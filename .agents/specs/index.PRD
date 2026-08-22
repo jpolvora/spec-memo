@@ -1,0 +1,138 @@
+# spec-memo — Specification Index
+
+## 1. How to use
+
+- **Index (this file):** Workflow-skills roadmap copy: phase feature map, next specs, inbox, done log, archive.
+- **Product of record:** [`PRODUCT.PRD`](../../PRODUCT.PRD) — when facts diverge, fix that file first, then this index.
+- **Detail specs (`*.spec.md`):** Split from the PRD only when a slice starts. One spec of record per slice; no workflow twin. Until then, Next specs slugs are links only (files may not exist).
+- **Capabilities / proof:** [`FEATURES.md`](../../FEATURES.md), [`PLAN.md`](../../PLAN.md).
+
+## 2. Status legend
+
+| Mark | Meaning |
+|------|---------|
+| `[ ]` | todo |
+| `[~]` | partial / in design |
+| `[x]` | done (proof in `PLAN.md` Done log) |
+| `Verified: ...` | optional host smoke — **never auto-written by sync** |
+
+## 3. Goal
+
+Give coding agents a **curated working memory** that is **outside the product git repository**: traps, decisions, specs, plans, state, and logs. Product clones stay source + shipped docs. Agents retrieve a token-capped brief instead of dump-reading hundreds of leftover files.
+
+## 4. Problems
+
+Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directories, **561** files under `.agents/plans` (2.7 MB), **640** tracked workflow artifacts, 600-line agent changelog — versus **28 KB** of useful traps.
+
+1. **Wrong git boundary.** Workflow artifacts live in the product working tree. Gitignore does not share memory across clones, hide files from Glob/`git status`, or prevent accidental commit.
+2. **No query layer.** Agents `Read`/`Grep` whole `MEMORY.md` and `Glob` every spec. Only traps have a compile-to-index step.
+3. **Unrelocatable hub data.** In workflow-skills, `plans.dir` can move; `{sharedDir}` cannot, so `MEMORY.md` / `memory/*` and agent changelog stay in-tree.
+4. **Duplication and drift.** Spec of record plus `step-00` copy; shipped plans sit forever; architecture decisions have no schema (traps do).
+5. **Cleanup is optional.** `/ws-cleanup` and gitignore patterns exist; residue remains.
+
+## 5. Primary use cases
+
+- UC1 — Session start: Agent opens a product repo, calls `bootstrap`. Receives traps (path/keyword match, severity floor), open decisions, the live spec/plan slug if any, and drift warnings. Token budget enforced. No product-tree files required.
+- UC2 — Record a trap or decision: Agent `upsert`s a typed record. Schema failure is an error. Similar traps supersede rather than duplicate.
+- UC3 — Active delivery artifacts: Specs and plans for the live slug live in the vault. Scratch/state are not globally searchable. After ship, plans compact; scratch expires.
+- UC4 — Audit without context pollution: `append` writes changelog/run events. Bootstrap never dumps the log. Humans `search` kind=log when needed.
+- UC5 — Import: One-shot map from an existing `.agents/specs`, `memory/*`, and active plan folders into the vault; skip telemetry/jsonl.
+- UC6 — Rare publish: `promote` copies one decision or spec into a named path in the product repo. Default deny.
+
+## 6. Constraints & non-goals
+
+- Local-first filesystem vault. No cloud account required for v1.
+- Host-neutral MCP stdio + CLI. Do not name a required IDE in schemas or tool contracts.
+- Markdown is source of truth. SQLite FTS is rebuilt from files.
+- Project identity = git remote (normalized). Fallback: canonicalized absolute path of the repo root. No committed pointer file in the consumer product.
+- Zero required files in the consumer product tree.
+- Bootstrap budget starts at 8 KB UTF-8. Fail closed (truncate with a notice).
+- Language: en-us for product surfaces.
+- Refuse in-repo workflow writes when a product root is known.
+- Non-goals (v1): vector search / knowledge graph as the store; host plugin as the agent contract; Obsidian as a runtime dependency; in-product `.spec-memo/` or gitignored `.agents/` dump as the store; replacing workflow-skills skill bodies; shipping product README through the vault; multi-tenant SaaS / sync / e2e encryption in Phase 1.
+
+## 7. Feature map by phase
+
+### Phase 0: Dogfood remap (optional, outside this repo)
+
+- [ ] Point a throwaway clone of a consumer `plans.dir` / `specsDir` at a directory under `~/.spec-memo-test` (`spec: n/a`)
+
+### Phase 1: spec-memo MVP (this repository)
+
+- [ ] Vault + project identity from git remote (`spec: vault-and-identity.spec.md`)
+- [ ] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`spec: record-schema-and-indexes.spec.md`)
+- [ ] SQLite FTS disposable index (`spec: fts-index.spec.md`)
+- [ ] MCP server (stdio) + CLI parity for the eight tools (`spec: mcp-and-cli.spec.md`)
+- [ ] `bootstrap` token budget and default filters (`spec: bootstrap-brief.spec.md`)
+- [ ] `gc` TTL + shipped-plan compact (`spec: curator-gc.spec.md`)
+- [ ] Refuse upsert payload written into a known product working tree (`spec: refuse-product-write.spec.md`)
+- [ ] Secret redaction on write (`spec: redaction.spec.md`)
+- [ ] `memo import` from workflow-skills-style trees (`spec: import-agents-tree.spec.md`)
+
+### Phase 2: Harness adapter (workflow-skills, not this repo’s core)
+
+- [ ] Relocatable consumer hub (MEMORY / changelog) (`spec: later in workflow-skills`)
+- [ ] `{memoRoot}` / MCP as `read-memory` / `update-memory` (`spec: later in workflow-skills`)
+- [ ] Hook or skill rule blocking in-repo workflow writes (`spec: later in workflow-skills`)
+
+### Phase 3: Curator hardening
+
+- [ ] Trap dedup on upsert (`spec: trap-dedup.spec.md`)
+- [ ] Spec SHA drift on bootstrap (`spec: spec-drift.spec.md`)
+- [ ] Optional private git remote on the vault (`spec: vault-git.spec.md`)
+- [ ] Cross-project search opt-in (`spec: cross-project-search.spec.md`)
+
+### Phase 4: Human viewers (optional)
+
+- [ ] CLI browse/doctor UX polish (`spec: cli-doctor.spec.md`)
+- [ ] Optional IDE plugin or Obsidian vault as viewer only (`spec: viewer.spec.md`)
+
+## 8. Next specs
+
+| # | Spec | Status | Target Phase | Notes |
+|---|------|--------|--------------|-------|
+| 1 | `vault-and-identity` | `[ ]` todo | Phase 1 | Remote normalization, fallback path id, vault layout |
+| 2 | `record-schema-and-indexes` | `[ ]` todo | Phase 1 | Frontmatter, kinds, compiled md |
+| 3 | `fts-index` | `[ ]` todo | Phase 1 | Rebuild from files; never SoT |
+| 4 | `mcp-and-cli` | `[ ]` todo | Phase 1 | Eight tools, shared module |
+| 5 | `bootstrap-brief` | `[ ]` todo | Phase 1 | 8 KB cap, include/exclude rules |
+| 6 | `curator-gc` | `[ ]` todo | Phase 1 | TTL, compact |
+| 7 | `refuse-product-write` | `[ ]` todo | Phase 1 | Detect product root; deny dual-write |
+| 8 | `redaction` | `[ ]` todo | Phase 1 | Block obvious secrets in bodies |
+| 9 | `import-agents-tree` | `[ ]` todo | Phase 1 | Map specs/memory/plans; skip scratch |
+
+Split a row into `{specsDir}/*.spec.md` only when that slice starts. Until then this table is the backlog.
+
+## 9. Inbox (unscheduled ideas)
+
+- Embeddings as an optional `search` backend after kinds/TTL exist.
+- Host plugin / canvas UI for humans.
+- Encrypted vault / git-crypt.
+- Multi-machine sync beyond optional git remote on the vault.
+- Promote-to-ADR templates per product language.
+
+## 10. Done log
+
+| Date | Slug | Title | PR / Commit |
+|------|------|-------|-------------|
+| 2026-08-22 | docs-v0 | Product docs: README, AGENTS, PRD, FEATURES, PLAN | uncommitted |
+
+## Archive
+
+Durable delivery records harvested from `{plansDir}` so plan folders can be removed without losing history.
+
+| Slug | Outcome | Last state | PR / Commit | Summary |
+|------|---------|------------|-------------|---------|
+
+## 11. Maintenance checklist
+
+- [ ] All completed features logged in Done log.
+- [ ] Linked `*.spec.md` files exist for active Next specs.
+
+## 12. Related docs
+
+- [`PRODUCT.PRD`](../../PRODUCT.PRD)
+- [`FEATURES.md`](../../FEATURES.md)
+- [`PLAN.md`](../../PLAN.md)
+- [`README.md`](../../README.md)
+- [`AGENTS.md`](../../AGENTS.md)
