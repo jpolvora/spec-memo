@@ -1,6 +1,3 @@
-# Local workflow-skills config (never commit)
-.agents/skills/ws-shared/config.json
-
 # Editor / configure backups
 *.bak
 AGENTS.md.bak

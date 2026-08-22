@@ -1,0 +1,229 @@
+{
+  "$schema": "./config.schema.json",
+  "_comment": "Fresh install seeds this file as config.json (gitignored — never commit). Fill via ws-configure-project. toolsFile points to the tool vocabulary all agents use.",
+  "toolsFile": "tools.md",
+  "pathTokens": {
+    "_comment": "Fixed install layout (not relocatable). Expand brace tokens before Read/Grep/Shell. Full contract: tools.md § Path tokens. plansDir/reviewsDir still resolve from plans.dir / reviews.dir.",
+    "skillsRoot": ".agents/skills",
+    "sharedDir": ".agents/skills/ws-shared"
+  },
+  "project": {
+    "name": "spec-memo",
+    "org": "jpolvora",
+    "repoUrl": "https://github.com/jpolvora/spec-memo",
+    "baseBranch": "master",
+    "workingBranch": "master",
+    "gitRemote": "origin"
+  },
+  "stack": {
+    "id": "node-mcp",
+    "description": "MCP stdio + CLI; Markdown records; SQLite FTS as disposable index",
+    "backend": {
+      "framework": "Node 22",
+      "language": "TypeScript",
+      "solutionFile": "package.json",
+      "srcDir": "src",
+      "layers": [
+        {
+          "name": "mcp-cli",
+          "path": "src",
+          "role": "Tool handlers, argument schemas, bootstrap budget"
+        },
+        {
+          "name": "store",
+          "path": "src/store",
+          "role": "Vault layout, frontmatter, compiled indexes"
+        },
+        {
+          "name": "index",
+          "path": "src/index",
+          "role": "SQLite FTS rebuild and query"
+        },
+        {
+          "name": "policy",
+          "path": "src/policy",
+          "role": "Schema, TTL, refuse-in-repo-write, redaction"
+        }
+      ],
+      "testProject": "test/",
+      "apiHost": "",
+      "apiPort": 0
+    },
+    "frontend": {
+      "framework": "",
+      "language": "",
+      "sourceDir": "",
+      "buildDir": "",
+      "devHost": "",
+      "devPort": 0,
+      "i18n": {
+        "framework": "none",
+        "localesDir": "",
+        "locales": [
+          "en-US"
+        ]
+      }
+    },
+    "database": {
+      "type": "SQLite",
+      "orm": "none (better-sqlite3 FTS5)",
+      "migrationsProject": "",
+      "startupProject": "",
+      "seedScript": ""
+    },
+    "orchestration": {
+      "devCommand": "",
+      "startCommand": "",
+      "stopCommand": "",
+      "composeCommand": ""
+    }
+  },
+  "domain": {
+    "model": "Curated agent working memory outside product git (traps, decisions, specs, plans, logs)",
+    "tenancyField": "",
+    "platformPrefix": "",
+    "glossaryFile": "",
+    "designTokens": "",
+    "architectureSpec": "PRODUCT.PRD"
+  },
+  "providers": {
+    "_comment": "active = work-item/spec source (github | azure-devops | local). scm = PR/thread host (github | azure-devops only; never local). Hybrid example: active=local + scm=github (local specs, GitHub PRs). If scm omitted: when active is github|azure-devops → scm=active; when active=local → infer from project.repoUrl host (github.com → github; dev.azure.com|visualstudio.com → azure-devops) or STOP and set scm explicitly. LEGACY: omit this entire providers block to infer active from issueTrackers.*.enabled (GitHub if enabled, else Azure DevOps, else local).",
+    "active": "github",
+    "scm": "github"
+  },
+  "issueTrackers": {
+    "github": {
+      "enabled": true,
+      "owner": "jpolvora",
+      "repo": "spec-memo",
+      "cli": "gh",
+      "issueToSpecScript": ".agents/skills/ws-github-provider/scripts/github-issue-to-spec.py"
+    },
+    "azureDevOps": {
+      "enabled": false,
+      "_comment": "Set enabled: true and fill org/project. Put token in ADO_PAT (or AZURE_DEVOPS_PAT) — never commit it.",
+      "org": "",
+      "project": "",
+      "patEnvVar": "ADO_PAT",
+      "apiBase": "https://dev.azure.com",
+      "workItemToSpecScript": ".agents/skills/ws-azure-devops-provider/scripts/ado-workitem-to-spec.py"
+    }
+  },
+  "verification": {
+    "backendBuild": "",
+    "backendTest": "",
+    "backendFormat": "",
+    "frontendBuild": "",
+    "frontendTest": "",
+    "migrationsAdd": "",
+    "migrationsApply": "",
+    "mutationTest": "",
+    "_comment_mutationTest": "Optional mutation runner (e.g. npx stryker run, mvn org.pitest:pitest-maven:mutationCoverage). Empty = skip mutation substep in ws-testing Step 7.",
+    "mutationThreshold": 80,
+    "_comment_mutationThreshold": "Minimum mutation score percent (killed/(killed+survived)*100). Used when mutationTest is set and skipMutationTesting is false.",
+    "testGlobs": [
+      "test/**/*.js",
+      "tests/**/*",
+      "**/*.test.*",
+      "**/*.spec.*"
+    ],
+    "_comment_testGlobs": "Machine test-surface probe patterns. Step 7 auto-skip requires no non-empty test alias and no matching file."
+  },
+  "dagThresholds": {
+    "_comment": "If ALL criteria are within limits, execMode is sequential (skip DAG).",
+    "maxImplementationSteps": 3,
+    "maxExpectedFiles": 6,
+    "maxLayers": 2
+  },
+  "defaults": {
+    "autoMode": false,
+    "dryRun": false,
+    "skipTesting": false,
+    "skipMutationTesting": true,
+    "_comment_skipMutationTesting": "When true (default), skip Step 7 mutation substep even if verification.mutationTest is set. Opt in by setting false and providing mutationTest.",
+    "skipTests": false,
+    "fullMode": false,
+    "scoreAndRefine": false,
+    "_comment_scoreAndRefine": "Optional extra polish when Step 5 score is already >= 9. Score < 9 always runs scoreAndRefine until >= 9 (max 3 rounds, then Pause).",
+    "autoload": true,
+    "_comment_autoload": "When true, consumer intends repo-root AGENTS.md to autoload Always-applied skills from {sharedDir}/autoload.md. Omitted/missing/false → effective false; harness fails closed only when true.",
+    "enableAuditing": false,
+    "_comment_enableAuditing": "When true, ws-spec-to-pr* orch runs under ws-audit runtime observer; writes {us-dir}/audit-*.log.md; logs anomalies/performance/correctness/disposable scripts; end-of-run may propose upstream GitHub issues or reusable tooling. Default false.",
+    "enableDag": false,
+    "_comment_enableDag": "When true, break execution plan into multiple parallel tasks. When false (default), execute tasks sequentially one by one in serial order.",
+    "contextBudget": 32000,
+    "_comment_contextBudget": "Maximum UTF-8 bytes in one complete standard subagent dispatch; fixed contract preamble remains capped at 18000 and MEMORY at 4000.",
+    "parallelVerifyReview": false,
+    "_comment_parallelVerifyReview": "When true, standard Steps 5 and 6 may run concurrently as read-only reviewers after an immutable product commit; default false.",
+    "gateGranularity": "step",
+    "_comment_gateGranularity": "step prompts at every boundary; phase uses at most five blocking gates in a normal standard run without weakening hard stops.",
+    "convergence": {
+      "initialDelaySec": 0,
+      "minPollSec": 30,
+      "maxPollSec": 300,
+      "backoff": 1.5,
+      "maxIterations": 20
+    },
+    "patternsBackend": true,
+    "patternsFrontend": true,
+    "_comment_patterns": "When true, ws-patterns-backend and ws-patterns-frontend are active for consulting backend.md and frontend.md during development.",
+    "_comment_deliveryCommitArtifacts": "Step 8 delivery commit includes under {us-dir}. Defaults: refined plan on; delivery result off (behavior change vs legacy always plan+result); opt-ins false. Omitted object/keys at read time merge to these AC1 defaults — never silently revert to always staging plan+result.",
+    "deliveryCommitArtifacts": {
+      "includeRefinedPlan": true,
+      "includeDeliveryResult": false,
+      "includeSpec": false,
+      "includeCheckReport": false,
+      "includeCodeReview": false,
+      "includeTestingReport": false
+    },
+    "_comment_models": "Optional portable model identifiers for subagents. Fallback to the active session model if empty or unavailable. testingModel is the test executor for standard Step 7; empty/omitted uses executionModel. reviewerModel covers standard Steps 5-6 only.",
+    "plannerModel": "",
+    "executionModel": "",
+    "reviewerModel": "",
+    "testingModel": ""
+  },
+  "plans": {
+    "dir": ".agents/plans",
+    "_comment_plansDir": "Resolve skill token {plansDir} from plans.dir (there is no separate plansDir key).",
+    "_comment_specsDir": "Human-facing local specs dir. Skill token {specsDir} ← plans.specsDir (default .agents/specs). Prefer existing repo-root specs/ when already present. ws-write-spec writes here only; workflow step-00 copies under {plansDir}/{slug}/ come from providers or ws-local-spec-provider register.",
+    "specsDir": ".agents/specs",
+    "diagnosticsDir": ".agents/plans/diagnostics",
+    "worktreesDir": ".agents/plans/{slug}/worktrees",
+    "useWorktrees": false
+  },
+  "reviews": {
+    "_comment": "Optional local review artifact root (fix-pr / ws-goal-fix-pr round reports).",
+    "dir": ".agents/codereviews"
+  },
+  "preview": {
+    "_comment": "Optional ws-preview dry-run overrides. preview.backend is not required for v1 (defaults to cursor-reviewer).",
+    "stack": "",
+    "backend": "cursor-reviewer"
+  },
+  "rules": {
+    "_comment": "Guardrails paths. Resolve per ws-shared/AGENTS.md External dependencies (first match). seniorDeveloper = Code review proof checklist source (default packaged ws-senior-developer); set \"\" to disable or point at another guardrail; karpathyGuidelines = surgical-change skill; stackFile = stack companion; changelogFile = append-only history (default under ws-shared/); other keys optional consumer rule paths — leave empty when unused.",
+    "harness": ".agents/skills/ws-shared/AGENTS.md",
+    "seniorDeveloper": ".agents/skills/ws-senior-developer/SKILL.md",
+    "karpathyGuidelines": ".agents/skills/ws-karpathy-guidelines/SKILL.md",
+    "viewPatterns": "",
+    "efMigrations": "",
+    "stackFile": ".agents/skills/ws-shared/STACK.md",
+    "changelogFile": ".agents/skills/ws-shared/CHANGELOG.md"
+  },
+  "invariants": {
+    "entitiesAreClassNotRecord": true,
+    "migrationsCliOnly": true,
+    "tenancyViaGlobalQueryFilters": true,
+    "efOnlyInInfrastructure": true,
+    "noInlineHandWrittenMigrations": true,
+    "commitPlanFilesOnlyAtStep8": true,
+    "skipQualityGates": false
+  },
+  "fable": {
+    "_comment": "Opt-in integration for fable-* skills within ws-spec-to-pr / ws-spec-to-pr-lite workflows. Master toggle must be true to enable automatic calls.",
+    "enabled": true,
+    "autoAudit": true,
+    "autoDetectDomain": true,
+    "auditVerdictsBlockShip": "refuted"
+  }
+}
