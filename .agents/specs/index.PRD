@@ -59,15 +59,13 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 ### Phase 1: spec-memo MVP (this repository)
 
-- [ ] Vault + project identity from git remote (`spec: vault-and-identity.spec.md`)
-- [ ] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`spec: record-schema-and-indexes.spec.md`)
-- [ ] SQLite FTS disposable index (`spec: fts-index.spec.md`)
-- [ ] MCP server (stdio) + CLI parity for the eight tools (`spec: mcp-and-cli.spec.md`)
+- [x] Vault + project identity from git remote (`spec: vault-and-identity`)
+- [x] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`spec: record-schema-and-indexes`)
+- [x] SQLite FTS disposable index (`spec: fts-index.spec.md`)
+- [ ] Remaining record kinds, append-only logs, and forget archiving (`spec: remaining-kinds-and-events.spec.md`)
 - [ ] `bootstrap` token budget and default filters (`spec: bootstrap-brief.spec.md`)
-- [ ] `gc` TTL + shipped-plan compact (`spec: curator-gc.spec.md`)
-- [ ] Refuse upsert payload written into a known product working tree (`spec: refuse-product-write.spec.md`)
-- [ ] Secret redaction on write (`spec: redaction.spec.md`)
-- [ ] `memo import` from workflow-skills-style trees (`spec: import-agents-tree.spec.md`)
+- [ ] `gc` TTL, compaction, secret redaction, and product write guard (`spec: curator-gc-and-safety.spec.md`)
+- [ ] CLI parity, workflow tree importer, promote, and doctor diagnostics (`spec: import-and-doctor.spec.md`)
 
 ### Phase 2: Harness adapter (workflow-skills, not this repo’s core)
 
@@ -94,13 +92,11 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 |---|------|--------|--------------|-------|
 | 1 | `vault-and-identity` | `[x] done` | Phase 1 | Remote normalization, fallback path id, vault layout |
 | 2 | `record-schema-and-indexes` | `[x] done` | Phase 1 | Frontmatter, kinds, compiled md |
-| 3 | `fts-index` | `[~] in progress` | Phase 1 | Rebuild from files; never SoT |
-| 4 | `mcp-and-cli` | `[~] skeleton done` | Phase 1 | Eight tools, shared module |
-| 5 | `bootstrap-brief` | `[ ] todo` | Phase 1 | 8 KB cap, include/exclude rules |
-| 6 | `curator-gc` | `[ ] todo` | Phase 1 | TTL, compact |
-| 7 | `refuse-product-write` | `[ ] todo` | Phase 1 | Detect product root; deny dual-write |
-| 8 | `redaction` | `[ ] todo` | Phase 1 | Block obvious secrets in bodies |
-| 9 | `import-agents-tree` | `[ ] todo` | Phase 1 | Map specs/memory/plans; skip scratch |
+| 3 | `fts-index` | `[x] done` | Phase 1 | SQLite FTS5 index (`memo.sqlite`), rebuild from vault files |
+| 4 | `remaining-kinds-and-events` | `[ ] todo` | Phase 1 | `spec`, `plan`, `state`, `log`, `scratch`, `review`, `append`, `forget` |
+| 5 | `bootstrap-brief` | `[ ] todo` | Phase 1 | 8 KB cap, trap ranking, cwd binding |
+| 6 | `curator-gc-and-safety` | `[ ] todo` | Phase 1 | TTL, compact, secret redaction, refuse product write |
+| 7 | `import-and-doctor` | `[ ] todo` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
 
 Split a row into `{specsDir}/*.spec.md` only when that slice starts. Until then this table is the backlog.
 
@@ -120,6 +116,7 @@ Split a row into `{specsDir}/*.spec.md` only when that slice starts. Until then 
 | 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, test suite | 30f22f3 |
 | 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), git remote normalization, project ID binding, project.json, directory scaffolding | b9a99b4 |
 | 2026-08-23 | slice-3-records-indexes | Record schema validation, upsert/get engine, superseding workflow, TRAPS.md / DECISIONS.md / INDEX.md compiler | Slice 3 delivery |
+| 2026-08-23 | slice-4-fts-index | SQLite FTS5 disposable index (memo.sqlite), Porter stemmer, pathPatterns glob filter, rebuildIndex, search CLI & MCP tool | 66771e4 |
 
 ## Archive
 

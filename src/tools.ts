@@ -43,14 +43,27 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
           description: 'Filter by record kinds (e.g. trap, decision, spec)'
         },
         status: { type: 'string', description: 'Filter by status (active, shipped, superseded, archived)' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Filter by tags'
+        },
+        path: { type: 'string', description: 'Match records whose pathPatterns cover this file path' },
+        includeScratch: { type: 'boolean', description: 'Include scratch records (omitted by default)' },
+        projectId: { type: 'string', description: 'Specific project ID to search' },
+        crossProject: { type: 'boolean', description: 'Search across all projects in vault' },
         limit: { type: 'number', description: 'Maximum number of results to return' }
-      },
-      required: ['query']
+      }
     },
     zodSchema: z.object({
-      query: z.string(),
+      query: z.string().optional(),
       kinds: z.array(z.string()).optional(),
       status: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      path: z.string().optional(),
+      includeScratch: z.boolean().optional(),
+      projectId: z.string().optional(),
+      crossProject: z.boolean().optional(),
       limit: z.number().optional()
     })
   },
@@ -164,7 +177,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
 };
 
 import { upsertRecord, getRecord } from './store.js';
-import { RecordKind } from './types.js';
+import { searchIndex } from './indexer.js';
+import { RecordKind, RecordStatus, SearchOptions } from './types.js';
 
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
@@ -185,6 +199,23 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       code: 'INVALID_ARGUMENTS',
       details: parseResult.error.format()
     };
+  }
+
+  if (name === 'search') {
+    try {
+      const searchOpts = parseResult.data as SearchOptions;
+      const results = searchIndex(searchOpts);
+      return {
+        data: results
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        isError: true,
+        error: message,
+        code: 'SEARCH_FAILED'
+      };
+    }
   }
 
   if (name === 'upsert') {

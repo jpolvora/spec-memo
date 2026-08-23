@@ -89,6 +89,20 @@ describe('MCP Server Integration', () => {
     const parsed = JSON.parse(content[0].text as string);
     assert.equal(parsed.frontmatter.id, 'mcp-test-trap');
 
+    // Test search tool over MCP
+    const searchRes = await client.callTool({
+      name: 'search',
+      arguments: {
+        query: 'MCP'
+      }
+    });
+    assert.equal(searchRes.isError, undefined);
+    const searchContent = searchRes.content as Array<{ type: string; text?: string }>;
+    assert.ok(searchContent && searchContent.length > 0);
+    const searchHits = JSON.parse(searchContent[0].text as string) as Array<{ id: string }>;
+    assert.ok(Array.isArray(searchHits));
+    assert.ok(searchHits.some((h) => h.id === 'mcp-test-trap'));
+
     await client.close();
     await server.close();
   });

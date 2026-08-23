@@ -163,9 +163,90 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   }
 
   if (TOOL_NAMES.includes(parsed.command as ToolName)) {
-    const payload = { ...parsed.options };
+    const payload: Record<string, unknown> = { ...parsed.options };
     delete payload.help;
     delete payload.json;
+
+    // Normalization for search command
+    if (parsed.command === 'search') {
+      if (parsed.positionals.length > 0 && !payload.query) {
+        payload.query = parsed.positionals.join(' ');
+      }
+      if (payload.kind) {
+        payload.kinds = [String(payload.kind)];
+        delete payload.kind;
+      } else if (typeof payload.kinds === 'string') {
+        payload.kinds = (payload.kinds as string).split(',').map((s) => s.trim());
+      }
+      if (payload.tag) {
+        payload.tags = [String(payload.tag)];
+        delete payload.tag;
+      } else if (typeof payload.tags === 'string') {
+        payload.tags = (payload.tags as string).split(',').map((s) => s.trim());
+      }
+      if (payload.scratch === true) {
+        payload.includeScratch = true;
+        delete payload.scratch;
+      }
+      if (payload.all === true) {
+        payload.crossProject = true;
+        delete payload.all;
+      }
+      if (typeof payload.limit === 'string') {
+        payload.limit = parseInt(payload.limit, 10);
+      }
+    }
+
+    // Normalization for upsert command
+    if (parsed.command === 'upsert') {
+      const fm: Record<string, unknown> =
+        typeof payload.frontmatter === 'object' && payload.frontmatter
+          ? { ...(payload.frontmatter as Record<string, unknown>) }
+          : {};
+
+      if (payload.title) {
+        fm.title = payload.title;
+        delete payload.title;
+      }
+      if (payload.severity) {
+        fm.severity = payload.severity;
+        delete payload.severity;
+      }
+      if (payload['path-patterns']) {
+        fm.pathPatterns = String(payload['path-patterns']).split(',').map((s) => s.trim());
+        delete payload['path-patterns'];
+      }
+      if (payload.pathPatterns) {
+        fm.pathPatterns = Array.isArray(payload.pathPatterns)
+          ? payload.pathPatterns
+          : String(payload.pathPatterns).split(',').map((s) => s.trim());
+        delete payload.pathPatterns;
+      }
+      if (payload.tags) {
+        fm.tags = Array.isArray(payload.tags)
+          ? payload.tags
+          : String(payload.tags).split(',').map((s) => s.trim());
+        delete payload.tags;
+      }
+      if (payload.tag) {
+        fm.tags = [String(payload.tag)];
+        delete payload.tag;
+      }
+      if (payload.supersedes) {
+        fm.supersedes = payload.supersedes;
+        delete payload.supersedes;
+      }
+      if (payload.rationale) {
+        fm.rationale = payload.rationale;
+        delete payload.rationale;
+      }
+      if (Object.keys(fm).length > 0) {
+        payload.frontmatter = fm;
+      }
+      if (parsed.positionals.length > 0 && !payload.body) {
+        payload.body = parsed.positionals.join(' ');
+      }
+    }
 
     const response = await executeTool(parsed.command, payload);
 
@@ -178,6 +259,30 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     } else {
       if (response.isError) {
         console.error(`Error [${response.code}]: ${response.error}`);
+      } else if (parsed.command === 'search' && Array.isArray(response.data)) {
+        const hits = response.data as Array<{
+          id: string;
+          kind: string;
+          status?: string;
+          title?: string;
+          pathPatterns?: string[];
+          snippet?: string;
+        }>;
+        if (hits.length === 0) {
+          console.log('No matching records found.');
+        } else {
+          console.log(`Found ${hits.length} record${hits.length === 1 ? '' : 's'}:\n`);
+          for (const hit of hits) {
+            const statusStr = hit.status ? `:${hit.status.toUpperCase()}` : '';
+            const kindStr = `[${hit.kind.toUpperCase()}${statusStr}]`;
+            const titleStr = hit.title ? `: ${hit.title}` : '';
+            const patternsStr = hit.pathPatterns ? ` (paths: ${hit.pathPatterns.join(', ')})` : '';
+            console.log(`${kindStr} ${hit.id}${titleStr}${patternsStr}`);
+            if (hit.snippet) {
+              console.log(`  ${hit.snippet.trim()}`);
+            }
+          }
+        }
       } else {
         console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));
       }

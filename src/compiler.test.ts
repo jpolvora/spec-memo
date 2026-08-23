@@ -6,6 +6,7 @@ import * as os from 'node:os';
 import { upsertRecord } from './store.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { resolveProjectIdentity } from './identity.js';
+import { closeIndex } from './indexer.js';
 
 describe('Compiled Views (TRAPS.md, DECISIONS.md, INDEX.md)', () => {
   let tempVault: string;
@@ -17,6 +18,7 @@ describe('Compiled Views (TRAPS.md, DECISIONS.md, INDEX.md)', () => {
   });
 
   afterEach(() => {
+    closeIndex();
     fs.rmSync(tempVault, { recursive: true, force: true });
     fs.rmSync(tempProject, { recursive: true, force: true });
   });

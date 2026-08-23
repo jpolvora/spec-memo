@@ -149,9 +149,9 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 
 ### Phase 1 — spec-memo MVP (this repository)
 
-- [ ] Vault + project identity from git remote (`spec: split when implementing — vault-and-identity`)
-- [ ] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`spec: record-schema-and-indexes`)
-- [ ] SQLite FTS disposable index (`spec: fts-index`)
+- [x] Vault + project identity from git remote (`spec: split when implementing — vault-and-identity`)
+- [x] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`spec: record-schema-and-indexes`)
+- [x] SQLite FTS disposable index (`spec: fts-index`)
 - [ ] MCP server (stdio) + CLI parity for the eight tools (`spec: mcp-and-cli`)
 - [ ] `bootstrap` token budget and default filters (`spec: bootstrap-brief`)
 - [ ] `gc` TTL + shipped-plan compact (`spec: curator-gc`)
@@ -182,9 +182,9 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 
 | # | Slug | Status | Target phase | Notes |
 |---|------|--------|--------------|-------|
-| 1 | `vault-and-identity` | `[ ]` | Phase 1 | Remote normalization, fallback path id, vault layout |
-| 2 | `record-schema-and-indexes` | `[ ]` | Phase 1 | Frontmatter, kinds, compiled md |
-| 3 | `fts-index` | `[ ]` | Phase 1 | Rebuild from files; never SoT |
+| 1 | `vault-and-identity` | `[x]` | Phase 1 | Remote normalization, fallback path id, vault layout |
+| 2 | `record-schema-and-indexes` | `[x]` | Phase 1 | Frontmatter, kinds, compiled md |
+| 3 | `fts-index` | `[x]` | Phase 1 | Rebuild from files; never SoT |
 | 4 | `mcp-and-cli` | `[ ]` | Phase 1 | Eight tools, shared module |
 | 5 | `bootstrap-brief` | `[ ]` | Phase 1 | 8 KB cap, include/exclude rules |
 | 6 | `curator-gc` | `[ ]` | Phase 1 | TTL, compact |
@@ -210,6 +210,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, test suite | Slice 1 delivery |
 | 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), remote normalization, project ID binding, project.json | Slice 2 delivery |
 | 2026-08-23 | slice-3-records-indexes | Record schema validation, upsert/get engine, TRAPS.md / DECISIONS.md / INDEX.md compiler | Slice 3 delivery |
+| 2026-08-23 | slice-4-fts-index | SQLite FTS5 disposable index, Porter stemmer, pathPatterns matching, rebuildIndex, search tool & CLI | 66771e4 |
 
 ## 12. Related docs
 

@@ -5,6 +5,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { ensureProjectVault, getVaultRoot } from './vault.js';
 import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
+import { openIndex, indexRecord } from './indexer.js';
 
 export interface UpsertOptions {
   cwd?: string;
@@ -152,6 +153,15 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
         body: olderRecord.body
       });
       fs.writeFileSync(olderRecord.path, updatedOlderContent, 'utf8');
+
+      // Update superseded record in FTS index
+      try {
+        const db = openIndex(vaultRoot);
+        indexRecord(db, { frontmatter: updatedOlderFm, body: olderRecord.body }, olderRecord.path);
+      } catch {
+        // Non-blocking if index fails
+      }
+
       superseded = true;
     }
   }
@@ -162,6 +172,14 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
   });
 
   fs.writeFileSync(filePath, fileContent, 'utf8');
+
+  // Index record into SQLite FTS
+  try {
+    const db = openIndex(vaultRoot);
+    indexRecord(db, { frontmatter: validation.data, body: options.body }, filePath);
+  } catch {
+    // Non-blocking if index fails
+  }
 
   // Automatically update compiled views (TRAPS.md, DECISIONS.md, INDEX.md)
   rebuildCompiledViews(projectId, vaultRoot);

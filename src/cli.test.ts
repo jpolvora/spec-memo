@@ -90,6 +90,8 @@ describe('CLI Integration', () => {
         'decision',
         '--slug',
         'cli-adr-01',
+        '--title',
+        'CLI Architecture Decision',
         '--body',
         'CLI Decision text',
         '--json'
@@ -104,6 +106,20 @@ describe('CLI Integration', () => {
       const getParsed = JSON.parse(capturedLogs.trim());
       assert.equal(getParsed.frontmatter.id, 'cli-adr-01');
       assert.equal(getParsed.body, 'CLI Decision text');
+
+      // Search CLI with JSON
+      capturedLogs = '';
+      const searchCode = await runCli(['search', 'Architecture', '--json']);
+      assert.equal(searchCode, 0);
+      const searchParsed = JSON.parse(capturedLogs.trim());
+      assert.ok(Array.isArray(searchParsed));
+      assert.ok(searchParsed.some((h: { id: string }) => h.id === 'cli-adr-01'));
+
+      // Search CLI with human-readable text output
+      capturedLogs = '';
+      const searchTextCode = await runCli(['search', 'Architecture']);
+      assert.equal(searchTextCode, 0);
+      assert.ok(capturedLogs.includes('[DECISION:ACTIVE] cli-adr-01: CLI Architecture Decision'));
     } finally {
       console.log = origLog;
     }

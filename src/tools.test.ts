@@ -23,28 +23,38 @@ describe('Tool Definitions and Execution', () => {
   });
 
   it('should validate tool arguments', async () => {
-    // search requires query string
-    const res = await executeTool('search', {});
+    // upsert requires kind and body
+    const res = await executeTool('upsert', {});
     assert.equal(res.isError, true);
     if (res.isError) {
       assert.equal(res.code, 'INVALID_ARGUMENTS');
     }
   });
 
-  it('should execute upsert and get tools successfully', async () => {
+  it('should execute upsert, search, and get tools successfully', async () => {
     const upsertRes = await executeTool('upsert', {
       kind: 'trap',
       slug: 'test-exec-trap',
       frontmatter: {
         id: 'trap-test-exec',
         title: 'Execution Test Trap',
-        severity: 'high'
+        severity: 'high',
+        tags: ['security', 'tools']
       },
-      body: 'Body content'
+      body: 'Body content for security verification'
     });
 
     assert.equal(upsertRes.isError, undefined);
     assert.ok(upsertRes.data);
+
+    // Search via executeTool
+    const searchRes = await executeTool('search', {
+      query: 'security'
+    });
+    assert.equal(searchRes.isError, undefined);
+    assert.ok(Array.isArray(searchRes.data));
+    const hits = searchRes.data as Array<{ id: string }>;
+    assert.ok(hits.some((h) => h.id === 'trap-test-exec'));
 
     const getRes = await executeTool('get', {
       id: 'trap-test-exec'
@@ -59,7 +69,6 @@ describe('Tool Definitions and Execution', () => {
   it('should return NOT_IMPLEMENTED for remaining unbuilt tools', async () => {
     const unbuiltTools: Array<{ name: ToolName; args: unknown }> = [
       { name: 'bootstrap', args: { cwd: '.' } },
-      { name: 'search', args: { query: 'test' } },
       { name: 'append', args: { event: 'sample event' } },
       { name: 'forget', args: { id: 'test-id' } },
       { name: 'gc', args: { dryRun: true } },

@@ -36,9 +36,9 @@ Package version: **not shipped**. Status marks: `[ ]` planned · `[~]` in design
 
 ## 3. Index
 
-- [ ] **SQLite FTS5.** Query by text, kind, status, slug, pathPatterns, severity, tags, project.
-- [ ] **Disposable DB.** Delete `memo.sqlite` and rebuild from the vault. The DB is never the source of truth.
-- [ ] **Default search filter.** Exclude `scratch`, `state`, `log`, `review` unless the caller sets `kinds`.
+- [x] **SQLite FTS5.** Query by text, kind, status, slug, pathPatterns, severity, tags, project.
+- [x] **Disposable DB.** Delete `memo.sqlite` and rebuild from the vault. The DB is never the source of truth.
+- [x] **Default search filter.** Exclude `scratch`, `state`, `log`, `review` unless the caller sets `kinds`.
 
 ---
 
@@ -49,9 +49,9 @@ One stdio MCP server. Tool descriptions are the interface; vault paths are not.
 | Tool | Status | Job | Returns |
 |------|--------|-----|---------|
 | `bootstrap` | [ ] | Bind cwd’s git remote; compile a session brief | Traps (medium+, path/keyword match, cap), open accepted decisions that match, live spec/plan slugs, drift flags, notices if truncated |
-| `search` | [ ] | Filtered retrieval | id, kind, score, snippet, status |
-| `get` | [ ] | Read one record by id or `kind+slug` | Full markdown + frontmatter |
-| `upsert` | [ ] | Write/update trap, decision, spec, plan, state, review, scratch | id, whether it superseded another; schema errors fail closed |
+| `search` | [x] | Filtered retrieval | id, kind, score, snippet, status |
+| `get` | [x] | Read one record by id or `kind+slug` | Full markdown + frontmatter |
+| `upsert` | [x] | Write/update trap, decision, spec, plan, state, review, scratch | id, whether it superseded another; schema errors fail closed |
 | `append` | [ ] | Changelog / audit event | New event id; never rewrites prior events |
 | `forget` | [ ] | Supersede or archive | New status. Traps archive unless the caller passes an explicit purge confirmed by the user |
 | `gc` | [ ] | Apply TTL, compact shipped plans, rebuild FTS | Counts archived/compacted/deleted (scratch only) |

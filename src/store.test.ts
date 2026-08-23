@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { upsertRecord, getRecord } from './store.js';
+import { closeIndex } from './indexer.js';
 
 describe('Store Engine (upsert and get)', () => {
   let tempVault: string;
@@ -15,6 +16,7 @@ describe('Store Engine (upsert and get)', () => {
   });
 
   afterEach(() => {
+    closeIndex();
     fs.rmSync(tempVault, { recursive: true, force: true });
     fs.rmSync(tempProject, { recursive: true, force: true });
   });

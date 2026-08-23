@@ -101,3 +101,31 @@ export interface VaultConfig {
   };
 }
 
+export interface SearchOptions {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  query?: string;
+  kinds?: RecordKind[];
+  status?: RecordStatus;
+  tags?: string[];
+  path?: string;
+  includeScratch?: boolean;
+  crossProject?: boolean;
+  limit?: number;
+}
+
+export interface SearchHit {
+  id: string;
+  projectId: string;
+  kind: RecordKind;
+  status: RecordStatus;
+  title?: string;
+  tags?: string[];
+  pathPatterns?: string[];
+  filepath: string;
+  snippet?: string;
+  rank?: number;
+  updated?: string;
+}
+
