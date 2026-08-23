@@ -207,6 +207,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 |------|------|-------|-------------|
 | 2026-08-22 | docs-v0 | Product docs: README, AGENTS, PRD, FEATURES, PLAN | uncommitted |
 | 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, test suite | Slice 1 delivery |
+| 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), remote normalization, project ID binding, project.json | Slice 2 delivery |
 
 ## 12. Related docs
 

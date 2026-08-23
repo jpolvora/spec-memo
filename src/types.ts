@@ -69,3 +69,35 @@ export const TOOL_NAMES = [
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
+
+export interface ProjectIdentity {
+  projectId: string;
+  normalizedRemote: string | null;
+  rootPath: string;
+  isGit: boolean;
+  isFallback: boolean;
+  vaultProjectPath: string;
+}
+
+export interface ProjectMetadata {
+  projectId: string;
+  gitRemote: string | null;
+  displayName: string;
+  lastSeenRoot: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VaultConfig {
+  version: string;
+  defaultRemote: string;
+  ttl: {
+    scratchDays: number;
+    reviewDays: number;
+  };
+  bootstrap: {
+    maxBytes: number;
+    maxTraps: number;
+  };
+}
+

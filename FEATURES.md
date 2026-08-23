@@ -16,10 +16,10 @@ Package version: **not shipped**. Status marks: `[ ]` planned · `[~]` in design
 
 ## 1. Project binding
 
-- [ ] **Remote identity.** Normalize `git remote get-url origin` (or configured remote) to a stable project id (strip credentials, trailing `.git`, case rules for github.com). Same remote from two clone paths is one project.
-- [ ] **Fallback identity.** No remotes → id from canonical absolute repo root. Document the collision risk if the folder is copied.
-- [ ] **Last-seen root.** Record the product working tree path in `project.json` for refuse-write checks. Not committed to the product.
-- [ ] **Zero product files.** Binding does not create `.spec-memo.json` or similar in the consumer repo.
+- [x] **Remote identity.** Normalize `git remote get-url origin` (or configured remote) to a stable project id (strip credentials, trailing `.git`, case rules for github.com). Same remote from two clone paths is one project.
+- [x] **Fallback identity.** No remotes → id from canonical absolute repo root. Document the collision risk if the folder is copied.
+- [x] **Last-seen root.** Record the product working tree path in `project.json` for refuse-write checks. Not committed to the product.
+- [x] **Zero product files.** Binding does not create `.spec-memo.json` or similar in the consumer repo.
 
 ---
 

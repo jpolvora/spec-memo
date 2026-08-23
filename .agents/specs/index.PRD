@@ -91,10 +91,10 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | # | Spec | Status | Target Phase | Notes |
 |---|------|--------|--------------|-------|
-| 1 | `vault-and-identity` | `[ ]` todo | Phase 1 | Remote normalization, fallback path id, vault layout |
-| 2 | `record-schema-and-indexes` | `[ ]` todo | Phase 1 | Frontmatter, kinds, compiled md |
+| 1 | `vault-and-identity` | `[x]` done | Phase 1 | Remote normalization, fallback path id, vault layout |
+| 2 | `record-schema-and-indexes` | `[~]` in progress | Phase 1 | Frontmatter, kinds, compiled md |
 | 3 | `fts-index` | `[ ]` todo | Phase 1 | Rebuild from files; never SoT |
-| 4 | `mcp-and-cli` | `[ ]` todo | Phase 1 | Eight tools, shared module |
+| 4 | `mcp-and-cli` | `[~]` skeleton done | Phase 1 | Eight tools, shared module |
 | 5 | `bootstrap-brief` | `[ ]` todo | Phase 1 | 8 KB cap, include/exclude rules |
 | 6 | `curator-gc` | `[ ]` todo | Phase 1 | TTL, compact |
 | 7 | `refuse-product-write` | `[ ]` todo | Phase 1 | Detect product root; deny dual-write |
@@ -116,6 +116,8 @@ Split a row into `{specsDir}/*.spec.md` only when that slice starts. Until then 
 | Date | Slug | Title | PR / Commit |
 |------|------|-------|-------------|
 | 2026-08-22 | docs-v0 | Product docs: README, AGENTS, PRD, FEATURES, PLAN | uncommitted |
+| 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, test suite | 30f22f3 |
+| 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), git remote normalization, project ID binding, project.json, directory scaffolding | Slice 2 delivery |
 
 ## Archive
 
