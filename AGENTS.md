@@ -32,22 +32,39 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 3. `.agents/skills/ws-shared/AGENTS.md` (consumer hub)
 4. Design / spec / architecture constraints
 
-## Canonical tracking & marking features done
+## Task execution & tracking workflow
 
-As soon as an implementation slice or feature lands and its verification proof passes, locate and update the tracking documents immediately in this canonical order:
+Always work in strict synchronization with [`.agents/specs/index.PRD`](.agents/specs/index.PRD) and the project's tracking documents ([`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), [`PRODUCT.PRD`](PRODUCT.PRD)).
+
+### Phase 1: Intake & spec alignment (pre-execution)
+
+1. **Locate matching slice/spec:**
+   - Locate the relevant feature or slice in [`.agents/specs/index.PRD`](.agents/specs/index.PRD) and [`PLAN.md`](PLAN.md).
+   - Check if a dedicated slice spec exists (`.agents/specs/<slug>.spec.md`).
+2. **Evaluate or create spec:**
+   - **Found:** Review and align the task instructions with the spec requirements.
+   - **Not found:** Determine if the task warrants its own spec. If yes, create `.agents/specs/<slug>.spec.md` and register the slug in `.agents/specs/index.PRD` § `## 8. Next specs`.
+3. **Mark in execution:**
+   - Before executing changes, mark the task / spec as `[~] in progress` in [`.agents/specs/index.PRD`](.agents/specs/index.PRD) (and the slice spec if applicable).
+
+### Phase 2: Surgical implementation & verification
+
+1. **Implement surgically:**
+   - Apply minimal, precise edits adhering to Karpathy guidelines and project constraints in [`PRODUCT.PRD`](PRODUCT.PRD).
+2. **Verify proofs:**
+   - Run tests (`npm test`) and confirm exit proofs defined in [`PLAN.md`](PLAN.md).
+
+### Phase 3: Completion, canonical tracking & state update (post-execution)
+
+As soon as an implementation slice or feature lands and its verification proof passes, update the tracking documents immediately in this **canonical order**:
 
 1. **[`FEATURES.md`](FEATURES.md)**: Mark matching capability checkboxes as `[x]`.
-2. **[`PLAN.md`](PLAN.md)**: Append an entry to `## Done log` with Date, Slice Slug, and Proof Result.
-3. **[`PRODUCT.PRD`](PRODUCT.PRD)**: Append an entry to `## 11. Done log` with Date, Slug, Title, and PR / Commit.
-4. **[`.agents/specs/index.PRD`](.agents/specs/index.PRD)**: Mark matching spec in `## 8. Next specs` as `[x] done` and append to `## 10. Done log`.
+2. **[`PLAN.md`](PLAN.md)**: Append an entry to `## Done log` with `Date`, `Slice Slug`, and `Proof Result`.
+3. **[`PRODUCT.PRD`](PRODUCT.PRD)**: Append an entry to `## 11. Done log` with `Date`, `Slug`, `Title`, and `PR / Commit`.
+4. **[`.agents/specs/index.PRD`](.agents/specs/index.PRD)**:
+   - Mark matching spec in `## 8. Next specs` as `[x] done`.
+   - Append an entry to `## 10. Done log` with `Date`, `Slug`, `Title`, and `PR / Commit`.
+   - Mark the slice spec status (`.agents/specs/<slug>.spec.md`) as complete if present.
+5. **Changelog & Learning:**
+   - Log task completion via `ws-changelog` and record any newly discovered anti-regression traps via `ws-self-learning`.
 
-## Task execution workflow
-
-1. **Check & align with [`.agents/specs/index.PRD`](.agents/specs/index.PRD):**
-   - On receiving a prompt instruction, locate the relevant feature / slice in `index.PRD` and `PLAN.md`.
-   - If a dedicated slice spec exists or is needed, load or create the slice spec under `.agents/specs/<slug>.spec.md`.
-2. **Implement & Verify:**
-   - Execute the implementation surgically.
-   - Run tests (`npm test`) and confirm exit proofs.
-3. **Mark Complete & Sync:**
-   - Immediately update `FEATURES.md`, `PLAN.md`, `PRODUCT.PRD`, and `.agents/specs/index.PRD` per the canonical tracking order above.
