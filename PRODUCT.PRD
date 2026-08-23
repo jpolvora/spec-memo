@@ -171,6 +171,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 - [ ] Spec SHA drift on bootstrap (`spec: spec-drift`)
 - [ ] Optional private git remote on the vault (`spec: vault-git`)
 - [ ] Cross-project search opt-in (`spec: cross-project-search`)
+- [ ] Embeddings as an optional search backend (`spec: embeddings-search`)
 
 ### Phase 4 — Human viewers (optional)
 
@@ -190,12 +191,12 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 7 | `refuse-product-write` | `[ ]` | Phase 1 | Detect product root; deny dual-write |
 | 8 | `redaction` | `[ ]` | Phase 1 | Block obvious secrets in bodies |
 | 9 | `import-agents-tree` | `[ ]` | Phase 1 | Map specs/memory/plans; skip scratch |
+| 10 | `embeddings-search` | `[ ]` | Phase 3 | Optional embeddings search backend after kinds/TTL |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
 ## 10. Inbox (unscheduled)
 
-- Embeddings as an optional `search` backend after kinds/TTL exist.
 - Host plugin / canvas UI for humans.
 - Encrypted vault / git-crypt.
 - Multi-machine sync beyond “optional git remote on the vault.”
@@ -208,6 +209,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-22 | docs-v0 | Product docs: README, AGENTS, PRD, FEATURES, PLAN | uncommitted |
 | 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, test suite | Slice 1 delivery |
 | 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), remote normalization, project ID binding, project.json | Slice 2 delivery |
+| 2026-08-23 | slice-3-records-indexes | Record schema validation, upsert/get engine, TRAPS.md / DECISIONS.md / INDEX.md compiler | Slice 3 delivery |
 
 ## 12. Related docs
 

@@ -170,12 +170,16 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const response = await executeTool(parsed.command, payload);
 
     if (parsed.isJson) {
-      console.log(JSON.stringify(response, null, 2));
+      if (response.isError) {
+        console.log(JSON.stringify(response, null, 2));
+      } else {
+        console.log(JSON.stringify(response.data, null, 2));
+      }
     } else {
       if (response.isError) {
         console.error(`Error [${response.code}]: ${response.error}`);
       } else {
-        console.log(JSON.stringify(response.data, null, 2));
+        console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));
       }
     }
 

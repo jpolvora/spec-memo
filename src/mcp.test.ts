@@ -54,4 +54,42 @@ describe('MCP Server Integration', () => {
     await client.close();
     await server.close();
   });
+
+  it('should successfully execute upsert and get over MCP', async () => {
+    const server = createMcpServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const upsertRes = await client.callTool({
+      name: 'upsert',
+      arguments: {
+        kind: 'trap',
+        slug: 'mcp-test-trap',
+        frontmatter: { id: 'mcp-test-trap', title: 'MCP Trap' },
+        body: 'MCP test body'
+      }
+    });
+
+    assert.equal(upsertRes.isError, undefined);
+
+    const getRes = await client.callTool({
+      name: 'get',
+      arguments: {
+        id: 'mcp-test-trap'
+      }
+    });
+
+    assert.equal(getRes.isError, undefined);
+    const content = getRes.content as Array<{ type: string; text?: string }>;
+    assert.ok(content && content.length > 0);
+    const parsed = JSON.parse(content[0].text as string);
+    assert.equal(parsed.frontmatter.id, 'mcp-test-trap');
+
+    await client.close();
+    await server.close();
+  });
 });

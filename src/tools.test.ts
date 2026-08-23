@@ -31,19 +31,42 @@ describe('Tool Definitions and Execution', () => {
     }
   });
 
-  it('should return NOT_IMPLEMENTED for all 8 tools in Slice 1', async () => {
-    const testCases: Array<{ name: ToolName; args: unknown }> = [
+  it('should execute upsert and get tools successfully', async () => {
+    const upsertRes = await executeTool('upsert', {
+      kind: 'trap',
+      slug: 'test-exec-trap',
+      frontmatter: {
+        id: 'trap-test-exec',
+        title: 'Execution Test Trap',
+        severity: 'high'
+      },
+      body: 'Body content'
+    });
+
+    assert.equal(upsertRes.isError, undefined);
+    assert.ok(upsertRes.data);
+
+    const getRes = await executeTool('get', {
+      id: 'trap-test-exec'
+    });
+
+    assert.equal(getRes.isError, undefined);
+    assert.ok(getRes.data);
+    const memo = getRes.data as { frontmatter: { id: string } };
+    assert.equal(memo.frontmatter.id, 'trap-test-exec');
+  });
+
+  it('should return NOT_IMPLEMENTED for remaining unbuilt tools', async () => {
+    const unbuiltTools: Array<{ name: ToolName; args: unknown }> = [
       { name: 'bootstrap', args: { cwd: '.' } },
       { name: 'search', args: { query: 'test' } },
-      { name: 'get', args: { id: 'test-id' } },
-      { name: 'upsert', args: { kind: 'trap', body: 'sample' } },
       { name: 'append', args: { event: 'sample event' } },
       { name: 'forget', args: { id: 'test-id' } },
       { name: 'gc', args: { dryRun: true } },
       { name: 'promote', args: { destination: 'docs/test.md' } }
     ];
 
-    for (const { name, args } of testCases) {
+    for (const { name, args } of unbuiltTools) {
       const res = await executeTool(name, args);
       assert.equal(res.isError, true);
       if (res.isError) {

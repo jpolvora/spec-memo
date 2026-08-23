@@ -152,5 +152,6 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-22 | docs-v0 | PRODUCT.PRD, FEATURES.md, PLAN.md, AGENTS.md, README.md written |
 | 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, type/schema definitions, test suite |
 | 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), git remote normalization, project ID binding, project.json, directory scaffolding, test suite |
+| 2026-08-23 | slice-3-records-indexes | Record schema validation, upsert/get engine, superseding workflow, TRAPS.md / DECISIONS.md / INDEX.md compiler, test suite |
 
 When a Phase 1 slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.

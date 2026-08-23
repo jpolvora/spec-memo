@@ -163,6 +163,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   }
 };
 
+import { upsertRecord, getRecord } from './store.js';
+import { RecordKind } from './types.js';
+
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
     return {
@@ -184,11 +187,67 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     };
   }
 
-  // Slice 1 stub: return a stable NOT_IMPLEMENTED response
+  if (name === 'upsert') {
+    try {
+      const { kind, slug, frontmatter, body } = parseResult.data as {
+        kind: RecordKind;
+        slug?: string;
+        frontmatter?: Record<string, unknown>;
+        body: string;
+      };
+      const result = await upsertRecord({
+        kind,
+        slug,
+        frontmatter,
+        body
+      });
+      return {
+        data: result
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        isError: true,
+        error: message,
+        code: 'UPSERT_FAILED'
+      };
+    }
+  }
+
+  if (name === 'get') {
+    try {
+      const { id, kind, slug } = parseResult.data as {
+        id?: string;
+        kind?: RecordKind;
+        slug?: string;
+      };
+      const record = await getRecord({ id, kind, slug });
+      if (!record) {
+        return {
+          isError: true,
+          error: `Record not found: id=${id || 'n/a'}, kind=${kind || 'n/a'}, slug=${slug || 'n/a'}`,
+          code: 'RECORD_NOT_FOUND'
+        };
+      }
+      return {
+        data: record
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        isError: true,
+        error: message,
+        code: 'GET_FAILED'
+      };
+    }
+  }
+
+  // Stubs for remaining tools
   return {
     isError: true,
-    error: `Tool '${name}' is not yet implemented in Slice 1`,
+    error: `Tool '${name}' is not yet implemented`,
     code: 'NOT_IMPLEMENTED',
     details: { tool: name, args: parseResult.data }
   };
 }
+

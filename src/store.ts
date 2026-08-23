@@ -1,0 +1,243 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus } from './types.js';
+import { resolveProjectIdentity } from './identity.js';
+import { ensureProjectVault, getVaultRoot } from './vault.js';
+import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
+import { rebuildCompiledViews } from './compiler.js';
+
+export interface UpsertOptions {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  kind: RecordKind;
+  slug?: string;
+  frontmatter?: Partial<RecordFrontmatter>;
+  body: string;
+  source?: RecordSource;
+}
+
+export interface UpsertResult {
+  id: string;
+  kind: RecordKind;
+  slug: string;
+  path: string;
+  superseded: boolean;
+}
+
+export interface GetOptions {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  id?: string;
+  kind?: RecordKind;
+  slug?: string;
+}
+
+/**
+ * Generate a slug/id from a title or string.
+ */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Get target subdirectory name for a record kind.
+ */
+export function getSubdirForKind(kind: RecordKind): string {
+  switch (kind) {
+    case 'trap':
+      return 'traps';
+    case 'decision':
+      return 'decisions';
+    case 'spec':
+      return 'specs';
+    case 'plan':
+      return 'plans';
+    case 'log':
+      return 'logs';
+    case 'review':
+      return 'reviews';
+    case 'scratch':
+      return 'scratch';
+    case 'state':
+      return 'plans'; // state records live under plans/ or state subfolder
+    default:
+      return `${kind}s`;
+  }
+}
+
+/**
+ * Upsert a memory record (trap, decision, spec, plan, state, log, scratch, review)
+ * and update compiled index views.
+ */
+export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult> {
+  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+  const projectId = options.projectId || identity.projectId;
+
+  ensureProjectVault(identity, vaultRoot);
+
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+  const subdir = getSubdirForKind(options.kind);
+  const targetDir = path.join(projectDir, subdir);
+
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  // Derive slug and record ID
+  let slug = options.slug || (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : '');
+  if (!slug && typeof options.frontmatter?.title === 'string') {
+    slug = slugify(options.frontmatter.title);
+  }
+  if (!slug) {
+    slug = `${options.kind}-${Date.now()}`;
+  }
+
+  const recordId = (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : null) || slug;
+  const fileName = `${slug}.md`;
+  const filePath = path.join(targetDir, fileName);
+
+  let existingRecord: MemoRecord | null = null;
+  if (fs.existsSync(filePath)) {
+    try {
+      existingRecord = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
+    } catch {
+      // Overwrite if corrupt
+    }
+  }
+
+  const now = new Date().toISOString();
+  const rawFrontmatter: RecordFrontmatter = {
+    ...(existingRecord?.frontmatter || {}),
+    ...(options.frontmatter || {}),
+    id: recordId,
+    kind: options.kind,
+    project: projectId,
+    status: (options.frontmatter?.status as RecordStatus) || (existingRecord?.frontmatter.status ?? 'active'),
+    created: existingRecord?.frontmatter.created || options.frontmatter?.created || now,
+    updated: now,
+    source: options.source || options.frontmatter?.source || existingRecord?.frontmatter.source || 'agent'
+  };
+
+  const validation = validateFrontmatter(rawFrontmatter);
+  if (!validation.success) {
+    throw new Error(`Invalid record frontmatter: ${validation.errors.join(', ')}`);
+  }
+
+  // If this record supersedes an existing one, update the older record
+  let superseded = false;
+  if (validation.data.supersedes) {
+    const olderRecord = await getRecord({
+      projectId,
+      vaultRoot,
+      id: validation.data.supersedes,
+      kind: options.kind
+    });
+
+    if (olderRecord && olderRecord.path && fs.existsSync(olderRecord.path)) {
+      const updatedOlderFm: RecordFrontmatter = {
+        ...olderRecord.frontmatter,
+        status: 'superseded',
+        updated: now
+      };
+      const updatedOlderContent = serializeRecord({
+        frontmatter: updatedOlderFm,
+        body: olderRecord.body
+      });
+      fs.writeFileSync(olderRecord.path, updatedOlderContent, 'utf8');
+      superseded = true;
+    }
+  }
+
+  const fileContent = serializeRecord({
+    frontmatter: validation.data,
+    body: options.body
+  });
+
+  fs.writeFileSync(filePath, fileContent, 'utf8');
+
+  // Automatically update compiled views (TRAPS.md, DECISIONS.md, INDEX.md)
+  rebuildCompiledViews(projectId, vaultRoot);
+
+  return {
+    id: recordId,
+    kind: options.kind,
+    slug,
+    path: filePath,
+    superseded
+  };
+}
+
+/**
+ * Retrieve a memory record by ID or by kind+slug.
+ */
+export async function getRecord(options: GetOptions): Promise<MemoRecord | null> {
+  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+  const projectId = options.projectId || identity.projectId;
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+
+  if (!fs.existsSync(projectDir)) {
+    return null;
+  }
+
+  // If kind and slug provided, check direct path
+  if (options.kind && options.slug) {
+    const subdir = getSubdirForKind(options.kind);
+    const directPath = path.join(projectDir, subdir, `${options.slug}.md`);
+    if (fs.existsSync(directPath)) {
+      try {
+        return parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  // Otherwise search across subdirectories
+  const lookupId = options.id || options.slug;
+  if (!lookupId) {
+    return null;
+  }
+
+  const subdirs = fs.readdirSync(projectDir, { withFileTypes: true });
+  for (const d of subdirs) {
+    if (d.isDirectory()) {
+      const dirPath = path.join(projectDir, d.name);
+      // Check exact slug filename first
+      const directFile = path.join(dirPath, `${lookupId}.md`);
+      if (fs.existsSync(directFile)) {
+        try {
+          return parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
+        } catch {
+          // Continue scanning
+        }
+      }
+
+      // Check all files in directory for matching frontmatter id
+      const files = fs.readdirSync(dirPath);
+      for (const file of files) {
+        if (file.endsWith('.md')) {
+          const filePath = path.join(dirPath, file);
+          try {
+            const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
+            if (parsed.frontmatter.id === lookupId) {
+              return parsed;
+            }
+          } catch {
+            // Ignore unparseable
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}

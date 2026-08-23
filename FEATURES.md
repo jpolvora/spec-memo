@@ -25,12 +25,12 @@ Package version: **not shipped**. Status marks: `[ ]` planned · `[~]` in design
 
 ## 2. Record store
 
-- [ ] **Typed Markdown records.** One file per record, YAML frontmatter per [`PRODUCT.PRD`](PRODUCT.PRD) § Frontmatter. Body is Markdown.
-- [ ] **Kinds.** `trap`, `decision`, `spec`, `plan`, `state`, `log`, `scratch`, `review` with the retention table in the PRD.
-- [ ] **Compiled views.** Regenerated, never hand-edited: `INDEX.md`, `TRAPS.md`, `DECISIONS.md`. Rebuild from sources (no merge of compiled files).
-- [ ] **Trap shape.** Layer, module, severity, pathPatterns, scenario, DO NOT, INSTEAD DO — compatible with today’s workflow-skills memory entries so import is mechanical.
-- [ ] **Decision shape.** Title, status (`proposed` / `accepted` / `superseded`), rationale, alternatives considered (optional).
-- [ ] **Spec of record.** Single spec per slug in the vault. No `step-00` duplicate. Optional `linkedPaths` + `verifiedAtSha`.
+- [x] **Typed Markdown records.** One file per record, YAML frontmatter per [`PRODUCT.PRD`](PRODUCT.PRD) § Frontmatter. Body is Markdown.
+- [x] **Kinds.** `trap`, `decision`, `spec`, `plan`, `state`, `log`, `scratch`, `review` with the retention table in the PRD.
+- [x] **Compiled views.** Regenerated, never hand-edited: `INDEX.md`, `TRAPS.md`, `DECISIONS.md`. Rebuild from sources (no merge of compiled files).
+- [x] **Trap shape.** Layer, module, severity, pathPatterns, scenario, DO NOT, INSTEAD DO — compatible with today’s workflow-skills memory entries so import is mechanical.
+- [x] **Decision shape.** Title, status (`proposed` / `accepted` / `superseded`), rationale, alternatives considered (optional).
+- [x] **Spec of record.** Single spec per slug in the vault. No `step-00` duplicate. Optional `linkedPaths` + `verifiedAtSha`.
 
 ---
 

@@ -75,4 +75,37 @@ describe('CLI Integration', () => {
       console.log = origLog;
     }
   });
+
+  it('should execute memo upsert and memo get through CLI with --json', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      const upsertCode = await runCli([
+        'upsert',
+        '--kind',
+        'decision',
+        '--slug',
+        'cli-adr-01',
+        '--body',
+        'CLI Decision text',
+        '--json'
+      ]);
+      assert.equal(upsertCode, 0);
+      const upsertParsed = JSON.parse(capturedLogs.trim());
+      assert.equal(upsertParsed.id, 'cli-adr-01');
+
+      capturedLogs = '';
+      const getCode = await runCli(['get', '--id', 'cli-adr-01', '--json']);
+      assert.equal(getCode, 0);
+      const getParsed = JSON.parse(capturedLogs.trim());
+      assert.equal(getParsed.frontmatter.id, 'cli-adr-01');
+      assert.equal(getParsed.body, 'CLI Decision text');
+    } finally {
+      console.log = origLog;
+    }
+  });
 });
