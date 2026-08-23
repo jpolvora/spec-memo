@@ -150,5 +150,6 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | Date | Slice | Result |
 |------|-------|--------|
 | 2026-08-22 | docs-v0 | PRODUCT.PRD, FEATURES.md, PLAN.md, AGENTS.md, README.md written |
+| 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, type/schema definitions, test suite |
 
 When a Phase 1 slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.

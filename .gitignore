@@ -1,3 +1,13 @@
-# Editor / configure backups
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+
+# Editor / backups
 *.bak
 AGENTS.md.bak
+
+# Test coverage / scratch
+coverage/
+.spec-memo/

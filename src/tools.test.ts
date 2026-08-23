@@ -1,0 +1,54 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { TOOL_DEFINITIONS, executeTool } from './tools.js';
+import { TOOL_NAMES, ToolName } from './types.js';
+
+describe('Tool Definitions and Execution', () => {
+  it('should define all 8 core tools', () => {
+    assert.equal(TOOL_NAMES.length, 8);
+    for (const name of TOOL_NAMES) {
+      assert.ok(TOOL_DEFINITIONS[name], `Missing definition for ${name}`);
+      assert.equal(TOOL_DEFINITIONS[name].name, name);
+      assert.ok(TOOL_DEFINITIONS[name].description.length > 0);
+      assert.ok(TOOL_DEFINITIONS[name].inputSchema);
+    }
+  });
+
+  it('should return error for unknown tool', async () => {
+    const res = await executeTool('nonexistent_tool', {});
+    assert.equal(res.isError, true);
+    if (res.isError) {
+      assert.equal(res.code, 'UNKNOWN_TOOL');
+    }
+  });
+
+  it('should validate tool arguments', async () => {
+    // search requires query string
+    const res = await executeTool('search', {});
+    assert.equal(res.isError, true);
+    if (res.isError) {
+      assert.equal(res.code, 'INVALID_ARGUMENTS');
+    }
+  });
+
+  it('should return NOT_IMPLEMENTED for all 8 tools in Slice 1', async () => {
+    const testCases: Array<{ name: ToolName; args: unknown }> = [
+      { name: 'bootstrap', args: { cwd: '.' } },
+      { name: 'search', args: { query: 'test' } },
+      { name: 'get', args: { id: 'test-id' } },
+      { name: 'upsert', args: { kind: 'trap', body: 'sample' } },
+      { name: 'append', args: { event: 'sample event' } },
+      { name: 'forget', args: { id: 'test-id' } },
+      { name: 'gc', args: { dryRun: true } },
+      { name: 'promote', args: { destination: 'docs/test.md' } }
+    ];
+
+    for (const { name, args } of testCases) {
+      const res = await executeTool(name, args);
+      assert.equal(res.isError, true);
+      if (res.isError) {
+        assert.equal(res.code, 'NOT_IMPLEMENTED');
+      }
+    }
+  });
+});
