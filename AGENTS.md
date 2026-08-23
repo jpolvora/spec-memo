@@ -31,3 +31,23 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 2. This root `AGENTS.md` (autoload membership via `autoload.md`)
 3. `.agents/skills/ws-shared/AGENTS.md` (consumer hub)
 4. Design / spec / architecture constraints
+
+## Canonical tracking & marking features done
+
+As soon as an implementation slice or feature lands and its verification proof passes, locate and update the tracking documents immediately in this canonical order:
+
+1. **[`FEATURES.md`](FEATURES.md)**: Mark matching capability checkboxes as `[x]`.
+2. **[`PLAN.md`](PLAN.md)**: Append an entry to `## Done log` with Date, Slice Slug, and Proof Result.
+3. **[`PRODUCT.PRD`](PRODUCT.PRD)**: Append an entry to `## 11. Done log` with Date, Slug, Title, and PR / Commit.
+4. **[`.agents/specs/index.PRD`](.agents/specs/index.PRD)**: Mark matching spec in `## 8. Next specs` as `[x] done` and append to `## 10. Done log`.
+
+## Task execution workflow
+
+1. **Check & align with [`.agents/specs/index.PRD`](.agents/specs/index.PRD):**
+   - On receiving a prompt instruction, locate the relevant feature / slice in `index.PRD` and `PLAN.md`.
+   - If a dedicated slice spec exists or is needed, load or create the slice spec under `.agents/specs/<slug>.spec.md`.
+2. **Implement & Verify:**
+   - Execute the implementation surgically.
+   - Run tests (`npm test`) and confirm exit proofs.
+3. **Mark Complete & Sync:**
+   - Immediately update `FEATURES.md`, `PLAN.md`, `PRODUCT.PRD`, and `.agents/specs/index.PRD` per the canonical tracking order above.
