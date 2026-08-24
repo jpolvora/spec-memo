@@ -248,6 +248,30 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       }
     }
 
+    // Normalization for append command
+    if (parsed.command === 'append') {
+      if (parsed.positionals.length > 0 && !payload.event) {
+        payload.event = parsed.positionals.join(' ');
+      }
+      if (typeof payload.details === 'string') {
+        try {
+          payload.details = JSON.parse(payload.details as string);
+        } catch {
+          // Keep as string or ignore
+        }
+      }
+    }
+
+    // Normalization for forget command
+    if (parsed.command === 'forget') {
+      if (parsed.positionals.length > 0 && !payload.id) {
+        payload.id = parsed.positionals[0];
+      }
+      if (payload.purge === true || payload.purge === 'true') {
+        payload.purge = true;
+      }
+    }
+
     const response = await executeTool(parsed.command, payload);
 
     if (parsed.isJson) {
@@ -283,6 +307,12 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
             }
           }
         }
+      } else if (parsed.command === 'append' && response.data) {
+        const res = response.data as { id: string; path: string };
+        console.log(`[APPEND] Recorded event ${res.id}`);
+      } else if (parsed.command === 'forget' && response.data) {
+        const res = response.data as { id: string; status: string; purged: boolean };
+        console.log(`[FORGET] Record ${res.id} ${res.purged ? 'permanently purged' : 'archived'}`);
       } else {
         console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));
       }

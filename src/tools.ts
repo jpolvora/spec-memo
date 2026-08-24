@@ -176,9 +176,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   }
 };
 
-import { upsertRecord, getRecord } from './store.js';
+import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
 import { searchIndex } from './indexer.js';
-import { RecordKind, RecordStatus, SearchOptions } from './types.js';
+import { AppendOptions, ForgetOptions, RecordKind, RecordStatus, SearchOptions } from './types.js';
 
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
@@ -273,7 +273,41 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     }
   }
 
-  // Stubs for remaining tools
+  if (name === 'append') {
+    try {
+      const appendOpts = parseResult.data as AppendOptions;
+      const result = await appendEvent(appendOpts);
+      return {
+        data: result
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        isError: true,
+        error: message,
+        code: 'APPEND_FAILED'
+      };
+    }
+  }
+
+  if (name === 'forget') {
+    try {
+      const forgetOpts = parseResult.data as ForgetOptions;
+      const result = await forgetRecord(forgetOpts);
+      return {
+        data: result
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        isError: true,
+        error: message,
+        code: 'FORGET_FAILED'
+      };
+    }
+  }
+
+  // Stubs for remaining tools (bootstrap, gc, promote)
   return {
     isError: true,
     error: `Tool '${name}' is not yet implemented`,

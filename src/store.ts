@@ -1,11 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus } from './types.js';
+import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus, AppendOptions, AppendResult, ForgetOptions, ForgetResult } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 import { ensureProjectVault, getVaultRoot } from './vault.js';
 import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
-import { openIndex, indexRecord } from './indexer.js';
+import { openIndex, indexRecord, removeRecord } from './indexer.js';
 
 export interface UpsertOptions {
   cwd?: string;
@@ -258,4 +258,157 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
   }
 
   return null;
+}
+
+let logSequence = 0;
+
+/**
+ * Append a write-only log or audit event record without overwriting previous events.
+ */
+export async function appendEvent(options: AppendOptions): Promise<AppendResult> {
+  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+  const projectId = options.projectId || identity.projectId;
+
+  ensureProjectVault(identity, vaultRoot);
+
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+  const kind: RecordKind = options.kind || 'log';
+  const subdir = getSubdirForKind(kind);
+  const targetDir = path.join(projectDir, subdir);
+
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().replace(/[:.]/g, '-');
+  logSequence = (logSequence + 1) % 10000;
+  const seqStr = String(logSequence).padStart(4, '0');
+  const logId = `log-${dateStr}-${seqStr}`;
+  const fileName = `${logId}.md`;
+  const filePath = path.join(targetDir, fileName);
+
+  const frontmatter: RecordFrontmatter = {
+    id: logId,
+    kind,
+    project: projectId,
+    status: 'active',
+    created: now.toISOString(),
+    updated: now.toISOString(),
+    source: options.source || 'agent',
+    ...(options.details || {})
+  };
+
+  const validation = validateFrontmatter(frontmatter);
+  if (!validation.success) {
+    throw new Error(`Invalid log frontmatter: ${validation.errors.join(', ')}`);
+  }
+
+  const fileContent = serializeRecord({
+    frontmatter: validation.data,
+    body: options.event
+  });
+
+  fs.writeFileSync(filePath, fileContent, 'utf8');
+
+  // Index into SQLite FTS
+  try {
+    const db = openIndex(vaultRoot);
+    indexRecord(db, { frontmatter: validation.data, body: options.event }, filePath);
+  } catch {
+    // Non-blocking
+  }
+
+  // Update compiled views
+  rebuildCompiledViews(projectId, vaultRoot);
+
+  return {
+    id: logId,
+    kind,
+    path: filePath,
+    event: options.event
+  };
+}
+
+/**
+ * Archive or permanently purge a memory record.
+ */
+export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult> {
+  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+  const projectId = options.projectId || identity.projectId;
+
+  const record = await getRecord({
+    cwd: options.cwd,
+    projectId,
+    vaultRoot,
+    id: options.id,
+    kind: options.kind,
+    slug: options.slug
+  });
+
+  if (!record || !record.path) {
+    const lookup = options.id || `${options.kind || ''}/${options.slug || ''}`;
+    throw new Error(`Record not found: ${lookup}`);
+  }
+
+  const id = record.frontmatter.id;
+  const kind = record.frontmatter.kind;
+
+  if (options.purge) {
+    // Permanent physical delete
+    if (fs.existsSync(record.path)) {
+      fs.unlinkSync(record.path);
+    }
+
+    try {
+      const db = openIndex(vaultRoot);
+      removeRecord(db, id, projectId);
+    } catch {
+      // Non-blocking
+    }
+
+    rebuildCompiledViews(projectId, vaultRoot);
+
+    return {
+      id,
+      kind,
+      status: 'purged',
+      purged: true,
+      path: record.path
+    };
+  }
+
+  // Soft archive (default)
+  const now = new Date().toISOString();
+  const updatedFrontmatter: RecordFrontmatter = {
+    ...record.frontmatter,
+    status: 'archived',
+    updated: now
+  };
+
+  const fileContent = serializeRecord({
+    frontmatter: updatedFrontmatter,
+    body: record.body
+  });
+
+  fs.writeFileSync(record.path, fileContent, 'utf8');
+
+  try {
+    const db = openIndex(vaultRoot);
+    indexRecord(db, { frontmatter: updatedFrontmatter, body: record.body }, record.path);
+  } catch {
+    // Non-blocking
+  }
+
+  rebuildCompiledViews(projectId, vaultRoot);
+
+  return {
+    id,
+    kind,
+    status: 'archived',
+    purged: false,
+    path: record.path
+  };
 }

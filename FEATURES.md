@@ -52,8 +52,8 @@ One stdio MCP server. Tool descriptions are the interface; vault paths are not.
 | `search` | [x] | Filtered retrieval | id, kind, score, snippet, status |
 | `get` | [x] | Read one record by id or `kind+slug` | Full markdown + frontmatter |
 | `upsert` | [x] | Write/update trap, decision, spec, plan, state, review, scratch | id, whether it superseded another; schema errors fail closed |
-| `append` | [ ] | Changelog / audit event | New event id; never rewrites prior events |
-| `forget` | [ ] | Supersede or archive | New status. Traps archive unless the caller passes an explicit purge confirmed by the user |
+| `append` | [x] | Changelog / audit event | New event id; never rewrites prior events |
+| `forget` | [x] | Supersede or archive | New status. Traps archive unless the caller passes an explicit purge confirmed by the user |
 | `gc` | [ ] | Apply TTL, compact shipped plans, rebuild FTS | Counts archived/compacted/deleted (scratch only) |
 | `promote` | [ ] | Copy one record into the product repo | Product-relative path. **Default deny** without `destination` inside the product root |
 

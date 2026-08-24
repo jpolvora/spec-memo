@@ -120,6 +120,32 @@ describe('CLI Integration', () => {
       const searchTextCode = await runCli(['search', 'Architecture']);
       assert.equal(searchTextCode, 0);
       assert.ok(capturedLogs.includes('[DECISION:ACTIVE] cli-adr-01: CLI Architecture Decision'));
+
+      // Append CLI
+      capturedLogs = '';
+      const appendCode = await runCli(['append', 'Audit log via CLI test', '--json']);
+      assert.equal(appendCode, 0);
+      const appendParsed = JSON.parse(capturedLogs.trim());
+      assert.ok(appendParsed.id.startsWith('log-'));
+      assert.equal(appendParsed.event, 'Audit log via CLI test');
+
+      // Forget CLI (archive)
+      capturedLogs = '';
+      const forgetCode = await runCli(['forget', 'cli-adr-01', '--json']);
+      assert.equal(forgetCode, 0);
+      const forgetParsed = JSON.parse(capturedLogs.trim());
+      assert.equal(forgetParsed.id, 'cli-adr-01');
+      assert.equal(forgetParsed.status, 'archived');
+      assert.equal(forgetParsed.purged, false);
+
+      // Forget CLI (purge)
+      capturedLogs = '';
+      const purgeCode = await runCli(['forget', 'cli-adr-01', '--purge', '--json']);
+      assert.equal(purgeCode, 0);
+      const purgeParsed = JSON.parse(capturedLogs.trim());
+      assert.equal(purgeParsed.id, 'cli-adr-01');
+      assert.equal(purgeParsed.status, 'purged');
+      assert.equal(purgeParsed.purged, true);
     } finally {
       console.log = origLog;
     }

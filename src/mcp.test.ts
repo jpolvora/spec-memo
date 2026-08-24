@@ -103,6 +103,30 @@ describe('MCP Server Integration', () => {
     assert.ok(Array.isArray(searchHits));
     assert.ok(searchHits.some((h) => h.id === 'mcp-test-trap'));
 
+    // Test append tool over MCP
+    const appendRes = await client.callTool({
+      name: 'append',
+      arguments: {
+        event: 'MCP append event test'
+      }
+    });
+    assert.equal(appendRes.isError, undefined);
+    const appendContent = appendRes.content as Array<{ type: string; text?: string }>;
+    const appendData = JSON.parse(appendContent[0].text as string);
+    assert.ok(appendData.id.startsWith('log-'));
+
+    // Test forget tool over MCP
+    const forgetRes = await client.callTool({
+      name: 'forget',
+      arguments: {
+        id: 'mcp-test-trap'
+      }
+    });
+    assert.equal(forgetRes.isError, undefined);
+    const forgetContent = forgetRes.content as Array<{ type: string; text?: string }>;
+    const forgetData = JSON.parse(forgetContent[0].text as string);
+    assert.equal(forgetData.status, 'archived');
+
     await client.close();
     await server.close();
   });

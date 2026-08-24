@@ -194,8 +194,8 @@ export function generateIndexView(metadata: ProjectMetadata | null, records: Mem
 |---|---|---|
 `;
 
-  const allKinds = ['trap', 'decision', 'spec', 'plan', 'state', 'log', 'review', 'scratch'] as const;
-  for (const kind of allKinds) {
+  const durableKinds = ['trap', 'decision', 'spec', 'plan', 'log', 'review'] as const;
+  for (const kind of durableKinds) {
     const list = byKind[kind] || [];
     const active = list.filter((r) => r.frontmatter.status === 'active').length;
     md += `| \`${kind}\` | ${active} | ${list.length} |\n`;
@@ -203,7 +203,7 @@ export function generateIndexView(metadata: ProjectMetadata | null, records: Mem
 
   md += `\n## Records by Kind\n\n`;
 
-  for (const kind of allKinds) {
+  for (const kind of durableKinds) {
     const list = byKind[kind] || [];
     if (list.length > 0) {
       md += `### ${kind.toUpperCase()} (${list.length})\n\n`;

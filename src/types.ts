@@ -129,3 +129,38 @@ export interface SearchHit {
   updated?: string;
 }
 
+export interface AppendOptions {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  event: string;
+  kind?: RecordKind;
+  details?: Record<string, unknown>;
+  source?: RecordSource;
+}
+
+export interface AppendResult {
+  id: string;
+  kind: RecordKind;
+  path: string;
+  event: string;
+}
+
+export interface ForgetOptions {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  id?: string;
+  kind?: RecordKind;
+  slug?: string;
+  purge?: boolean;
+}
+
+export interface ForgetResult {
+  id: string;
+  kind?: RecordKind;
+  status: RecordStatus | 'purged';
+  purged: boolean;
+  path?: string;
+}
+

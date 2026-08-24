@@ -148,4 +148,128 @@ describe('Store Engine (upsert and get)', () => {
     assert.ok(newer);
     assert.equal(newer.frontmatter.status, 'active');
   });
+
+  it('should upsert and retrieve all record kinds (spec, plan, state, log, scratch, review)', async () => {
+    const kinds: Array<{ kind: 'spec' | 'plan' | 'state' | 'log' | 'scratch' | 'review'; id: string; title: string }> = [
+      { kind: 'spec', id: 'spec-auth', title: 'OAuth2 Authentication Specification' },
+      { kind: 'plan', id: 'plan-auth-phase1', title: 'Phase 1 Delivery Plan' },
+      { kind: 'state', id: 'state-session', title: 'Live Agent Session State' },
+      { kind: 'log', id: 'log-bootstrap-01', title: 'Session Bootstrap Audit' },
+      { kind: 'scratch', id: 'scratch-experiments', title: 'Temporary Scratch Notes' },
+      { kind: 'review', id: 'review-pr-42', title: 'Pre-Merge Adversarial Review' }
+    ];
+
+    for (const item of kinds) {
+      const res = await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: item.kind,
+        slug: item.id,
+        frontmatter: {
+          id: item.id,
+          title: item.title,
+          status: 'active'
+        },
+        body: `Content for ${item.kind}: ${item.title}`
+      });
+
+      assert.equal(res.id, item.id);
+      assert.equal(res.kind, item.kind);
+      assert.ok(fs.existsSync(res.path));
+
+      const retrieved = await getRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        id: item.id
+      });
+      assert.ok(retrieved, `Failed to retrieve record for kind ${item.kind}`);
+      assert.equal(retrieved.frontmatter.id, item.id);
+      assert.equal(retrieved.frontmatter.kind, item.kind);
+    }
+  });
+
+  it('should append sequential event records without rewriting previous events', async () => {
+    const { appendEvent } = await import('./store.js');
+
+    const ev1 = await appendEvent({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      event: 'Initial session start event',
+      details: { step: 1 }
+    });
+
+    const ev2 = await appendEvent({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      event: 'Secondary checkpoint completed',
+      details: { step: 2 }
+    });
+
+    assert.notEqual(ev1.id, ev2.id);
+    assert.ok(fs.existsSync(ev1.path));
+    assert.ok(fs.existsSync(ev2.path));
+
+    const content1 = fs.readFileSync(ev1.path, 'utf8');
+    const content2 = fs.readFileSync(ev2.path, 'utf8');
+
+    assert.ok(content1.includes('Initial session start event'));
+    assert.ok(content2.includes('Secondary checkpoint completed'));
+  });
+
+  it('should archive record on forget by default and permanently delete with purge flag', async () => {
+    const { forgetRecord } = await import('./store.js');
+
+    // 1. Create a trap
+    const trap = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'forget-target-trap',
+      frontmatter: {
+        id: 'trap-forget-target',
+        title: 'Trap to be forgotten'
+      },
+      body: 'Body of target trap'
+    });
+
+    // 2. Default forget (soft archive)
+    const archiveRes = await forgetRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-forget-target'
+    });
+
+    assert.equal(archiveRes.id, 'trap-forget-target');
+    assert.equal(archiveRes.status, 'archived');
+    assert.equal(archiveRes.purged, false);
+    assert.ok(fs.existsSync(trap.path), 'File should still exist on disk after archive');
+
+    const archivedRecord = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-forget-target'
+    });
+    assert.ok(archivedRecord);
+    assert.equal(archivedRecord.frontmatter.status, 'archived');
+
+    // 3. Purge forget (hard delete)
+    const purgeRes = await forgetRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-forget-target',
+      purge: true
+    });
+
+    assert.equal(purgeRes.id, 'trap-forget-target');
+    assert.equal(purgeRes.status, 'purged');
+    assert.equal(purgeRes.purged, true);
+    assert.ok(!fs.existsSync(trap.path), 'File should be deleted on purge');
+
+    const purgedRecord = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-forget-target'
+    });
+    assert.equal(purgedRecord, null);
+  });
 });

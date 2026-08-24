@@ -211,6 +211,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), remote normalization, project ID binding, project.json | Slice 2 delivery |
 | 2026-08-23 | slice-3-records-indexes | Record schema validation, upsert/get engine, TRAPS.md / DECISIONS.md / INDEX.md compiler | Slice 3 delivery |
 | 2026-08-23 | slice-4-fts-index | SQLite FTS5 disposable index, Porter stemmer, pathPatterns matching, rebuildIndex, search tool & CLI | 66771e4 |
+| 2026-08-23 | slice-5-remaining-kinds-and-events | Full record kinds matrix, append-only event logging, forget soft-archive & purge | 1dbc5ac |
 
 ## 12. Related docs
 

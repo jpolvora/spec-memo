@@ -64,13 +64,42 @@ describe('Tool Definitions and Execution', () => {
     assert.ok(getRes.data);
     const memo = getRes.data as { frontmatter: { id: string } };
     assert.equal(memo.frontmatter.id, 'trap-test-exec');
+
+    // Append tool
+    const appendRes = await executeTool('append', {
+      event: 'Tool execution log event',
+      details: { trigger: 'test' }
+    });
+    assert.equal(appendRes.isError, undefined);
+    assert.ok(appendRes.data);
+    const appended = appendRes.data as { id: string; event: string };
+    assert.equal(appended.event, 'Tool execution log event');
+
+    // Forget tool (soft archive)
+    const forgetRes = await executeTool('forget', {
+      id: 'trap-test-exec'
+    });
+    assert.equal(forgetRes.isError, undefined);
+    const forgotten = forgetRes.data as { id: string; status: string; purged: boolean };
+    assert.equal(forgotten.id, 'trap-test-exec');
+    assert.equal(forgotten.status, 'archived');
+    assert.equal(forgotten.purged, false);
+
+    // Forget tool (purge)
+    const purgeRes = await executeTool('forget', {
+      id: 'trap-test-exec',
+      purge: true
+    });
+    assert.equal(purgeRes.isError, undefined);
+    const purged = purgeRes.data as { id: string; status: string; purged: boolean };
+    assert.equal(purged.id, 'trap-test-exec');
+    assert.equal(purged.status, 'purged');
+    assert.equal(purged.purged, true);
   });
 
   it('should return NOT_IMPLEMENTED for remaining unbuilt tools', async () => {
     const unbuiltTools: Array<{ name: ToolName; args: unknown }> = [
       { name: 'bootstrap', args: { cwd: '.' } },
-      { name: 'append', args: { event: 'sample event' } },
-      { name: 'forget', args: { id: 'test-id' } },
       { name: 'gc', args: { dryRun: true } },
       { name: 'promote', args: { destination: 'docs/test.md' } }
     ];
