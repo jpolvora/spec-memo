@@ -40,7 +40,7 @@ describe('CLI Integration', () => {
     }
   });
 
-  it('should output JSON error and exit 1 on tool execution in Slice 1', async () => {
+  it('should output JSON error and exit 1 for unbuilt tool', async () => {
     let capturedLogs = '';
     const origLog = console.log;
     console.log = (...args) => {
@@ -48,11 +48,38 @@ describe('CLI Integration', () => {
     };
 
     try {
-      const code = await runCli(['bootstrap', '--cwd', '.', '--json']);
+      const code = await runCli(['gc', '--json']);
       assert.equal(code, 1);
       const parsed = JSON.parse(capturedLogs.trim());
       assert.equal(parsed.isError, true);
       assert.equal(parsed.code, 'NOT_IMPLEMENTED');
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('should execute memo bootstrap with text and json outputs', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      // JSON mode
+      const codeJson = await runCli(['bootstrap', '--cwd', '.', '--json']);
+      assert.equal(codeJson, 0);
+      const parsed = JSON.parse(capturedLogs.trim());
+      assert.ok(parsed.projectId);
+      assert.equal(typeof parsed.truncated, 'boolean');
+
+      // Text mode
+      capturedLogs = '';
+      const codeText = await runCli(['bootstrap', '--cwd', '.']);
+      assert.equal(codeText, 0);
+      assert.ok(capturedLogs.includes('Bootstrap Context Brief'));
+      assert.ok(capturedLogs.includes('Active Traps'));
+      assert.ok(capturedLogs.includes('Active Decisions'));
     } finally {
       console.log = origLog;
     }

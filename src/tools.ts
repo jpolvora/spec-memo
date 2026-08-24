@@ -21,13 +21,17 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       properties: {
         cwd: { type: 'string', description: 'Product repository working directory (defaults to current dir)' },
         query: { type: 'string', description: 'Optional context query or task intent to filter traps/decisions' },
-        slug: { type: 'string', description: 'Active feature spec/plan slug' }
+        slug: { type: 'string', description: 'Active feature spec/plan slug' },
+        path: { type: 'string', description: 'Focus file path to prioritize matching traps' },
+        maxBytes: { type: 'number', description: 'Maximum UTF-8 payload byte budget (defaults to 8192)' }
       }
     },
     zodSchema: z.object({
       cwd: z.string().optional(),
       query: z.string().optional(),
-      slug: z.string().optional()
+      slug: z.string().optional(),
+      path: z.string().optional(),
+      maxBytes: z.number().optional()
     })
   },
   search: {
@@ -178,7 +182,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
 
 import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
 import { searchIndex } from './indexer.js';
-import { AppendOptions, ForgetOptions, RecordKind, RecordStatus, SearchOptions } from './types.js';
+import { compileBootstrapBrief } from './bootstrap.js';
+import { AppendOptions, BootstrapOptions, ForgetOptions, RecordKind, RecordStatus, SearchOptions } from './types.js';
 
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
@@ -199,6 +204,23 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       code: 'INVALID_ARGUMENTS',
       details: parseResult.error.format()
     };
+  }
+
+  if (name === 'bootstrap') {
+    try {
+      const bootstrapOpts = parseResult.data as BootstrapOptions;
+      const result = await compileBootstrapBrief(bootstrapOpts);
+      return {
+        data: result
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        isError: true,
+        error: message,
+        code: 'BOOTSTRAP_FAILED'
+      };
+    }
   }
 
   if (name === 'search') {

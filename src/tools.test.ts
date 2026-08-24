@@ -85,6 +85,16 @@ describe('Tool Definitions and Execution', () => {
     assert.equal(forgotten.status, 'archived');
     assert.equal(forgotten.purged, false);
 
+    // Bootstrap tool
+    const bootstrapRes = await executeTool('bootstrap', {
+      cwd: '.'
+    });
+    assert.equal(bootstrapRes.isError, undefined);
+    assert.ok(bootstrapRes.data);
+    const brief = bootstrapRes.data as { projectId: string; traps: unknown[]; truncated: boolean };
+    assert.ok(brief.projectId);
+    assert.equal(typeof brief.truncated, 'boolean');
+
     // Forget tool (purge)
     const purgeRes = await executeTool('forget', {
       id: 'trap-test-exec',
@@ -99,7 +109,6 @@ describe('Tool Definitions and Execution', () => {
 
   it('should return NOT_IMPLEMENTED for remaining unbuilt tools', async () => {
     const unbuiltTools: Array<{ name: ToolName; args: unknown }> = [
-      { name: 'bootstrap', args: { cwd: '.' } },
       { name: 'gc', args: { dryRun: true } },
       { name: 'promote', args: { destination: 'docs/test.md' } }
     ];

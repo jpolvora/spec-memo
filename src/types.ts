@@ -164,3 +164,33 @@ export interface ForgetResult {
   path?: string;
 }
 
+export interface BootstrapOptions {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  query?: string;
+  slug?: string;
+  path?: string;
+  maxBytes?: number;
+}
+
+export interface BootstrapBrief {
+  projectId: string;
+  gitRemote: string | null;
+  lastSeenRoot: string;
+  activeSlice?: {
+    slug: string;
+    spec?: MemoRecord;
+    plan?: MemoRecord;
+    state?: MemoRecord;
+  };
+  traps: MemoRecord[];
+  decisions: MemoRecord[];
+  totalTrapsCount: number;
+  totalDecisionsCount: number;
+  byteLength: number;
+  budgetBytes: number;
+  truncated: boolean;
+  notices: string[];
+}
+

@@ -38,8 +38,8 @@ describe('MCP Server Integration', () => {
     await client.connect(clientTransport);
 
     const result = await client.callTool({
-      name: 'bootstrap',
-      arguments: { cwd: '.' }
+      name: 'gc',
+      arguments: { dryRun: true }
     });
 
     assert.equal(result.isError, true);
@@ -55,7 +55,7 @@ describe('MCP Server Integration', () => {
     await server.close();
   });
 
-  it('should successfully execute upsert and get over MCP', async () => {
+  it('should successfully execute upsert, get, search, append, forget, and bootstrap over MCP', async () => {
     const server = createMcpServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -102,6 +102,20 @@ describe('MCP Server Integration', () => {
     const searchHits = JSON.parse(searchContent[0].text as string) as Array<{ id: string }>;
     assert.ok(Array.isArray(searchHits));
     assert.ok(searchHits.some((h) => h.id === 'mcp-test-trap'));
+
+    // Test bootstrap tool over MCP
+    const bootRes = await client.callTool({
+      name: 'bootstrap',
+      arguments: {
+        cwd: '.'
+      }
+    });
+    assert.equal(bootRes.isError, undefined);
+    const bootContent = bootRes.content as Array<{ type: string; text?: string }>;
+    assert.ok(bootContent && bootContent.length > 0);
+    const bootData = JSON.parse(bootContent[0].text as string);
+    assert.ok(bootData.projectId);
+    assert.equal(typeof bootData.truncated, 'boolean');
 
     // Test append tool over MCP
     const appendRes = await client.callTool({

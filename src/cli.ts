@@ -167,6 +167,17 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     delete payload.help;
     delete payload.json;
 
+    // Normalization for bootstrap command
+    if (parsed.command === 'bootstrap') {
+      if (payload['max-bytes']) {
+        payload.maxBytes = parseInt(String(payload['max-bytes']), 10);
+        delete payload['max-bytes'];
+      }
+      if (typeof payload.maxBytes === 'string') {
+        payload.maxBytes = parseInt(payload.maxBytes, 10);
+      }
+    }
+
     // Normalization for search command
     if (parsed.command === 'search') {
       if (parsed.positionals.length > 0 && !payload.query) {
@@ -283,6 +294,38 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     } else {
       if (response.isError) {
         console.error(`Error [${response.code}]: ${response.error}`);
+      } else if (parsed.command === 'bootstrap' && response.data) {
+        const b = response.data as import('./types.js').BootstrapBrief;
+        console.log(`spec-memo — Bootstrap Context Brief (${b.byteLength} / ${b.budgetBytes} bytes)\n`);
+        console.log(`Project: ${b.projectId} (remote: ${b.gitRemote || 'local-only'})`);
+        if (b.activeSlice) {
+          console.log(`\nActive Feature Slice: ${b.activeSlice.slug}`);
+          if (b.activeSlice.spec) console.log(`  Spec: ${b.activeSlice.spec.frontmatter.title || b.activeSlice.spec.frontmatter.id}`);
+          if (b.activeSlice.plan) console.log(`  Plan: ${b.activeSlice.plan.frontmatter.title || b.activeSlice.plan.frontmatter.id}`);
+        }
+        console.log(`\nActive Traps (${b.traps.length} of ${b.totalTrapsCount}):`);
+        if (b.traps.length === 0) {
+          console.log(`  (None)`);
+        } else {
+          for (const t of b.traps) {
+            const sev = (t.frontmatter.severity || 'medium').toUpperCase();
+            console.log(`  - [${sev}] ${t.frontmatter.id}: ${t.frontmatter.title || ''}`);
+          }
+        }
+        console.log(`\nActive Decisions (${b.decisions.length} of ${b.totalDecisionsCount}):`);
+        if (b.decisions.length === 0) {
+          console.log(`  (None)`);
+        } else {
+          for (const d of b.decisions) {
+            console.log(`  - ${d.frontmatter.id}: ${d.frontmatter.title || ''}`);
+          }
+        }
+        if (b.truncated) {
+          console.log(`\n[WARNING] Context truncated:`);
+          for (const n of b.notices) {
+            console.log(`  ${n}`);
+          }
+        }
       } else if (parsed.command === 'search' && Array.isArray(response.data)) {
         const hits = response.data as Array<{
           id: string;

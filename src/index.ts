@@ -4,6 +4,7 @@ export * from './vault.js';
 export * from './schema.js';
 export * from './compiler.js';
 export * from './indexer.js';
+export * from './bootstrap.js';
 export * from './store.js';
 export * from './tools.js';
 export * from './mcp.js';

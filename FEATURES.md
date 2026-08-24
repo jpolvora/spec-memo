@@ -48,7 +48,7 @@ One stdio MCP server. Tool descriptions are the interface; vault paths are not.
 
 | Tool | Status | Job | Returns |
 |------|--------|-----|---------|
-| `bootstrap` | [ ] | Bind cwd’s git remote; compile a session brief | Traps (medium+, path/keyword match, cap), open accepted decisions that match, live spec/plan slugs, drift flags, notices if truncated |
+| `bootstrap` | [x] | Bind cwd’s git remote; compile a session brief | Traps (medium+, path/keyword match, cap), open accepted decisions that match, live spec/plan slugs, drift flags, notices if truncated |
 | `search` | [x] | Filtered retrieval | id, kind, score, snippet, status |
 | `get` | [x] | Read one record by id or `kind+slug` | Full markdown + frontmatter |
 | `upsert` | [x] | Write/update trap, decision, spec, plan, state, review, scratch | id, whether it superseded another; schema errors fail closed |
