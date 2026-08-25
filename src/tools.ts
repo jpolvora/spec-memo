@@ -217,6 +217,11 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         kind: { type: 'string', description: 'Record kind' },
         slug: { type: 'string', description: 'Record slug' },
         destination: { type: 'string', description: 'Product-relative destination path (e.g. docs/adr/001.md)' },
+        format: {
+          type: 'string',
+          enum: ['raw', 'adr', 'madr'],
+          description: 'Output format: raw markdown, Nygard ADR, or MADR template'
+        },
         force: { type: 'boolean', description: 'Overwrite destination if it already exists' },
         cwd: { type: 'string', description: 'Product repository working directory' },
       },
@@ -227,6 +232,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       kind: z.string().optional(),
       slug: z.string().optional(),
       destination: z.string(),
+      format: z.enum(['raw', 'adr', 'madr']).optional(),
       force: z.boolean().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional()

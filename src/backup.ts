@@ -143,9 +143,9 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
             for (const file of files) {
               if (file.endsWith('.md') && !file.includes('.conflict.')) {
                 const filePath = path.join(subDir, file);
+                const relPath = `${dirName}/${file}`;
                 try {
                   const content = fs.readFileSync(filePath, 'utf8');
-                  const relPath = `${dirName}/${file}`;
                   assertNoSecrets(content, `export record ${relPath}`);
                   records.push({ relativePath: relPath, content });
                   totalRecords++;
@@ -153,7 +153,7 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
                   if (err instanceof Error && err.message.includes('Safety violation')) {
                     throw err;
                   }
-                  // Ignore
+                  throw new Error(`Failed to export record ${relPath}: ${err instanceof Error ? err.message : String(err)}`);
                 }
               }
             }

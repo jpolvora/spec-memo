@@ -6,6 +6,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { parseRecord, serializeRecord } from './schema.js';
 import { openIndex, indexRecord, removeRecord, rebuildIndex } from './indexer.js';
 import { rebuildCompiledViews } from './compiler.js';
+import { recordTombstone } from './sync.js';
 
 /**
  * Check if a record has expired given its date, default TTL days, and optional custom TTL.
@@ -207,6 +208,13 @@ export function compactMonthlyLogs(
       for (const item of items) {
         try {
           if (fs.existsSync(item.filePath)) {
+            recordTombstone(
+              vaultRoot,
+              projectId,
+              item.record.frontmatter.kind,
+              item.record.frontmatter.id,
+              String(item.record.frontmatter.slug || item.record.frontmatter.id)
+            );
             fs.unlinkSync(item.filePath);
             unlinkedFiles.push(item.filePath);
             removeRecord(db, item.record.frontmatter.id, projectId);
@@ -273,6 +281,13 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
             purgedScratchCount++;
             purgedFiles.push(filePath);
             if (!dryRun) {
+              recordTombstone(
+                vaultRoot,
+                projectId,
+                record.frontmatter.kind,
+                record.frontmatter.id,
+                String(record.frontmatter.slug || record.frontmatter.id)
+              );
               fs.unlinkSync(filePath);
               removeRecord(db, record.frontmatter.id, projectId);
             }
@@ -311,6 +326,13 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
             purgedReviewCount++;
             purgedFiles.push(filePath);
             if (!dryRun) {
+              recordTombstone(
+                vaultRoot,
+                projectId,
+                record.frontmatter.kind,
+                record.frontmatter.id,
+                String(record.frontmatter.slug || record.frontmatter.id)
+              );
               fs.unlinkSync(filePath);
               removeRecord(db, record.frontmatter.id, projectId);
             }

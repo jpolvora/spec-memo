@@ -307,6 +307,7 @@ export async function applyChangeset(
         if (isPathInside(targetPath, projDir) && fs.existsSync(targetPath)) {
           if (!dryRun) {
             fs.unlinkSync(targetPath);
+            recordTombstone(vaultRoot, del.project, del.kind, del.id, slug);
           }
           touchedProjects.add(del.project);
           applied++;
