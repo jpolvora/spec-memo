@@ -54,7 +54,7 @@ One stdio MCP server. Tool descriptions are the interface; vault paths are not.
 | `upsert` | [x] | Write/update trap, decision, spec, plan, state, review, scratch | id, whether it superseded another; schema errors fail closed |
 | `append` | [x] | Changelog / audit event | New event id; never rewrites prior events |
 | `forget` | [x] | Supersede or archive | New status. Traps archive unless the caller passes an explicit purge confirmed by the user |
-| `gc` | [ ] | Apply TTL, compact shipped plans, rebuild FTS | Counts archived/compacted/deleted (scratch only) |
+| `gc` | [x] | Apply TTL, compact shipped plans, rebuild FTS | Counts archived/compacted/deleted (scratch only) |
 | `promote` | [ ] | Copy one record into the product repo | Product-relative path. **Default deny** without `destination` inside the product root |
 
 Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
@@ -80,12 +80,12 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
 ## 6. Policy and curator
 
-- [ ] **Schema gate.** Invalid kind/status/frontmatter → error, no write.
-- [ ] **TTL.** `scratch` 7 days; `review` 14 days after `relatedSlug` PR merged or 14 days from `updated` if unknown. `gc` applies this.
-- [ ] **Plan compact.** `status=shipped` plans reduce to a short result record; detail files become `scratch` then expire.
+- [x] **Schema gate.** Invalid kind/status/frontmatter → error, no write.
+- [x] **TTL.** `scratch` 7 days; `review` 14 days after `relatedSlug` PR merged or 14 days from `updated` if unknown. `gc` applies this.
+- [x] **Plan compact.** `status=shipped` plans reduce to a short result record; detail files become `scratch` then expire.
 - [ ] **Log compact.** Monthly roll-up files; events remain searchable via FTS.
-- [ ] **Redaction.** `upsert` / `append` reject bodies that look like secrets (PEM headers, `api_key=` assignments, known env-file patterns). Caller must omit the secret; spec-memo does not store a redacted copy of the secret value.
-- [ ] **Refuse product-tree write.** If `cwd` or `productRoot` is a git work tree, API/CLI refuse to write record files *under that tree*. Vault writes stay under `$SPEC_MEMO_ROOT`.
+- [x] **Redaction.** `upsert` / `append` reject bodies that look like secrets (PEM headers, `api_key=` assignments, known env-file patterns). Caller must omit the secret; spec-memo does not store a redacted copy of the secret value.
+- [x] **Refuse product-tree write.** If `cwd` or `productRoot` is a git work tree, API/CLI refuse to write record files *under that tree*. Vault writes stay under `$SPEC_MEMO_ROOT`.
 - [ ] **Trap dedup (Phase 3).** Same `pathPatterns` + similar DO NOT → supersede instead of a third entry. Phase 1 may no-op with a documented skip.
 
 ---

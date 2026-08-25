@@ -64,7 +64,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] SQLite FTS disposable index (`spec: fts-index.spec.md`)
 - [x] Remaining record kinds, append-only logs, and forget archiving (`spec: remaining-kinds-and-events.spec.md`)
 - [x] `bootstrap` token budget and default filters (`spec: bootstrap-brief.spec.md`)
-- [ ] `gc` TTL, compaction, secret redaction, and product write guard (`spec: curator-gc-and-safety.spec.md`)
+- [x] `gc` TTL, compaction, secret redaction, and product write guard (`spec: curator-gc-and-safety.spec.md`)
 - [ ] CLI parity, workflow tree importer, promote, and doctor diagnostics (`spec: import-and-doctor.spec.md`)
 
 ### Phase 2: Harness adapter (workflow-skills, not this repo’s core)
@@ -95,7 +95,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 3 | `fts-index` | `[x] done` | Phase 1 | SQLite FTS5 index (`memo.sqlite`), rebuild from vault files |
 | 4 | `remaining-kinds-and-events` | `[x] done` | Phase 1 | `spec`, `plan`, `state`, `log`, `scratch`, `review`, `append`, `forget` |
 | 5 | `bootstrap-brief` | `[x] done` | Phase 1 | 8 KB cap, trap ranking, cwd binding |
-| 6 | `curator-gc-and-safety` | `[ ] todo` | Phase 1 | TTL, compact, secret redaction, refuse product write |
+| 6 | `curator-gc-and-safety` | `[x] done` | Phase 1 | TTL, compact, secret redaction, refuse product write |
 | 7 | `import-and-doctor` | `[ ] todo` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
 
 Split a row into `{specsDir}/*.spec.md` only when that slice starts. Until then this table is the backlog.
@@ -119,6 +119,7 @@ Split a row into `{specsDir}/*.spec.md` only when that slice starts. Until then 
 | 2026-08-23 | slice-4-fts-index | SQLite FTS5 disposable index (memo.sqlite), Porter stemmer, pathPatterns glob filter, rebuildIndex, search CLI & MCP tool | 66771e4 |
 | 2026-08-23 | slice-5-remaining-kinds-and-events | Full record kinds matrix, append-only event logging, forget soft-archive & purge | 1dbc5ac |
 | 2026-08-23 | slice-6-bootstrap-brief | Bootstrap session brief generation with 8 KB budget cap and trap ranking | 4884172 |
+| 2026-08-25 | slice-7-curator-gc-safety | Curator GC, secret redaction, and product-tree write guard | Slice 7 delivery |
 
 ## Archive
 

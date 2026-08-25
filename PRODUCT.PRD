@@ -153,10 +153,10 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 - [x] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`spec: record-schema-and-indexes`)
 - [x] SQLite FTS disposable index (`spec: fts-index`)
 - [ ] MCP server (stdio) + CLI parity for the eight tools (`spec: mcp-and-cli`)
-- [ ] `bootstrap` token budget and default filters (`spec: bootstrap-brief`)
-- [ ] `gc` TTL + shipped-plan compact (`spec: curator-gc`)
-- [ ] Refuse upsert payload written into a known product working tree (`spec: refuse-product-write`)
-- [ ] Secret redaction on write (`spec: redaction`)
+- [x] `bootstrap` token budget and default filters (`spec: bootstrap-brief`)
+- [x] `gc` TTL + shipped-plan compact (`spec: curator-gc`)
+- [x] Refuse upsert payload written into a known product working tree (`spec: refuse-product-write`)
+- [x] Secret redaction on write (`spec: redaction`)
 - [ ] `memo import` from workflow-skills-style trees (`spec: import-agents-tree`)
 
 ### Phase 2 — Harness adapter (workflow-skills, not this repo’s core)
@@ -213,6 +213,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-23 | slice-4-fts-index | SQLite FTS5 disposable index, Porter stemmer, pathPatterns matching, rebuildIndex, search tool & CLI | 66771e4 |
 | 2026-08-23 | slice-5-remaining-kinds-and-events | Full record kinds matrix, append-only event logging, forget soft-archive & purge | 1dbc5ac |
 | 2026-08-23 | slice-6-bootstrap-brief | Bootstrap session brief generation with 8 KB budget cap and trap ranking | 4884172 |
+| 2026-08-25 | slice-7-curator-gc-safety | Curator GC, secret redaction & product write guard | Slice 7 delivery |
 
 ## 12. Related docs
 

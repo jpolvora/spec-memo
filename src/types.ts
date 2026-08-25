@@ -194,3 +194,24 @@ export interface BootstrapBrief {
   notices: string[];
 }
 
+export interface GcOptions {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  dryRun?: boolean;
+}
+
+export interface GcResult {
+  projectId: string;
+  purgedScratchCount: number;
+  purgedReviewCount: number;
+  compactedPlansCount: number;
+  rebuiltFts: boolean;
+  rebuiltViews: boolean;
+  dryRun: boolean;
+  details?: {
+    purgedFiles: string[];
+    compactedPlans: string[];
+  };
+}
+

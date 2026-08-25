@@ -38,8 +38,8 @@ describe('MCP Server Integration', () => {
     await client.connect(clientTransport);
 
     const result = await client.callTool({
-      name: 'gc',
-      arguments: { dryRun: true }
+      name: 'promote',
+      arguments: { destination: 'docs/test.md' }
     });
 
     assert.equal(result.isError, true);
@@ -55,7 +55,7 @@ describe('MCP Server Integration', () => {
     await server.close();
   });
 
-  it('should successfully execute upsert, get, search, append, forget, and bootstrap over MCP', async () => {
+  it('should successfully execute upsert, get, search, append, forget, bootstrap, and gc over MCP', async () => {
     const server = createMcpServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -140,6 +140,18 @@ describe('MCP Server Integration', () => {
     const forgetContent = forgetRes.content as Array<{ type: string; text?: string }>;
     const forgetData = JSON.parse(forgetContent[0].text as string);
     assert.equal(forgetData.status, 'archived');
+
+    // Test gc tool over MCP
+    const gcRes = await client.callTool({
+      name: 'gc',
+      arguments: {
+        dryRun: true
+      }
+    });
+    assert.equal(gcRes.isError, undefined);
+    const gcContent = gcRes.content as Array<{ type: string; text?: string }>;
+    const gcData = JSON.parse(gcContent[0].text as string);
+    assert.equal(gcData.dryRun, true);
 
     await client.close();
     await server.close();

@@ -48,11 +48,38 @@ describe('CLI Integration', () => {
     };
 
     try {
-      const code = await runCli(['gc', '--json']);
+      const code = await runCli(['promote', '--destination', 'docs/test.md', '--json']);
       assert.equal(code, 1);
       const parsed = JSON.parse(capturedLogs.trim());
       assert.equal(parsed.isError, true);
       assert.equal(parsed.code, 'NOT_IMPLEMENTED');
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('should execute memo gc with text and json outputs', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      // JSON mode
+      const codeJson = await runCli(['gc', '--dry-run', '--json']);
+      assert.equal(codeJson, 0);
+      const parsed = JSON.parse(capturedLogs.trim());
+      assert.ok(parsed.projectId);
+      assert.equal(parsed.dryRun, true);
+
+      // Text mode
+      capturedLogs = '';
+      const codeText = await runCli(['gc', '--dry-run']);
+      assert.equal(codeText, 0);
+      assert.ok(capturedLogs.includes('Curator GC completed'));
+      assert.ok(capturedLogs.includes('Purged expired scratch records'));
+      assert.ok(capturedLogs.includes('Compacted shipped plans'));
     } finally {
       console.log = origLog;
     }

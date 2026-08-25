@@ -283,6 +283,18 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       }
     }
 
+    // Normalization for gc command
+    if (parsed.command === 'gc') {
+      if (payload['dry-run'] === true || payload['dry-run'] === 'true' || payload.dryRun === true || payload.dryRun === 'true') {
+        payload.dryRun = true;
+        delete payload['dry-run'];
+      }
+      if (payload.project) {
+        payload.projectId = String(payload.project);
+        delete payload.project;
+      }
+    }
+
     const response = await executeTool(parsed.command, payload);
 
     if (parsed.isJson) {
@@ -356,6 +368,15 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       } else if (parsed.command === 'forget' && response.data) {
         const res = response.data as { id: string; status: string; purged: boolean };
         console.log(`[FORGET] Record ${res.id} ${res.purged ? 'permanently purged' : 'archived'}`);
+      } else if (parsed.command === 'gc' && response.data) {
+        const g = response.data as import('./types.js').GcResult;
+        const dryNotice = g.dryRun ? ' (Dry Run — no files modified)' : '';
+        console.log(`spec-memo — Curator GC completed for project: ${g.projectId}${dryNotice}\n`);
+        console.log(`  Purged expired scratch records: ${g.purgedScratchCount}`);
+        console.log(`  Purged stale review records:   ${g.purgedReviewCount}`);
+        console.log(`  Compacted shipped plans:       ${g.compactedPlansCount}`);
+        console.log(`  Rebuilt FTS index:             ${g.rebuiltFts}`);
+        console.log(`  Rebuilt compiled views:        ${g.rebuiltViews}`);
       } else {
         console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));
       }

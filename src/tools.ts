@@ -151,10 +151,16 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     inputSchema: {
       type: 'object',
       properties: {
+        cwd: { type: 'string', description: 'Product repository working directory' },
+        projectId: { type: 'string', description: 'Specific project ID to clean' },
+        vaultRoot: { type: 'string', description: 'Override vault root directory' },
         dryRun: { type: 'boolean', description: 'Check what would be cleaned without modifying files' }
       }
     },
     zodSchema: z.object({
+      cwd: z.string().optional(),
+      projectId: z.string().optional(),
+      vaultRoot: z.string().optional(),
       dryRun: z.boolean().optional()
     })
   },
@@ -183,7 +189,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
 import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
 import { searchIndex } from './indexer.js';
 import { compileBootstrapBrief } from './bootstrap.js';
-import { AppendOptions, BootstrapOptions, ForgetOptions, RecordKind, RecordStatus, SearchOptions } from './types.js';
+import { runGc } from './curator.js';
+import { AppendOptions, BootstrapOptions, ForgetOptions, GcOptions, RecordKind, RecordStatus, SearchOptions } from './types.js';
 
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
@@ -329,7 +336,24 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     }
   }
 
-  // Stubs for remaining tools (bootstrap, gc, promote)
+  if (name === 'gc') {
+    try {
+      const gcOpts = parseResult.data as GcOptions;
+      const result = await runGc(gcOpts);
+      return {
+        data: result
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        isError: true,
+        error: message,
+        code: 'GC_FAILED'
+      };
+    }
+  }
+
+  // Stubs for remaining tools (promote)
   return {
     isError: true,
     error: `Tool '${name}' is not yet implemented`,

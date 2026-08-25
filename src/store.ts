@@ -6,6 +6,7 @@ import { ensureProjectVault, getVaultRoot } from './vault.js';
 import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
+import { assertNoSecrets, assertNotInProductRoot } from './safety.js';
 
 export interface UpsertOptions {
   cwd?: string;
@@ -131,6 +132,13 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
   if (!validation.success) {
     throw new Error(`Invalid record frontmatter: ${validation.errors.join(', ')}`);
   }
+
+  // Safety checks: assert no secrets in body or frontmatter, and protect product tree
+  assertNoSecrets(options.body, 'record body');
+  if (options.frontmatter) {
+    assertNoSecrets(options.frontmatter, 'record frontmatter');
+  }
+  assertNotInProductRoot(filePath, identity.rootPath, identity.isGit);
 
   // If this record supersedes an existing one, update the older record
   let superseded = false;
@@ -305,6 +313,13 @@ export async function appendEvent(options: AppendOptions): Promise<AppendResult>
     throw new Error(`Invalid log frontmatter: ${validation.errors.join(', ')}`);
   }
 
+  // Safety checks: assert no secrets and protect product tree
+  assertNoSecrets(options.event, 'event log body');
+  if (options.details) {
+    assertNoSecrets(options.details, 'event log details');
+  }
+  assertNotInProductRoot(filePath, identity.rootPath, identity.isGit);
+
   const fileContent = serializeRecord({
     frontmatter: validation.data,
     body: options.event
@@ -352,6 +367,8 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
     const lookup = options.id || `${options.kind || ''}/${options.slug || ''}`;
     throw new Error(`Record not found: ${lookup}`);
   }
+
+  assertNotInProductRoot(record.path, identity.rootPath, identity.isGit);
 
   const id = record.frontmatter.id;
   const kind = record.frontmatter.kind;

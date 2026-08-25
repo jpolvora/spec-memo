@@ -95,6 +95,15 @@ describe('Tool Definitions and Execution', () => {
     assert.ok(brief.projectId);
     assert.equal(typeof brief.truncated, 'boolean');
 
+    // GC tool
+    const gcRes = await executeTool('gc', {
+      dryRun: true
+    });
+    assert.equal(gcRes.isError, undefined);
+    assert.ok(gcRes.data);
+    const gcData = gcRes.data as { dryRun: boolean };
+    assert.equal(gcData.dryRun, true);
+
     // Forget tool (purge)
     const purgeRes = await executeTool('forget', {
       id: 'trap-test-exec',
@@ -109,7 +118,6 @@ describe('Tool Definitions and Execution', () => {
 
   it('should return NOT_IMPLEMENTED for remaining unbuilt tools', async () => {
     const unbuiltTools: Array<{ name: ToolName; args: unknown }> = [
-      { name: 'gc', args: { dryRun: true } },
       { name: 'promote', args: { destination: 'docs/test.md' } }
     ];
 

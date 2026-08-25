@@ -7,5 +7,7 @@ export * from './indexer.js';
 export * from './bootstrap.js';
 export * from './store.js';
 export * from './tools.js';
+export * from './safety.js';
+export * from './curator.js';
 export * from './mcp.js';
 export * from './cli.js';
