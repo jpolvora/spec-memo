@@ -253,4 +253,56 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
       initialHits.map((h) => h.id).sort()
     );
   });
+
+  it('should return hits across multiple projects when crossProject option is true', async () => {
+    const tempProj2 = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-fts-proj2-'));
+    try {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: 'proj1-trap',
+        frontmatter: {
+          id: 'trap-proj1',
+          title: 'Project 1 trap'
+        },
+        body: 'Cross project test content in project 1'
+      });
+
+      await upsertRecord({
+        cwd: tempProj2,
+        vaultRoot: tempVault,
+        kind: 'decision',
+        slug: 'proj2-decision',
+        frontmatter: {
+          id: 'decision-proj2',
+          title: 'Project 2 decision'
+        },
+        body: 'Cross project test content in project 2'
+      });
+
+      // Single project search returns only 1 hit
+      const singleHits = searchIndex({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        query: 'Cross'
+      });
+      assert.equal(singleHits.length, 1);
+      assert.equal(singleHits[0].id, 'trap-proj1');
+
+      // Cross project search returns hits from both projects
+      const crossHits = searchIndex({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        query: 'Cross',
+        crossProject: true
+      });
+      assert.equal(crossHits.length, 2);
+      const hitIds = crossHits.map((h) => h.id).sort();
+      assert.deepEqual(hitIds, ['decision-proj2', 'trap-proj1']);
+    } finally {
+      fs.rmSync(tempProj2, { recursive: true, force: true });
+    }
+  });
 });
+

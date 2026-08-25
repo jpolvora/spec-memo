@@ -216,6 +216,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
     const placeholders = options.kinds.map(() => '?').join(', ');
     clauses.push(`kind IN (${placeholders})`);
     params.push(...options.kinds);
+  } else if (options.crossProject) {
+    clauses.push("kind NOT IN ('scratch', 'state', 'review')");
   } else if (!options.includeScratch) {
     clauses.push("kind != 'scratch'");
   }

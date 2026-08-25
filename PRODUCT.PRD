@@ -170,7 +170,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 - [x] Trap dedup on upsert (`.agents/specs/trap-dedup.spec.md`)
 - [x] Spec SHA drift on bootstrap (`.agents/specs/spec-drift.spec.md`)
 - [x] Optional private git remote on the vault (`.agents/specs/vault-git.spec.md`)
-- [ ] Cross-project search opt-in (`.agents/specs/cross-project-search.spec.md`)
+- [x] Cross-project search opt-in (`.agents/specs/cross-project-search.spec.md`)
 - [ ] Embeddings as an optional search backend (`.agents/specs/embeddings-search.spec.md`)
 
 ### Phase 4 — Human viewers (optional)
@@ -228,6 +228,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-25 | slice-12-trap-dedup | Trap deduplication and automatic superseding engine | Slice 12 delivery |
 | 2026-08-25 | slice-13-spec-drift | Specification git SHA drift detection during session bootstrap | Slice 13 delivery |
 | 2026-08-25 | slice-14-vault-git | Opt-in private git remote sync for vault persistence | Slice 14 delivery |
+| 2026-08-25 | slice-15-cross-project-search | Opt-in multi-project cross-vault search engine | Slice 15 delivery |
 
 ## 12. Related docs
 
