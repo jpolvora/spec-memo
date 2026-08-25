@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus, AppendOptions, AppendResult, ForgetOptions, ForgetResult } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
-import { ensureProjectVault, getVaultRoot, commitVaultChange } from './vault.js';
+import { randomBytes } from 'node:crypto';
+import { ensureProjectVault, getVaultRoot, commitVaultChange, withVaultLock } from './vault.js';
 import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
@@ -96,6 +97,7 @@ export function getSubdirForKind(kind: RecordKind): string {
  */
 export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
+  return withVaultLock(vaultRoot, async () => {
   const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
   const projectId = options.projectId || identity.projectId;
 
@@ -126,7 +128,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
                 newPatterns.length === existingPatterns.length &&
                 newPatterns.every((p, idx) => p === existingPatterns[idx]);
 
-              if (samePatterns || newPatterns.length === 0) {
+              if (samePatterns) {
                 const overlap = calculateTextOverlap(options.body, existing.body);
                 if (overlap >= 0.7) {
                   options.frontmatter = {
@@ -253,6 +255,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     path: filePath,
     superseded
   };
+  });
 }
 
 /**
@@ -322,8 +325,6 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
   return null;
 }
 
-let logSequence = 0;
-
 /**
  * Append a write-only log or audit event record without overwriting previous events.
  */
@@ -345,9 +346,7 @@ export async function appendEvent(options: AppendOptions): Promise<AppendResult>
 
   const now = new Date();
   const dateStr = now.toISOString().replace(/[:.]/g, '-');
-  logSequence = (logSequence + 1) % 10000;
-  const seqStr = String(logSequence).padStart(4, '0');
-  const logId = `log-${dateStr}-${seqStr}`;
+  const logId = `log-${dateStr}-${process.pid}-${randomBytes(4).toString('hex')}`;
   const fileName = `${logId}.md`;
   const filePath = path.join(targetDir, fileName);
 

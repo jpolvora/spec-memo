@@ -17,6 +17,7 @@ import { searchIndex } from './indexer.js';
 import { compileBootstrapBrief } from './bootstrap.js';
 import { runGc } from './curator.js';
 import { promoteRecord } from './promote.js';
+import { sanitizeToolOutput } from './safety.js';
 
 export interface ToolDefinition {
   name: ToolName;
@@ -41,7 +42,6 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         slug: { type: 'string', description: 'Active feature spec/plan slug' },
         path: { type: 'string', description: 'Focus file path to prioritize matching traps' },
         maxBytes: { type: 'number', description: 'Maximum UTF-8 payload byte budget (defaults to 8192)' },
-        vaultRoot: { type: 'string', description: 'Override vault root directory' },
         projectId: { type: 'string', description: 'Specific project ID' }
       }
     },
@@ -76,10 +76,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         path: { type: 'string', description: 'Match records whose pathPatterns cover this file path' },
         includeScratch: { type: 'boolean', description: 'Include scratch records (omitted by default)' },
         projectId: { type: 'string', description: 'Specific project ID to search' },
-        crossProject: { type: 'boolean', description: 'Search across all projects in vault' },
+        crossProject: { type: 'boolean', description: 'Search across all bound projects' },
         limit: { type: 'number', description: 'Maximum number of results to return' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        vaultRoot: { type: 'string', description: 'Override vault root directory' }
       }
     },
     zodSchema: z.object({
@@ -106,7 +105,6 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         kind: { type: 'string', description: 'Record kind' },
         slug: { type: 'string', description: 'Record slug (if kind is specified)' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        vaultRoot: { type: 'string', description: 'Override vault root directory' },
         projectId: { type: 'string', description: 'Specific project ID' }
       }
     },
@@ -130,7 +128,6 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         frontmatter: { type: 'object', description: 'Record frontmatter metadata' },
         body: { type: 'string', description: 'Record Markdown content' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        vaultRoot: { type: 'string', description: 'Override vault root directory' },
         projectId: { type: 'string', description: 'Specific project ID' }
       },
       required: ['kind', 'body']
@@ -155,7 +152,6 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         kind: { type: 'string', description: 'Log kind (defaults to log)' },
         details: { type: 'object', description: 'Additional structured event details' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        vaultRoot: { type: 'string', description: 'Override vault root directory' },
         projectId: { type: 'string', description: 'Specific project ID' }
       },
       required: ['event']
@@ -180,7 +176,6 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         slug: { type: 'string', description: 'Record slug' },
         purge: { type: 'boolean', description: 'Set true to permanently delete file (defaults to false for archive)' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        vaultRoot: { type: 'string', description: 'Override vault root directory' },
         projectId: { type: 'string', description: 'Specific project ID' }
       }
     },
@@ -202,7 +197,6 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       properties: {
         cwd: { type: 'string', description: 'Product repository working directory' },
         projectId: { type: 'string', description: 'Specific project ID to clean' },
-        vaultRoot: { type: 'string', description: 'Override vault root directory' },
         dryRun: { type: 'boolean', description: 'Check what would be cleaned without modifying files' }
       }
     },
@@ -225,7 +219,6 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         destination: { type: 'string', description: 'Product-relative destination path (e.g. docs/adr/001.md)' },
         force: { type: 'boolean', description: 'Overwrite destination if it already exists' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        vaultRoot: { type: 'string', description: 'Override vault root directory' }
       },
       required: ['destination']
     },
@@ -240,6 +233,10 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     })
   }
 };
+
+function ok(data: unknown): { data: unknown } {
+  return { data: sanitizeToolOutput(data) };
+}
 
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
@@ -266,9 +263,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const bootstrapOpts = parseResult.data as BootstrapOptions;
       const result = await compileBootstrapBrief(bootstrapOpts);
-      return {
-        data: result
-      };
+      return ok(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -283,9 +278,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const searchOpts = parseResult.data as SearchOptions;
       const results = searchIndex(searchOpts);
-      return {
-        data: results
-      };
+      return ok(results);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -316,9 +309,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
         vaultRoot,
         projectId
       });
-      return {
-        data: result
-      };
+      return ok(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -347,9 +338,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
           code: 'RECORD_NOT_FOUND'
         };
       }
-      return {
-        data: record
-      };
+      return ok(record);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -364,9 +353,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const appendOpts = parseResult.data as AppendOptions;
       const result = await appendEvent(appendOpts);
-      return {
-        data: result
-      };
+      return ok(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -381,9 +368,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const forgetOpts = parseResult.data as ForgetOptions;
       const result = await forgetRecord(forgetOpts);
-      return {
-        data: result
-      };
+      return ok(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -398,9 +383,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const gcOpts = parseResult.data as GcOptions;
       const result = await runGc(gcOpts);
-      return {
-        data: result
-      };
+      return ok(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -415,9 +398,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const promoteOpts = parseResult.data as PromoteOptions;
       const result = await promoteRecord(promoteOpts);
-      return {
-        data: result
-      };
+      return ok(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {

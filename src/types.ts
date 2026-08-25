@@ -95,6 +95,7 @@ export interface VaultConfig {
     enabled: boolean;
     remoteUrl?: string;
     autoCommit?: boolean;
+    branch?: string;
   };
   embeddings?: {
     enabled: boolean;

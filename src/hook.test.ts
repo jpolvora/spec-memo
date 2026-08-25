@@ -43,4 +43,18 @@ describe('Write-Block Pre-Commit Hook (Phase 2)', () => {
     assert.ok(content.includes('SKIP_MEMO_HOOK'));
     assert.ok(content.includes('spec-memo blocked staged workflow artifact'));
   });
+
+  it('should back up an existing unrelated pre-commit hook before overwrite', () => {
+    const gitHooksDir = path.join(tempRepo, '.git', 'hooks');
+    fs.mkdirSync(gitHooksDir, { recursive: true });
+    const hookPath = path.join(gitHooksDir, 'pre-commit');
+    fs.writeFileSync(hookPath, '#!/bin/sh\necho other-hook\n', { mode: 0o755 });
+
+    installPreCommitHook(tempRepo);
+
+    const backup = `${hookPath}.spec-memo.bak`;
+    assert.ok(fs.existsSync(backup));
+    assert.ok(fs.readFileSync(backup, 'utf8').includes('other-hook'));
+    assert.ok(fs.readFileSync(hookPath, 'utf8').includes('SKIP_MEMO_HOOK'));
+  });
 });

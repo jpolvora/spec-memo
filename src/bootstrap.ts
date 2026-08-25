@@ -41,19 +41,28 @@ export function checkSpecDrift(
 
     if (isGit) {
       try {
-        const currentSha = execFileSync('git', ['log', '-n', '1', '--format=%H', '--', relPath], {
-          cwd: productRoot,
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'ignore']
-        }).trim();
-
         const statusOutput = execFileSync('git', ['status', '--porcelain', '--', relPath], {
           cwd: productRoot,
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'ignore']
         }).trim();
 
-        if (statusOutput.length > 0 || (currentSha && currentSha !== verifiedAtSha)) {
+        let diverged = statusOutput.length > 0;
+        if (!diverged) {
+          try {
+            const atVerify = execFileSync('git', ['show', `${verifiedAtSha}:${relPath.replace(/\\/g, '/')}`], {
+              cwd: productRoot,
+              stdio: ['ignore', 'pipe', 'ignore']
+            }) as Buffer;
+            const current = fs.readFileSync(fullPath);
+            diverged = Buffer.compare(Buffer.from(atVerify), current) !== 0;
+          } catch {
+            // Missing blob at verified SHA, or git show failed: treat as drift
+            diverged = true;
+          }
+        }
+
+        if (diverged) {
           modifiedPaths.push(relPath);
         }
       } catch {
@@ -223,13 +232,38 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     // Drop lower-ranked traps first
     while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
       currentTraps.pop();
-      initialBrief.byteLength = calculatePayloadSize(initialBrief);
     }
 
     // If still over budget, drop older decisions
     while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
       currentDecisions.pop();
-      initialBrief.byteLength = calculatePayloadSize(initialBrief);
+    }
+
+    // Then trim activeSlice (state → plan → spec) so the byte cap is fail-closed
+    while (calculatePayloadSize(initialBrief) > budgetBytes && initialBrief.activeSlice) {
+      const slice = initialBrief.activeSlice;
+      if (slice.state) {
+        delete slice.state;
+        continue;
+      }
+      if (slice.plan) {
+        delete slice.plan;
+        continue;
+      }
+      if (slice.spec) {
+        delete slice.spec;
+        continue;
+      }
+      initialBrief.activeSlice = undefined;
+    }
+
+    if (initialBrief.drift) {
+      while (initialBrief.drift.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+        initialBrief.drift.pop();
+      }
+      if (initialBrief.drift.length === 0) {
+        initialBrief.drift = undefined;
+      }
     }
 
     const droppedTraps = activeTraps.length - currentTraps.length;
@@ -237,6 +271,16 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     notices.push(
       `Context brief truncated to fit ${budgetBytes} byte budget (dropped ${droppedTraps} trap(s), ${droppedDecisions} decision(s)).`
     );
+
+    if (calculatePayloadSize(initialBrief) > budgetBytes) {
+      initialBrief.traps = [];
+      initialBrief.decisions = [];
+      initialBrief.activeSlice = undefined;
+      initialBrief.drift = undefined;
+      while (calculatePayloadSize(initialBrief) > budgetBytes && notices.length > 1) {
+        notices.pop();
+      }
+    }
 
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
   }

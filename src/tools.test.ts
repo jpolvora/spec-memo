@@ -121,5 +121,34 @@ describe('Tool Definitions and Execution', () => {
     // All 8 tools are now implemented in Phase 1
     assert.equal(TOOL_NAMES.length, 8);
   });
+
+  it('should omit vaultRoot from advertised MCP schemas and strip vault paths from search hits', async () => {
+    for (const name of TOOL_NAMES) {
+      const props = TOOL_DEFINITIONS[name].inputSchema.properties;
+      assert.equal(props.vaultRoot, undefined, `${name} schema advertised vaultRoot`);
+    }
+
+    const upsertRes = await executeTool('upsert', {
+      kind: 'trap',
+      slug: 'path-leak-trap',
+      frontmatter: {
+        id: 'trap-path-leak',
+        title: 'Path leak trap'
+      },
+      body: 'Body for path leak check'
+    });
+    assert.equal(upsertRes.isError, undefined);
+    const upsertData = upsertRes.data as { path?: string; filepath?: string };
+    assert.equal(upsertData.path, undefined);
+    assert.equal(upsertData.filepath, undefined);
+
+    const searchRes = await executeTool('search', { query: 'path leak' });
+    assert.equal(searchRes.isError, undefined);
+    const hits = searchRes.data as Array<{ id: string; filepath?: string; path?: string }>;
+    const hit = hits.find((h) => h.id === 'trap-path-leak');
+    assert.ok(hit);
+    assert.equal(hit.filepath, undefined);
+    assert.equal(hit.path, undefined);
+  });
 });
 

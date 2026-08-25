@@ -321,5 +321,42 @@ describe('Store Engine (upsert and get)', () => {
     assert.equal(newTrap.frontmatter.supersedes, 'trap-no-raw-sql');
     assert.equal(newTrap.frontmatter.status, 'active');
   });
+
+  it('should not treat empty pathPatterns as a wildcard match against patterned traps', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'patterned-trap',
+      frontmatter: {
+        id: 'trap-patterned',
+        title: 'Patterned Trap',
+        pathPatterns: ['src/db/*.ts']
+      },
+      body: '## DO NOT\nNever execute raw unescaped SQL strings in database handlers.\n\n## INSTEAD DO\nUse parameterized queries.'
+    });
+
+    const res2 = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'unpatterned-trap',
+      frontmatter: {
+        id: 'trap-unpatterned',
+        title: 'Unpatterned Trap',
+        pathPatterns: []
+      },
+      body: '## DO NOT\nNever execute raw unescaped SQL strings in database handlers.\n\n## INSTEAD DO\nUse parameterized queries.'
+    });
+
+    assert.equal(res2.superseded, false);
+    const oldTrap = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-patterned'
+    });
+    assert.ok(oldTrap);
+    assert.equal(oldTrap.frontmatter.status, 'active');
+  });
 });
 

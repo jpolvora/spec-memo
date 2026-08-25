@@ -4,7 +4,7 @@ import { GcOptions, GcResult, MemoRecord, RecordFrontmatter } from './types.js';
 import { getVaultRoot, ensureVaultStructure, ensureProjectVault } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { parseRecord, serializeRecord } from './schema.js';
-import { openIndex, indexRecord, removeRecord } from './indexer.js';
+import { openIndex, indexRecord, removeRecord, rebuildIndex } from './indexer.js';
 import { rebuildCompiledViews } from './compiler.js';
 
 /**
@@ -206,8 +206,11 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
   }
 
   // 4. Update index and compiled views
+  let rebuiltFts = false;
   if (!dryRun) {
     rebuildCompiledViews(projectId, vaultRoot);
+    await rebuildIndex(vaultRoot);
+    rebuiltFts = true;
   }
 
   return {
@@ -215,7 +218,7 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
     purgedScratchCount,
     purgedReviewCount,
     compactedPlansCount,
-    rebuiltFts: !dryRun,
+    rebuiltFts,
     rebuiltViews: !dryRun,
     dryRun,
     details: {

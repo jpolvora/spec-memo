@@ -81,6 +81,14 @@ export function installPreCommitHook(targetRepoPath: string = process.cwd()): { 
   const hookPath = path.join(gitHooksDir, 'pre-commit');
   const scriptContent = generatePreCommitHookScript();
 
+  const hookMarker = 'spec-memo pre-commit write-block hook';
+  if (fs.existsSync(hookPath)) {
+    const existing = fs.readFileSync(hookPath, 'utf8');
+    if (!existing.includes(hookMarker)) {
+      fs.copyFileSync(hookPath, `${hookPath}.spec-memo.bak`);
+    }
+  }
+
   fs.writeFileSync(hookPath, scriptContent, { mode: 0o755 });
 
   return {

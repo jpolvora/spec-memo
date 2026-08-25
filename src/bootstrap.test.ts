@@ -223,5 +223,99 @@ describe('Bootstrap Brief Engine', () => {
     assert.deepEqual(brief.drift[0].modifiedPaths, ['src/dummy.ts']);
     assert.ok(brief.notices.some((n) => n.includes('Spec drift detected')));
   });
+
+  it('should not flag drift when linked file content matches verifiedAtSha after later unrelated commits', async () => {
+    const { execFileSync } = await import('node:child_process');
+    fs.mkdirSync(path.join(tempProject, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(tempProject, 'src', 'dummy.ts'), 'export const n = 1;\n');
+    execFileSync('git', ['init'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['add', '.'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'add dummy'], { cwd: tempProject, stdio: 'ignore' });
+    const verifiedAtSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: tempProject,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+
+    fs.writeFileSync(path.join(tempProject, 'README.md'), 'unrelated\n');
+    execFileSync('git', ['add', 'README.md'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'unrelated'], { cwd: tempProject, stdio: 'ignore' });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'spec',
+      slug: 'stable-spec',
+      frontmatter: {
+        id: 'spec-stable-spec',
+        title: 'Stable Spec',
+        status: 'active',
+        linkedPaths: ['src/dummy.ts'],
+        verifiedAtSha
+      },
+      body: 'Spec body'
+    });
+
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault
+    });
+
+    assert.equal(brief.drift, undefined);
+  });
+
+  it('should trim oversized activeSlice until the brief fits the byte budget', async () => {
+    const hugeBody = 'x'.repeat(6000);
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'spec',
+      slug: 'huge-slice',
+      frontmatter: {
+        id: 'spec-huge-slice',
+        title: 'Huge Slice Spec',
+        status: 'active'
+      },
+      body: hugeBody
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'plan',
+      slug: 'huge-slice',
+      frontmatter: {
+        id: 'plan-huge-slice',
+        title: 'Huge Slice Plan',
+        status: 'active'
+      },
+      body: hugeBody
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'state',
+      slug: 'huge-slice',
+      frontmatter: {
+        id: 'state-huge-slice',
+        title: 'Huge Slice State',
+        status: 'active'
+      },
+      body: hugeBody
+    });
+
+    const budgetBytes = 2500;
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      slug: 'huge-slice',
+      maxBytes: budgetBytes
+    });
+
+    assert.equal(brief.truncated, true);
+    assert.ok(brief.byteLength <= budgetBytes);
+    assert.ok(calculatePayloadSize(brief) <= budgetBytes);
+  });
 });
 

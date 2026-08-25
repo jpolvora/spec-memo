@@ -104,6 +104,61 @@ export function assertNoSecrets(payload: unknown, contextDesc = 'record payload'
   }
 }
 
+const VAULT_PATH_KEYS = new Set(['path', 'filepath', 'targetPath']);
+
+/**
+ * Redact credential-like strings in a JSON-serializable payload (read-path fail-closed).
+ */
+export function redactSecretsInPayload(payload: unknown): unknown {
+  if (typeof payload === 'string') {
+    let out = payload;
+    for (const pattern of SECRET_PATTERNS) {
+      const global = new RegExp(pattern.regex.source, pattern.regex.flags.includes('g') ? pattern.regex.flags : `${pattern.regex.flags}g`);
+      out = out.replace(global, `[REDACTED:${pattern.name}]`);
+    }
+    return out;
+  }
+  if (Array.isArray(payload)) {
+    return payload.map((item) => redactSecretsInPayload(item));
+  }
+  if (payload !== null && typeof payload === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+      out[key] = redactSecretsInPayload(value);
+    }
+    return out;
+  }
+  return payload;
+}
+
+/**
+ * Strip absolute vault filesystem paths from caller-facing MCP/CLI payloads.
+ * Keeps product-relative fields such as pathPatterns and destination.
+ */
+export function stripVaultPaths(payload: unknown): unknown {
+  if (Array.isArray(payload)) {
+    return payload.map((item) => stripVaultPaths(item));
+  }
+  if (payload !== null && typeof payload === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+      if (VAULT_PATH_KEYS.has(key)) {
+        continue;
+      }
+      out[key] = stripVaultPaths(value);
+    }
+    return out;
+  }
+  return payload;
+}
+
+/**
+ * Prepare a tool result for MCP/CLI callers: redact secrets then omit vault paths.
+ */
+export function sanitizeToolOutput(payload: unknown): unknown {
+  return stripVaultPaths(redactSecretsInPayload(payload));
+}
+
 /**
  * Check whether a target path is located inside a product repository.
  */

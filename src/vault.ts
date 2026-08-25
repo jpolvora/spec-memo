@@ -28,6 +28,98 @@ export const RECORD_SUBDIRS = [
   'scratch'
 ] as const;
 
+const vaultLockDepth = new Map<string, number>();
+const vaultLockFds = new Map<string, number>();
+
+function waitMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function acquireVaultLockSync(vaultRoot: string): void {
+  const key = path.resolve(vaultRoot);
+  const depth = vaultLockDepth.get(key) || 0;
+  if (depth > 0) {
+    vaultLockDepth.set(key, depth + 1);
+    return;
+  }
+
+  if (!fs.existsSync(key)) {
+    fs.mkdirSync(key, { recursive: true });
+  }
+  const lockPath = path.join(key, '.memo.lock');
+  const deadline = Date.now() + 8000;
+  let fd: number | undefined;
+  while (fd === undefined) {
+    try {
+      fd = fs.openSync(lockPath, 'wx');
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'EEXIST' || Date.now() >= deadline) {
+        throw err;
+      }
+      waitMs(50);
+    }
+  }
+  fs.writeSync(fd, String(process.pid));
+  vaultLockFds.set(key, fd);
+  vaultLockDepth.set(key, 1);
+}
+
+function releaseVaultLockSync(vaultRoot: string): void {
+  const key = path.resolve(vaultRoot);
+  const depth = (vaultLockDepth.get(key) || 1) - 1;
+  if (depth > 0) {
+    vaultLockDepth.set(key, depth);
+    return;
+  }
+  vaultLockDepth.delete(key);
+  const fd = vaultLockFds.get(key);
+  vaultLockFds.delete(key);
+  if (fd !== undefined) {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      // ignore
+    }
+  }
+  try {
+    fs.unlinkSync(path.join(key, '.memo.lock'));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Exclusive vault lock (re-entrant in-process; file lock across processes).
+ */
+export async function withVaultLock<T>(vaultRoot: string, fn: () => T | Promise<T>): Promise<T> {
+  acquireVaultLockSync(vaultRoot);
+  try {
+    return await fn();
+  } finally {
+    releaseVaultLockSync(vaultRoot);
+  }
+}
+
+function resolveVaultGitBranch(config: VaultConfig, vaultRoot: string): string {
+  if (config.vaultGit?.branch && config.vaultGit.branch.trim().length > 0) {
+    return config.vaultGit.branch.trim();
+  }
+  try {
+    const current = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd: vaultRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    if (current && current !== 'HEAD') {
+      return current;
+    }
+  } catch {
+    // uninitialized or detached
+  }
+  return 'master';
+}
+
 /**
  * Resolves the root directory of the spec-memo vault.
  * Priority: override argument > SPEC_MEMO_ROOT env var > ~/.spec-memo
@@ -220,14 +312,19 @@ export function commitVaultChange(message: string, vaultRoot: string = getVaultR
   if (!fs.existsSync(configPath)) return false;
 
   try {
-    const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (!config.vaultGit?.enabled) return false;
+    acquireVaultLockSync(vaultRoot);
+    try {
+      const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (!config.vaultGit?.enabled) return false;
 
-    initVaultGit(vaultRoot);
+      initVaultGit(vaultRoot);
 
-    execFileSync('git', ['add', '.'], { cwd: vaultRoot, stdio: 'ignore' });
-    execFileSync('git', ['commit', '-m', message], { cwd: vaultRoot, stdio: 'ignore' });
-    return true;
+      execFileSync('git', ['add', '.'], { cwd: vaultRoot, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', message], { cwd: vaultRoot, stdio: 'ignore' });
+      return true;
+    } finally {
+      releaseVaultLockSync(vaultRoot);
+    }
   } catch {
     return false;
   }
@@ -254,14 +351,16 @@ export function syncVault(vaultRoot: string = getVaultRoot()): { pulled: boolean
     let pushed = false;
 
     try {
-      execFileSync('git', ['pull', '--rebase', 'origin', 'main'], { cwd: vaultRoot, stdio: 'ignore' });
+      const branch = resolveVaultGitBranch(config, vaultRoot);
+      execFileSync('git', ['pull', '--rebase', 'origin', branch], { cwd: vaultRoot, stdio: 'ignore' });
       pulled = true;
     } catch {
       // Pull optional fallback
     }
 
     try {
-      execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: vaultRoot, stdio: 'ignore' });
+      const branch = resolveVaultGitBranch(config, vaultRoot);
+      execFileSync('git', ['push', '-u', 'origin', branch], { cwd: vaultRoot, stdio: 'ignore' });
       pushed = true;
     } catch {
       // Push optional fallback
