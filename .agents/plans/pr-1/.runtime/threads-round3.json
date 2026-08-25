@@ -1,0 +1,50 @@
+{
+  "prNumber": 1,
+  "owner": "jpolvora",
+  "repo": "spec-memo",
+  "cooperativeContract": ".agents/skills/ws-fix-pr/scripts/COOPERATIVE_FIX.md",
+  "activeThreads": [
+    {
+      "index": 1,
+      "threadId": "PRRT_kwDOUAQCh86cJSLB",
+      "filePath": "/src/vault.ts",
+      "lineNumber": 336,
+      "summary": "agentic-code-reviewers v0.4.0 (cursor-sdk) ⚠️ **WARNING:** `syncVault` performs `git pull --rebase` and `git push` on the vault tree without acquiring the same `.memo.lock` used by `upsertRecord`, `appendEvent`, `forgetRecord`, and `runG...",
+      "comments": [
+        {
+          "author": "github-actions",
+          "createdAt": "2026-08-25T15:58:45Z",
+          "body": "agentic-code-reviewers v0.4.0 (cursor-sdk)\n\n⚠️ **WARNING:** `syncVault` performs `git pull --rebase` and `git push` on the vault tree without acquiring the same `.memo.lock` used by `upsertRecord`, `appendEvent`, `forgetRecord`, and `runGc`. When `vaultGit.enabled` is true, a concurrent mutation can interleave with pull/rebase/push, producing lost commits, rebase conflicts, or a vault snapshot that omits in-flight markdown writes.\n\n**Correção sugerida:**\n\n```typescript\nexport function syncVault(vaultRoot: string = getVaultRoot()) {\n  acquireVaultLockSync(vaultRoot);\n  try {\n    // existing pull/push body\n  } finally {\n    releaseVaultLockSync(vaultRoot);\n  }\n}\n```\n\n<details>\n<summary>🔍 Detalhes da Análise IA</summary>\n\n**Score:** 6/10 | **Ação dev:** fix-code\n\n**Análise:**\n1. Evidence: `withVaultLock` serializes mutations in store.ts/curator.ts; `syncVault` (vault.ts:336–377) calls git commands with no lock wrapper, while `commitVaultChange` explicitly uses `acquireVaultLockSync`. 2. Scenario: terminal A runs `memo upsert`; terminal B runs `memo sync` before the auto-commit finishes — rebase/pull rewrites tracked files while markdown/SQLite are mid-update. 3. Protection: vault.test.ts only exercises sync in isolation; no concurrent sync+upsert test. 4. Discards: assuming single-user CLI use was rejected because vault-git spec targets multi-machine sync (explicit parallelism).\n\n**Caminhos analisados:** /src/vault.ts, /src/store.ts, /src/cli.ts, /.agents/specs/vault-git.spec.md\n</details>"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "threadId": "PRRT_kwDOUAQCh86cJSML",
+      "filePath": "/src/doctor.ts",
+      "lineNumber": 181,
+      "summary": "agentic-code-reviewers v0.4.0 (cursor-sdk) ⚠️ **WARNING:** `memo doctor --rebuild` calls `rebuildIndex` outside the vault file lock. `rebuildIndex` deletes and rebuilds the entire FTS table from disk while other handlers may be writing m...",
+      "comments": [
+        {
+          "author": "github-actions",
+          "createdAt": "2026-08-25T15:58:46Z",
+          "body": "agentic-code-reviewers v0.4.0 (cursor-sdk)\n\n⚠️ **WARNING:** `memo doctor --rebuild` calls `rebuildIndex` outside the vault file lock. `rebuildIndex` deletes and rebuilds the entire FTS table from disk while other handlers may be writing markdown and incrementally updating SQLite via `indexRecord`, so concurrent MCP/CLI mutations can yield a transiently incomplete or stale search index.\n\n**Correção sugerida:**\n\n```typescript\nimport { withVaultLock } from './vault.js';\n\nif (options.rebuild) {\n  try {\n    const rebuildRes = await withVaultLock(vaultRoot, () => rebuildIndex(vaultRoot));\n    indexedRecordsCount = rebuildRes.indexed;\n    ftsHealthy = true;\n    rebuilt = true;\n  } catch (err: unknown) {\n    // existing warning handling\n  }\n}\n```\n\n<details>\n<summary>🔍 Detalhes da Análise IA</summary>\n\n**Score:** 6/10 | **Ação dev:** fix-code\n\n**Análise:**\n1. Evidence: doctor.ts:181 invokes `rebuildIndex(vaultRoot)` with no `withVaultLock`; store.ts mutations and runGc wrap writes in `withVaultLock`; indexer.ts:428 rebuild clears and rescans atomically only at the SQL layer, not filesystem coordination. 2. Scenario: agent upserts a trap while developer runs `memo doctor --rebuild`; rebuild scans vault mid-write and the new trap is missing from FTS until another rebuild. 3. Protection: doctor.test.ts covers rebuild success path only, not overlap with upsert. 4. Discards: WAL mode alone was rejected because rebuild deletes all FTS rows and rescans files — filesystem interleaving remains unprotected.\n\n**Caminhos analisados:** /src/doctor.ts, /src/importer.ts, /src/indexer.ts, /src/store.ts\n</details>"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "threadId": "PRRT_kwDOUAQCh86cJSNf",
+      "filePath": "/src/importer.ts",
+      "lineNumber": 413,
+      "summary": "agentic-code-reviewers v0.4.0 (cursor-sdk) ⚠️ **WARNING:** *(Ocorrência similar identificada)* `memo doctor --rebuild` calls `rebuildIndex` outside the vault file lock. `rebuildIndex` deletes and rebuilds the entire FTS table from disk w...",
+      "comments": [
+        {
+          "author": "github-actions",
+          "createdAt": "2026-08-25T15:58:47Z",
+          "body": "agentic-code-reviewers v0.4.0 (cursor-sdk)\n\n⚠️ **WARNING:** *(Ocorrência similar identificada)*\n\n`memo doctor --rebuild` calls `rebuildIndex` outside the vault file lock. `rebuildIndex` deletes and rebuilds the entire FTS table from disk while other handlers may be writing markdown and incrementally updating SQLite via `indexRecord`, so concurrent MCP/CLI mutations can yield a transiently incomplete or stale search index.\n\n**Correção sugerida:**\n\n```typescript\nimport { withVaultLock } from './vault.js';\n\nif (options.rebuild) {\n  try {\n    const rebuildRes = await withVaultLock(vaultRoot, () => rebuildIndex(vaultRoot));\n    indexedRecordsCount = rebuildRes.indexed;\n    ftsHealthy = true;\n    rebuilt = true;\n  } catch (err: unknown) {\n    // existing warning handling\n  }\n}\n```\n\n<details>\n<summary>🔍 Detalhes da Análise IA</summary>\n\n**Score:** 6/10 | **Ação dev:** fix-code\n\n**Análise:**\n1. Evidence: doctor.ts:181 invokes `rebuildIndex(vaultRoot)` with no `withVaultLock`; store.ts mutations and runGc wrap writes in `withVaultLock`; indexer.ts:428 rebuild clears and rescans atomically only at the SQL layer, not filesystem coordination. 2. Scenario: agent upserts a trap while developer runs `memo doctor --rebuild`; rebuild scans vault mid-write and the new trap is missing from FTS until another rebuild. 3. Protection: doctor.test.ts covers rebuild success path only, not overlap with upsert. 4. Discards: WAL mode alone was rejected because rebuild deletes all FTS rows and rescans files — filesystem interleaving remains unprotected.\n\n**Caminhos analisados:** /src/doctor.ts, /src/importer.ts, /src/indexer.ts, /src/store.ts\n</details>"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "prNumber": 1,
+  "owner": "jpolvora",
+  "repo": "spec-memo",
+  "cooperativeContract": ".agents/skills/ws-fix-pr/scripts/COOPERATIVE_FIX.md",
+  "activeThreads": [
+    {
+      "index": 1,
+      "threadId": "PRRT_kwDOUAQCh86cJ7F-",
+      "filePath": "/src/vault.ts",
+      "lineNumber": 342,
+      "summary": "agentic-code-reviewers v0.4.0 (cursor-sdk) ⚠️ **WARNING:** When vault git auto-commit is enabled, `commitVaultChange` stages the entire vault tree with `git add .` before every upsert/append/forget/gc mutation. Unrelated dirty files—manu...",
+      "comments": [
+        {
+          "author": "github-actions",
+          "createdAt": "2026-08-25T16:28:21Z",
+          "body": "agentic-code-reviewers v0.4.0 (cursor-sdk)\n\n⚠️ **WARNING:** When vault git auto-commit is enabled, `commitVaultChange` stages the entire vault tree with `git add .` before every upsert/append/forget/gc mutation. Unrelated dirty files—manual edits, scratch imports, or a half-finished `memo import`—are swept into the same commit as the single record change, producing misleading history and making it impossible to revert one mutation without reverting unrelated local work.\n\n**Correção sugerida:**\n\n```typescript\n// Stage only paths touched by the mutation, not the whole vault.\nexport function commitVaultChange(\n  message: string,\n  vaultRoot: string = getVaultRoot(),\n  paths: string[] = []\n): boolean {\n  // ...\n  const toAdd = paths.length > 0 ? paths : ['projects', 'config.json'];\n  execFileSync('git', ['add', '--', ...toAdd], { cwd: vaultRoot, stdio: 'ignore' });\n  execFileSync('git', ['commit', '-m', message], { cwd: vaultRoot, stdio: 'ignore' });\n}\n```\n\n<details>\n<summary>🔍 Detalhes da Análise IA</summary>\n\n**Score:** 6/10 | **Ação dev:** fix-code\n\n**Análise:**\n1. Evidence: `commitVaultChange` in `vault.ts` lines 342–343; callers include `upsertRecord`, `appendEvent`, `forgetRecord`, and `runGc` in `store.ts`/`curator.ts`. 2. Scenario: vault git sync is on; operator manually edits a scratch file; an agent upserts a trap; auto-commit captures both the trap markdown/SQLite delta and the unrelated scratch edit under one message. 3. Protection: `vault.test.ts` only verifies a commit succeeds on a clean vault; no test stages extraneous dirty files before `commitVaultChange`. 4. Discards: `git commit` failure is swallowed (returns false), but the over-broad staging scope is independent of error handling.\n\n**Caminhos analisados:** src/vault.ts, src/store.ts, src/curator.ts, src/vault.test.ts\n</details>"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "threadId": "PRRT_kwDOUAQCh86cJ7HO",
+      "filePath": "/src/bootstrap.ts",
+      "lineNumber": 68,
+      "summary": "agentic-code-reviewers v0.4.0 (cursor-sdk) ⚠️ **WARNING:** `checkSpecDrift` silently treats git failures as \"no drift\" instead of surfacing uncertainty. When `git status` or `git show` throws—for example during a rebase conflict, missing...",
+      "comments": [
+        {
+          "author": "github-actions",
+          "createdAt": "2026-08-25T16:28:22Z",
+          "body": "agentic-code-reviewers v0.4.0 (cursor-sdk)\n\n⚠️ **WARNING:** `checkSpecDrift` silently treats git failures as \"no drift\" instead of surfacing uncertainty. When `git status` or `git show` throws—for example during a rebase conflict, missing `.git`, or transient git errors—the outer catch at line 68 swallows the error and returns null, so bootstrap omits drift warnings even if linked product files no longer match `verifiedAtSha`.\n\n**Correção sugerida:**\n\n```typescript\n      } catch (err) {\n        modifiedPaths.push(relPath);\n        notices.push(`Spec drift check failed for '${relPath}' (git unavailable); treating as potentially drifted.`);\n      }\n```\n\n<details>\n<summary>🔍 Detalhes da Análise IA</summary>\n\n**Score:** 5/10 | **Ação dev:** fix-code\n\n**Análise:**\n1. Evidence: `checkSpecDrift` lines 42–70 in `bootstrap.ts`; empty catch with comment \"If git fails, fallback to assumption of safe\". 2. Scenario: active spec records `linkedPaths: ['src/foo.ts']` and a verified SHA; repository enters conflicted/rebase state so `git status` exits non-zero; linked file content diverged—bootstrap reports no drift and agents proceed on stale spec assurance. 3. Protection: `bootstrap.test.ts` covers happy-path drift and stable specs with working git, but has no case where git subprocess fails yet filesystem content differs. 4. Discards: missing blob at verified SHA is handled (lines 59–61 set diverged=true); only the outer catch creates false negatives.\n\n**Caminhos analisados:** src/bootstrap.ts, src/bootstrap.test.ts\n</details>"
+        }
+      ]
+    }
+  ]
+}

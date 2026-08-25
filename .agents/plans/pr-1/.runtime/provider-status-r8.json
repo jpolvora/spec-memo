@@ -1,0 +1,6 @@
+{
+  "activeThreads": [],
+  "checks": [
+    { "name": "review", "state": "IN_PROGRESS" }
+  ]
+}
