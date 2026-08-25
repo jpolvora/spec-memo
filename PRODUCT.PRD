@@ -149,53 +149,61 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 
 ### Phase 1 — spec-memo MVP (this repository)
 
-- [ ] Vault + project identity from git remote (`spec: split when implementing — vault-and-identity`)
-- [ ] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`spec: record-schema-and-indexes`)
-- [ ] SQLite FTS disposable index (`spec: fts-index`)
-- [ ] MCP server (stdio) + CLI parity for the eight tools (`spec: mcp-and-cli`)
-- [ ] `bootstrap` token budget and default filters (`spec: bootstrap-brief`)
-- [ ] `gc` TTL + shipped-plan compact (`spec: curator-gc`)
-- [ ] Refuse upsert payload written into a known product working tree (`spec: refuse-product-write`)
-- [ ] Secret redaction on write (`spec: redaction`)
-- [ ] `memo import` from workflow-skills-style trees (`spec: import-agents-tree`)
+- [x] Vault + project identity from git remote (`.agents/specs/vault-and-identity.spec.md`)
+- [x] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`.agents/specs/record-schema-and-indexes.spec.md`)
+- [x] SQLite FTS disposable index (`.agents/specs/fts-index.spec.md`)
+- [x] Remaining kinds, append-only logs, and forget archiving (`.agents/specs/remaining-kinds-and-events.spec.md`)
+- [x] `bootstrap` token budget and default filters (`.agents/specs/bootstrap-brief.spec.md`)
+- [x] `gc` TTL + shipped-plan compact (`.agents/specs/curator-gc-and-safety.spec.md`)
+- [x] Refuse upsert payload written into a known product working tree (`.agents/specs/curator-gc-and-safety.spec.md`)
+- [x] Secret redaction on write (`.agents/specs/curator-gc-and-safety.spec.md`)
+- [x] CLI parity, `memo import`, `memo promote`, and `memo doctor` (`.agents/specs/import-and-doctor.spec.md`)
 
 ### Phase 2 — Harness adapter (workflow-skills, not this repo’s core)
 
-- [ ] Relocatable consumer hub (MEMORY / changelog) (`spec: later in workflow-skills`)
-- [ ] `{memoRoot}` / MCP as `read-memory` / `update-memory` (`spec: later in workflow-skills`)
-- [ ] Hook or skill rule blocking in-repo workflow writes (`spec: later in workflow-skills`)
+- [x] Relocatable consumer hub (MEMORY / changelog) (`.agents/specs/relocatable-hub.spec.md`)
+- [x] `{memoRoot}` / MCP as `read-memory` / `update-memory` (`.agents/specs/memory-adapter-mcp.spec.md`)
+- [x] Hook or skill rule blocking in-repo workflow writes (`.agents/specs/write-block-hook.spec.md`)
 
 ### Phase 3 — Curator hardening
 
-- [ ] Trap dedup on upsert (`spec: trap-dedup`)
-- [ ] Spec SHA drift on bootstrap (`spec: spec-drift`)
-- [ ] Optional private git remote on the vault (`spec: vault-git`)
-- [ ] Cross-project search opt-in (`spec: cross-project-search`)
+- [x] Trap dedup on upsert (`.agents/specs/trap-dedup.spec.md`)
+- [x] Spec SHA drift on bootstrap (`.agents/specs/spec-drift.spec.md`)
+- [x] Optional private git remote on the vault (`.agents/specs/vault-git.spec.md`)
+- [x] Cross-project search opt-in (`.agents/specs/cross-project-search.spec.md`)
+- [x] Embeddings as an optional search backend (`.agents/specs/embeddings-search.spec.md`)
 
 ### Phase 4 — Human viewers (optional)
 
-- [ ] CLI browse/doctor UX polish (`spec: cli-doctor`)
-- [ ] Optional IDE plugin or Obsidian vault as **viewer only** (`spec: viewer`)
+- [x] Polished interactive CLI doctor and health inspection (`.agents/specs/cli-doctor.spec.md`)
+- [x] Optional IDE plugin or Obsidian vault as **viewer only** (`.agents/specs/viewer.spec.md`)
 
 ## 9. Next specs
 
 | # | Slug | Status | Target phase | Notes |
 |---|------|--------|--------------|-------|
-| 1 | `vault-and-identity` | `[ ]` | Phase 1 | Remote normalization, fallback path id, vault layout |
-| 2 | `record-schema-and-indexes` | `[ ]` | Phase 1 | Frontmatter, kinds, compiled md |
-| 3 | `fts-index` | `[ ]` | Phase 1 | Rebuild from files; never SoT |
-| 4 | `mcp-and-cli` | `[ ]` | Phase 1 | Eight tools, shared module |
-| 5 | `bootstrap-brief` | `[ ]` | Phase 1 | 8 KB cap, include/exclude rules |
-| 6 | `curator-gc` | `[ ]` | Phase 1 | TTL, compact |
-| 7 | `refuse-product-write` | `[ ]` | Phase 1 | Detect product root; deny dual-write |
-| 8 | `redaction` | `[ ]` | Phase 1 | Block obvious secrets in bodies |
-| 9 | `import-agents-tree` | `[ ]` | Phase 1 | Map specs/memory/plans; skip scratch |
+| 1 | `vault-and-identity` | `[x]` | Phase 1 | Remote normalization, fallback path id, vault layout |
+| 2 | `record-schema-and-indexes` | `[x]` | Phase 1 | Frontmatter, kinds, compiled md |
+| 3 | `fts-index` | `[x]` | Phase 1 | Rebuild from files; never SoT |
+| 4 | `remaining-kinds-and-events` | `[x]` | Phase 1 | Full matrix kinds, append, forget |
+| 5 | `bootstrap-brief` | `[x]` | Phase 1 | 8 KB cap, include/exclude rules |
+| 6 | `curator-gc-and-safety` | `[x]` | Phase 1 | TTL, compact, redaction, write guard |
+| 7 | `import-and-doctor` | `[x]` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
+| 8 | `relocatable-hub` | `[ ]` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
+| 9 | `memory-adapter-mcp` | `[ ]` | Phase 2 | Route consumer memory calls to MCP |
+| 10 | `write-block-hook` | `[ ]` | Phase 2 | In-repo write blocking hook |
+| 11 | `trap-dedup` | `[ ]` | Phase 3 | Deduplicate traps with matching paths & rules |
+| 12 | `spec-drift` | `[ ]` | Phase 3 | Flag SHA drift during bootstrap |
+| 13 | `vault-git` | `[ ]` | Phase 3 | Optional private git remote on vault root |
+| 14 | `cross-project-search` | `[ ]` | Phase 3 | Opt-in multi-project search |
+| 15 | `embeddings-search` | `[ ]` | Phase 3 | Optional embeddings search backend |
+| 16 | `cli-doctor` | `[ ]` | Phase 4 | Polished interactive CLI doctor UX |
+| 17 | `viewer` | `[ ]` | Phase 4 | Obsidian and markdown viewer compatibility |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
 ## 10. Inbox (unscheduled)
 
-- Embeddings as an optional `search` backend after kinds/TTL exist.
 - Host plugin / canvas UI for humans.
 - Encrypted vault / git-crypt.
 - Multi-machine sync beyond “optional git remote on the vault.”
@@ -206,6 +214,24 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | Date | Slug | Title | PR / Commit |
 |------|------|-------|-------------|
 | 2026-08-22 | docs-v0 | Product docs: README, AGENTS, PRD, FEATURES, PLAN | uncommitted |
+| 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, test suite | Slice 1 delivery |
+| 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), remote normalization, project ID binding, project.json | Slice 2 delivery |
+| 2026-08-23 | slice-3-records-indexes | Record schema validation, upsert/get engine, TRAPS.md / DECISIONS.md / INDEX.md compiler | Slice 3 delivery |
+| 2026-08-23 | slice-4-fts-index | SQLite FTS5 disposable index, Porter stemmer, pathPatterns matching, rebuildIndex, search tool & CLI | 66771e4 |
+| 2026-08-23 | slice-5-remaining-kinds-and-events | Full record kinds matrix, append-only event logging, forget soft-archive & purge | 1dbc5ac |
+| 2026-08-23 | slice-6-bootstrap-brief | Bootstrap session brief generation with 8 KB budget cap and trap ranking | 4884172 |
+| 2026-08-25 | slice-7-curator-gc-safety | Curator GC, secret redaction & product write guard | Slice 7 delivery |
+| 2026-08-25 | slice-8-import-and-doctor | CLI parity, memo import, memo doctor diagnostics, memo promote export | Slice 8 delivery |
+| 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver | Slice 9 delivery |
+| 2026-08-25 | slice-10-memory-adapter-mcp | Consumer memory adapter module for MCP/CLI integration | Slice 10 delivery |
+| 2026-08-25 | slice-11-write-block-hook | Pre-commit git hook generator and installer CLI command | Slice 11 delivery |
+| 2026-08-25 | slice-12-trap-dedup | Trap deduplication and automatic superseding engine | Slice 12 delivery |
+| 2026-08-25 | slice-13-spec-drift | Specification git SHA drift detection during session bootstrap | Slice 13 delivery |
+| 2026-08-25 | slice-14-vault-git | Opt-in private git remote sync for vault persistence | Slice 14 delivery |
+| 2026-08-25 | slice-15-cross-project-search | Opt-in multi-project cross-vault search engine | Slice 15 delivery |
+| 2026-08-25 | slice-16-embeddings-search | Optional vector similarity search backend fallback engine | Slice 16 delivery |
+| 2026-08-25 | slice-17-cli-doctor | Interactive CLI doctor health inspector with --rebuild and --fix options | Slice 17 delivery |
+| 2026-08-25 | slice-18-viewer | Passive Markdown & Obsidian wikilink viewer compatibility | Slice 18 delivery |
 
 ## 12. Related docs
 

@@ -12,7 +12,7 @@
     "org": "jpolvora",
     "repoUrl": "https://github.com/jpolvora/spec-memo",
     "baseBranch": "master",
-    "workingBranch": "master",
+    "workingBranch": "develop",
     "gitRemote": "origin"
   },
   "stack": {
@@ -180,7 +180,8 @@
     "plannerModel": "",
     "executionModel": "",
     "reviewerModel": "",
-    "testingModel": ""
+    "testingModel": "",
+    "autoloadTaskLifecycle": true
   },
   "plans": {
     "dir": ".agents/plans",

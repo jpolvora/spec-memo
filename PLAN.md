@@ -147,8 +147,25 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 
 ## Done log
 
-| Date | Slice | Result |
-|------|-------|--------|
 | 2026-08-22 | docs-v0 | PRODUCT.PRD, FEATURES.md, PLAN.md, AGENTS.md, README.md written |
+| 2026-08-22 | slice-1-skeleton | Package skeleton, 8 MCP tools & CLI stubs, type/schema definitions, test suite |
+| 2026-08-22 | slice-2-vault-identity | Vault root ($SPEC_MEMO_ROOT), git remote normalization, project ID binding, project.json, directory scaffolding, test suite |
+| 2026-08-23 | slice-3-records-indexes | Record schema validation, upsert/get engine, superseding workflow, TRAPS.md / DECISIONS.md / INDEX.md compiler, test suite |
+| 2026-08-23 | slice-4-fts-index | SQLite FTS5 disposable index (memo.sqlite), Porter stemmer, pathPatterns glob filter, rebuildIndex, search CLI & MCP tool, test suite (66771e4) |
+| 2026-08-23 | slice-5-remaining-kinds-and-events | Full record kinds matrix (spec, plan, state, log, scratch, review), write-only append log stream, forget soft-archive & purge, test suite (1dbc5ac) |
+| 2026-08-23 | slice-6-bootstrap-brief | Bootstrap session brief generation, 8 KB UTF-8 token budget capping, trap severity/path ranking, zero-write proof, test suite (4884172) |
+| 2026-08-25 | slice-7-curator-gc-safety | Curator GC (TTL 7d scratch / 14d review), shipped plan compaction, secret redaction, product-tree write guard, test suite |
+| 2026-08-25 | slice-8-import-and-doctor | CLI parity, memo import, memo doctor diagnostics, memo promote export, test suite |
+| 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver, test suite |
+| 2026-08-25 | slice-10-memory-adapter-mcp | Consumer memory adapter module for MCP/CLI integration, test suite |
+| 2026-08-25 | slice-11-write-block-hook | Pre-commit git hook generator and installer CLI command, test suite |
+| 2026-08-25 | slice-12-trap-dedup | Trap deduplication and automatic superseding engine, test suite |
+| 2026-08-25 | slice-13-spec-drift | Specification git SHA drift detection during session bootstrap, test suite |
+| 2026-08-25 | slice-14-vault-git | Opt-in private git remote sync for vault persistence, test suite |
+| 2026-08-25 | slice-15-cross-project-search | Opt-in multi-project cross-vault search engine, test suite |
+| 2026-08-25 | slice-16-embeddings-search | Optional vector similarity search backend fallback engine, test suite |
+| 2026-08-25 | slice-17-cli-doctor | Interactive CLI doctor health inspector with --rebuild and --fix options, test suite |
+| 2026-08-25 | slice-18-viewer | Passive Markdown & Obsidian wikilink viewer compatibility, test suite |
 
 When a Phase 1 slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
+

@@ -1,0 +1,38 @@
+{
+  "name": "spec-memo",
+  "version": "0.1.0",
+  "description": "Local working memory for coding agents outside the product repository",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "memo": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "pretest": "npm run build",
+    "test": "node --test dist/**/*.test.js",
+    "start": "node dist/mcp.js"
+  },
+  "keywords": [
+    "mcp",
+    "agent-memory",
+    "spec-memo",
+    "context",
+    "developer-tools"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "better-sqlite3": "^11.8.1",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.9",
+    "typescript": "^5.7.3"
+  }
+}

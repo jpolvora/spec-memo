@@ -15,11 +15,12 @@ When both this file and `.agents/skills/ws-shared/AGENTS.md` load, **this root f
 |-------|------|
 | `ws-senior-developer` | `{globalSkillsRoot}/ws-senior-developer/SKILL.md` |
 | `ws-self-learning` | `{globalSkillsRoot}/ws-self-learning/SKILL.md` |
-| `ws-patterns-backend` | `{globalSkillsRoot}/ws-patterns-backend/SKILL.md` |
-| `ws-patterns-frontend` | `{globalSkillsRoot}/ws-patterns-frontend/SKILL.md` |
+| `ws-patterns-backend` | `{skillsRoot}/ws-patterns-backend/SKILL.md` |
+| `ws-patterns-frontend` | `{skillsRoot}/ws-patterns-frontend/SKILL.md` |
 | `ws-changelog` | `{globalSkillsRoot}/ws-changelog/SKILL.md` |
 | `ws-fable-method` | `{globalSkillsRoot}/ws-fable-method/SKILL.md` |
 | `ws-tdah` | `{globalSkillsRoot}/ws-tdah/SKILL.md` |
+| `ws-task-lifecycle` | `{globalSkillsRoot}/ws-task-lifecycle/SKILL.md` |
 
 ## Specs progressive disclosure
 
