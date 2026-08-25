@@ -70,7 +70,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 ### Phase 2: Harness adapter (workflow-skills, not this repo’s core)
 
 - [~] [`relocatable-hub`](relocatable-hub.spec.md): Relocatable consumer hub data (MEMORY / changelog)
-- [ ] [`memory-adapter-mcp`](memory-adapter-mcp.spec.md): Consumer memory adapter for spec-memo MCP tools
+- [~] [`memory-adapter-mcp`](memory-adapter-mcp.spec.md): Consumer memory adapter for spec-memo MCP tools
 - [ ] [`write-block-hook`](write-block-hook.spec.md): Consumer hook and skill rule blocking in-repo workflow writes
 
 ### Phase 3: Curator hardening
@@ -99,7 +99,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 6 | [`curator-gc-and-safety`](curator-gc-and-safety.spec.md) | `[x] done` | Phase 1 | TTL, compaction, secret redaction, refuse product write |
 | 7 | [`import-and-doctor`](import-and-doctor.spec.md) | `[x] done` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
 | 8 | [`relocatable-hub`](relocatable-hub.spec.md) | `[x] done` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
-| 9 | [`memory-adapter-mcp`](memory-adapter-mcp.spec.md) | `[ ] todo` | Phase 2 | Route consumer `read-memory`/`update-memory` to MCP |
+| 9 | [`memory-adapter-mcp`](memory-adapter-mcp.spec.md) | `[x] done` | Phase 2 | Route consumer `read-memory`/`update-memory` to MCP |
 | 10 | [`write-block-hook`](write-block-hook.spec.md) | `[ ] todo` | Phase 2 | Git hook & skill rules blocking in-repo workflow writes |
 | 11 | [`trap-dedup`](trap-dedup.spec.md) | `[ ] todo` | Phase 3 | Deduplicate traps with matching paths & rules |
 | 12 | [`spec-drift`](spec-drift.spec.md) | `[ ] todo` | Phase 3 | Flag SHA drift between specs and code during bootstrap |
@@ -130,6 +130,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-7-curator-gc-safety | Curator GC, secret redaction, and product-tree write guard | Slice 7 delivery |
 | 2026-08-25 | slice-8-import-and-doctor | CLI parity, memo import, memo doctor diagnostics, memo promote export | Slice 8 delivery |
 | 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver | Slice 9 delivery |
+| 2026-08-25 | slice-10-memory-adapter-mcp | Consumer memory adapter module for MCP/CLI integration | Slice 10 delivery |
 
 ## Archive
 
