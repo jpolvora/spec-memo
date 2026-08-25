@@ -171,4 +171,42 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
     assert.equal(searchRes.length, 1);
     assert.equal(searchRes[0].id, 'secret-auth-spec');
   });
+
+  it('should reject archive with path traversal relativePath segments', async () => {
+    const maliciousArchive = {
+      format: 'spec-memo-vault-v1',
+      manifest: {
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        projects: ['proj-1'],
+        recordCount: 1
+      },
+      projects: [
+        {
+          projectId: 'proj-1',
+          records: [
+            {
+              relativePath: '../../config.json',
+              content: 'malicious payload'
+            }
+          ]
+        }
+      ]
+    };
+
+    const maliciousPath = path.join(tempDir, 'malicious.json');
+    fs.writeFileSync(maliciousPath, JSON.stringify(maliciousArchive), 'utf8');
+
+    await assert.rejects(
+      async () => {
+        await importVault({
+          vaultRoot: targetVault,
+          archivePath: maliciousPath
+        });
+      },
+      {
+        message: /Archive record path escapes project directory/
+      }
+    );
+  });
 });

@@ -8,9 +8,10 @@ import {
   ImportVaultResult,
   VaultConfig
 } from './types.js';
-import { getVaultRoot, ensureVaultStructure, withVaultLock } from './vault.js';
+import { getVaultRoot, ensureVaultStructure, withVaultLock, commitVaultChange } from './vault.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { rebuildIndex } from './indexer.js';
+import { isPathInside } from './safety.js';
 
 interface RawVaultRecord {
   relativePath: string;
@@ -289,7 +290,10 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
       }
 
       for (const record of project.records) {
-        const targetPath = path.join(projDir, record.relativePath);
+        const targetPath = path.resolve(projDir, record.relativePath);
+        if (!isPathInside(targetPath, path.resolve(projDir))) {
+          throw new Error('Archive record path escapes project directory');
+        }
         const parentDir = path.dirname(targetPath);
         if (!fs.existsSync(parentDir)) {
           fs.mkdirSync(parentDir, { recursive: true });
@@ -306,6 +310,7 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
     }
 
     await rebuildIndex(vaultRoot);
+    commitVaultChange('import vault archive', vaultRoot, restoredProjects.map((p) => path.join('projects', p)));
 
     return {
       vaultRoot,

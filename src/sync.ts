@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getVaultRoot, RECORD_SUBDIRS, initVault } from "./vault.js";
+import { getVaultRoot, RECORD_SUBDIRS, initVault, withVaultLock, commitVaultChange } from "./vault.js";
 import { getSubdirForKind } from "./store.js";
 import { parseRecord, serializeRecord } from "./schema.js";
 import { rebuildIndex } from "./indexer.js";
 import { getVaultProjectList, listProjectRecordsInternal } from "./canvas.js";
+import { isPathInside } from "./safety.js";
 import { RecordFrontmatter, RecordKind } from "./types.js";
 
 export interface ChangesetRecord {
@@ -78,79 +79,94 @@ export async function applyChangeset(
   options: ApplyChangesetOptions = {}
 ): Promise<SyncResult> {
   const vaultRoot = getVaultRoot(vaultRootInput);
-  const dryRun = !!options.dryRun;
-  let applied = 0;
-  let skipped = 0;
-  let conflicts = 0;
-  const recordsApplied: string[] = [];
+  return withVaultLock(vaultRoot, async () => {
+    const dryRun = !!options.dryRun;
+    let applied = 0;
+    let skipped = 0;
+    let conflicts = 0;
+    const recordsApplied: string[] = [];
 
-  const touchedProjects = new Set<string>();
+    const touchedProjects = new Set<string>();
 
-  for (const item of changeset.records) {
-    const projId = item.project;
-    touchedProjects.add(projId);
+    for (const item of changeset.records) {
+      const projId = item.project;
+      touchedProjects.add(projId);
 
-    const projDir = path.join(vaultRoot, "projects", projId);
-    if (!dryRun && !fs.existsSync(projDir)) {
-      initVault({ vaultRoot, projectId: projId, displayName: projId });
-    }
-
-    const kind = item.frontmatter.kind;
-    const recId = item.frontmatter.id;
-    const kindDir = path.join(projDir, getSubdirForKind(kind));
-    const targetFilePath = path.join(kindDir, `${recId}.md`);
-
-    if (fs.existsSync(targetFilePath)) {
-      const existingContent = fs.readFileSync(targetFilePath, "utf8");
-      const existing = parseRecord(existingContent);
-
-      const localTime = new Date(existing.frontmatter.updated || existing.frontmatter.created).getTime();
-      const remoteTime = new Date(item.frontmatter.updated || item.frontmatter.created).getTime();
-
-      if (existingContent === serializeRecord(item)) {
-        skipped++;
-        continue;
+      const projDir = path.resolve(vaultRoot, "projects", projId);
+      if (!isPathInside(projDir, path.resolve(vaultRoot, "projects"))) {
+        throw new Error("Changeset project path escapes vault projects directory");
+      }
+      if (!dryRun && !fs.existsSync(projDir)) {
+        initVault({ vaultRoot, projectId: projId, displayName: projId });
       }
 
-      if (remoteTime > localTime || options.force) {
+      const kind = item.frontmatter.kind;
+      const recId = item.frontmatter.id;
+      const slug = String(item.frontmatter.slug || recId);
+      const kindDir = path.join(projDir, getSubdirForKind(kind));
+      const targetFilePath = path.resolve(kindDir, `${slug}.md`);
+
+      if (!isPathInside(targetFilePath, projDir)) {
+        throw new Error("Changeset record path escapes project directory");
+      }
+
+      if (fs.existsSync(targetFilePath)) {
+        const existingContent = fs.readFileSync(targetFilePath, "utf8");
+        const existing = parseRecord(existingContent);
+
+        const localTime = new Date(existing.frontmatter.updated || existing.frontmatter.created).getTime();
+        const remoteTime = new Date(item.frontmatter.updated || item.frontmatter.created).getTime();
+
+        if (existingContent === serializeRecord(item)) {
+          skipped++;
+          continue;
+        }
+
+        if (remoteTime > localTime || options.force) {
+          if (!dryRun) {
+            fs.writeFileSync(targetFilePath, serializeRecord(item), "utf8");
+          }
+          applied++;
+          recordsApplied.push(`${projId}/${kind}/${recId}`);
+        } else if (remoteTime === localTime) {
+          conflicts++;
+          if (!dryRun) {
+            const conflictPath = path.resolve(kindDir, `${slug}.conflict.${Date.now()}.md`);
+            fs.writeFileSync(conflictPath, serializeRecord(item), "utf8");
+          }
+          recordsApplied.push(`${projId}/${kind}/${recId} (conflict-saved)`);
+        } else {
+          skipped++;
+        }
+      } else {
         if (!dryRun) {
+          if (!fs.existsSync(kindDir)) {
+            fs.mkdirSync(kindDir, { recursive: true });
+          }
           fs.writeFileSync(targetFilePath, serializeRecord(item), "utf8");
         }
         applied++;
         recordsApplied.push(`${projId}/${kind}/${recId}`);
-      } else if (remoteTime === localTime) {
-        conflicts++;
-        if (!dryRun) {
-          const conflictPath = path.join(kindDir, `${recId}.conflict.${Date.now()}.md`);
-          fs.writeFileSync(conflictPath, serializeRecord(item), "utf8");
-        }
-        recordsApplied.push(`${projId}/${kind}/${recId} (conflict-saved)`);
-      } else {
-        skipped++;
       }
-    } else {
-      if (!dryRun) {
-        if (!fs.existsSync(kindDir)) {
-          fs.mkdirSync(kindDir, { recursive: true });
-        }
-        fs.writeFileSync(targetFilePath, serializeRecord(item), "utf8");
-      }
-      applied++;
-      recordsApplied.push(`${projId}/${kind}/${recId}`);
     }
-  }
 
-  if (!dryRun && applied > 0) {
-    await rebuildIndex(vaultRoot);
-  }
+    if (!dryRun && applied > 0) {
+      await rebuildIndex(vaultRoot);
+      commitVaultChange(
+        "sync changeset applied",
+        vaultRoot,
+        Array.from(touchedProjects).map((p) => path.join("projects", p))
+      );
+    }
 
-  return {
-    applied,
-    skipped,
-    conflicts,
-    dryRun,
-    recordsApplied
-  };
+    return {
+      applied,
+      skipped,
+      conflicts,
+      dryRun,
+      recordsApplied
+    };
+  });
 }
 
 export async function syncVaults(
@@ -161,16 +177,25 @@ export async function syncVaults(
   const sourceVault = getVaultRoot(sourceVaultInput);
   const targetVault = getVaultRoot(targetVaultInput);
 
-  // 1. Source -> Target
-  const changesetForward = exportChangeset(sourceVault, { since: options.since });
-  const forwardResult = await applyChangeset(targetVault, changesetForward, { dryRun: options.dryRun });
+  const [first, second] = sourceVault < targetVault ? [sourceVault, targetVault] : [targetVault, sourceVault];
 
-  let backwardResult: SyncResult | undefined;
-  if (options.twoWay) {
-    // 2. Target -> Source
-    const changesetBackward = exportChangeset(targetVault, { since: options.since });
-    backwardResult = await applyChangeset(sourceVault, changesetBackward, { dryRun: options.dryRun });
+  const doSync = async () => {
+    // 1. Source -> Target
+    const changesetForward = exportChangeset(sourceVault, { since: options.since });
+    const forwardResult = await applyChangeset(targetVault, changesetForward, { dryRun: options.dryRun });
+
+    let backwardResult: SyncResult | undefined;
+    if (options.twoWay) {
+      // 2. Target -> Source
+      const changesetBackward = exportChangeset(targetVault, { since: options.since });
+      backwardResult = await applyChangeset(sourceVault, changesetBackward, { dryRun: options.dryRun });
+    }
+
+    return { forward: forwardResult, backward: backwardResult };
+  };
+
+  if (first === second) {
+    return withVaultLock(first, doSync);
   }
-
-  return { forward: forwardResult, backward: backwardResult };
+  return withVaultLock(first, () => withVaultLock(second, doSync));
 }

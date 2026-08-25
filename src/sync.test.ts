@@ -85,4 +85,65 @@ test("Multi-Machine Vault Sync & Delta Engine", async (t) => {
     assert.ok(syncedDecisionInA);
     assert.strictEqual(syncedDecisionInA?.frontmatter.id, "crdt-decision");
   });
+
+  await t.test("should properly name files based on slug when id and slug differ", async () => {
+    // Add record with divergent slug and id in Vault A
+    const customRecord = await upsertRecord({
+      vaultRoot: vaultA,
+      projectId: projA,
+      kind: "trap",
+      slug: "auth-divergent-slug",
+      frontmatter: {
+        id: "trap-auth-divergent-id",
+        slug: "auth-divergent-slug",
+        title: "Divergent Slug Trap",
+        severity: "medium"
+      },
+      body: "# Divergent Slug Body\nEnsure slug file naming is preserved."
+    });
+
+    const changeset = exportChangeset(vaultA);
+    await applyChangeset(vaultB, changeset);
+
+    // Check target vault file path uses slug
+    const targetFilePath = path.join(vaultB, "projects", projA, "traps", "auth-divergent-slug.md");
+    assert.ok(fs.existsSync(targetFilePath), "Target file must be named auth-divergent-slug.md");
+
+    // Check get by slug and by id works
+    const fetchedBySlug = await getRecord({ vaultRoot: vaultB, projectId: projA, kind: "trap", slug: "auth-divergent-slug" });
+    assert.ok(fetchedBySlug);
+    assert.strictEqual(fetchedBySlug?.frontmatter.id, "trap-auth-divergent-id");
+  });
+
+  await t.test("should reject changeset with path traversal segment", async () => {
+    const maliciousChangeset = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          frontmatter: {
+            id: "evil-trap",
+            slug: "../../evil-trap",
+            kind: "trap" as const,
+            status: "active" as const,
+            source: "agent" as const,
+            created: new Date().toISOString(),
+            updated: new Date().toISOString(),
+            project: projA
+          },
+          body: "evil",
+          project: projA
+        }
+      ]
+    };
+
+    await assert.rejects(
+      async () => {
+        await applyChangeset(vaultB, maliciousChangeset);
+      },
+      {
+        message: /Changeset record path escapes project directory/
+      }
+    );
+  });
 });

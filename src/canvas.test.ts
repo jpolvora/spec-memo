@@ -117,18 +117,26 @@ test("Canvas Engine & Graph Visualization", async (t) => {
       const graph = await graphRes.json() as any;
       assert.ok(graph.nodes.length >= 4);
 
-      // 4. Check API record detail
+      // 4. Check API record detail (with path stripping/sanitization)
       const recordRes = await fetch(`${baseUrl}/api/record/${projectId}/spec/${spec1.id}`);
       assert.strictEqual(recordRes.status, 200);
       const recordData = await recordRes.json() as any;
       assert.ok(recordData.record);
       assert.strictEqual(recordData.record.frontmatter.id, spec1.id);
+      assert.strictEqual(recordData.record.path, undefined, "Record path must be stripped from HTTP API responses");
 
-      // 5. Check API search
+      // 5. Check API search (with path stripping/sanitization)
       const searchRes = await fetch(`${baseUrl}/api/search?q=Leak&project=${projectId}`);
       assert.strictEqual(searchRes.status, 200);
       const searchHits = await searchRes.json() as any[];
       assert.ok(searchHits.length >= 1);
+      assert.strictEqual(searchHits[0].filepath, undefined, "Search hit filepath must be stripped from HTTP API responses");
+
+      // 6. Check malicious project traversal fails safely
+      const evilGraphRes = await fetch(`${baseUrl}/api/project/..%2F..%2Fevil/graph`);
+      assert.strictEqual(evilGraphRes.status, 200);
+      const evilGraph = await evilGraphRes.json() as any;
+      assert.strictEqual(evilGraph.nodes.length, 0, "Traversed graph must return empty nodes");
     } finally {
       await serverInstance.close();
     }

@@ -5,6 +5,7 @@ import { getVaultRoot, RECORD_SUBDIRS, getProjectMetadata } from "./vault.js";
 import { getRecord } from "./store.js";
 import { parseRecord } from "./schema.js";
 import { searchIndex } from "./indexer.js";
+import { sanitizeToolOutput, isPathInside } from "./safety.js";
 import { MemoRecord, RecordKind, RecordStatus } from "./types.js";
 
 export interface GraphNode {
@@ -33,8 +34,10 @@ export interface ProjectGraph {
 }
 
 export function listProjectRecordsInternal(vaultRoot: string, projectId: string): MemoRecord[] {
-  const projPath = path.join(vaultRoot, "projects", projectId);
+  const projectsDir = path.resolve(vaultRoot, "projects");
+  const projPath = path.resolve(projectsDir, projectId);
   const records: MemoRecord[] = [];
+  if (!isPathInside(projPath, projectsDir)) return records;
   if (!fs.existsSync(projPath)) return records;
 
   for (const dirName of RECORD_SUBDIRS) {
@@ -78,6 +81,11 @@ export function getVaultProjectList(vaultRoot: string): Array<{ id: string; disp
 }
 
 export function generateProjectGraph(vaultRoot: string, projectId: string): ProjectGraph {
+  const projectsDir = path.resolve(vaultRoot, "projects");
+  const projPath = path.resolve(projectsDir, projectId);
+  if (!isPathInside(projPath, projectsDir)) {
+    return { projectId, nodes: [], edges: [] };
+  }
   const records = listProjectRecordsInternal(vaultRoot, projectId);
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -523,7 +531,7 @@ export function startCanvasServer(options: CanvasServerOptions = {}): Promise<Ca
         const id = decodeURIComponent(recordMatch[3]);
         const record = await getRecord({ vaultRoot, projectId: projId, kind, id });
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ record }));
+        res.end(JSON.stringify(sanitizeToolOutput({ record })));
         return;
       }
 
@@ -532,7 +540,7 @@ export function startCanvasServer(options: CanvasServerOptions = {}): Promise<Ca
         const projId = url.searchParams.get("project") || options.project;
         const results = searchIndex({ query, projectId: projId || undefined, vaultRoot });
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(results));
+        res.end(JSON.stringify(sanitizeToolOutput(results)));
         return;
       }
 
