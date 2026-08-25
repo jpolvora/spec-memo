@@ -64,20 +64,13 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
 
       if (req.method === "POST" && pathname === "/message") {
         const sessionId = url.searchParams.get("sessionId");
-        let transport: SSEServerTransport | undefined;
-
-        if (sessionId && transports.has(sessionId)) {
-          transport = transports.get(sessionId);
-        } else if (transports.size === 1) {
-          transport = transports.values().next().value;
-        }
-
-        if (!transport) {
+        if (!sessionId || !transports.has(sessionId)) {
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "No active SSE transport found or invalid sessionId" }));
+          res.end(JSON.stringify({ error: "Valid sessionId required" }));
           return;
         }
 
+        const transport = transports.get(sessionId)!;
         await transport.handlePostMessage(req, res);
         return;
       }

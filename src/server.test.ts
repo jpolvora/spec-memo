@@ -91,4 +91,15 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
       await client.close();
     }
   });
+
+  await t.test("should reject POST /message without valid sessionId", async () => {
+    const res = await fetch(`${baseUrl}/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 })
+    });
+    assert.strictEqual(res.status, 400);
+    const body = await res.json() as any;
+    assert.strictEqual(body.error, "Valid sessionId required");
+  });
 });

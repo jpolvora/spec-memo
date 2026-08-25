@@ -94,6 +94,15 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('ws-shared/MEMORY.md')));
   });
 
+  it('should not flag legitimate product documentation containing memory in path', async () => {
+    const docsMemoryDir = path.join(tempProductRepo, 'docs', 'architecture', 'memory');
+    fs.mkdirSync(docsMemoryDir, { recursive: true });
+    fs.writeFileSync(path.join(docsMemoryDir, 'guide.md'), '# Architecture Memory Guide\n', 'utf8');
+
+    const pollution = scanForRepoPollution(tempProductRepo);
+    assert.equal(pollution.some((p) => p.path.includes('docs/architecture/memory/guide.md')), false);
+  });
+
   it('should detect in-tree run.json, .state.md, and telemetry dumps as state/telemetry residue', async () => {
     fs.writeFileSync(path.join(tempProductRepo, 'run.json'), '{"step": 1}\n', 'utf8');
     fs.writeFileSync(path.join(tempProductRepo, '.state.md'), '# State\n', 'utf8');

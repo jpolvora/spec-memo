@@ -72,7 +72,9 @@ export function scanForRepoPollution(rootPath: string): DoctorPollutionItem[] {
       lowerRel === 'memory.md' ||
       lowerRel.endsWith('/memory.md') ||
       lowerRel.startsWith('memory/') ||
-      lowerRel.includes('/memory/')
+      lowerRel.startsWith('.agents/memory/') ||
+      lowerRel.startsWith('ws-shared/memory/') ||
+      lowerRel.includes('/ws-shared/memory/')
     ) {
       pollution.push({
         path: rel,

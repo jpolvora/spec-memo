@@ -209,4 +209,42 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
       }
     );
   });
+
+  it('should reject archive with path traversal projectId segments', async () => {
+    const maliciousProjArchive = {
+      format: 'spec-memo-vault-v1',
+      manifest: {
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        projects: ['../../outside-vault'],
+        recordCount: 1
+      },
+      projects: [
+        {
+          projectId: '../../outside-vault',
+          records: [
+            {
+              relativePath: 'traps/escape.md',
+              content: 'malicious payload'
+            }
+          ]
+        }
+      ]
+    };
+
+    const maliciousPath = path.join(tempDir, 'malicious-proj.json');
+    fs.writeFileSync(maliciousPath, JSON.stringify(maliciousProjArchive), 'utf8');
+
+    await assert.rejects(
+      async () => {
+        await importVault({
+          vaultRoot: targetVault,
+          archivePath: maliciousPath
+        });
+      },
+      {
+        message: /Archive project path escapes vault projects directory/
+      }
+    );
+  });
 });

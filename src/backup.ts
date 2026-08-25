@@ -275,9 +275,13 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
 
     let restoredRecordsCount = 0;
     const restoredProjects: string[] = [];
+    const projectsRoot = path.resolve(vaultRoot, 'projects');
 
     for (const project of plainArchive.projects) {
-      const projDir = path.join(vaultRoot, 'projects', project.projectId);
+      const projDir = path.resolve(projectsRoot, project.projectId);
+      if (!isPathInside(projDir, projectsRoot)) {
+        throw new Error('Archive project path escapes vault projects directory');
+      }
       if (!fs.existsSync(projDir)) {
         fs.mkdirSync(projDir, { recursive: true });
       }
