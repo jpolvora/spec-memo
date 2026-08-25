@@ -482,6 +482,7 @@ export interface CanvasServerOptions {
   port?: number;
   host?: string;
   project?: string;
+  authToken?: string;
 }
 
 export interface CanvasServerInstance {
@@ -496,11 +497,27 @@ export function startCanvasServer(options: CanvasServerOptions = {}): Promise<Ca
   const vaultRoot = getVaultRoot(options.vaultRoot);
   const host = options.host || "127.0.0.1";
   const port = options.port ?? 4100;
+  const authToken = options.authToken || process.env.SPEC_MEMO_AUTH_TOKEN || process.env.SPEC_MEMO_CANVAS_TOKEN;
+
+  if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !authToken) {
+    throw new Error("Refusing to bind Canvas server to a non-loopback host without authentication token (--auth-token or SPEC_MEMO_AUTH_TOKEN).");
+  }
 
   return new Promise((resolve, reject) => {
     const server = http.createServer(async (req, res) => {
       const url = new URL(req.url || "/", `http://${host}:${port}`);
       const pathname = url.pathname;
+
+      if (authToken) {
+        const authHeader = req.headers.authorization;
+        const queryToken = url.searchParams.get("token");
+        const authorized = authHeader === `Bearer ${authToken}` || queryToken === authToken;
+        if (!authorized) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+      }
 
       if (pathname === "/" || pathname === "/index.html") {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

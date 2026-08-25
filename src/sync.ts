@@ -2,10 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { getVaultRoot, RECORD_SUBDIRS, initVault, withVaultLock, commitVaultChange } from "./vault.js";
 import { getSubdirForKind } from "./store.js";
-import { parseRecord, serializeRecord } from "./schema.js";
+import { parseRecord, serializeRecord, validateFrontmatter } from "./schema.js";
 import { rebuildIndex } from "./indexer.js";
 import { getVaultProjectList, listProjectRecordsInternal } from "./canvas.js";
-import { isPathInside } from "./safety.js";
+import { isPathInside, assertNoSecrets } from "./safety.js";
 import { RecordFrontmatter, RecordKind } from "./types.js";
 
 export interface ChangesetRecord {
@@ -108,6 +108,13 @@ export async function applyChangeset(
 
       if (!isPathInside(targetFilePath, projDir)) {
         throw new Error("Changeset record path escapes project directory");
+      }
+
+      assertNoSecrets(item.body, "synced changeset body");
+      assertNoSecrets(item.frontmatter, "synced changeset frontmatter");
+      const validation = validateFrontmatter(item.frontmatter);
+      if (!validation.success) {
+        throw new Error(`Invalid changeset record ${item.frontmatter.id}: ${validation.errors.join(", ")}`);
       }
 
       if (fs.existsSync(targetFilePath)) {

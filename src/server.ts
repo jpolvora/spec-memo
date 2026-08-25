@@ -8,6 +8,7 @@ export interface SseServerOptions {
   port?: number;
   host?: string;
   vaultRoot?: string;
+  authToken?: string;
 }
 
 export interface SseServerInstance {
@@ -22,6 +23,11 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
   const port = options.port ?? 3000;
   const host = options.host || "127.0.0.1";
   const vaultRoot = getVaultRoot(options.vaultRoot);
+  const authToken = options.authToken || process.env.SPEC_MEMO_AUTH_TOKEN || process.env.SPEC_MEMO_SSE_TOKEN;
+
+  if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !authToken) {
+    throw new Error("Refusing to bind SSE MCP server to a non-loopback host without authentication token (--auth-token or SPEC_MEMO_SSE_TOKEN).");
+  }
 
   const transports = new Map<string, SSEServerTransport>();
 
@@ -29,6 +35,17 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
     const server = http.createServer(async (req, res) => {
       const url = new URL(req.url || "/", `http://${host}:${port}`);
       const pathname = url.pathname;
+
+      if (authToken) {
+        const authHeader = req.headers.authorization;
+        const queryToken = url.searchParams.get("token");
+        const authorized = authHeader === `Bearer ${authToken}` || queryToken === authToken;
+        if (!authorized) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+      }
 
       if (req.method === "GET" && pathname === "/health") {
         const projects = getVaultProjectList(vaultRoot);
@@ -46,7 +63,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
 
       if (req.method === "GET" && pathname === "/sse") {
         const transport = new SSEServerTransport("/message", res);
-        const mcpServer = createMcpServer();
+        const mcpServer = createMcpServer({ defaultVaultRoot: vaultRoot });
 
         transports.set(transport.sessionId, transport);
 

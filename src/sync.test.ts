@@ -146,4 +146,37 @@ test("Multi-Machine Vault Sync & Delta Engine", async (t) => {
       }
     );
   });
+
+  await t.test("should reject changeset containing secrets", async () => {
+    const awsKey = ['AKIA', 'IOSFODNN7EXAMPLE'].join('');
+    const secretChangeset = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          frontmatter: {
+            id: "secret-trap",
+            slug: "secret-trap",
+            kind: "trap" as const,
+            status: "active" as const,
+            source: "agent" as const,
+            created: new Date().toISOString(),
+            updated: new Date().toISOString(),
+            project: projA
+          },
+          body: `Leaked key ${awsKey}`,
+          project: projA
+        }
+      ]
+    };
+
+    await assert.rejects(
+      async () => {
+        await applyChangeset(vaultB, secretChangeset);
+      },
+      {
+        message: /Safety violation: Secret detected/
+      }
+    );
+  });
 });

@@ -102,4 +102,38 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     const body = await res.json() as any;
     assert.strictEqual(body.error, "Valid sessionId required");
   });
+
+  await t.test("should refuse non-loopback host without auth token", () => {
+    assert.throws(
+      () => {
+        startSseServer({ vaultRoot, port: 0, host: "192.168.1.100" });
+      },
+      {
+        message: /Refusing to bind SSE MCP server to a non-loopback host without authentication token/
+      }
+    );
+  });
+
+  await t.test("should enforce authToken when configured", async () => {
+    const authServer = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "secret-token-123"
+    });
+
+    try {
+      // 1. Unauthenticated request rejected
+      const unauthRes = await fetch(`${authServer.url}/health`);
+      assert.strictEqual(unauthRes.status, 401);
+
+      // 2. Authenticated request accepted
+      const authRes = await fetch(`${authServer.url}/health`, {
+        headers: { Authorization: "Bearer secret-token-123" }
+      });
+      assert.strictEqual(authRes.status, 200);
+    } finally {
+      await authServer.close();
+    }
+  });
 });

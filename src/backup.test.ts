@@ -247,4 +247,84 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
       }
     );
   });
+
+  it('should reject archive containing hardcoded secrets', async () => {
+    const awsKey = ['AKIA', 'IOSFODNN7EXAMPLE'].join('');
+    const secretArchive = {
+      format: 'spec-memo-vault-v1',
+      manifest: {
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        projects: ['proj-1'],
+        recordCount: 1
+      },
+      projects: [
+        {
+          projectId: 'proj-1',
+          records: [
+            {
+              relativePath: 'traps/secret-trap.md',
+              content: `---\nid: secret-trap\nkind: trap\nproject: proj-1\nstatus: active\nsource: agent\ncreated: 2026-08-25T00:00:00.000Z\nupdated: 2026-08-25T00:00:00.000Z\n---\nSecret key ${awsKey}`
+            }
+          ]
+        }
+      ]
+    };
+
+    const secretPath = path.join(tempDir, 'secret-archive.json');
+    fs.writeFileSync(secretPath, JSON.stringify(secretArchive), 'utf8');
+
+    await assert.rejects(
+      async () => {
+        await importVault({
+          vaultRoot: targetVault,
+          archivePath: secretPath
+        });
+      },
+      {
+        message: /Safety violation: Secret detected/
+      }
+    );
+  });
+
+  it('should restore vaultConfig to config.json on import', async () => {
+    const archiveWithConfig = {
+      format: 'spec-memo-vault-v1',
+      manifest: {
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        projects: ['proj-1'],
+        recordCount: 1
+      },
+      vaultConfig: {
+        version: 1,
+        bootstrap: { maxBytes: 12345 },
+        retention: { scratchDays: 5, reviewDays: 10 }
+      },
+      projects: [
+        {
+          projectId: 'proj-1',
+          records: [
+            {
+              relativePath: 'traps/valid-trap.md',
+              content: `---\nid: valid-trap\nkind: trap\nproject: proj-1\nstatus: active\nsource: agent\ncreated: 2026-08-25T00:00:00.000Z\nupdated: 2026-08-25T00:00:00.000Z\n---\nValid trap`
+            }
+          ]
+        }
+      ]
+    };
+
+    const archivePath = path.join(tempDir, 'archive-with-config.json');
+    fs.writeFileSync(archivePath, JSON.stringify(archiveWithConfig), 'utf8');
+
+    await importVault({
+      vaultRoot: targetVault,
+      archivePath
+    });
+
+    const targetConfigPath = path.join(targetVault, 'config.json');
+    assert.ok(fs.existsSync(targetConfigPath));
+    const restoredConfig = JSON.parse(fs.readFileSync(targetConfigPath, 'utf8'));
+    assert.equal(restoredConfig.bootstrap?.maxBytes, 12345);
+  });
 });

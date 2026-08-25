@@ -11,7 +11,8 @@ import {
 import { getVaultRoot, ensureVaultStructure, withVaultLock, commitVaultChange } from './vault.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { rebuildIndex } from './indexer.js';
-import { isPathInside } from './safety.js';
+import { isPathInside, assertNoSecrets } from './safety.js';
+import { parseRecord, validateFrontmatter } from './schema.js';
 
 interface RawVaultRecord {
   relativePath: string;
@@ -273,6 +274,11 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
       throw new Error('Unrecognized archive format. Expected spec-memo-vault-v1 or spec-memo-encrypted-vault-v1.');
     }
 
+    if (plainArchive.vaultConfig && options.overwrite !== false) {
+      const configPath = path.join(vaultRoot, 'config.json');
+      fs.writeFileSync(configPath, JSON.stringify(plainArchive.vaultConfig, null, 2), 'utf8');
+    }
+
     let restoredRecordsCount = 0;
     const restoredProjects: string[] = [];
     const projectsRoot = path.resolve(vaultRoot, 'projects');
@@ -298,6 +304,14 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
         if (!isPathInside(targetPath, path.resolve(projDir))) {
           throw new Error('Archive record path escapes project directory');
         }
+
+        assertNoSecrets(record.content, 'imported archive record');
+        const parsed = parseRecord(record.content);
+        const validation = validateFrontmatter(parsed.frontmatter);
+        if (!validation.success) {
+          throw new Error(`Invalid archive record ${parsed.frontmatter.id}: ${validation.errors.join(', ')}`);
+        }
+
         const parentDir = path.dirname(targetPath);
         if (!fs.existsSync(parentDir)) {
           fs.mkdirSync(parentDir, { recursive: true });
