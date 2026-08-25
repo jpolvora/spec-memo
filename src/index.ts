@@ -17,6 +17,9 @@ export * from './mcp.js';
 export * from './cli.js';
 export * from './adapter.js';
 export * from './hook.js';
+export * from './canvas.js';
+export * from './sync.js';
+export * from './server.js';
 
 
 

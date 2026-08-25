@@ -10,6 +10,9 @@ import { syncVault } from './vault.js';
 import { exportVault, importVault } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { sanitizeToolOutput } from './safety.js';
+import { startCanvasServer } from './canvas.js';
+import { syncVaults } from './sync.js';
+import { startSseServer } from './server.js';
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -90,7 +93,9 @@ Utility Commands:
   import        Import legacy .agents tree into external vault
   export-vault  Export vault records into portable archive (optional AES-256-GCM)
   import-vault  Import vault archive into local vault
-  serve         Run the stdio MCP server for agent integration
+  canvas        Start interactive Canvas visualizer and graph UI server
+  sync-vault    Synchronize delta changesets directly between vault instances
+  serve         Run the stdio or SSE MCP server for agent integration
 
 Global Options:
   --json        Output machine-readable JSON to stdout
@@ -100,9 +105,45 @@ Global Options:
 
 function printCommandHelp(cmd: string): void {
   if (cmd === 'serve') {
-    console.log(`Usage: memo serve
+    console.log(`Usage: memo serve [options]
 
-Starts the spec-memo stdio MCP server for AI agent host integration.`);
+Starts the spec-memo MCP server for AI agent host integration.
+
+Options:
+  --sse           Run as HTTP / Server-Sent Events (SSE) server
+  --port          Port to listen on (default 3000 for SSE)
+  --host          Host address to bind (default 127.0.0.1)
+  --vaultRoot     Override vault root directory
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'canvas' || cmd === 'serve-canvas') {
+    console.log(`Usage: memo canvas [options]
+
+Starts the embedded interactive Canvas visualizer and graph web application.
+
+Options:
+  --port          Port to listen on (default 4100)
+  --host          Host address to bind (default 127.0.0.1)
+  --project       Pre-select a specific project ID
+  --vaultRoot     Override vault root directory
+  --json          Output server URL metadata as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'sync-vault') {
+    console.log(`Usage: memo sync-vault <targetVaultPath> [options]
+
+Synchronizes delta changesets bidirectionally between vault instances.
+
+Options:
+  --two-way       Perform bidirectional two-way synchronization
+  --dry-run       Preview changes without writing to disk
+  --vaultRoot     Override source vault root directory
+  --json          Output synchronization report as JSON
+  -h, --help      Show this help message`);
     return;
   }
 
@@ -198,8 +239,96 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   }
 
   if (parsed.command === 'serve') {
+    if (parsed.options.sse) {
+      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : 3000;
+      const host = (parsed.options.host as string) || '127.0.0.1';
+      const vaultRoot = parsed.options.vaultRoot as string | undefined;
+
+      const instance = await startSseServer({ port, host, vaultRoot });
+      if (parsed.isJson) {
+        printJson({ status: 'running', service: 'mcp-sse', url: instance.url, port: instance.port, host: instance.host });
+      } else {
+        console.log(`spec-memo — MCP SSE Server running at: ${instance.url}`);
+        console.log(`  SSE endpoint:     ${instance.url}/sse`);
+        console.log(`  Message endpoint: ${instance.url}/message`);
+        console.log(`  Health check:     ${instance.url}/health`);
+      }
+      return new Promise(() => {});
+    }
+
     await startMcpServer();
     return 0;
+  }
+
+  // Handle memo canvas command
+  if (parsed.command === 'canvas' || parsed.command === 'serve-canvas') {
+    try {
+      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : 4100;
+      const host = (parsed.options.host as string) || '127.0.0.1';
+      const vaultRoot = parsed.options.vaultRoot as string | undefined;
+      const project = (parsed.options.project as string) || undefined;
+
+      const instance = await startCanvasServer({ port, host, vaultRoot, project });
+      if (parsed.isJson) {
+        printJson({ status: 'running', url: instance.url, port: instance.port, host: instance.host });
+      } else {
+        console.log(`spec-memo — Visual Graph Canvas running at: ${instance.url}`);
+      }
+      return new Promise(() => {});
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'CANVAS_ERROR' });
+      } else {
+        console.error(`Canvas server failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo sync-vault command
+  if (parsed.command === 'sync-vault') {
+    try {
+      const targetPath =
+        parsed.positionals[0] ||
+        (parsed.options.target as string) ||
+        (parsed.options.to as string);
+
+      if (!targetPath) {
+        throw new Error('Target vault path is required for sync-vault.');
+      }
+
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const twoWay = parsed.options['two-way'] === true || parsed.options.twoWay === true;
+      const dryRun = parsed.options['dry-run'] === true || parsed.options.dryRun === true;
+
+      const result = await syncVaults(vaultRoot || '', targetPath, { twoWay, dryRun });
+
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(`spec-memo — Vault Synchronization Complete\n`);
+        console.log(`Forward Sync (Source -> Target):`);
+        console.log(`  Applied:   ${result.forward.applied}`);
+        console.log(`  Skipped:   ${result.forward.skipped}`);
+        console.log(`  Conflicts: ${result.forward.conflicts}`);
+        if (result.backward) {
+          console.log(`\nBackward Sync (Target -> Source):`);
+          console.log(`  Applied:   ${result.backward.applied}`);
+          console.log(`  Skipped:   ${result.backward.skipped}`);
+          console.log(`  Conflicts: ${result.backward.conflicts}`);
+        }
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'SYNC_VAULT_ERROR' });
+      } else {
+        console.error(`Sync vault failed: ${msg}`);
+      }
+      return 1;
+    }
   }
 
   // Handle memo doctor command

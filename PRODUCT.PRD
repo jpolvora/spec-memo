@@ -181,6 +181,12 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 - [x] Promote-to-ADR formatting templates and directory resolution (`.agents/specs/promote-adr.spec.md`)
 - [x] Encrypted vault backup, export, and restoration engine (`.agents/specs/vault-backup.spec.md`)
 
+### Phase 5 — Advanced Ecosystem & Connectivity
+
+- [x] Interactive Canvas UI and Visual Graph Viewer (`.agents/specs/canvas-viewer.spec.md`)
+- [x] Multi-Machine Vault Synchronization and Delta Engine (`.agents/specs/multi-machine-sync.spec.md`)
+- [x] HTTP and Server-Sent Events (SSE) MCP Transport (`.agents/specs/mcp-sse-transport.spec.md`)
+
 ## 9. Next specs
 
 | # | Slug | Status | Target phase | Notes |
@@ -206,13 +212,16 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 18 | `log-compaction` | `[x]` | Phase 3 | Monthly log roll-up compaction and archiving |
 | 19 | `promote-adr` | `[x]` | Phase 4 | Promote-to-ADR formatting templates and directory resolution |
 | 20 | `vault-backup` | `[x]` | Phase 4 | Encrypted vault backup, export, and restoration engine |
+| 21 | `canvas-viewer` | `[x]` | Phase 5 | Interactive Canvas UI and Visual Graph Viewer |
+| 22 | `multi-machine-sync` | `[x]` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
+| 23 | `mcp-sse-transport` | `[x]` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
 ## 10. Inbox (unscheduled)
 
-- Host plugin / canvas UI for humans.
-- Multi-machine sync beyond optional git remote on the vault and export-vault archives.
+- Mobile companion web dashboard.
+- Live CRDT collaboration mode for team vaults.
 
 ## 11. Done log
 
@@ -240,6 +249,9 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-25 | slice-19-log-compaction | Monthly log roll-up compaction and FTS5 indexing | Slice 19 delivery |
 | 2026-08-25 | slice-20-promote-adr | Promote-to-ADR formatting templates and directory destination resolution | Slice 20 delivery |
 | 2026-08-25 | slice-21-vault-backup | Encrypted vault backup, export, and restoration engine (AES-256-GCM) | Slice 21 delivery |
+| 2026-08-25 | slice-22-canvas-viewer | Interactive Canvas UI and Visual Graph Viewer | Slice 22 delivery |
+| 2026-08-25 | slice-23-multi-machine-sync | Multi-Machine Vault Synchronization and Delta Engine | Slice 23 delivery |
+| 2026-08-25 | slice-24-mcp-sse-transport | HTTP and Server-Sent Events (SSE) MCP Transport | Slice 24 delivery |
 
 ## 12. Related docs
 

@@ -38,6 +38,30 @@ export interface GetOptions {
   slug?: string;
 }
 
+export function listProjectRecords(vaultRoot: string = getVaultRoot(), projectId: string): MemoRecord[] {
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+  if (!fs.existsSync(projectDir)) return [];
+  const results: MemoRecord[] = [];
+  const entries = fs.readdirSync(projectDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const subPath = path.join(projectDir, entry.name);
+      const files = fs.readdirSync(subPath);
+      for (const file of files) {
+        if (file.endsWith('.md')) {
+          const filePath = path.join(subPath, file);
+          try {
+            results.push(parseRecord(fs.readFileSync(filePath, 'utf8'), filePath));
+          } catch {
+            // Ignore unparseable
+          }
+        }
+      }
+    }
+  }
+  return results;
+}
+
 /**
  * Calculate Jaccard token overlap between two strings (0.0 to 1.0).
  */
@@ -179,6 +203,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     ...(existingRecord?.frontmatter || {}),
     ...(options.frontmatter || {}),
     id: recordId,
+    slug: options.slug || options.frontmatter?.slug || existingRecord?.frontmatter?.slug,
     kind: options.kind,
     project: projectId,
     status: (options.frontmatter?.status as RecordStatus) || (existingRecord?.frontmatter.status ?? 'active'),

@@ -18,6 +18,31 @@ export const DEFAULT_VAULT_CONFIG: VaultConfig = {
   }
 };
 
+export function resolveVaultRoot(overridePath?: string): string {
+  return getVaultRoot(overridePath);
+}
+
+export function getVaultProjects(vaultRoot: string = getVaultRoot()): Array<{ id: string; name: string }> {
+  const projectsDir = path.join(vaultRoot, 'projects');
+  if (!fs.existsSync(projectsDir)) return [];
+  const entries = fs.readdirSync(projectsDir, { withFileTypes: true });
+  return entries
+    .filter((e) => e.isDirectory())
+    .map((e) => ({ id: e.name, name: e.name }));
+}
+
+export function initVault(options: { vaultRoot?: string; projectId?: string; displayName?: string } = {}): { root: string } {
+  const root = getVaultRoot(options.vaultRoot);
+  ensureVaultStructure(root);
+  if (options.projectId) {
+    const projDir = path.join(root, 'projects', options.projectId);
+    if (!fs.existsSync(projDir)) {
+      fs.mkdirSync(projDir, { recursive: true });
+    }
+  }
+  return { root };
+}
+
 export const RECORD_SUBDIRS = [
   'traps',
   'decisions',

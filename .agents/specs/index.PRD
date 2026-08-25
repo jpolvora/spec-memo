@@ -89,6 +89,12 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`promote-adr`](promote-adr.spec.md): Promote-to-ADR formatting templates and directory resolution
 - [x] [`vault-backup`](vault-backup.spec.md): Encrypted vault backup, export, and restoration engine
 
+### Phase 5: Advanced Ecosystem & Connectivity
+
+- [x] [`canvas-viewer`](canvas-viewer.spec.md): Interactive Canvas UI and Visual Graph Viewer
+- [x] [`multi-machine-sync`](multi-machine-sync.spec.md): Multi-Machine Vault Synchronization and Delta Engine
+- [x] [`mcp-sse-transport`](mcp-sse-transport.spec.md): HTTP and Server-Sent Events (SSE) MCP Transport
+
 ## 8. Next specs
 
 | # | Spec | Status | Target Phase | Summary |
@@ -114,11 +120,14 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 18 | [`log-compaction`](log-compaction.spec.md) | `[x] done` | Phase 3 | Monthly log roll-up compaction and archiving |
 | 19 | [`promote-adr`](promote-adr.spec.md) | `[x] done` | Phase 4 | Promote-to-ADR formatting templates and directory resolution |
 | 20 | [`vault-backup`](vault-backup.spec.md) | `[x] done` | Phase 4 | Encrypted vault backup, export, and restoration engine |
+| 21 | [`canvas-viewer`](canvas-viewer.spec.md) | `[x] done` | Phase 5 | Interactive Canvas UI and Visual Graph Viewer |
+| 22 | [`multi-machine-sync`](multi-machine-sync.spec.md) | `[x] done` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
+| 23 | [`mcp-sse-transport`](mcp-sse-transport.spec.md) | `[x] done` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
 
 ## 9. Inbox (unscheduled ideas)
 
-- Host plugin / canvas UI for humans.
-- Multi-machine sync beyond optional git remote on the vault and export-vault archives.
+- Mobile companion web dashboard.
+- Live CRDT collaboration mode for team vaults.
 
 ## 10. Done log
 
@@ -146,6 +155,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-19-log-compaction | Monthly log roll-up compaction and FTS5 indexing | Slice 19 delivery |
 | 2026-08-25 | slice-20-promote-adr | Promote-to-ADR formatting templates and directory destination resolution | Slice 20 delivery |
 | 2026-08-25 | slice-21-vault-backup | Encrypted vault backup, export, and restoration engine (AES-256-GCM) | Slice 21 delivery |
+| 2026-08-25 | slice-22-canvas-viewer | Interactive Canvas UI and Visual Graph Viewer | Slice 22 delivery |
+| 2026-08-25 | slice-23-multi-machine-sync | Multi-Machine Vault Synchronization and Delta Engine | Slice 23 delivery |
+| 2026-08-25 | slice-24-mcp-sse-transport | HTTP and Server-Sent Events (SSE) MCP Transport | Slice 24 delivery |
 
 ## Archive
 

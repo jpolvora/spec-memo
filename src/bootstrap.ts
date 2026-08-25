@@ -29,7 +29,7 @@ export function checkSpecDrift(
     return null;
   }
 
-  const specSlug = String(spec.frontmatter.slug || spec.frontmatter.id || 'unknown');
+  const specSlug = String(spec.frontmatter.id || spec.frontmatter.slug || 'unknown');
   const modifiedPaths: string[] = [];
 
   for (const relPath of linkedPaths) {

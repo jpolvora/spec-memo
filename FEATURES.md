@@ -114,19 +114,26 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 
 ---
 
-## 9. Explicitly not features (v1)
+## 9. Advanced Ecosystem & Connectivity (Phase 5)
+
+- [x] **Interactive Canvas UI & Visual Graph.** Embedded HTTP visualizer (`memo canvas`) with SVG/Canvas force graph, dark theme, node filter, inspection drawer, and REST API.
+- [x] **Multi-Machine Vault Sync.** Delta changeset export, two-way peer vault synchronization (`memo sync-vault`), and conflict-safe resolution.
+- [x] **HTTP / SSE MCP Server Transport.** Standalone network daemon (`memo serve --sse`) supporting Server-Sent Events (SSE) for remote agents and IDE plugins.
+
+---
+
+## 10. Explicitly not features (v1)
 
 | Idea | Why not |
 |------|---------|
 | Ninth MCP tool for “list files in vault” | Leaks layout; use `search` |
 | Auto-rewrite specs when code changes | Drift is a flag, not an author |
 | Auto-`promote` into README | Default deny |
-| HTTP/SSE MCP as the only transport | stdio first; extra transports later |
 | Bundling the vault in the product clone | Violates UC1 |
 
 ---
 
-## 10. Shipped in this repository today
+## 11. Shipped in this repository today
 
 | Capability | Status |
 |------------|--------|
@@ -135,6 +142,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime (Phase 1 MVP + Phase 2 Harness Adapters + Phase 3 Curator Hardening + Phase 4 Viewers delivered) | `[x]` |
+| Runtime (Phase 1 MVP + Phase 2 Harness Adapters + Phase 3 Curator Hardening + Phase 4 Viewers + Phase 5 Ecosystem delivered) | `[x]` |
+
 
 

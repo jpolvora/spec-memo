@@ -496,5 +496,100 @@ describe('CLI Integration', () => {
       }
     }
   });
+
+  it('should print help for canvas, sync-vault, and serve commands', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      capturedLogs = '';
+      const canvasCode = await runCli(['canvas', '--help']);
+      assert.equal(canvasCode, 0);
+      assert.ok(capturedLogs.includes('Usage: memo canvas'));
+
+      capturedLogs = '';
+      const syncCode = await runCli(['sync-vault', '--help']);
+      assert.equal(syncCode, 0);
+      assert.ok(capturedLogs.includes('Usage: memo sync-vault'));
+
+      capturedLogs = '';
+      const serveCode = await runCli(['serve', '--help']);
+      assert.equal(serveCode, 0);
+      assert.ok(capturedLogs.includes('Usage: memo serve'));
+      assert.ok(capturedLogs.includes('--sse'));
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('should execute memo sync-vault between two vault directories', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-sync-test-'));
+    const vaultA = path.join(tempDir, 'vault-a');
+    const vaultB = path.join(tempDir, 'vault-b');
+    const fixtureRepo = path.join(tempDir, 'fixture-repo');
+    fs.mkdirSync(fixtureRepo, { recursive: true });
+
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      // 1. Create a trap in Vault A
+      await runCli([
+        'upsert',
+        '--kind',
+        'trap',
+        '--slug',
+        'cli-sync-trap',
+        '--cwd',
+        fixtureRepo,
+        '--vaultRoot',
+        vaultA,
+        '--body',
+        '# CLI Sync Trap Body'
+      ]);
+
+      // 2. Sync from Vault A to Vault B with --json
+      capturedLogs = '';
+      const syncJsonCode = await runCli([
+        'sync-vault',
+        vaultB,
+        '--vaultRoot',
+        vaultA,
+        '--two-way',
+        '--json'
+      ]);
+      assert.equal(syncJsonCode, 0);
+      const parsed = JSON.parse(capturedLogs.trim());
+      assert.ok(parsed.forward);
+      assert.ok(parsed.forward.applied >= 1);
+
+      // 3. Sync from Vault A to Vault B with standard text output
+      capturedLogs = '';
+      const syncTextCode = await runCli([
+        'sync-vault',
+        vaultB,
+        '--vaultRoot',
+        vaultA,
+        '--two-way'
+      ]);
+      assert.equal(syncTextCode, 0);
+      assert.ok(capturedLogs.includes('Vault Synchronization Complete'));
+      assert.ok(capturedLogs.includes('Forward Sync'));
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
 });
+
 

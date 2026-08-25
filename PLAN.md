@@ -169,7 +169,11 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-25 | slice-19-log-compaction | Monthly log roll-up compaction and FTS5 indexing, test suite |
 | 2026-08-25 | slice-20-promote-adr | Promote-to-ADR formatting templates and directory destination resolution, test suite |
 | 2026-08-25 | slice-21-vault-backup | Encrypted vault backup, export, and restoration engine (AES-256-GCM), test suite |
+| 2026-08-25 | slice-22-canvas-viewer | Interactive Canvas UI and Visual Graph Viewer, test suite |
+| 2026-08-25 | slice-23-multi-machine-sync | Multi-Machine Vault Synchronization and Delta Engine, test suite |
+| 2026-08-25 | slice-24-mcp-sse-transport | HTTP and Server-Sent Events (SSE) MCP Transport, test suite |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
+
 
 
