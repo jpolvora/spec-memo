@@ -90,4 +90,41 @@ describe('Compiled Views (TRAPS.md, DECISIONS.md, INDEX.md)', () => {
     assert.ok(critIndex !== -1 && lowIndex !== -1);
     assert.ok(critIndex < lowIndex, 'Critical trap should appear before low trap in TRAPS.md');
   });
+
+  it('should generate standard relative markdown links and wikilinks for Obsidian compatibility', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'obsidian-trap',
+      frontmatter: { id: 'trap-obsidian', title: 'Obsidian Compatible Trap' },
+      body: 'Body content'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'obsidian-adr',
+      frontmatter: { id: 'adr-obsidian', title: 'Obsidian ADR' },
+      body: 'ADR details'
+    });
+
+    const identity = resolveProjectIdentity(tempProject, { vaultRoot: tempVault });
+    const projectDir = identity.vaultProjectPath;
+
+    const trapsContent = fs.readFileSync(path.join(projectDir, 'TRAPS.md'), 'utf8');
+    const decisionsContent = fs.readFileSync(path.join(projectDir, 'DECISIONS.md'), 'utf8');
+    const indexContent = fs.readFileSync(path.join(projectDir, 'INDEX.md'), 'utf8');
+
+    assert.ok(trapsContent.includes('[[trap-obsidian]]'));
+    assert.ok(trapsContent.includes('./traps/trap-obsidian.md'));
+
+    assert.ok(decisionsContent.includes('[[adr-obsidian]]'));
+    assert.ok(decisionsContent.includes('./decisions/adr-obsidian.md'));
+
+    assert.ok(indexContent.includes('./traps/trap-obsidian.md'));
+    assert.ok(indexContent.includes('./decisions/adr-obsidian.md'));
+  });
 });
+

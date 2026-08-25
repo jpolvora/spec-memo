@@ -107,7 +107,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 14 | [`cross-project-search`](cross-project-search.spec.md) | `[x] done` | Phase 3 | Opt-in multi-project search across local vault |
 | 15 | [`embeddings-search`](embeddings-search.spec.md) | `[x] done` | Phase 3 | Optional embeddings search backend after kinds/TTL |
 | 16 | [`cli-doctor`](cli-doctor.spec.md) | `[x] done` | Phase 4 | Polished interactive CLI doctor and health inspection |
-| 17 | [`viewer`](viewer.spec.md) | `[ ] todo` | Phase 4 | Obsidian and markdown viewer passive compatibility |
+| 17 | [`viewer`](viewer.spec.md) | `[x] done` | Phase 4 | Obsidian and markdown viewer passive compatibility |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -138,6 +138,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-15-cross-project-search | Opt-in multi-project cross-vault search engine | Slice 15 delivery |
 | 2026-08-25 | slice-16-embeddings-search | Optional vector similarity search backend fallback engine | Slice 16 delivery |
 | 2026-08-25 | slice-17-cli-doctor | Interactive CLI doctor health inspector with --rebuild and --fix options | Slice 17 delivery |
+| 2026-08-25 | slice-18-viewer | Passive Markdown & Obsidian wikilink viewer compatibility | Slice 18 delivery |
 
 ## Archive
 

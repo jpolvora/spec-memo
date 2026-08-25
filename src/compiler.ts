@@ -81,12 +81,13 @@ export function generateTrapsView(metadata: ProjectMetadata | null, traps: MemoR
       const sev = (trap.frontmatter.severity || 'medium').toUpperCase();
       const name = trap.frontmatter.title || trap.frontmatter.id;
       const patterns = (trap.frontmatter.pathPatterns || []).join(', ') || 'all';
+      const relPath = `./traps/${trap.frontmatter.id}.md`;
 
-      md += `### [${sev}] ${name} (\`${trap.frontmatter.id}\`)\n\n`;
-      md += `- **Path Patterns:** \`${patterns}\`\n`;
+      md += `### [${sev}] ${name} ([${trap.frontmatter.id}](${relPath}))\n\n`;
+      md += `- **Path Patterns:** \`${patterns}\` | **Wikilink:** \`[[${trap.frontmatter.id}]]\`\n`;
       md += `- **Severity:** \`${trap.frontmatter.severity || 'medium'}\` | **Source:** \`${trap.frontmatter.source}\` | **Updated:** \`${trap.frontmatter.updated}\`\n`;
       if (trap.frontmatter.supersedes) {
-        md += `- **Supersedes:** \`${trap.frontmatter.supersedes}\`\n`;
+        md += `- **Supersedes:** \`[[${trap.frontmatter.supersedes}]]\`\n`;
       }
       md += `\n${trap.body}\n\n---\n\n`;
     }
@@ -96,7 +97,8 @@ export function generateTrapsView(metadata: ProjectMetadata | null, traps: MemoR
     md += `## Archived & Superseded Traps\n\n`;
     for (const trap of inactiveTraps) {
       const name = trap.frontmatter.title || trap.frontmatter.id;
-      md += `- **[${trap.frontmatter.status.toUpperCase()}]** \`${trap.frontmatter.id}\`: ${name} (updated: ${trap.frontmatter.updated})\n`;
+      const relPath = `./traps/${trap.frontmatter.id}.md`;
+      md += `- **[${trap.frontmatter.status.toUpperCase()}]** [\`${trap.frontmatter.id}\`](${relPath}) (\`[[${trap.frontmatter.id}]]\`): ${name} (updated: ${trap.frontmatter.updated})\n`;
     }
     md += `\n`;
   }
@@ -136,8 +138,9 @@ export function generateDecisionsView(metadata: ProjectMetadata | null, decision
   } else {
     for (const d of sorted) {
       const dTitle = d.frontmatter.title || d.frontmatter.id;
-      const superId = d.frontmatter.supersedes ? `\`${d.frontmatter.supersedes}\`` : '-';
-      md += `| \`${d.frontmatter.id}\` | ${dTitle} | \`${d.frontmatter.status}\` | ${d.frontmatter.updated.slice(0, 10)} | ${superId} |\n`;
+      const relPath = `./decisions/${d.frontmatter.id}.md`;
+      const superId = d.frontmatter.supersedes ? `[[${d.frontmatter.supersedes}]]` : '-';
+      md += `| [\`${d.frontmatter.id}\`](${relPath}) | ${dTitle} | \`${d.frontmatter.status}\` | ${d.frontmatter.updated.slice(0, 10)} | ${superId} |\n`;
     }
     md += `\n`;
   }
@@ -146,8 +149,9 @@ export function generateDecisionsView(metadata: ProjectMetadata | null, decision
     md += `## Accepted Decisions\n\n`;
     for (const d of accepted) {
       const dTitle = d.frontmatter.title || d.frontmatter.id;
-      md += `### \`${d.frontmatter.id}\`: ${dTitle}\n\n`;
-      md += `- **Status:** \`${d.frontmatter.status}\` | **Created:** \`${d.frontmatter.created}\` | **Updated:** \`${d.frontmatter.updated}\`\n`;
+      const relPath = `./decisions/${d.frontmatter.id}.md`;
+      md += `### [\`${d.frontmatter.id}\`](${relPath}): ${dTitle}\n\n`;
+      md += `- **Status:** \`${d.frontmatter.status}\` | **Created:** \`${d.frontmatter.created}\` | **Updated:** \`${d.frontmatter.updated}\` | **Wikilink:** \`[[${d.frontmatter.id}]]\`\n`;
       if (d.frontmatter.rationale) {
         md += `- **Rationale:** ${d.frontmatter.rationale}\n`;
       }
@@ -159,7 +163,8 @@ export function generateDecisionsView(metadata: ProjectMetadata | null, decision
     md += `## Proposed Decisions\n\n`;
     for (const d of proposed) {
       const dTitle = d.frontmatter.title || d.frontmatter.id;
-      md += `### [PROPOSED] \`${d.frontmatter.id}\`: ${dTitle}\n\n`;
+      const relPath = `./decisions/${d.frontmatter.id}.md`;
+      md += `### [PROPOSED] [\`${d.frontmatter.id}\`](${relPath}): ${dTitle}\n\n`;
       md += `${d.body}\n\n---\n\n`;
     }
   }
@@ -211,7 +216,9 @@ export function generateIndexView(metadata: ProjectMetadata | null, records: Mem
       md += `|---|---|---|---|\n`;
       for (const r of list) {
         const rTitle = r.frontmatter.title || r.frontmatter.relatedSlug || r.frontmatter.id;
-        md += `| \`${r.frontmatter.id}\` | ${rTitle} | \`${r.frontmatter.status}\` | ${r.frontmatter.updated.slice(0, 10)} |\n`;
+        const kindSubdir = `${kind}s`;
+        const relPath = `./${kindSubdir}/${r.frontmatter.id}.md`;
+        md += `| [\`${r.frontmatter.id}\`](${relPath}) | ${rTitle} | \`${r.frontmatter.status}\` | ${r.frontmatter.updated.slice(0, 10)} |\n`;
       }
       md += `\n`;
     }
