@@ -243,8 +243,11 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : 3000;
       const host = (parsed.options.host as string) || '127.0.0.1';
       const vaultRoot = parsed.options.vaultRoot as string | undefined;
+      const authToken =
+        (parsed.options['auth-token'] as string | undefined) ||
+        (parsed.options.authToken as string | undefined);
 
-      const instance = await startSseServer({ port, host, vaultRoot });
+      const instance = await startSseServer({ port, host, vaultRoot, authToken });
       if (parsed.isJson) {
         printJson({ status: 'running', service: 'mcp-sse', url: instance.url, port: instance.port, host: instance.host });
       } else {
@@ -253,6 +256,17 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         console.log(`  Message endpoint: ${instance.url}/message`);
         console.log(`  Health check:     ${instance.url}/health`);
       }
+
+      const shutdown = async (signal: NodeJS.Signals) => {
+        try {
+          await instance.close();
+        } finally {
+          process.exit(signal === 'SIGTERM' ? 0 : 130);
+        }
+      };
+      process.once('SIGINT', () => void shutdown('SIGINT'));
+      process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
       return new Promise(() => {});
     }
 
@@ -267,13 +281,27 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const host = (parsed.options.host as string) || '127.0.0.1';
       const vaultRoot = parsed.options.vaultRoot as string | undefined;
       const project = (parsed.options.project as string) || undefined;
+      const authToken =
+        (parsed.options['auth-token'] as string | undefined) ||
+        (parsed.options.authToken as string | undefined);
 
-      const instance = await startCanvasServer({ port, host, vaultRoot, project });
+      const instance = await startCanvasServer({ port, host, vaultRoot, project, authToken });
       if (parsed.isJson) {
         printJson({ status: 'running', url: instance.url, port: instance.port, host: instance.host });
       } else {
         console.log(`spec-memo — Visual Graph Canvas running at: ${instance.url}`);
       }
+
+      const shutdown = async (signal: NodeJS.Signals) => {
+        try {
+          await instance.close();
+        } finally {
+          process.exit(signal === 'SIGTERM' ? 0 : 130);
+        }
+      };
+      process.once('SIGINT', () => void shutdown('SIGINT'));
+      process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
       return new Promise(() => {});
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -499,7 +527,10 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   // Handle memo export-vault command
   if (parsed.command === 'export-vault') {
     try {
-      const password = (parsed.options.password as string) || undefined;
+      const password =
+        (parsed.options.password as string | undefined) ||
+        process.env.SPEC_MEMO_VAULT_PASSWORD ||
+        undefined;
       const outputPath =
         (parsed.options.output as string) ||
         (parsed.options.o as string) ||
@@ -552,7 +583,10 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         throw new Error('Archive file path is required to import vault.');
       }
 
-      const password = (parsed.options.password as string) || undefined;
+      const password =
+        (parsed.options.password as string | undefined) ||
+        process.env.SPEC_MEMO_VAULT_PASSWORD ||
+        undefined;
       const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
 
       const result = await importVault({

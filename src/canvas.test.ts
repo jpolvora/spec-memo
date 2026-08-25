@@ -172,9 +172,9 @@ test("Canvas Engine & Graph Visualization", async (t) => {
       });
       assert.strictEqual(authHeaderRes.status, 200);
 
-      // 3. Authenticated request accepted via query parameter
+      // 3. Query parameter auth is rejected (header-only auth required)
       const authQueryRes = await fetch(`${authCanvas.url}/api/projects?token=canvas-token-abc`);
-      assert.strictEqual(authQueryRes.status, 200);
+      assert.strictEqual(authQueryRes.status, 401);
     } finally {
       await authCanvas.close();
     }

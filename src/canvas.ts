@@ -306,7 +306,12 @@ export function generateCanvasHtml(): string {
     let isDragging = false;
     let startPos = { x: 0, y: 0 };
 
-    const pageToken = new URLSearchParams(window.location.search).get('token');
+    const urlToken = new URLSearchParams(window.location.search).get('token');
+    if (urlToken) {
+      sessionStorage.setItem('canvas_auth_token', urlToken);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    const pageToken = sessionStorage.getItem('canvas_auth_token');
     const apiHeaders = pageToken ? { Authorization: 'Bearer ' + pageToken } : {};
 
     const kindColors = {
@@ -511,10 +516,9 @@ export function startCanvasServer(options: CanvasServerOptions = {}): Promise<Ca
       const url = new URL(req.url || "/", `http://${host}:${port}`);
       const pathname = url.pathname;
 
-      if (authToken) {
+      if (authToken && pathname.startsWith("/api/")) {
         const authHeader = req.headers.authorization;
-        const queryToken = url.searchParams.get("token");
-        const authorized = authHeader === `Bearer ${authToken}` || queryToken === authToken;
+        const authorized = authHeader === `Bearer ${authToken}`;
         if (!authorized) {
           res.writeHead(401, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Unauthorized" }));

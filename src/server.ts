@@ -38,8 +38,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
 
       if (authToken) {
         const authHeader = req.headers.authorization;
-        const queryToken = url.searchParams.get("token");
-        const authorized = authHeader === `Bearer ${authToken}` || queryToken === authToken;
+        const authorized = authHeader === `Bearer ${authToken}`;
         if (!authorized) {
           res.writeHead(401, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Unauthorized" }));

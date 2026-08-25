@@ -140,7 +140,7 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
           if (fs.existsSync(subDir)) {
             const files = fs.readdirSync(subDir);
             for (const file of files) {
-              if (file.endsWith('.md')) {
+              if (file.endsWith('.md') && !file.includes('.conflict.')) {
                 const filePath = path.join(subDir, file);
                 try {
                   const content = fs.readFileSync(filePath, 'utf8');
