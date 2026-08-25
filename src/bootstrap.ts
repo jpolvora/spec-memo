@@ -1,4 +1,6 @@
 import * as path from 'node:path';
+import * as fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { BootstrapBrief, BootstrapOptions, MemoRecord } from './types.js';
 import { getProjectMetadata, getVaultRoot } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
@@ -12,6 +14,60 @@ const SEVERITY_WEIGHT: Record<string, number> = {
   medium: 200,
   low: 100
 };
+
+/**
+ * AC1-AC4: Detect code-specification drift by comparing verifiedAtSha with current git SHA of linkedPaths.
+ */
+export function checkSpecDrift(
+  spec: MemoRecord,
+  productRoot: string,
+  isGit: boolean
+): { specSlug: string; modifiedPaths: string[] } | null {
+  const linkedPaths = spec.frontmatter.linkedPaths;
+  const verifiedAtSha = spec.frontmatter.verifiedAtSha;
+  if (!Array.isArray(linkedPaths) || linkedPaths.length === 0 || !verifiedAtSha) {
+    return null;
+  }
+
+  const specSlug = String(spec.frontmatter.slug || spec.frontmatter.id || 'unknown');
+  const modifiedPaths: string[] = [];
+
+  for (const relPath of linkedPaths) {
+    const fullPath = path.resolve(productRoot, relPath);
+    if (!fs.existsSync(fullPath)) {
+      modifiedPaths.push(relPath);
+      continue;
+    }
+
+    if (isGit) {
+      try {
+        const currentSha = execFileSync('git', ['log', '-n', '1', '--format=%H', '--', relPath], {
+          cwd: productRoot,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore']
+        }).trim();
+
+        const statusOutput = execFileSync('git', ['status', '--porcelain', '--', relPath], {
+          cwd: productRoot,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore']
+        }).trim();
+
+        if (statusOutput.length > 0 || (currentSha && currentSha !== verifiedAtSha)) {
+          modifiedPaths.push(relPath);
+        }
+      } catch {
+        // If git fails, fallback to assumption of safe
+      }
+    }
+  }
+
+  if (modifiedPaths.length > 0) {
+    return { specSlug, modifiedPaths };
+  }
+
+  return null;
+}
 
 /**
  * Compute byte length of JSON-serialized payload in UTF-8.
@@ -121,11 +177,27 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     }
   }
 
+  // 3b. Scan for spec drift across all active specs
+  const driftList: Array<{ specSlug: string; modifiedPaths: string[] }> = [];
+  const activeSpecs = allRecords.filter((r) => r.frontmatter.kind === 'spec' && r.frontmatter.status === 'active');
+  for (const s of activeSpecs) {
+    const driftResult = checkSpecDrift(s, identity.rootPath, identity.isGit);
+    if (driftResult) {
+      driftList.push(driftResult);
+    }
+  }
+
   // 4. Budget constraints and progressive truncation
   const budgetBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 8192;
   const currentTraps = [...activeTraps];
   const currentDecisions = [...activeDecisions];
   const notices: string[] = [];
+
+  if (driftList.length > 0) {
+    for (const d of driftList) {
+      notices.push(`Spec drift detected for '${d.specSlug}': modified linked paths [${d.modifiedPaths.join(', ')}]`);
+    }
+  }
 
   const initialBrief: BootstrapBrief = {
     projectId,
@@ -139,6 +211,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     byteLength: 0,
     budgetBytes,
     truncated: false,
+    drift: driftList.length > 0 ? driftList : undefined,
     notices
   };
 

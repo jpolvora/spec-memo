@@ -191,6 +191,7 @@ export interface BootstrapBrief {
   byteLength: number;
   budgetBytes: number;
   truncated: boolean;
+  drift?: Array<{ specSlug: string; modifiedPaths: string[] }>;
   notices: string[];
 }
 

@@ -168,7 +168,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 ### Phase 3 — Curator hardening
 
 - [x] Trap dedup on upsert (`.agents/specs/trap-dedup.spec.md`)
-- [ ] Spec SHA drift on bootstrap (`.agents/specs/spec-drift.spec.md`)
+- [x] Spec SHA drift on bootstrap (`.agents/specs/spec-drift.spec.md`)
 - [ ] Optional private git remote on the vault (`.agents/specs/vault-git.spec.md`)
 - [ ] Cross-project search opt-in (`.agents/specs/cross-project-search.spec.md`)
 - [ ] Embeddings as an optional search backend (`.agents/specs/embeddings-search.spec.md`)
@@ -226,6 +226,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-25 | slice-10-memory-adapter-mcp | Consumer memory adapter module for MCP/CLI integration | Slice 10 delivery |
 | 2026-08-25 | slice-11-write-block-hook | Pre-commit git hook generator and installer CLI command | Slice 11 delivery |
 | 2026-08-25 | slice-12-trap-dedup | Trap deduplication and automatic superseding engine | Slice 12 delivery |
+| 2026-08-25 | slice-13-spec-drift | Specification git SHA drift detection during session bootstrap | Slice 13 delivery |
 
 ## 12. Related docs
 

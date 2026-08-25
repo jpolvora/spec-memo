@@ -195,4 +195,33 @@ describe('Bootstrap Brief Engine', () => {
     assert.ok(brief.activeSlice.plan);
     assert.equal(brief.activeSlice.plan.frontmatter.title, 'Authentication Implementation Plan');
   });
+
+  it('should detect spec drift when linked file differs from verifiedAtSha', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'spec',
+      slug: 'drifted-spec',
+      frontmatter: {
+        id: 'spec-drifted-spec',
+        title: 'Drifted Spec',
+        status: 'active',
+        linkedPaths: ['src/dummy.ts'],
+        verifiedAtSha: 'old-commit-sha-000000000000000000000000'
+      },
+      body: 'Spec body'
+    });
+
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault
+    });
+
+    assert.ok(brief.drift);
+    assert.equal(brief.drift.length, 1);
+    assert.equal(brief.drift[0].specSlug, 'spec-drifted-spec');
+    assert.deepEqual(brief.drift[0].modifiedPaths, ['src/dummy.ts']);
+    assert.ok(brief.notices.some((n) => n.includes('Spec drift detected')));
+  });
 });
+
