@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getVaultRoot, RECORD_SUBDIRS, initVault, withVaultLock, commitVaultChange } from "./vault.js";
-import { getSubdirForKind } from "./store.js";
+import { getSubdirForKind, upsertRecord } from "./store.js";
 import { parseRecord, serializeRecord, validateFrontmatter } from "./schema.js";
 import { rebuildIndex } from "./indexer.js";
+import { rebuildCompiledViews } from "./compiler.js";
 import { getVaultProjectList, listProjectRecordsInternal } from "./canvas.js";
 import { isPathInside, assertNoSecrets } from "./safety.js";
 import { RecordFrontmatter, RecordKind } from "./types.js";
@@ -147,10 +148,22 @@ export async function applyChangeset(
         }
       } else {
         if (!dryRun) {
-          if (!fs.existsSync(kindDir)) {
-            fs.mkdirSync(kindDir, { recursive: true });
+          if (kind === "trap" && !item.frontmatter.supersedes) {
+            await upsertRecord({
+              vaultRoot,
+              projectId: projId,
+              kind: "trap",
+              slug,
+              frontmatter: item.frontmatter,
+              body: item.body,
+              allowDuplicate: false
+            });
+          } else {
+            if (!fs.existsSync(kindDir)) {
+              fs.mkdirSync(kindDir, { recursive: true });
+            }
+            fs.writeFileSync(targetFilePath, serializeRecord(item), "utf8");
           }
-          fs.writeFileSync(targetFilePath, serializeRecord(item), "utf8");
         }
         applied++;
         recordsApplied.push(`${projId}/${kind}/${recId}`);
@@ -158,6 +171,9 @@ export async function applyChangeset(
     }
 
     if (!dryRun && applied > 0) {
+      for (const projId of touchedProjects) {
+        rebuildCompiledViews(projId, vaultRoot);
+      }
       await rebuildIndex(vaultRoot);
       commitVaultChange(
         "sync changeset applied",

@@ -179,4 +179,34 @@ test("Multi-Machine Vault Sync & Delta Engine", async (t) => {
       }
     );
   });
+
+  await t.test("should regenerate compiled Markdown views on applyChangeset", async () => {
+    const newTrapChangeset = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          frontmatter: {
+            id: "compiled-view-test-trap",
+            slug: "compiled-view-test-trap",
+            kind: "trap" as const,
+            status: "active" as const,
+            source: "agent" as const,
+            created: new Date().toISOString(),
+            updated: new Date().toISOString(),
+            project: projA,
+            title: "Compiled View Test Trap"
+          },
+          body: "Ensure compiled views are rebuilt.",
+          project: projA
+        }
+      ]
+    };
+
+    await applyChangeset(vaultB, newTrapChangeset);
+    const trapsViewPath = path.join(vaultB, "projects", projA, "TRAPS.md");
+    assert.ok(fs.existsSync(trapsViewPath), "TRAPS.md must exist in vault");
+    const trapsViewContent = fs.readFileSync(trapsViewPath, "utf8");
+    assert.ok(trapsViewContent.includes("Compiled View Test Trap"), "TRAPS.md must contain newly synced trap");
+  });
 });

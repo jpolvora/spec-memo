@@ -208,7 +208,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     project: projectId,
     status: (options.frontmatter?.status as RecordStatus) || (existingRecord?.frontmatter.status ?? 'active'),
     created: existingRecord?.frontmatter.created || options.frontmatter?.created || now,
-    updated: now,
+    updated: options.frontmatter?.updated || now,
     source: options.source || options.frontmatter?.source || existingRecord?.frontmatter.source || 'agent'
   };
 
