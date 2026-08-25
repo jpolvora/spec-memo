@@ -86,7 +86,7 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 - [ ] **Log compact.** Monthly roll-up files; events remain searchable via FTS.
 - [x] **Redaction.** `upsert` / `append` reject bodies that look like secrets (PEM headers, `api_key=` assignments, known env-file patterns). Caller must omit the secret; spec-memo does not store a redacted copy of the secret value.
 - [x] **Refuse product-tree write.** If `cwd` or `productRoot` is a git work tree, API/CLI refuse to write record files *under that tree*. Vault writes stay under `$SPEC_MEMO_ROOT`.
-- [ ] **Trap dedup (Phase 3).** Same `pathPatterns` + similar DO NOT → supersede instead of a third entry. Phase 1 may no-op with a documented skip.
+- [x] **Trap dedup (Phase 3).** Same `pathPatterns` + similar DO NOT → supersede instead of a third entry.
 
 ---
 

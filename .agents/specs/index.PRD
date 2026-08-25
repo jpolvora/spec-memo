@@ -75,7 +75,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 ### Phase 3: Curator hardening
 
-- [ ] [`trap-dedup`](trap-dedup.spec.md): Anti-regression trap deduplication and automatic superseding
+- [~] [`trap-dedup`](trap-dedup.spec.md): Anti-regression trap deduplication and automatic superseding
 - [ ] [`spec-drift`](spec-drift.spec.md): Specification git SHA drift detection on bootstrap
 - [ ] [`vault-git`](vault-git.spec.md): Optional private git remote sync for vault persistence
 - [ ] [`cross-project-search`](cross-project-search.spec.md): Opt-in cross-project search across local vault repositories
@@ -101,7 +101,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 8 | [`relocatable-hub`](relocatable-hub.spec.md) | `[x] done` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
 | 9 | [`memory-adapter-mcp`](memory-adapter-mcp.spec.md) | `[x] done` | Phase 2 | Route consumer `read-memory`/`update-memory` to MCP |
 | 10 | [`write-block-hook`](write-block-hook.spec.md) | `[x] done` | Phase 2 | Git hook & skill rules blocking in-repo workflow writes |
-| 11 | [`trap-dedup`](trap-dedup.spec.md) | `[ ] todo` | Phase 3 | Deduplicate traps with matching paths & rules |
+| 11 | [`trap-dedup`](trap-dedup.spec.md) | `[x] done` | Phase 3 | Deduplicate traps with matching paths & rules |
 | 12 | [`spec-drift`](spec-drift.spec.md) | `[ ] todo` | Phase 3 | Flag SHA drift between specs and code during bootstrap |
 | 13 | [`vault-git`](vault-git.spec.md) | `[ ] todo` | Phase 3 | Optional private git remote on vault root |
 | 14 | [`cross-project-search`](cross-project-search.spec.md) | `[ ] todo` | Phase 3 | Opt-in multi-project search across local vault |
@@ -132,6 +132,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver | Slice 9 delivery |
 | 2026-08-25 | slice-10-memory-adapter-mcp | Consumer memory adapter module for MCP/CLI integration | Slice 10 delivery |
 | 2026-08-25 | slice-11-write-block-hook | Pre-commit git hook generator and installer CLI command | Slice 11 delivery |
+| 2026-08-25 | slice-12-trap-dedup | Trap deduplication and automatic superseding engine | Slice 12 delivery |
 
 ## Archive
 

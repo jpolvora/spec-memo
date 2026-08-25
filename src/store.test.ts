@@ -272,4 +272,54 @@ describe('Store Engine (upsert and get)', () => {
     });
     assert.equal(purgedRecord, null);
   });
+
+  it('should automatically detect duplicate trap and set supersedes status when >70% token overlap', async () => {
+    // 1. Create first trap
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'no-raw-sql',
+      frontmatter: {
+        id: 'trap-no-raw-sql',
+        title: 'Prevent Raw SQL Queries',
+        pathPatterns: ['src/db/*.ts']
+      },
+      body: '## DO NOT\nNever execute raw unescaped SQL strings in database handlers.\n\n## INSTEAD DO\nUse parameterized queries.'
+    });
+
+    // 2. Upsert similar evolutionary trap with same pathPatterns and overlapping body
+    const res2 = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'no-raw-sql-v2',
+      frontmatter: {
+        id: 'trap-no-raw-sql-v2',
+        title: 'Prevent Raw SQL Queries Updated',
+        pathPatterns: ['src/db/*.ts']
+      },
+      body: '## DO NOT\nNever execute raw unescaped SQL query strings directly.\n\n## INSTEAD DO\nUse parameterized query builders.'
+    });
+
+    assert.equal(res2.superseded, true);
+
+    const oldTrap = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-no-raw-sql'
+    });
+    assert.ok(oldTrap);
+    assert.equal(oldTrap.frontmatter.status, 'superseded');
+
+    const newTrap = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-no-raw-sql-v2'
+    });
+    assert.ok(newTrap);
+    assert.equal(newTrap.frontmatter.supersedes, 'trap-no-raw-sql');
+    assert.equal(newTrap.frontmatter.status, 'active');
+  });
 });
+

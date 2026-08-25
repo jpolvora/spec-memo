@@ -127,6 +127,7 @@ describe('Bootstrap Brief Engine', () => {
         vaultRoot: tempVault,
         kind: 'trap',
         slug: `trap-batch-${i}`,
+        allowDuplicate: true,
         frontmatter: {
           id: `trap-batch-${String(i).padStart(2, '0')}`,
           title: `Trap #${i} with detailed description and extensive explanation`,

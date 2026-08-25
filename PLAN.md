@@ -159,6 +159,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver, test suite |
 | 2026-08-25 | slice-10-memory-adapter-mcp | Consumer memory adapter module for MCP/CLI integration, test suite |
 | 2026-08-25 | slice-11-write-block-hook | Pre-commit git hook generator and installer CLI command, test suite |
+| 2026-08-25 | slice-12-trap-dedup | Trap deduplication and automatic superseding engine, test suite |
 
 When a Phase 1 slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

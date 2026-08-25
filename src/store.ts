@@ -17,6 +17,7 @@ export interface UpsertOptions {
   frontmatter?: Partial<RecordFrontmatter>;
   body: string;
   source?: RecordSource;
+  allowDuplicate?: boolean;
 }
 
 export interface UpsertResult {
@@ -34,6 +35,21 @@ export interface GetOptions {
   id?: string;
   kind?: RecordKind;
   slug?: string;
+}
+
+/**
+ * Calculate Jaccard token overlap between two strings (0.0 to 1.0).
+ */
+export function calculateTextOverlap(text1: string, text2: string): number {
+  const tokens1 = new Set(text1.toLowerCase().split(/\W+/).filter(Boolean));
+  const tokens2 = new Set(text2.toLowerCase().split(/\W+/).filter(Boolean));
+  if (tokens1.size === 0 || tokens2.size === 0) return 0;
+  let intersection = 0;
+  for (const t of tokens1) {
+    if (tokens2.has(t)) intersection++;
+  }
+  const minSize = Math.min(tokens1.size, tokens2.size);
+  return minSize === 0 ? 0 : intersection / minSize;
 }
 
 /**
@@ -93,6 +109,42 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
+  // AC1-AC4 (Slice 12 Trap Dedup): Automatically find and supersede matching traps
+  if (options.kind === 'trap' && !options.allowDuplicate && !options.frontmatter?.supersedes) {
+    const newPatterns = (options.frontmatter?.pathPatterns || []).slice().sort();
+    const trapsDir = path.join(projectDir, 'traps');
+    if (fs.existsSync(trapsDir)) {
+      const files = fs.readdirSync(trapsDir);
+      for (const file of files) {
+        if (file.endsWith('.md')) {
+          const trapPath = path.join(trapsDir, file);
+          try {
+            const existing = parseRecord(fs.readFileSync(trapPath, 'utf8'), trapPath);
+            if (existing.frontmatter.status === 'active' && existing.frontmatter.id !== options.slug) {
+              const existingPatterns = (existing.frontmatter.pathPatterns || []).slice().sort();
+              const samePatterns =
+                newPatterns.length === existingPatterns.length &&
+                newPatterns.every((p, idx) => p === existingPatterns[idx]);
+
+              if (samePatterns || newPatterns.length === 0) {
+                const overlap = calculateTextOverlap(options.body, existing.body);
+                if (overlap >= 0.7) {
+                  options.frontmatter = {
+                    ...(options.frontmatter || {}),
+                    supersedes: existing.frontmatter.id
+                  };
+                  break;
+                }
+              }
+            }
+          } catch {
+            // Ignore unparseable
+          }
+        }
+      }
+    }
+  }
+
   // Derive slug and record ID
   let slug = options.slug || (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : '');
   if (!slug && typeof options.frontmatter?.title === 'string') {
@@ -105,6 +157,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
   const recordId = (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : null) || slug;
   const fileName = `${slug}.md`;
   const filePath = path.join(targetDir, fileName);
+
 
   let existingRecord: MemoRecord | null = null;
   if (fs.existsSync(filePath)) {
