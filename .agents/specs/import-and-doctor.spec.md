@@ -1,9 +1,10 @@
 ---
-id: null
+id: import-and-doctor
 slug: import-and-doctor
 title: "CLI parity, workflow tree importer, promote, and doctor diagnostics"
 source: local
 specDate: 2026-08-23
+status: shipped
 ---
 
 # Specification — CLI parity, workflow tree importer, promote, and doctor diagnostics
@@ -16,11 +17,11 @@ Greenfield feature. Design Intent skipped: complete Phase 1 CLI toolset and diag
 
 ## Acceptance Criteria
 
-- AC1: All 8 core MCP tools have 1:1 CLI command equivalents supporting both human and `--json` outputs.
-- AC2: `memo import --from <path>` maps `.agents/specs/*.spec.md` → `specs/`, `memory/*.md` → `traps/` & `decisions/`, and active plan directories into `plans/`, skipping scratch/telemetry.
-- AC3: Running `memo import` repeatedly is idempotent and does not generate duplicate records or mangle existing IDs.
-- AC4: `memo doctor` reports vault root location, resolved project identity, SQLite FTS index status, and scans the local repo for in-tree workflow pollution (e.g. leftover `.agents/plans`).
-- AC5: `memo promote <recordId> --to <targetPath>` safely exports a vault decision or spec into the product repository working tree.
+- [x] AC1: All 8 core MCP tools have 1:1 CLI command equivalents supporting both human and `--json` outputs.
+- [x] AC2: `memo import --from <path>` maps `.agents/specs/*.spec.md` → `specs/`, `memory/*.md` → `traps/` & `decisions/`, and active plan directories into `plans/`, skipping scratch/telemetry.
+- [x] AC3: Running `memo import` repeatedly is idempotent and does not generate duplicate records or mangle existing IDs.
+- [x] AC4: `memo doctor` reports vault root location, resolved project identity, SQLite FTS index status, and scans the local repo for in-tree workflow pollution (e.g. leftover `.agents/plans`).
+- [x] AC5: `memo promote <recordId> --to <targetPath>` safely exports a vault decision or spec into the product repository working tree.
 
 ## Original Issue Context
 
@@ -29,6 +30,12 @@ Plan Slice 8: CLI parity + `memo import` + `memo doctor`. Deliver: Each tool as 
 ### Design Intent
 
 Greenfield feature. Design Intent skipped: complete Phase 1 CLI toolset, importer, and diagnostics.
+
+## Verification
+
+- Automated test suites: `src/promote.test.ts`, `src/doctor.test.ts`, `src/importer.test.ts`, `src/cli.test.ts`, `src/tools.test.ts`, `src/mcp.test.ts`.
+- Phase 1 exit proof verified: clean repository fixture + external vault bootstrap returns traps, clean `git status`, and zero pollution reported by `doctor`.
+- Full test suite: 77 tests across 21 suites passing.
 
 ## Notes
 
@@ -49,3 +56,4 @@ Greenfield feature. Design Intent skipped: complete Phase 1 CLI toolset, importe
 | Promote authorization | Explicit confirmation/flag required | Prevents unwanted writes to product repository | y |
 | Import mapping rule | File frontmatter parsed or generated from headers if legacy | Normalizes legacy memory into structured records | y |
 | Implicit dimensions | N/A because CLI commands run in isolated user terminal context | Standard terminal IO | y |
+

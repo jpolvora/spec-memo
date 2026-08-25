@@ -215,3 +215,92 @@ export interface GcResult {
   };
 }
 
+export interface PromoteOptions {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  id?: string;
+  kind?: RecordKind;
+  slug?: string;
+  destination: string;
+  force?: boolean;
+}
+
+export interface PromoteResult {
+  id: string;
+  kind: RecordKind;
+  destination: string;
+  targetPath: string;
+  bytesWritten: number;
+}
+
+export interface DoctorPollutionItem {
+  path: string;
+  absolutePath: string;
+  type: 'plan_residue' | 'memory_residue' | 'state_residue' | 'spec_residue' | 'telemetry_residue' | 'log_residue';
+  description: string;
+}
+
+export interface DoctorOptions {
+  cwd?: string;
+  vaultRoot?: string;
+  productRoot?: string;
+}
+
+export interface DoctorResult {
+  healthy: boolean;
+  vaultRoot: string;
+  vaultExists: boolean;
+  project: {
+    projectId: string;
+    gitRemote: string | null;
+    rootPath: string;
+    isGit: boolean;
+    isFallback: boolean;
+  };
+  fts: {
+    dbPath: string;
+    dbExists: boolean;
+    indexedRecordsCount: number;
+    healthy: boolean;
+  };
+  pollution: {
+    detected: boolean;
+    items: DoctorPollutionItem[];
+  };
+  warnings: string[];
+  summary: string;
+}
+
+export interface ImportItem {
+  id: string;
+  kind: RecordKind;
+  slug: string;
+  sourcePath: string;
+  vaultPath: string;
+}
+
+export interface ImportOptions {
+  from?: string;
+  cwd?: string;
+  productRoot?: string;
+  projectId?: string;
+  vaultRoot?: string;
+}
+
+export interface ImportResult {
+  projectId: string;
+  vaultRoot: string;
+  importedSpecsCount: number;
+  importedTrapsCount: number;
+  importedDecisionsCount: number;
+  importedPlansCount: number;
+  importedLogsCount: number;
+  importedStateCount: number;
+  skippedFilesCount: number;
+  totalImported: number;
+  records: ImportItem[];
+  skippedPaths: string[];
+}
+
+

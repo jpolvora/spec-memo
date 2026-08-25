@@ -157,7 +157,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 - [x] `gc` TTL + shipped-plan compact (`.agents/specs/curator-gc-and-safety.spec.md`)
 - [x] Refuse upsert payload written into a known product working tree (`.agents/specs/curator-gc-and-safety.spec.md`)
 - [x] Secret redaction on write (`.agents/specs/curator-gc-and-safety.spec.md`)
-- [ ] CLI parity, `memo import`, `memo promote`, and `memo doctor` (`.agents/specs/import-and-doctor.spec.md`)
+- [x] CLI parity, `memo import`, `memo promote`, and `memo doctor` (`.agents/specs/import-and-doctor.spec.md`)
 
 ### Phase 2 — Harness adapter (workflow-skills, not this repo’s core)
 
@@ -188,7 +188,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 4 | `remaining-kinds-and-events` | `[x]` | Phase 1 | Full matrix kinds, append, forget |
 | 5 | `bootstrap-brief` | `[x]` | Phase 1 | 8 KB cap, include/exclude rules |
 | 6 | `curator-gc-and-safety` | `[x]` | Phase 1 | TTL, compact, redaction, write guard |
-| 7 | `import-and-doctor` | `[ ]` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
+| 7 | `import-and-doctor` | `[x]` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
 | 8 | `relocatable-hub` | `[ ]` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
 | 9 | `memory-adapter-mcp` | `[ ]` | Phase 2 | Route consumer memory calls to MCP |
 | 10 | `write-block-hook` | `[ ]` | Phase 2 | In-repo write blocking hook |
@@ -221,6 +221,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-23 | slice-5-remaining-kinds-and-events | Full record kinds matrix, append-only event logging, forget soft-archive & purge | 1dbc5ac |
 | 2026-08-23 | slice-6-bootstrap-brief | Bootstrap session brief generation with 8 KB budget cap and trap ranking | 4884172 |
 | 2026-08-25 | slice-7-curator-gc-safety | Curator GC, secret redaction & product write guard | Slice 7 delivery |
+| 2026-08-25 | slice-8-import-and-doctor | CLI parity, memo import, memo doctor diagnostics, memo promote export | Slice 8 delivery |
 
 ## 12. Related docs
 

@@ -55,7 +55,7 @@ One stdio MCP server. Tool descriptions are the interface; vault paths are not.
 | `append` | [x] | Changelog / audit event | New event id; never rewrites prior events |
 | `forget` | [x] | Supersede or archive | New status. Traps archive unless the caller passes an explicit purge confirmed by the user |
 | `gc` | [x] | Apply TTL, compact shipped plans, rebuild FTS | Counts archived/compacted/deleted (scratch only) |
-| `promote` | [ ] | Copy one record into the product repo | Product-relative path. **Default deny** without `destination` inside the product root |
+| `promote` | [x] | Copy one record into the product repo | Product-relative path. **Default deny** without `destination` inside the product root |
 
 Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
@@ -71,10 +71,10 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
 ## 5. CLI
 
-- [ ] **Same module as MCP.** `memo <command>` maps 1:1 to tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`.
-- [ ] **`memo doctor`.** Vault exists, FTS rebuilds, project binds, reports in-repo pollution under a given product root (does not delete).
-- [ ] **`memo import <productRoot>`.** See § Import.
-- [ ] **Help and errors on stderr; machine-readable JSON on stdout** when `--json` is passed.
+- [x] **Same module as MCP.** `memo <command>` maps 1:1 to tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`.
+- [x] **`memo doctor`.** Vault exists, FTS rebuilds, project binds, reports in-repo pollution under a given product root (does not delete).
+- [x] **`memo import <productRoot>`.** See § Import.
+- [x] **Help and errors on stderr; machine-readable JSON on stdout** when `--json` is passed.
 
 ---
 
@@ -92,13 +92,13 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
 ## 7. Import
 
-- [ ] Map `{specsDir}/*.spec.md` → `kind=spec`.
-- [ ] Map `{sharedDir}/memory/*.md` → `kind=trap` (preserve severity and pathPatterns when present).
-- [ ] Map compiled `MEMORY.md` as skipped (rebuild from entries).
-- [ ] Map active `{plansDir}/{slug}/` → `kind=plan` + `kind=state`; skip `telemetry/`, `.runtime/`, `*.jsonl`, `audit-*.log.md`.
-- [ ] Map agent changelog entries → `kind=log` (split by heading).
-- [ ] Do not import skill bodies (`SKILL.md`, scripts).
-- [ ] Idempotent: re-import updates by slug/id, does not duplicate.
+- [x] Map `{specsDir}/*.spec.md` → `kind=spec`.
+- [x] Map `{sharedDir}/memory/*.md` → `kind=trap` (preserve severity and pathPatterns when present).
+- [x] Map compiled `MEMORY.md` as skipped (rebuild from entries).
+- [x] Map active `{plansDir}/{slug}/` → `kind=plan` + `kind=state`; skip `telemetry/`, `.runtime/`, `*.jsonl`, `audit-*.log.md`.
+- [x] Map agent changelog entries → `kind=log` (split by heading).
+- [x] Do not import skill bodies (`SKILL.md`, scripts).
+- [x] Idempotent: re-import updates by slug/id, does not duplicate.
 
 ---
 
@@ -133,4 +133,5 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime (Slices 1–7 delivered) | `[~]` |
+| Runtime (Phase 1 Slices 1–8 delivered) | `[x]` |
+

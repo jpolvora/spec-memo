@@ -28,7 +28,7 @@ describe('MCP Server Integration', () => {
     await server.close();
   });
 
-  it('should handle tool call and return NOT_IMPLEMENTED error shape', async () => {
+  it('should handle tool call and return UNKNOWN_TOOL error for invalid tool name', async () => {
     const server = createMcpServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -38,8 +38,8 @@ describe('MCP Server Integration', () => {
     await client.connect(clientTransport);
 
     const result = await client.callTool({
-      name: 'promote',
-      arguments: { destination: 'docs/test.md' }
+      name: 'non_existent_tool',
+      arguments: {}
     });
 
     assert.equal(result.isError, true);
@@ -49,7 +49,7 @@ describe('MCP Server Integration', () => {
 
     const parsed = JSON.parse(content[0].text as string);
     assert.equal(parsed.isError, true);
-    assert.equal(parsed.code, 'NOT_IMPLEMENTED');
+    assert.equal(parsed.code, 'UNKNOWN_TOOL');
 
     await client.close();
     await server.close();

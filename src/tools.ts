@@ -23,7 +23,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         query: { type: 'string', description: 'Optional context query or task intent to filter traps/decisions' },
         slug: { type: 'string', description: 'Active feature spec/plan slug' },
         path: { type: 'string', description: 'Focus file path to prioritize matching traps' },
-        maxBytes: { type: 'number', description: 'Maximum UTF-8 payload byte budget (defaults to 8192)' }
+        maxBytes: { type: 'number', description: 'Maximum UTF-8 payload byte budget (defaults to 8192)' },
+        vaultRoot: { type: 'string', description: 'Override vault root directory' },
+        projectId: { type: 'string', description: 'Specific project ID' }
       }
     },
     zodSchema: z.object({
@@ -31,7 +33,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       query: z.string().optional(),
       slug: z.string().optional(),
       path: z.string().optional(),
-      maxBytes: z.number().optional()
+      maxBytes: z.number().optional(),
+      vaultRoot: z.string().optional(),
+      projectId: z.string().optional()
     })
   },
   search: {
@@ -56,7 +60,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         includeScratch: { type: 'boolean', description: 'Include scratch records (omitted by default)' },
         projectId: { type: 'string', description: 'Specific project ID to search' },
         crossProject: { type: 'boolean', description: 'Search across all projects in vault' },
-        limit: { type: 'number', description: 'Maximum number of results to return' }
+        limit: { type: 'number', description: 'Maximum number of results to return' },
+        cwd: { type: 'string', description: 'Product repository working directory' },
+        vaultRoot: { type: 'string', description: 'Override vault root directory' }
       }
     },
     zodSchema: z.object({
@@ -68,7 +74,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       includeScratch: z.boolean().optional(),
       projectId: z.string().optional(),
       crossProject: z.boolean().optional(),
-      limit: z.number().optional()
+      limit: z.number().optional(),
+      cwd: z.string().optional(),
+      vaultRoot: z.string().optional()
     })
   },
   get: {
@@ -79,13 +87,19 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       properties: {
         id: { type: 'string', description: 'Record unique ID' },
         kind: { type: 'string', description: 'Record kind' },
-        slug: { type: 'string', description: 'Record slug (if kind is specified)' }
+        slug: { type: 'string', description: 'Record slug (if kind is specified)' },
+        cwd: { type: 'string', description: 'Product repository working directory' },
+        vaultRoot: { type: 'string', description: 'Override vault root directory' },
+        projectId: { type: 'string', description: 'Specific project ID' }
       }
     },
     zodSchema: z.object({
       id: z.string().optional(),
       kind: z.string().optional(),
-      slug: z.string().optional()
+      slug: z.string().optional(),
+      cwd: z.string().optional(),
+      vaultRoot: z.string().optional(),
+      projectId: z.string().optional()
     })
   },
   upsert: {
@@ -97,7 +111,10 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         kind: { type: 'string', description: 'Record kind (trap, decision, spec, plan, state, log, scratch, review)' },
         slug: { type: 'string', description: 'Record slug identifier' },
         frontmatter: { type: 'object', description: 'Record frontmatter metadata' },
-        body: { type: 'string', description: 'Record Markdown content' }
+        body: { type: 'string', description: 'Record Markdown content' },
+        cwd: { type: 'string', description: 'Product repository working directory' },
+        vaultRoot: { type: 'string', description: 'Override vault root directory' },
+        projectId: { type: 'string', description: 'Specific project ID' }
       },
       required: ['kind', 'body']
     },
@@ -105,7 +122,10 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       kind: z.string(),
       slug: z.string().optional(),
       frontmatter: z.record(z.unknown()).optional(),
-      body: z.string()
+      body: z.string(),
+      cwd: z.string().optional(),
+      vaultRoot: z.string().optional(),
+      projectId: z.string().optional()
     })
   },
   append: {
@@ -116,14 +136,20 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       properties: {
         event: { type: 'string', description: 'Event description or log text' },
         kind: { type: 'string', description: 'Log kind (defaults to log)' },
-        details: { type: 'object', description: 'Additional structured event details' }
+        details: { type: 'object', description: 'Additional structured event details' },
+        cwd: { type: 'string', description: 'Product repository working directory' },
+        vaultRoot: { type: 'string', description: 'Override vault root directory' },
+        projectId: { type: 'string', description: 'Specific project ID' }
       },
       required: ['event']
     },
     zodSchema: z.object({
       event: z.string(),
       kind: z.string().optional(),
-      details: z.record(z.unknown()).optional()
+      details: z.record(z.unknown()).optional(),
+      cwd: z.string().optional(),
+      vaultRoot: z.string().optional(),
+      projectId: z.string().optional()
     })
   },
   forget: {
@@ -135,14 +161,20 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         id: { type: 'string', description: 'Record ID to archive' },
         kind: { type: 'string', description: 'Record kind' },
         slug: { type: 'string', description: 'Record slug' },
-        purge: { type: 'boolean', description: 'Set true to permanently delete file (defaults to false for archive)' }
+        purge: { type: 'boolean', description: 'Set true to permanently delete file (defaults to false for archive)' },
+        cwd: { type: 'string', description: 'Product repository working directory' },
+        vaultRoot: { type: 'string', description: 'Override vault root directory' },
+        projectId: { type: 'string', description: 'Specific project ID' }
       }
     },
     zodSchema: z.object({
       id: z.string().optional(),
       kind: z.string().optional(),
       slug: z.string().optional(),
-      purge: z.boolean().optional()
+      purge: z.boolean().optional(),
+      cwd: z.string().optional(),
+      vaultRoot: z.string().optional(),
+      projectId: z.string().optional()
     })
   },
   gc: {
@@ -173,7 +205,10 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         id: { type: 'string', description: 'Record ID to promote' },
         kind: { type: 'string', description: 'Record kind' },
         slug: { type: 'string', description: 'Record slug' },
-        destination: { type: 'string', description: 'Product-relative destination path (e.g. docs/adr/001.md)' }
+        destination: { type: 'string', description: 'Product-relative destination path (e.g. docs/adr/001.md)' },
+        force: { type: 'boolean', description: 'Overwrite destination if it already exists' },
+        cwd: { type: 'string', description: 'Product repository working directory' },
+        vaultRoot: { type: 'string', description: 'Override vault root directory' }
       },
       required: ['destination']
     },
@@ -181,7 +216,10 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       id: z.string().optional(),
       kind: z.string().optional(),
       slug: z.string().optional(),
-      destination: z.string()
+      destination: z.string(),
+      force: z.boolean().optional(),
+      cwd: z.string().optional(),
+      vaultRoot: z.string().optional()
     })
   }
 };
@@ -190,7 +228,17 @@ import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
 import { searchIndex } from './indexer.js';
 import { compileBootstrapBrief } from './bootstrap.js';
 import { runGc } from './curator.js';
-import { AppendOptions, BootstrapOptions, ForgetOptions, GcOptions, RecordKind, RecordStatus, SearchOptions } from './types.js';
+import { promoteRecord } from './promote.js';
+import {
+  AppendOptions,
+  BootstrapOptions,
+  ForgetOptions,
+  GcOptions,
+  PromoteOptions,
+  RecordKind,
+  RecordStatus,
+  SearchOptions
+} from './types.js';
 
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
@@ -249,17 +297,23 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
 
   if (name === 'upsert') {
     try {
-      const { kind, slug, frontmatter, body } = parseResult.data as {
+      const { kind, slug, frontmatter, body, cwd, vaultRoot, projectId } = parseResult.data as {
         kind: RecordKind;
         slug?: string;
         frontmatter?: Record<string, unknown>;
         body: string;
+        cwd?: string;
+        vaultRoot?: string;
+        projectId?: string;
       };
       const result = await upsertRecord({
         kind,
         slug,
         frontmatter,
-        body
+        body,
+        cwd,
+        vaultRoot,
+        projectId
       });
       return {
         data: result
@@ -276,12 +330,15 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
 
   if (name === 'get') {
     try {
-      const { id, kind, slug } = parseResult.data as {
+      const { id, kind, slug, cwd, vaultRoot, projectId } = parseResult.data as {
         id?: string;
         kind?: RecordKind;
         slug?: string;
+        cwd?: string;
+        vaultRoot?: string;
+        projectId?: string;
       };
-      const record = await getRecord({ id, kind, slug });
+      const record = await getRecord({ id, kind, slug, cwd, vaultRoot, projectId });
       if (!record) {
         return {
           isError: true,
@@ -353,7 +410,23 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     }
   }
 
-  // Stubs for remaining tools (promote)
+  if (name === 'promote') {
+    try {
+      const promoteOpts = parseResult.data as PromoteOptions;
+      const result = await promoteRecord(promoteOpts);
+      return {
+        data: result
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        isError: true,
+        error: message,
+        code: 'PROMOTE_FAILED'
+      };
+    }
+  }
+
   return {
     isError: true,
     error: `Tool '${name}' is not yet implemented`,
@@ -361,4 +434,5 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     details: { tool: name, args: parseResult.data }
   };
 }
+
 

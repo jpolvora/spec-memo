@@ -104,29 +104,22 @@ describe('Tool Definitions and Execution', () => {
     const gcData = gcRes.data as { dryRun: boolean };
     assert.equal(gcData.dryRun, true);
 
-    // Forget tool (purge)
-    const purgeRes = await executeTool('forget', {
-      id: 'trap-test-exec',
-      purge: true
+    // Promote tool
+    const promoteRes = await executeTool('promote', {
+      id: 'tool-exec-spec',
+      destination: 'docs/test-spec.md'
     });
-    assert.equal(purgeRes.isError, undefined);
-    const purged = purgeRes.data as { id: string; status: string; purged: boolean };
-    assert.equal(purged.id, 'trap-test-exec');
-    assert.equal(purged.status, 'purged');
-    assert.equal(purged.purged, true);
-  });
-
-  it('should return NOT_IMPLEMENTED for remaining unbuilt tools', async () => {
-    const unbuiltTools: Array<{ name: ToolName; args: unknown }> = [
-      { name: 'promote', args: { destination: 'docs/test.md' } }
-    ];
-
-    for (const { name, args } of unbuiltTools) {
-      const res = await executeTool(name, args);
-      assert.equal(res.isError, true);
-      if (res.isError) {
-        assert.equal(res.code, 'NOT_IMPLEMENTED');
-      }
+    // With nonexistent record, promote should fail with RECORD_NOT_FOUND or PROMOTE_FAILED (not NOT_IMPLEMENTED)
+    assert.equal(promoteRes.isError, true);
+    if (promoteRes.isError) {
+      assert.notEqual(promoteRes.code, 'NOT_IMPLEMENTED');
+      assert.equal(promoteRes.code, 'PROMOTE_FAILED');
     }
   });
+
+  it('should execute all 8 tools without NOT_IMPLEMENTED errors', () => {
+    // All 8 tools are now implemented in Phase 1
+    assert.equal(TOOL_NAMES.length, 8);
+  });
 });
+

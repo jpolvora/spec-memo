@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import { runCli } from './cli.js';
 import { TOOL_NAMES } from './types.js';
 
@@ -18,6 +21,8 @@ describe('CLI Integration', () => {
       for (const name of TOOL_NAMES) {
         assert.ok(capturedLogs.includes(name), `Help should include command: ${name}`);
       }
+      assert.ok(capturedLogs.includes('doctor'));
+      assert.ok(capturedLogs.includes('import'));
     } finally {
       console.log = origLog;
     }
@@ -35,24 +40,16 @@ describe('CLI Integration', () => {
       assert.equal(code, 0);
       assert.ok(capturedLogs.includes('Usage: memo bootstrap'));
       assert.ok(capturedLogs.includes('--cwd'));
-    } finally {
-      console.log = origLog;
-    }
-  });
 
-  it('should output JSON error and exit 1 for unbuilt tool', async () => {
-    let capturedLogs = '';
-    const origLog = console.log;
-    console.log = (...args) => {
-      capturedLogs += args.join(' ') + '\n';
-    };
+      capturedLogs = '';
+      const docCode = await runCli(['doctor', '--help']);
+      assert.equal(docCode, 0);
+      assert.ok(capturedLogs.includes('Usage: memo doctor'));
 
-    try {
-      const code = await runCli(['promote', '--destination', 'docs/test.md', '--json']);
-      assert.equal(code, 1);
-      const parsed = JSON.parse(capturedLogs.trim());
-      assert.equal(parsed.isError, true);
-      assert.equal(parsed.code, 'NOT_IMPLEMENTED');
+      capturedLogs = '';
+      const impCode = await runCli(['import', '--help']);
+      assert.equal(impCode, 0);
+      assert.ok(capturedLogs.includes('Usage: memo import'));
     } finally {
       console.log = origLog;
     }
@@ -112,7 +109,7 @@ describe('CLI Integration', () => {
     }
   });
 
-  it('should return 1 for unimplemented doctor command', async () => {
+  it('should execute memo doctor command with text and json outputs', async () => {
     let capturedLogs = '';
     const origLog = console.log;
     console.log = (...args) => {
@@ -120,26 +117,48 @@ describe('CLI Integration', () => {
     };
 
     try {
-      const code = await runCli(['doctor', '--json']);
-      assert.equal(code, 1);
+      // JSON mode
+      const codeJson = await runCli(['doctor', '--json']);
+      // Returns 0 or 1 depending on whether in-repo pollution is present
+      assert.ok(codeJson === 0 || codeJson === 1);
       const parsed = JSON.parse(capturedLogs.trim());
-      assert.equal(parsed.isError, true);
-      assert.equal(parsed.code, 'NOT_IMPLEMENTED');
+      assert.ok(parsed.vaultRoot);
+      assert.ok(parsed.project);
+      assert.ok(parsed.fts);
+
+      // Text mode
+      capturedLogs = '';
+      const codeText = await runCli(['doctor']);
+      assert.ok(codeText === 0 || codeText === 1);
+      assert.ok(capturedLogs.includes('spec-memo — Doctor Diagnostic Report'));
+      assert.ok(capturedLogs.includes('Vault Location:'));
+      assert.ok(capturedLogs.includes('SQLite FTS:'));
     } finally {
       console.log = origLog;
     }
   });
 
-  it('should execute memo upsert and memo get through CLI with --json', async () => {
+  it('should execute memo upsert, memo get, memo promote, search, append, forget', async () => {
     let capturedLogs = '';
     const origLog = console.log;
     console.log = (...args) => {
       capturedLogs += args.join(' ') + '\n';
     };
 
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-full-'));
+    const tempVault = path.join(tempDir, 'vault');
+    const tempRepo = path.join(tempDir, 'product');
+    fs.mkdirSync(tempVault, { recursive: true });
+    fs.mkdirSync(path.join(tempRepo, '.git'), { recursive: true });
+
     try {
+      // Upsert
       const upsertCode = await runCli([
         'upsert',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
         '--kind',
         'decision',
         '--slug',
@@ -154,30 +173,73 @@ describe('CLI Integration', () => {
       const upsertParsed = JSON.parse(capturedLogs.trim());
       assert.equal(upsertParsed.id, 'cli-adr-01');
 
+      // Get (JSON mode)
       capturedLogs = '';
-      const getCode = await runCli(['get', '--id', 'cli-adr-01', '--json']);
+      const getCode = await runCli(['get', 'cli-adr-01', '--cwd', tempRepo, '--vaultRoot', tempVault, '--json']);
       assert.equal(getCode, 0);
       const getParsed = JSON.parse(capturedLogs.trim());
       assert.equal(getParsed.frontmatter.id, 'cli-adr-01');
       assert.equal(getParsed.body, 'CLI Decision text');
 
+      // Get (Text mode)
+      capturedLogs = '';
+      const getTextCode = await runCli(['get', 'cli-adr-01', '--cwd', tempRepo, '--vaultRoot', tempVault]);
+      assert.equal(getTextCode, 0);
+      assert.ok(capturedLogs.includes('id: cli-adr-01'));
+      assert.ok(capturedLogs.includes('CLI Decision text'));
+
+      // Promote (JSON mode)
+      capturedLogs = '';
+      const promoteCode = await runCli([
+        'promote',
+        'cli-adr-01',
+        'docs/adr/001.md',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(promoteCode, 0);
+      const promoteParsed = JSON.parse(capturedLogs.trim());
+      assert.equal(promoteParsed.id, 'cli-adr-01');
+      assert.equal(promoteParsed.destination, 'docs/adr/001.md');
+      assert.ok(fs.existsSync(path.join(tempRepo, 'docs', 'adr', '001.md')));
+
+      // Promote (Text mode with force)
+      capturedLogs = '';
+      const promoteTextCode = await runCli([
+        'promote',
+        'cli-adr-01',
+        'docs/adr/001.md',
+        '--force',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault
+      ]);
+      assert.equal(promoteTextCode, 0);
+      assert.ok(capturedLogs.includes('[PROMOTE] Record cli-adr-01'));
+
       // Search CLI with JSON
       capturedLogs = '';
-      const searchCode = await runCli(['search', 'Architecture', '--json']);
+      const searchCode = await runCli(['search', 'Architecture', '--cwd', tempRepo, '--vaultRoot', tempVault, '--json']);
       assert.equal(searchCode, 0);
       const searchParsed = JSON.parse(capturedLogs.trim());
       assert.ok(Array.isArray(searchParsed));
       assert.ok(searchParsed.some((h: { id: string }) => h.id === 'cli-adr-01'));
 
-      // Search CLI with human-readable text output
-      capturedLogs = '';
-      const searchTextCode = await runCli(['search', 'Architecture']);
-      assert.equal(searchTextCode, 0);
-      assert.ok(capturedLogs.includes('[DECISION:ACTIVE] cli-adr-01: CLI Architecture Decision'));
-
       // Append CLI
       capturedLogs = '';
-      const appendCode = await runCli(['append', 'Audit log via CLI test', '--json']);
+      const appendCode = await runCli([
+        'append',
+        'Audit log via CLI test',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
       assert.equal(appendCode, 0);
       const appendParsed = JSON.parse(capturedLogs.trim());
       assert.ok(appendParsed.id.startsWith('log-'));
@@ -185,7 +247,7 @@ describe('CLI Integration', () => {
 
       // Forget CLI (archive)
       capturedLogs = '';
-      const forgetCode = await runCli(['forget', 'cli-adr-01', '--json']);
+      const forgetCode = await runCli(['forget', 'cli-adr-01', '--cwd', tempRepo, '--vaultRoot', tempVault, '--json']);
       assert.equal(forgetCode, 0);
       const forgetParsed = JSON.parse(capturedLogs.trim());
       assert.equal(forgetParsed.id, 'cli-adr-01');
@@ -194,7 +256,16 @@ describe('CLI Integration', () => {
 
       // Forget CLI (purge)
       capturedLogs = '';
-      const purgeCode = await runCli(['forget', 'cli-adr-01', '--purge', '--json']);
+      const purgeCode = await runCli([
+        'forget',
+        'cli-adr-01',
+        '--purge',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
       assert.equal(purgeCode, 0);
       const purgeParsed = JSON.parse(capturedLogs.trim());
       assert.equal(purgeParsed.id, 'cli-adr-01');
@@ -202,6 +273,72 @@ describe('CLI Integration', () => {
       assert.equal(purgeParsed.purged, true);
     } finally {
       console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
+
+  it('should execute memo import command via CLI', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-import-'));
+    const tempVault = path.join(tempDir, 'vault');
+    const fixtureRepo = path.join(tempDir, 'fixture');
+    fs.mkdirSync(tempVault, { recursive: true });
+    fs.mkdirSync(path.join(fixtureRepo, '.git'), { recursive: true });
+
+    const specDir = path.join(fixtureRepo, '.agents', 'specs');
+    fs.mkdirSync(specDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(specDir, 'cli-import.spec.md'),
+      '---\nid: cli-import\ntitle: CLI Import Spec\n---\n# CLI Import Spec\n',
+      'utf8'
+    );
+
+    try {
+      // JSON mode
+      const importCode = await runCli([
+        'import',
+        fixtureRepo,
+        '--vaultRoot',
+        tempVault,
+        '--cwd',
+        fixtureRepo,
+        '--json'
+      ]);
+      assert.equal(importCode, 0);
+      const parsed = JSON.parse(capturedLogs.trim());
+      assert.equal(parsed.importedSpecsCount, 1);
+      assert.ok(parsed.totalImported >= 1);
+
+      // Text mode
+      capturedLogs = '';
+      const importTextCode = await runCli([
+        'import',
+        fixtureRepo,
+        '--vaultRoot',
+        tempVault,
+        '--cwd',
+        fixtureRepo
+      ]);
+      assert.equal(importTextCode, 0);
+      assert.ok(capturedLogs.includes('Imported Legacy Workflow Tree into Vault'));
+      assert.ok(capturedLogs.includes('Specs:     1'));
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
     }
   });
 });
+

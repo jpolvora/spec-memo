@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
 import { TOOL_DEFINITIONS, executeTool } from './tools.js';
-import { TOOL_NAMES, ToolName } from './types.js';
+import { TOOL_NAMES, ToolName, MemoRecord } from './types.js';
 import { startMcpServer } from './mcp.js';
+import { runDoctor } from './doctor.js';
+import { importWorkflowTree } from './importer.js';
+import { serializeRecord } from './schema.js';
 
 interface ParsedCliArgs {
   command?: string;
@@ -94,16 +97,30 @@ Starts the spec-memo stdio MCP server for AI agent host integration.`);
   }
 
   if (cmd === 'doctor') {
-    console.log(`Usage: memo doctor [--json]
+    console.log(`Usage: memo doctor [productRoot] [options]
 
-Inspects local vault status, SQLite FTS index integrity, and detects workflow pollution in the product repository.`);
+Inspects local vault status, SQLite FTS index integrity, and detects workflow pollution in the product repository.
+
+Options:
+  --cwd           Product repository working directory
+  --vaultRoot     Override vault root directory
+  --productRoot   Path to product repository root
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
     return;
   }
 
   if (cmd === 'import') {
-    console.log(`Usage: memo import <productRoot> [--json]
+    console.log(`Usage: memo import [productRoot] [options]
 
-Imports legacy .agents/ directory (specs, memory, plans) from product repository into external vault.`);
+Imports legacy .agents/ directory (specs, memory, plans) from product repository into external vault.
+
+Options:
+  --from          Source repository or .agents directory path
+  --cwd           Product repository working directory
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
     return;
   }
 
@@ -147,19 +164,112 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     return 0;
   }
 
-  if (parsed.command === 'doctor' || parsed.command === 'import') {
-    const response = {
-      isError: true,
-      error: `Command '${parsed.command}' is not yet implemented in Slice 1`,
-      code: 'NOT_IMPLEMENTED',
-      details: { command: parsed.command }
-    };
-    if (parsed.isJson) {
-      console.log(JSON.stringify(response, null, 2));
-    } else {
-      console.error(`Error [${response.code}]: ${response.error}`);
+  // Handle memo doctor command
+  if (parsed.command === 'doctor') {
+    try {
+      const productRoot =
+        (parsed.options.productRoot as string) ||
+        (parsed.options.from as string) ||
+        (parsed.options.cwd as string) ||
+        parsed.positionals[0];
+      const vaultRoot = parsed.options.vaultRoot as string | undefined;
+      const cwd = (parsed.options.cwd as string) || productRoot;
+
+      const result = await runDoctor({
+        cwd,
+        productRoot,
+        vaultRoot
+      });
+
+      if (parsed.isJson) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(`spec-memo — Doctor Diagnostic Report\n`);
+        console.log(`Vault Location: ${result.vaultRoot} (exists: ${result.vaultExists})`);
+        console.log(
+          `Project ID:     ${result.project.projectId} (remote: ${result.project.gitRemote || 'local-fallback'})`
+        );
+        console.log(`Product Root:   ${result.project.rootPath} (git: ${result.project.isGit})`);
+        console.log(
+          `SQLite FTS:     Indexed ${result.fts.indexedRecordsCount} records (healthy: ${result.fts.healthy})\n`
+        );
+
+        console.log(`Repository Pollution Scan:`);
+        if (!result.pollution.detected) {
+          console.log(`  [CLEAN] No in-repo workflow residue found.`);
+        } else {
+          console.log(`  [POLLUTION DETECTED] ${result.pollution.items.length} item(s) found:`);
+          for (const item of result.pollution.items) {
+            console.log(`    - [${item.type}] ${item.path}`);
+          }
+        }
+
+        if (result.warnings.length > 0) {
+          console.log(`\nWarnings:`);
+          for (const w of result.warnings) {
+            console.log(`  - ${w}`);
+          }
+        }
+
+        console.log(`\nSummary: ${result.summary}`);
+      }
+
+      return result.healthy ? 0 : 1;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        console.log(JSON.stringify({ isError: true, error: msg, code: 'DOCTOR_ERROR' }, null, 2));
+      } else {
+        console.error(`Doctor failed: ${msg}`);
+      }
+      return 1;
     }
-    return 1;
+  }
+
+  // Handle memo import command
+  if (parsed.command === 'import') {
+    try {
+      const fromPath =
+        (parsed.options.from as string) ||
+        (parsed.options.productRoot as string) ||
+        parsed.positionals[0] ||
+        (parsed.options.cwd as string) ||
+        process.cwd();
+      const vaultRoot = parsed.options.vaultRoot as string | undefined;
+      const cwd = (parsed.options.cwd as string) || fromPath;
+
+      const result = await importWorkflowTree({
+        from: fromPath,
+        cwd,
+        vaultRoot
+      });
+
+      if (parsed.isJson) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(`spec-memo — Imported Legacy Workflow Tree into Vault\n`);
+        console.log(`Project ID: ${result.projectId}`);
+        console.log(`Vault Root: ${result.vaultRoot}\n`);
+        console.log(`Imported Records:`);
+        console.log(`  Specs:     ${result.importedSpecsCount}`);
+        console.log(`  Traps:     ${result.importedTrapsCount}`);
+        console.log(`  Decisions: ${result.importedDecisionsCount}`);
+        console.log(`  Plans:     ${result.importedPlansCount}`);
+        console.log(`  State:     ${result.importedStateCount}`);
+        console.log(`  Logs:      ${result.importedLogsCount}`);
+        console.log(`  Total:     ${result.totalImported} (skipped files: ${result.skippedFilesCount})`);
+      }
+
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        console.log(JSON.stringify({ isError: true, error: msg, code: 'IMPORT_ERROR' }, null, 2));
+      } else {
+        console.error(`Import failed: ${msg}`);
+      }
+      return 1;
+    }
   }
 
   if (TOOL_NAMES.includes(parsed.command as ToolName)) {
@@ -205,6 +315,13 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       }
       if (typeof payload.limit === 'string') {
         payload.limit = parseInt(payload.limit, 10);
+      }
+    }
+
+    // Normalization for get command
+    if (parsed.command === 'get') {
+      if (parsed.positionals.length > 0 && !payload.id && !payload.slug) {
+        payload.id = parsed.positionals[0];
       }
     }
 
@@ -285,13 +402,35 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
 
     // Normalization for gc command
     if (parsed.command === 'gc') {
-      if (payload['dry-run'] === true || payload['dry-run'] === 'true' || payload.dryRun === true || payload.dryRun === 'true') {
+      if (
+        payload['dry-run'] === true ||
+        payload['dry-run'] === 'true' ||
+        payload.dryRun === true ||
+        payload.dryRun === 'true'
+      ) {
         payload.dryRun = true;
         delete payload['dry-run'];
       }
       if (payload.project) {
         payload.projectId = String(payload.project);
         delete payload.project;
+      }
+    }
+
+    // Normalization for promote command
+    if (parsed.command === 'promote') {
+      if (parsed.positionals.length > 0 && !payload.id && !payload.slug) {
+        payload.id = parsed.positionals[0];
+      }
+      if (parsed.positionals.length > 1 && !payload.destination && !payload.to) {
+        payload.destination = parsed.positionals[1];
+      }
+      if (payload.to && !payload.destination) {
+        payload.destination = payload.to;
+        delete payload.to;
+      }
+      if (payload.force === true || payload.force === 'true') {
+        payload.force = true;
       }
     }
 
@@ -312,8 +451,10 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         console.log(`Project: ${b.projectId} (remote: ${b.gitRemote || 'local-only'})`);
         if (b.activeSlice) {
           console.log(`\nActive Feature Slice: ${b.activeSlice.slug}`);
-          if (b.activeSlice.spec) console.log(`  Spec: ${b.activeSlice.spec.frontmatter.title || b.activeSlice.spec.frontmatter.id}`);
-          if (b.activeSlice.plan) console.log(`  Plan: ${b.activeSlice.plan.frontmatter.title || b.activeSlice.plan.frontmatter.id}`);
+          if (b.activeSlice.spec)
+            console.log(`  Spec: ${b.activeSlice.spec.frontmatter.title || b.activeSlice.spec.frontmatter.id}`);
+          if (b.activeSlice.plan)
+            console.log(`  Plan: ${b.activeSlice.plan.frontmatter.title || b.activeSlice.plan.frontmatter.id}`);
         }
         console.log(`\nActive Traps (${b.traps.length} of ${b.totalTrapsCount}):`);
         if (b.traps.length === 0) {
@@ -362,6 +503,9 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
             }
           }
         }
+      } else if (parsed.command === 'get' && response.data) {
+        const rec = response.data as MemoRecord;
+        console.log(serializeRecord(rec));
       } else if (parsed.command === 'append' && response.data) {
         const res = response.data as { id: string; path: string };
         console.log(`[APPEND] Recorded event ${res.id}`);
@@ -377,6 +521,9 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         console.log(`  Compacted shipped plans:       ${g.compactedPlansCount}`);
         console.log(`  Rebuilt FTS index:             ${g.rebuiltFts}`);
         console.log(`  Rebuilt compiled views:        ${g.rebuiltViews}`);
+      } else if (parsed.command === 'promote' && response.data) {
+        const p = response.data as import('./types.js').PromoteResult;
+        console.log(`[PROMOTE] Record ${p.id} (${p.kind}) exported to ${p.destination} (${p.bytesWritten} bytes)`);
       } else {
         console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));
       }
@@ -397,3 +544,4 @@ if (process.argv[1] && (process.argv[1].endsWith('cli.js') || process.argv[1].en
     }
   });
 }
+
