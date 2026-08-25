@@ -161,7 +161,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 
 ### Phase 2 — Harness adapter (workflow-skills, not this repo’s core)
 
-- [ ] Relocatable consumer hub (MEMORY / changelog) (`.agents/specs/relocatable-hub.spec.md`)
+- [x] Relocatable consumer hub (MEMORY / changelog) (`.agents/specs/relocatable-hub.spec.md`)
 - [ ] `{memoRoot}` / MCP as `read-memory` / `update-memory` (`.agents/specs/memory-adapter-mcp.spec.md`)
 - [ ] Hook or skill rule blocking in-repo workflow writes (`.agents/specs/write-block-hook.spec.md`)
 
@@ -222,6 +222,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-23 | slice-6-bootstrap-brief | Bootstrap session brief generation with 8 KB budget cap and trap ranking | 4884172 |
 | 2026-08-25 | slice-7-curator-gc-safety | Curator GC, secret redaction & product write guard | Slice 7 delivery |
 | 2026-08-25 | slice-8-import-and-doctor | CLI parity, memo import, memo doctor diagnostics, memo promote export | Slice 8 delivery |
+| 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver | Slice 9 delivery |
 
 ## 12. Related docs
 

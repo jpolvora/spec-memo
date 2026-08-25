@@ -141,6 +141,8 @@ export function ensureProjectVault(
   return metadata;
 }
 
+import { resolveProjectIdentity } from './identity.js';
+
 /**
  * Get project metadata if already initialized in vault, or null.
  */
@@ -158,3 +160,21 @@ export function getProjectMetadata(
     return null;
   }
 }
+
+/**
+ * Resolves the relocatable consumer hub storage directory.
+ * Priority: memoRootOverride > $SPEC_MEMO_ROOT/projects/<projectId>
+ */
+export function resolveHubPath(
+  cwd: string,
+  memoRootOverride?: string,
+  vaultRoot: string = getVaultRoot()
+): string {
+  if (memoRootOverride && memoRootOverride.trim().length > 0) {
+    return path.resolve(memoRootOverride);
+  }
+  const identity = resolveProjectIdentity(cwd, { vaultRoot });
+  ensureProjectVault(identity, vaultRoot);
+  return identity.vaultProjectPath;
+}
+

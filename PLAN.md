@@ -156,5 +156,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-23 | slice-6-bootstrap-brief | Bootstrap session brief generation, 8 KB UTF-8 token budget capping, trap severity/path ranking, zero-write proof, test suite (4884172) |
 | 2026-08-25 | slice-7-curator-gc-safety | Curator GC (TTL 7d scratch / 14d review), shipped plan compaction, secret redaction, product-tree write guard, test suite |
 | 2026-08-25 | slice-8-import-and-doctor | CLI parity, memo import, memo doctor diagnostics, memo promote export, test suite |
+| 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver, test suite |
 
 When a Phase 1 slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
+

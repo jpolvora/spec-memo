@@ -8,6 +8,7 @@ import {
   ensureVaultStructure,
   ensureProjectVault,
   getProjectMetadata,
+  resolveHubPath,
   RECORD_SUBDIRS
 } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
@@ -125,4 +126,15 @@ describe('Vault Management & Project Binding', () => {
       fs.rmSync(localRepo, { recursive: true, force: true });
     }
   });
+
+  it('should resolve relocatable hub path dynamically to vault project path or custom memoRoot', () => {
+    const defaultHub = resolveHubPath(process.cwd(), undefined, tempVaultRoot);
+    const identity = resolveProjectIdentity(process.cwd(), { vaultRoot: tempVaultRoot });
+    assert.equal(defaultHub, identity.vaultProjectPath);
+
+    const customRoot = path.join(tempVaultRoot, 'custom-hub');
+    const customHub = resolveHubPath(process.cwd(), customRoot, tempVaultRoot);
+    assert.equal(customHub, path.resolve(customRoot));
+  });
 });
+
