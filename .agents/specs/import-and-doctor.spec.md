@@ -26,6 +26,10 @@ Greenfield feature. Design Intent skipped: complete Phase 1 CLI toolset and diag
 
 Plan Slice 8: CLI parity + `memo import` + `memo doctor`. Deliver: Each tool as a CLI command with `--json`. Import mapping per FEATURES.md § Import. `doctor` reports bind + FTS + pollution scan. Proof: Fixture import is idempotent. Doctor lists a planted `.agents/plans/foo.md` under a fixture product root as pollution.
 
+### Design Intent
+
+Greenfield feature. Design Intent skipped: complete Phase 1 CLI toolset, importer, and diagnostics.
+
 ## Notes
 
 - Import skips `.runtime`, `telemetry.jsonl`, `*.tmp`.

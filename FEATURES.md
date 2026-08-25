@@ -133,4 +133,4 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime | `[ ]` |
+| Runtime (Slices 1–7 delivered) | `[~]` |
