@@ -163,7 +163,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 
 - [x] Relocatable consumer hub (MEMORY / changelog) (`.agents/specs/relocatable-hub.spec.md`)
 - [x] `{memoRoot}` / MCP as `read-memory` / `update-memory` (`.agents/specs/memory-adapter-mcp.spec.md`)
-- [ ] Hook or skill rule blocking in-repo workflow writes (`.agents/specs/write-block-hook.spec.md`)
+- [x] Hook or skill rule blocking in-repo workflow writes (`.agents/specs/write-block-hook.spec.md`)
 
 ### Phase 3 — Curator hardening
 
@@ -224,6 +224,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-25 | slice-8-import-and-doctor | CLI parity, memo import, memo doctor diagnostics, memo promote export | Slice 8 delivery |
 | 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver | Slice 9 delivery |
 | 2026-08-25 | slice-10-memory-adapter-mcp | Consumer memory adapter module for MCP/CLI integration | Slice 10 delivery |
+| 2026-08-25 | slice-11-write-block-hook | Pre-commit git hook generator and installer CLI command | Slice 11 delivery |
 
 ## 12. Related docs
 

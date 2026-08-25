@@ -12,4 +12,6 @@ export * from './curator.js';
 export * from './mcp.js';
 export * from './cli.js';
 export * from './adapter.js';
+export * from './hook.js';
+
 
