@@ -18,11 +18,12 @@ When root `AGENTS.md` points here, load each listed `SKILL.md` every prompt (unl
 |-------|------|---------|
 | `ws-senior-developer` | `{globalSkillsRoot}/ws-senior-developer/SKILL.md` | Every prompt — delivery gate / Code review proof |
 | `ws-self-learning` | `{globalSkillsRoot}/ws-self-learning/SKILL.md` | Every mutating task — MEMORY consult + trap write |
-| `ws-patterns-backend` | `{globalSkillsRoot}/ws-patterns-backend/SKILL.md` | Every prompt — load SKILL.md; consult `{sharedDir}/backend.md` only on backend tasks |
-| `ws-patterns-frontend` | `{globalSkillsRoot}/ws-patterns-frontend/SKILL.md` | Every prompt — load SKILL.md; consult `{sharedDir}/frontend.md` only on frontend tasks |
+| `ws-patterns-backend` | `{skillsRoot}/ws-patterns-backend/SKILL.md` | Every prompt — load SKILL.md; consult `{sharedDir}/backend.md` only on backend tasks |
+| `ws-patterns-frontend` | `{skillsRoot}/ws-patterns-frontend/SKILL.md` | Every prompt — load SKILL.md; consult `{sharedDir}/frontend.md` only on frontend tasks |
 | `ws-changelog` | `{globalSkillsRoot}/ws-changelog/SKILL.md` | Every task completion — append-only history |
 | `ws-fable-method` | `{globalSkillsRoot}/ws-fable-method/SKILL.md` | Every prompt — structured investigate/act/verify when non-trivial |
 | `ws-tdah` | `{globalSkillsRoot}/ws-tdah/SKILL.md` | Every prompt — action-first shape + judgment |
+| `ws-task-lifecycle` | `{globalSkillsRoot}/ws-task-lifecycle/SKILL.md` | Every prompt-driven product task — intake, implement, complete (opt-in) |
 
 Precedence when both root and `{sharedDir}/AGENTS.md` load: root / this file win for **membership of the Always-applied set above**; shared-hub mandatory skills (including `ws-karpathy-guidelines`) still load. See [`AGENTS.md`](AGENTS.md) § Consumer root override.
 

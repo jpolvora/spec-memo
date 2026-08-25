@@ -180,7 +180,8 @@
     "plannerModel": "",
     "executionModel": "",
     "reviewerModel": "",
-    "testingModel": ""
+    "testingModel": "",
+    "autoloadTaskLifecycle": true
   },
   "plans": {
     "dir": ".agents/plans",

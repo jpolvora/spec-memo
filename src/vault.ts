@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { ProjectIdentity, ProjectMetadata, VaultConfig } from './types.js';
+import { resolveProjectIdentity } from './identity.js';
 
 export const DEFAULT_VAULT_CONFIG: VaultConfig = {
   version: '0.1.0',
@@ -141,8 +142,6 @@ export function ensureProjectVault(
 
   return metadata;
 }
-
-import { resolveProjectIdentity } from './identity.js';
 
 /**
  * Get project metadata if already initialized in vault, or null.

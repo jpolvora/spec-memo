@@ -1,5 +1,22 @@
 import { z } from 'zod';
-import { TOOL_NAMES, ToolName, ToolResponse } from './types.js';
+import {
+  TOOL_NAMES,
+  ToolName,
+  ToolResponse,
+  AppendOptions,
+  BootstrapOptions,
+  ForgetOptions,
+  GcOptions,
+  PromoteOptions,
+  RecordKind,
+  RecordStatus,
+  SearchOptions
+} from './types.js';
+import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
+import { searchIndex } from './indexer.js';
+import { compileBootstrapBrief } from './bootstrap.js';
+import { runGc } from './curator.js';
+import { promoteRecord } from './promote.js';
 
 export interface ToolDefinition {
   name: ToolName;
@@ -223,22 +240,6 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     })
   }
 };
-
-import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
-import { searchIndex } from './indexer.js';
-import { compileBootstrapBrief } from './bootstrap.js';
-import { runGc } from './curator.js';
-import { promoteRecord } from './promote.js';
-import {
-  AppendOptions,
-  BootstrapOptions,
-  ForgetOptions,
-  GcOptions,
-  PromoteOptions,
-  RecordKind,
-  RecordStatus,
-  SearchOptions
-} from './types.js';
 
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
