@@ -141,4 +141,42 @@ test("Canvas Engine & Graph Visualization", async (t) => {
       await serverInstance.close();
     }
   });
+
+  await t.test("should refuse non-loopback host without auth token", () => {
+    assert.throws(
+      () => {
+        startCanvasServer({ vaultRoot, port: 0, host: "192.168.1.100" });
+      },
+      {
+        message: /Refusing to bind Canvas server to a non-loopback host without authentication token/
+      }
+    );
+  });
+
+  await t.test("should enforce authToken when configured on Canvas server", async () => {
+    const authCanvas = await startCanvasServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "canvas-token-abc"
+    });
+
+    try {
+      // 1. Unauthenticated request rejected with 401
+      const unauthRes = await fetch(`${authCanvas.url}/api/projects`);
+      assert.strictEqual(unauthRes.status, 401);
+
+      // 2. Authenticated request accepted via Authorization header
+      const authHeaderRes = await fetch(`${authCanvas.url}/api/projects`, {
+        headers: { Authorization: "Bearer canvas-token-abc" }
+      });
+      assert.strictEqual(authHeaderRes.status, 200);
+
+      // 3. Authenticated request accepted via query parameter
+      const authQueryRes = await fetch(`${authCanvas.url}/api/projects?token=canvas-token-abc`);
+      assert.strictEqual(authQueryRes.status, 200);
+    } finally {
+      await authCanvas.close();
+    }
+  });
 });

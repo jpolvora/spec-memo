@@ -306,6 +306,9 @@ export function generateCanvasHtml(): string {
     let isDragging = false;
     let startPos = { x: 0, y: 0 };
 
+    const pageToken = new URLSearchParams(window.location.search).get('token');
+    const apiHeaders = pageToken ? { Authorization: 'Bearer ' + pageToken } : {};
+
     const kindColors = {
       trap: "#f85149",
       decision: "#a371f7",
@@ -318,7 +321,7 @@ export function generateCanvasHtml(): string {
     };
 
     async function init() {
-      const res = await fetch("/api/projects");
+      const res = await fetch("/api/projects", { headers: apiHeaders });
       const projects = await res.json();
       const select = document.getElementById("project-select");
       select.innerHTML = projects.map(p => \`<option value="\${p.id}">\${p.id} (\${p.displayName || "vault"})\`\).join("");
@@ -342,7 +345,7 @@ export function generateCanvasHtml(): string {
     }
 
     async function loadGraph(projectId) {
-      const res = await fetch(\`/api/project/\${projectId}/graph\`);
+      const res = await fetch(\`/api/project/\${projectId}/graph\`, { headers: apiHeaders });
       graphData = await res.json();
       document.getElementById("stats").textContent = \`\${graphData.nodes.length} nodes · \${graphData.edges.length} connections\`;
       renderGraph();
@@ -435,7 +438,7 @@ export function generateCanvasHtml(): string {
       drawer.classList.add("open");
 
       try {
-        const res = await fetch(\`/api/record/\${currentProject}/\${node.kind}/\${node.id}\`);
+        const res = await fetch(\`/api/record/\${currentProject}/\${node.kind}/\${node.id}\`, { headers: apiHeaders });
         const data = await res.json();
         document.getElementById("detail-body").textContent = data.record ? data.record.body : "No content body";
       } catch (err) {

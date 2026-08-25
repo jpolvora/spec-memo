@@ -132,7 +132,18 @@ export async function applyChangeset(
 
         if (remoteTime > localTime || options.force) {
           if (!dryRun) {
-            fs.writeFileSync(targetFilePath, serializeRecord(item), "utf8");
+            if (kind === "log") {
+              skipped++;
+              continue;
+            }
+            await upsertRecord({
+              vaultRoot,
+              projectId: projId,
+              kind,
+              slug,
+              frontmatter: item.frontmatter,
+              body: item.body
+            });
           }
           applied++;
           recordsApplied.push(`${projId}/${kind}/${recId}`);
@@ -148,22 +159,15 @@ export async function applyChangeset(
         }
       } else {
         if (!dryRun) {
-          if (kind === "trap" && !item.frontmatter.supersedes) {
-            await upsertRecord({
-              vaultRoot,
-              projectId: projId,
-              kind: "trap",
-              slug,
-              frontmatter: item.frontmatter,
-              body: item.body,
-              allowDuplicate: false
-            });
-          } else {
-            if (!fs.existsSync(kindDir)) {
-              fs.mkdirSync(kindDir, { recursive: true });
-            }
-            fs.writeFileSync(targetFilePath, serializeRecord(item), "utf8");
-          }
+          await upsertRecord({
+            vaultRoot,
+            projectId: projId,
+            kind,
+            slug,
+            frontmatter: item.frontmatter,
+            body: item.body,
+            allowDuplicate: kind !== "trap"
+          });
         }
         applied++;
         recordsApplied.push(`${projId}/${kind}/${recId}`);

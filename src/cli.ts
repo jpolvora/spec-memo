@@ -290,19 +290,24 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   if (parsed.command === 'sync-vault') {
     try {
       const targetPath =
-        parsed.positionals[0] ||
         (parsed.options.target as string) ||
-        (parsed.options.to as string);
+        (parsed.options.to as string) ||
+        parsed.positionals[0];
 
       if (!targetPath) {
         throw new Error('Target vault path is required for sync-vault.');
       }
 
-      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const sourceVault =
+        (parsed.options.source as string) ||
+        (parsed.options.from as string) ||
+        (parsed.options.vaultRoot as string) ||
+        undefined;
       const twoWay = parsed.options['two-way'] === true || parsed.options.twoWay === true;
       const dryRun = parsed.options['dry-run'] === true || parsed.options.dryRun === true;
+      const since = (parsed.options.since as string) || undefined;
 
-      const result = await syncVaults(vaultRoot || '', targetPath, { twoWay, dryRun });
+      const result = await syncVaults(sourceVault || '', targetPath, { twoWay, dryRun, since });
 
       if (parsed.isJson) {
         printJson(result);
@@ -486,40 +491,6 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         printJson({ isError: true, error: msg, code: 'SYNC_ERROR' });
       } else {
         console.error(`Sync failed: ${msg}`);
-      }
-      return 1;
-    }
-  }
-
-  // Handle memo sync-vault command (multi-machine peer sync)
-  if (parsed.command === 'sync-vault') {
-    try {
-      const targetVault = (parsed.options.target as string) || (parsed.options.to as string) || parsed.positionals[0];
-      if (!targetVault) {
-        throw new Error('Target vault path is required (e.g. memo sync-vault --to /path/to/target).');
-      }
-      const sourceVault = (parsed.options.source as string) || (parsed.options.from as string) || (parsed.options.vaultRoot as string) || undefined;
-      const twoWay = parsed.options['two-way'] === true || parsed.options.twoWay === true;
-      const dryRun = parsed.options['dry-run'] === true || parsed.options.dryRun === true;
-      const since = (parsed.options.since as string) || undefined;
-
-      const result = await syncVaults(sourceVault || (parsed.options.vaultRoot as string) || undefined as any, targetVault, { twoWay, dryRun, since });
-      if (parsed.isJson) {
-        printJson(result);
-      } else {
-        console.log(`spec-memo — Vault Synchronization\n`);
-        console.log(`  Forward Applied:  ${result.forward.applied} (skipped: ${result.forward.skipped}, conflicts: ${result.forward.conflicts})`);
-        if (result.backward) {
-          console.log(`  Backward Applied: ${result.backward.applied} (skipped: ${result.backward.skipped}, conflicts: ${result.backward.conflicts})`);
-        }
-      }
-      return 0;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (parsed.isJson) {
-        printJson({ isError: true, error: msg, code: 'SYNC_VAULT_ERROR' });
-      } else {
-        console.error(`Sync vault failed: ${msg}`);
       }
       return 1;
     }
