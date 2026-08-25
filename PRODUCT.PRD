@@ -189,16 +189,16 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 5 | `bootstrap-brief` | `[x]` | Phase 1 | 8 KB cap, include/exclude rules |
 | 6 | `curator-gc-and-safety` | `[x]` | Phase 1 | TTL, compact, redaction, write guard |
 | 7 | `import-and-doctor` | `[x]` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
-| 8 | `relocatable-hub` | `[ ]` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
-| 9 | `memory-adapter-mcp` | `[ ]` | Phase 2 | Route consumer memory calls to MCP |
-| 10 | `write-block-hook` | `[ ]` | Phase 2 | In-repo write blocking hook |
-| 11 | `trap-dedup` | `[ ]` | Phase 3 | Deduplicate traps with matching paths & rules |
-| 12 | `spec-drift` | `[ ]` | Phase 3 | Flag SHA drift during bootstrap |
-| 13 | `vault-git` | `[ ]` | Phase 3 | Optional private git remote on vault root |
-| 14 | `cross-project-search` | `[ ]` | Phase 3 | Opt-in multi-project search |
-| 15 | `embeddings-search` | `[ ]` | Phase 3 | Optional embeddings search backend |
-| 16 | `cli-doctor` | `[ ]` | Phase 4 | Polished interactive CLI doctor UX |
-| 17 | `viewer` | `[ ]` | Phase 4 | Obsidian and markdown viewer compatibility |
+| 8 | `relocatable-hub` | `[x]` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
+| 9 | `memory-adapter-mcp` | `[x]` | Phase 2 | Route consumer memory calls to MCP |
+| 10 | `write-block-hook` | `[x]` | Phase 2 | In-repo write blocking hook |
+| 11 | `trap-dedup` | `[x]` | Phase 3 | Deduplicate traps with matching paths & rules |
+| 12 | `spec-drift` | `[x]` | Phase 3 | Flag SHA drift during bootstrap |
+| 13 | `vault-git` | `[x]` | Phase 3 | Optional private git remote on vault root |
+| 14 | `cross-project-search` | `[x]` | Phase 3 | Opt-in multi-project search |
+| 15 | `embeddings-search` | `[x]` | Phase 3 | Optional embeddings search backend |
+| 16 | `cli-doctor` | `[x]` | Phase 4 | Polished interactive CLI doctor UX |
+| 17 | `viewer` | `[x]` | Phase 4 | Obsidian and markdown viewer compatibility |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 

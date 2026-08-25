@@ -17,11 +17,11 @@ Greenfield feature. Design Intent skipped: complete Phase 1 CLI toolset and diag
 
 ## Acceptance Criteria
 
-- [x] AC1: All 8 core MCP tools have 1:1 CLI command equivalents supporting both human and `--json` outputs.
-- [x] AC2: `memo import --from <path>` maps `.agents/specs/*.spec.md` → `specs/`, `memory/*.md` → `traps/` & `decisions/`, and active plan directories into `plans/`, skipping scratch/telemetry.
-- [x] AC3: Running `memo import` repeatedly is idempotent and does not generate duplicate records or mangle existing IDs.
-- [x] AC4: `memo doctor` reports vault root location, resolved project identity, SQLite FTS index status, and scans the local repo for in-tree workflow pollution (e.g. leftover `.agents/plans`).
-- [x] AC5: `memo promote <recordId> --to <targetPath>` safely exports a vault decision or spec into the product repository working tree.
+- AC1: All 8 core MCP tools have 1:1 CLI command equivalents supporting both human and `--json` outputs.
+- AC2: `memo import --from <path>` maps `.agents/specs/*.spec.md` → `specs/`, `memory/*.md` → `traps/` & `decisions/`, and active plan directories into `plans/`, skipping scratch/telemetry.
+- AC3: Running `memo import` repeatedly is idempotent and does not generate duplicate records or mangle existing IDs.
+- AC4: `memo doctor` reports vault root location, resolved project identity, SQLite FTS index status, and scans the local repo for in-tree workflow pollution (e.g. leftover `.agents/plans`).
+- AC5: `memo promote <recordId> --to <targetPath>` safely exports a vault decision or spec into the product repository working tree.
 
 ## Original Issue Context
 
