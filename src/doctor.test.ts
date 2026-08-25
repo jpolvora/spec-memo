@@ -110,4 +110,47 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     assert.equal(doc.healthy, false);
     assert.ok(doc.warnings.some((w) => w.includes('Vault root directory does not exist')));
   });
+
+  it('should support rebuilding FTS index when rebuild flag is true', async () => {
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'trap',
+      slug: 'rebuild-trap',
+      frontmatter: {
+        id: 'rebuild-trap',
+        title: 'Rebuild Trap'
+      },
+      body: 'Rebuild body'
+    });
+
+    const doc = await runDoctor({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      rebuild: true
+    });
+
+    assert.equal(doc.fts.rebuilt, true);
+    assert.ok(doc.fts.indexedRecordsCount >= 1);
+  });
+
+  it('should support cleaning up in-repo pollution when fix flag is true', async () => {
+    const planDir = path.join(tempProductRepo, '.agents', 'plans');
+    fs.mkdirSync(planDir, { recursive: true });
+    const plantedFile = path.join(planDir, 'residue.md');
+    fs.writeFileSync(plantedFile, '# Planted Residue\n', 'utf8');
+
+    assert.ok(fs.existsSync(plantedFile));
+
+    const doc = await runDoctor({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      fix: true
+    });
+
+    assert.equal(doc.pollution.fixedCount, 1);
+    assert.ok(!fs.existsSync(plantedFile));
+    assert.equal(doc.pollution.detected, false);
+  });
 });
+

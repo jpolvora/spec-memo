@@ -176,11 +176,15 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         parsed.positionals[0];
       const vaultRoot = parsed.options.vaultRoot as string | undefined;
       const cwd = (parsed.options.cwd as string) || productRoot;
+      const rebuild = parsed.options.rebuild === true || parsed.options.rebuild === 'true';
+      const fix = parsed.options.fix === true || parsed.options.fix === 'true';
 
       const result = await runDoctor({
         cwd,
         productRoot,
-        vaultRoot
+        vaultRoot,
+        rebuild,
+        fix
       });
 
       if (parsed.isJson) {

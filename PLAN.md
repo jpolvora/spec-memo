@@ -164,6 +164,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-25 | slice-14-vault-git | Opt-in private git remote sync for vault persistence, test suite |
 | 2026-08-25 | slice-15-cross-project-search | Opt-in multi-project cross-vault search engine, test suite |
 | 2026-08-25 | slice-16-embeddings-search | Optional vector similarity search backend fallback engine, test suite |
+| 2026-08-25 | slice-17-cli-doctor | Interactive CLI doctor health inspector with --rebuild and --fix options, test suite |
 
 When a Phase 1 slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

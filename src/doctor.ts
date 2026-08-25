@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
 import { getVaultRoot } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
-import { openIndex } from './indexer.js';
+import { openIndex, rebuildIndex } from './indexer.js';
 
 /**
  * Recursively find all files in a directory, ignoring node_modules, .git, and dist.
@@ -174,8 +174,40 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     );
   }
 
+  // Optional rebuild execution (AC2)
+  let rebuilt = false;
+  if (options.rebuild) {
+    try {
+      const rebuildRes = await rebuildIndex(vaultRoot);
+      indexedRecordsCount = rebuildRes.indexed;
+      ftsHealthy = true;
+      rebuilt = true;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      warnings.push(`FTS index rebuild failed: ${msg}`);
+    }
+  }
+
   // Check product tree pollution
-  const pollutionItems = scanForRepoPollution(identity.rootPath);
+  let pollutionItems = scanForRepoPollution(identity.rootPath);
+  let fixedCount = 0;
+
+  // Optional fix execution (AC3)
+  if (options.fix && pollutionItems.length > 0) {
+    for (const item of pollutionItems) {
+      try {
+        if (fs.existsSync(item.absolutePath)) {
+          fs.unlinkSync(item.absolutePath);
+          fixedCount++;
+        }
+      } catch {
+        // Ignore file delete errors
+      }
+    }
+    // Rescan after fix
+    pollutionItems = scanForRepoPollution(identity.rootPath);
+  }
+
   if (pollutionItems.length > 0) {
     warnings.push(
       `Detected ${pollutionItems.length} in-tree workflow pollution file${pollutionItems.length === 1 ? '' : 's'} in ${identity.rootPath}`
@@ -203,10 +235,12 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       dbPath,
       dbExists,
       indexedRecordsCount,
-      healthy: ftsHealthy
+      healthy: ftsHealthy,
+      rebuilt
     },
     pollution: {
       detected: pollutionItems.length > 0,
+      fixedCount,
       items: pollutionItems
     },
     warnings,

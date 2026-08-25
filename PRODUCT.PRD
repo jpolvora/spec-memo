@@ -175,7 +175,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 
 ### Phase 4 — Human viewers (optional)
 
-- [ ] CLI browse/doctor UX polish (`.agents/specs/cli-doctor.spec.md`)
+- [x] Polished interactive CLI doctor and health inspection (`.agents/specs/cli-doctor.spec.md`)
 - [ ] Optional IDE plugin or Obsidian vault as **viewer only** (`.agents/specs/viewer.spec.md`)
 
 ## 9. Next specs
@@ -230,6 +230,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-25 | slice-14-vault-git | Opt-in private git remote sync for vault persistence | Slice 14 delivery |
 | 2026-08-25 | slice-15-cross-project-search | Opt-in multi-project cross-vault search engine | Slice 15 delivery |
 | 2026-08-25 | slice-16-embeddings-search | Optional vector similarity search backend fallback engine | Slice 16 delivery |
+| 2026-08-25 | slice-17-cli-doctor | Interactive CLI doctor health inspector with --rebuild and --fix options | Slice 17 delivery |
 
 ## 12. Related docs
 

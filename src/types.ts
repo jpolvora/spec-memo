@@ -256,6 +256,8 @@ export interface DoctorOptions {
   cwd?: string;
   vaultRoot?: string;
   productRoot?: string;
+  rebuild?: boolean;
+  fix?: boolean;
 }
 
 export interface DoctorResult {
@@ -274,9 +276,11 @@ export interface DoctorResult {
     dbExists: boolean;
     indexedRecordsCount: number;
     healthy: boolean;
+    rebuilt?: boolean;
   };
   pollution: {
     detected: boolean;
+    fixedCount?: number;
     items: DoctorPollutionItem[];
   };
   warnings: string[];
