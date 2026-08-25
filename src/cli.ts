@@ -8,6 +8,11 @@ import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
 import { syncVault } from './vault.js';
 import { serializeRecord } from './schema.js';
+import { sanitizeToolOutput } from './safety.js';
+
+function printJson(payload: unknown): void {
+  console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
+}
 
 interface ParsedCliArgs {
   command?: string;
@@ -188,7 +193,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       });
 
       if (parsed.isJson) {
-        console.log(JSON.stringify(result, null, 2));
+        printJson(result);
       } else {
         console.log(`spec-memo — Doctor Diagnostic Report\n`);
         console.log(`Vault Location: ${result.vaultRoot} (exists: ${result.vaultExists})`);
@@ -224,7 +229,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (parsed.isJson) {
-        console.log(JSON.stringify({ isError: true, error: msg, code: 'DOCTOR_ERROR' }, null, 2));
+        printJson({ isError: true, error: msg, code: 'DOCTOR_ERROR' });
       } else {
         console.error(`Doctor failed: ${msg}`);
       }
@@ -251,7 +256,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       });
 
       if (parsed.isJson) {
-        console.log(JSON.stringify(result, null, 2));
+        printJson(result);
       } else {
         console.log(`spec-memo — Imported Legacy Workflow Tree into Vault\n`);
         console.log(`Project ID: ${result.projectId}`);
@@ -270,7 +275,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (parsed.isJson) {
-        console.log(JSON.stringify({ isError: true, error: msg, code: 'IMPORT_ERROR' }, null, 2));
+        printJson({ isError: true, error: msg, code: 'IMPORT_ERROR' });
       } else {
         console.error(`Import failed: ${msg}`);
       }
@@ -286,7 +291,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         const targetRepo = (parsed.options.productRoot as string) || (parsed.options.cwd as string) || process.cwd();
         const res = installPreCommitHook(targetRepo);
         if (parsed.isJson) {
-          console.log(JSON.stringify(res, null, 2));
+          printJson(res);
         } else {
           console.log(`[HOOK] Pre-commit write-block hook installed at: ${res.path}`);
         }
@@ -296,7 +301,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (parsed.isJson) {
-        console.log(JSON.stringify({ isError: true, error: msg, code: 'HOOK_ERROR' }, null, 2));
+        printJson({ isError: true, error: msg, code: 'HOOK_ERROR' });
       } else {
         console.error(`Hook installation failed: ${msg}`);
       }
@@ -310,7 +315,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
       const res = syncVault(vaultRoot);
       if (parsed.isJson) {
-        console.log(JSON.stringify(res, null, 2));
+        printJson(res);
       } else {
         console.log(`[SYNC] ${res.message}`);
       }
@@ -318,7 +323,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (parsed.isJson) {
-        console.log(JSON.stringify({ isError: true, error: msg, code: 'SYNC_ERROR' }, null, 2));
+        printJson({ isError: true, error: msg, code: 'SYNC_ERROR' });
       } else {
         console.error(`Sync failed: ${msg}`);
       }
@@ -492,9 +497,9 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
 
     if (parsed.isJson) {
       if (response.isError) {
-        console.log(JSON.stringify(response, null, 2));
+        printJson(response);
       } else {
-        console.log(JSON.stringify(response.data, null, 2));
+        printJson(response.data);
       }
     } else {
       if (response.isError) {

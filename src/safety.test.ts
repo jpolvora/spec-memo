@@ -211,11 +211,28 @@ You should provide your token via environment variables rather than hardcoding i
     const out = sanitizeToolOutput({
       path: '/home/user/.spec-memo/projects/p/traps/t.md',
       filepath: '/home/user/.spec-memo/projects/p/traps/t.md',
+      vaultPath: '/home/user/.spec-memo/projects/p/traps/t.md',
+      vaultRoot: '/home/user/.spec-memo',
+      dbPath: '/home/user/.spec-memo/memo.sqlite',
+      absolutePath: '/home/user/product/.agents/plans/foo.md',
       body: `token=${token}`,
       error: 'Safety violation inside /home/user/product/src/store.ts'
-    }) as { path?: string; filepath?: string; body: string; error: string };
+    }) as {
+      path?: string;
+      filepath?: string;
+      vaultPath?: string;
+      vaultRoot?: string;
+      dbPath?: string;
+      absolutePath?: string;
+      body: string;
+      error: string;
+    };
     assert.equal(out.path, undefined);
     assert.equal(out.filepath, undefined);
+    assert.equal(out.vaultPath, undefined);
+    assert.equal(out.vaultRoot, undefined);
+    assert.equal(out.dbPath, undefined);
+    assert.equal(out.absolutePath, undefined);
     assert.match(out.body, /\[REDACTED:GitHub Personal Access Token\]/);
     assert.doesNotMatch(out.body, /ghp_/);
     assert.doesNotMatch(out.error, /\/home\/user/);

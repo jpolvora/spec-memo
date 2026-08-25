@@ -187,8 +187,8 @@ export interface BootstrapOptions {
 
 export interface BootstrapBrief {
   projectId: string;
-  gitRemote: string | null;
-  lastSeenRoot: string;
+  gitRemote?: string | null;
+  lastSeenRoot?: string;
   activeSlice?: {
     slug: string;
     spec?: MemoRecord;

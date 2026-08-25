@@ -122,9 +122,15 @@ describe('CLI Integration', () => {
       // Returns 0 or 1 depending on whether in-repo pollution is present
       assert.ok(codeJson === 0 || codeJson === 1);
       const parsed = JSON.parse(capturedLogs.trim());
-      assert.ok(parsed.vaultRoot);
+      assert.equal(parsed.vaultRoot, undefined);
+      assert.equal(parsed.fts?.dbPath, undefined);
       assert.ok(parsed.project);
       assert.ok(parsed.fts);
+      if (Array.isArray(parsed.pollution?.items)) {
+        for (const item of parsed.pollution.items) {
+          assert.equal(item.absolutePath, undefined);
+        }
+      }
 
       // Text mode
       capturedLogs = '';
@@ -317,6 +323,12 @@ describe('CLI Integration', () => {
       const parsed = JSON.parse(capturedLogs.trim());
       assert.equal(parsed.importedSpecsCount, 1);
       assert.ok(parsed.totalImported >= 1);
+      assert.equal(parsed.vaultRoot, undefined);
+      if (Array.isArray(parsed.records)) {
+        for (const rec of parsed.records) {
+          assert.equal(rec.vaultPath, undefined);
+        }
+      }
 
       // Text mode
       capturedLogs = '';

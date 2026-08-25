@@ -317,5 +317,20 @@ describe('Bootstrap Brief Engine', () => {
     assert.ok(brief.byteLength <= budgetBytes);
     assert.ok(calculatePayloadSize(brief) <= budgetBytes);
   });
+
+  it('should fail closed when identity metadata alone exceeds the byte budget', async () => {
+    const budgetBytes = 200;
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      maxBytes: budgetBytes
+    });
+
+    assert.equal(brief.truncated, true);
+    assert.ok(brief.byteLength <= budgetBytes);
+    assert.ok(calculatePayloadSize(brief) <= budgetBytes);
+    assert.equal(brief.lastSeenRoot, undefined);
+    assert.equal(brief.gitRemote, undefined);
+  });
 });
 

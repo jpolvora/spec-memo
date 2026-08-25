@@ -289,6 +289,31 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       notices.length = 0;
     }
 
+    if (calculatePayloadSize(initialBrief) > budgetBytes) {
+      initialBrief.lastSeenRoot = undefined;
+      initialBrief.gitRemote = undefined;
+    }
+
+    if (calculatePayloadSize(initialBrief) > budgetBytes) {
+      const minimal: BootstrapBrief = {
+        projectId: initialBrief.projectId,
+        traps: [],
+        decisions: [],
+        totalTrapsCount: initialBrief.totalTrapsCount,
+        totalDecisionsCount: initialBrief.totalDecisionsCount,
+        byteLength: 0,
+        budgetBytes,
+        truncated: true,
+        notices: [`Brief truncated to fit ${budgetBytes} byte budget.`]
+      };
+      minimal.byteLength = calculatePayloadSize(minimal);
+      if (minimal.byteLength > budgetBytes) {
+        minimal.notices = [];
+        minimal.byteLength = calculatePayloadSize(minimal);
+      }
+      return minimal;
+    }
+
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
   }
 
