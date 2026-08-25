@@ -101,6 +101,15 @@ export async function withVaultLock<T>(vaultRoot: string, fn: () => T | Promise<
   }
 }
 
+export function withVaultLockSync<T>(vaultRoot: string, fn: () => T): T {
+  acquireVaultLockSync(vaultRoot);
+  try {
+    return fn();
+  } finally {
+    releaseVaultLockSync(vaultRoot);
+  }
+}
+
 function resolveVaultGitBranch(config: VaultConfig, vaultRoot: string): string {
   if (config.vaultGit?.branch && config.vaultGit.branch.trim().length > 0) {
     return config.vaultGit.branch.trim();
@@ -340,6 +349,7 @@ export function syncVault(vaultRoot: string = getVaultRoot()): { pulled: boolean
   }
 
   try {
+    return withVaultLockSync(vaultRoot, () => {
     const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (!config.vaultGit?.enabled) {
       return { pulled: false, pushed: false, message: 'Vault git sync is disabled in config.json.' };
@@ -371,6 +381,7 @@ export function syncVault(vaultRoot: string = getVaultRoot()): { pulled: boolean
       pushed,
       message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`
     };
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { pulled: false, pushed: false, message: `Sync failed: ${msg}` };

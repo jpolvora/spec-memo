@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordStatus, SearchHit, SearchOptions } from './types.js';
-import { getVaultRoot } from './vault.js';
+import { getVaultRoot, withVaultLock } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { parseRecord } from './schema.js';
 
@@ -426,6 +426,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
  * Rebuild the entire SQLite FTS index from vault Markdown files.
  */
 export async function rebuildIndex(vaultRoot: string = getVaultRoot()): Promise<{ indexed: number }> {
+  return withVaultLock(vaultRoot, async () => {
   const db = openIndex(vaultRoot);
   const projectsDir = path.join(vaultRoot, 'projects');
 
@@ -493,4 +494,5 @@ export async function rebuildIndex(vaultRoot: string = getVaultRoot()): Promise<
   rebuildTx();
 
   return { indexed: recordsToIndex.length };
+  });
 }
