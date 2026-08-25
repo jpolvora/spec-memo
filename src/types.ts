@@ -96,6 +96,11 @@ export interface VaultConfig {
     remoteUrl?: string;
     autoCommit?: boolean;
   };
+  embeddings?: {
+    enabled: boolean;
+    minSimilarity?: number;
+    provider?: string;
+  };
   ttl: {
     scratchDays: number;
     reviewDays: number;

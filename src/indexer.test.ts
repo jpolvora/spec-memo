@@ -304,5 +304,60 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
       fs.rmSync(tempProj2, { recursive: true, force: true });
     }
   });
+
+  it('should apply vector similarity threshold when embeddings.enabled is true in config.json', async () => {
+    // 1. Enable embeddings in config.json
+    const configPath = path.join(tempVault, 'config.json');
+    fs.mkdirSync(tempVault, { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          version: '0.1.0',
+          embeddings: {
+            enabled: true,
+            minSimilarity: 0.4
+          }
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'vector-match',
+      frontmatter: {
+        id: 'trap-vector-match',
+        title: 'Vector similarity search match'
+      },
+      body: 'Highly relevant context matching the vector query terms'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'unrelated-trap',
+      frontmatter: {
+        id: 'trap-unrelated',
+        title: 'Completely unaligned topic'
+      },
+      body: 'Random unaligned topic with no query tokens'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'vector similarity match context'
+    });
+
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].id, 'trap-vector-match');
+  });
 });
+
 

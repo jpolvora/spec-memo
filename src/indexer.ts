@@ -192,6 +192,38 @@ export function sanitizeFtsQuery(rawQuery: string): string {
 }
 
 /**
+ * AC1: Compute term-frequency vector similarity between query and record content.
+ */
+export function calculateVectorSimilarity(text1: string, text2: string): number {
+  const getTokens = (t: string) =>
+    t.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter((w) => w.length > 1);
+  const tokens1 = getTokens(text1);
+  const tokens2 = getTokens(text2);
+
+  if (tokens1.length === 0 || tokens2.length === 0) return 0;
+
+  const freq1 = new Map<string, number>();
+  const freq2 = new Map<string, number>();
+
+  for (const t of tokens1) freq1.set(t, (freq1.get(t) || 0) + 1);
+  for (const t of tokens2) freq2.set(t, (freq2.get(t) || 0) + 1);
+
+  let dotProduct = 0;
+  for (const [token, count1] of freq1.entries()) {
+    const count2 = freq2.get(token) || 0;
+    dotProduct += count1 * count2;
+  }
+
+  let mag1 = 0;
+  for (const count of freq1.values()) mag1 += count * count;
+  let mag2 = 0;
+  for (const count of freq2.values()) mag2 += count * count;
+
+  if (mag1 === 0 || mag2 === 0) return 0;
+  return dotProduct / (Math.sqrt(mag1) * Math.sqrt(mag2));
+}
+
+/**
  * Search memory records via SQLite FTS5 index.
  */
 export function searchIndex(options: SearchOptions): SearchHit[] {
@@ -202,6 +234,19 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   if (!targetProjectId && !options.crossProject) {
     const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
     targetProjectId = identity.projectId;
+  }
+
+  let embeddingsConfig: { enabled: boolean; minSimilarity?: number } | undefined = undefined;
+  const configPath = path.join(vaultRoot, 'config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (cfg.embeddings?.enabled) {
+        embeddingsConfig = cfg.embeddings;
+      }
+    } catch {
+      // Ignore config read error
+    }
   }
 
   const clauses: string[] = [];
@@ -253,6 +298,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         title,
         tags,
         pathPatterns,
+        body,
         filepath,
         updated,
         snippet(records_fts, 7, '', '', '...', 24) AS snippet,
@@ -272,6 +318,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         title,
         tags,
         pathPatterns,
+        body,
         filepath,
         updated,
         '' AS snippet,
@@ -291,6 +338,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
     title: string;
     tags: string;
     pathPatterns: string;
+    body: string;
     filepath: string;
     updated: string;
     snippet: string;
@@ -308,7 +356,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       const fallbackParams = params.filter((p) => p !== ftsQuery);
       const fallbackWhere = fallbackClauses.length > 0 ? `WHERE ${fallbackClauses.join(' AND ')}` : '';
       const fallbackSql = `
-        SELECT id, projectId, kind, status, title, tags, pathPatterns, filepath, updated, '' AS snippet, 0 AS rank
+        SELECT id, projectId, kind, status, title, tags, pathPatterns, body, filepath, updated, '' AS snippet, 0 AS rank
         FROM records_fts
         ${fallbackWhere}
         ORDER BY updated DESC
@@ -338,6 +386,16 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
     if (options.path) {
       const matchesPath = matchesAnyPattern(options.path, patternsArr);
       if (!matchesPath) {
+        continue;
+      }
+    }
+
+    // Embeddings vector similarity filtering if enabled
+    if (embeddingsConfig && rawQuery) {
+      const targetText = `${row.title} ${row.tags} ${row.body || ''}`;
+      const sim = calculateVectorSimilarity(rawQuery, targetText);
+      const minSim = embeddingsConfig.minSimilarity ?? 0.3;
+      if (sim < minSim) {
         continue;
       }
     }
