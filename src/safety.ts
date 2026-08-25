@@ -104,7 +104,17 @@ export function assertNoSecrets(payload: unknown, contextDesc = 'record payload'
   }
 }
 
-const VAULT_PATH_KEYS = new Set(['path', 'filepath', 'targetPath', 'purgedFiles', 'compactedPlans']);
+const VAULT_PATH_KEYS = new Set([
+  'path',
+  'filepath',
+  'targetPath',
+  'purgedFiles',
+  'compactedPlans',
+  'vaultPath',
+  'vaultRoot',
+  'dbPath',
+  'absolutePath'
+]);
 
 /**
  * Redact credential-like strings in a JSON-serializable payload (read-path fail-closed).
@@ -157,8 +167,8 @@ export function stripVaultPaths(payload: unknown): unknown {
  */
 export function redactAbsolutePathsInText(text: string): string {
   return text
-    .replace(/[A-Za-z]:\\[^\s)'"`]+/g, '[path]')
-    .replace(/(^|[\s(])(\/(?:[^/\s)]+\/)+[^/\s)]+)/g, '$1[path]');
+    .replace(/(?:file:\/\/\/?)?[A-Za-z]:[/\\][^\s)'"`]+/g, '[path]')
+    .replace(/(^|[\s(])((?:file:\/\/\/?)?\/(?:[^/\s)]+\/)+[^/\s)]+)/g, '$1[path]');
 }
 
 export function sanitizeToolOutput(payload: unknown): unknown {
@@ -214,4 +224,23 @@ export function assertNotInProductRoot(targetPath: string, productRoot: string |
       `Safety violation: Attempted to write memory record inside consumer product repository (${targetPath}). Workflow artifacts must be stored outside the product repository in the spec-memo vault.`
     );
   }
+}
+
+/**
+ * Validate that a projectId string is non-empty, not . or .., and strictly inside projects directory.
+ */
+export function assertValidProjectId(projectId: string, projectsRoot: string): string {
+  if (!projectId || typeof projectId !== 'string') {
+    throw new Error('Archive project path escapes vault projects directory: Invalid project id');
+  }
+  const trimmed = projectId.trim();
+  if (!trimmed || trimmed === '.' || trimmed === '..' || trimmed.includes('/') || trimmed.includes('\\')) {
+    throw new Error(`Archive project path escapes vault projects directory: Invalid project id (${projectId})`);
+  }
+  const projDir = path.resolve(projectsRoot, trimmed);
+  const resolvedProjectsRoot = path.resolve(projectsRoot);
+  if (!isPathInside(projDir, resolvedProjectsRoot) || projDir === resolvedProjectsRoot) {
+    throw new Error(`Archive project path escapes vault projects directory (${projectId})`);
+  }
+  return trimmed;
 }

@@ -358,5 +358,44 @@ describe('Store Engine (upsert and get)', () => {
     assert.ok(oldTrap);
     assert.equal(oldTrap.frontmatter.status, 'active');
   });
+
+  it('should not supersede itself when updating existing trap with frontmatter.id and omitting slug', async () => {
+    // 1. Create initial trap
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'trap-update-self',
+      frontmatter: {
+        id: 'trap-update-self',
+        title: 'Initial Trap Title',
+        pathPatterns: ['src/**/*.ts']
+      },
+      body: '## DO NOT\nOriginal instructions.'
+    });
+
+    // 2. Update same trap specifying frontmatter.id without options.slug
+    const res2 = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      frontmatter: {
+        id: 'trap-update-self',
+        title: 'Updated Trap Title',
+        pathPatterns: ['src/**/*.ts']
+      },
+      body: '## DO NOT\nOriginal instructions with minor edit.'
+    });
+
+    assert.equal(res2.superseded, false);
+    const trap = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-update-self'
+    });
+    assert.ok(trap);
+    assert.equal(trap.frontmatter.status, 'active');
+    assert.equal(trap.frontmatter.supersedes, undefined);
+  });
 });
 

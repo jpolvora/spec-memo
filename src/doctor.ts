@@ -70,11 +70,11 @@ export function scanForRepoPollution(rootPath: string): DoctorPollutionItem[] {
     // 2. Check for in-tree memory residue (MEMORY.md, memory/*.md, ws-shared/memory/)
     if (
       lowerRel === 'memory.md' ||
-      lowerRel === 'ws-shared/memory.md' ||
-      lowerRel === '.agents/memory.md' ||
+      lowerRel.endsWith('/memory.md') ||
       lowerRel.startsWith('memory/') ||
+      lowerRel.startsWith('.agents/memory/') ||
       lowerRel.startsWith('ws-shared/memory/') ||
-      lowerRel.startsWith('.agents/memory/')
+      lowerRel.includes('/ws-shared/memory/')
     ) {
       pollution.push({
         path: rel,

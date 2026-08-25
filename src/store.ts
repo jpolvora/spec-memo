@@ -8,6 +8,7 @@ import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
 import { assertNoSecrets, assertNotInProductRoot } from './safety.js';
+import { recordTombstone } from './sync.js';
 
 export interface UpsertOptions {
   cwd?: string;
@@ -36,6 +37,30 @@ export interface GetOptions {
   id?: string;
   kind?: RecordKind;
   slug?: string;
+}
+
+export function listProjectRecords(vaultRoot: string = getVaultRoot(), projectId: string): MemoRecord[] {
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+  if (!fs.existsSync(projectDir)) return [];
+  const results: MemoRecord[] = [];
+  const entries = fs.readdirSync(projectDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const subPath = path.join(projectDir, entry.name);
+      const files = fs.readdirSync(subPath);
+      for (const file of files) {
+        if (file.endsWith('.md')) {
+          const filePath = path.join(subPath, file);
+          try {
+            results.push(parseRecord(fs.readFileSync(filePath, 'utf8'), filePath));
+          } catch {
+            // Ignore unparseable
+          }
+        }
+      }
+    }
+  }
+  return results;
 }
 
 /**
@@ -111,6 +136,19 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
+  // Derive slug and record ID
+  let slug = options.slug || (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : '');
+  if (!slug && typeof options.frontmatter?.title === 'string') {
+    slug = slugify(options.frontmatter.title);
+  }
+  if (!slug) {
+    slug = `${options.kind}-${Date.now()}`;
+  }
+
+  const recordId = (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : null) || slug;
+  const fileName = `${slug}.md`;
+  const filePath = path.join(targetDir, fileName);
+
   // AC1-AC4 (Slice 12 Trap Dedup): Automatically find and supersede matching traps
   if (options.kind === 'trap' && !options.allowDuplicate && !options.frontmatter?.supersedes) {
     const newPatterns = (options.frontmatter?.pathPatterns || []).slice().sort();
@@ -122,7 +160,11 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
           const trapPath = path.join(trapsDir, file);
           try {
             const existing = parseRecord(fs.readFileSync(trapPath, 'utf8'), trapPath);
-            if (existing.frontmatter.status === 'active' && existing.frontmatter.id !== options.slug) {
+            if (
+              existing.frontmatter.status === 'active' &&
+              existing.frontmatter.id !== recordId &&
+              existing.frontmatter.id !== slug
+            ) {
               const existingPatterns = (existing.frontmatter.pathPatterns || []).slice().sort();
               const samePatterns =
                 newPatterns.length === existingPatterns.length &&
@@ -147,19 +189,6 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     }
   }
 
-  // Derive slug and record ID
-  let slug = options.slug || (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : '');
-  if (!slug && typeof options.frontmatter?.title === 'string') {
-    slug = slugify(options.frontmatter.title);
-  }
-  if (!slug) {
-    slug = `${options.kind}-${Date.now()}`;
-  }
-
-  const recordId = (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : null) || slug;
-  const fileName = `${slug}.md`;
-  const filePath = path.join(targetDir, fileName);
-
 
   let existingRecord: MemoRecord | null = null;
   if (fs.existsSync(filePath)) {
@@ -175,11 +204,12 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     ...(existingRecord?.frontmatter || {}),
     ...(options.frontmatter || {}),
     id: recordId,
+    slug: options.slug || options.frontmatter?.slug || existingRecord?.frontmatter?.slug,
     kind: options.kind,
     project: projectId,
     status: (options.frontmatter?.status as RecordStatus) || (existingRecord?.frontmatter.status ?? 'active'),
     created: existingRecord?.frontmatter.created || options.frontmatter?.created || now,
-    updated: now,
+    updated: options.frontmatter?.updated || now,
     source: options.source || options.frontmatter?.source || existingRecord?.frontmatter.source || 'agent'
   };
 
@@ -273,10 +303,11 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
     return null;
   }
 
-  // If kind and slug provided, check direct path
-  if (options.kind && options.slug) {
+  // If kind and slug or id provided, check direct path
+  const directLookup = options.slug || options.id;
+  if (options.kind && directLookup) {
     const subdir = getSubdirForKind(options.kind);
-    const directPath = path.join(projectDir, subdir, `${options.slug}.md`);
+    const directPath = path.join(projectDir, subdir, `${directLookup}.md`);
     if (fs.existsSync(directPath)) {
       try {
         return parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
@@ -437,6 +468,14 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
     if (fs.existsSync(record.path)) {
       fs.unlinkSync(record.path);
     }
+
+    recordTombstone(
+      vaultRoot,
+      projectId,
+      kind,
+      id,
+      (record.frontmatter.slug as string) || id
+    );
 
     try {
       const db = openIndex(vaultRoot);

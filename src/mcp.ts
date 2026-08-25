@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 
-export function createMcpServer(): Server {
+export function createMcpServer(opts: { defaultVaultRoot?: string } = {}): Server {
   const server = new Server(
     {
       name: 'spec-memo',
@@ -28,7 +28,11 @@ export function createMcpServer(): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const response = await executeTool(name, args);
+    const resolvedArgs = {
+      ...(args ?? {}),
+      vaultRoot: (args as any)?.vaultRoot ?? opts.defaultVaultRoot
+    };
+    const response = await executeTool(name, resolvedArgs);
 
     if (response.isError) {
       return {

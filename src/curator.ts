@@ -6,6 +6,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { parseRecord, serializeRecord } from './schema.js';
 import { openIndex, indexRecord, removeRecord, rebuildIndex } from './indexer.js';
 import { rebuildCompiledViews } from './compiler.js';
+import { recordTombstone } from './sync.js';
 
 /**
  * Check if a record has expired given its date, default TTL days, and optional custom TTL.
@@ -82,11 +83,165 @@ export function compactPlanRecord(record: MemoRecord): { frontmatter: RecordFron
 }
 
 /**
+ * Compact individual historical log event files into monthly roll-up archives.
+ */
+export function compactMonthlyLogs(
+  projectDir: string,
+  projectId: string,
+  vaultRoot: string,
+  options: { dryRun?: boolean; minAgeDays?: number; now?: number } = {}
+): { compactedCount: number; rollupFiles: string[]; unlinkedFiles: string[] } {
+  const logsDir = path.join(projectDir, 'logs');
+  if (!fs.existsSync(logsDir)) {
+    return { compactedCount: 0, rollupFiles: [], unlinkedFiles: [] };
+  }
+
+  const dryRun = Boolean(options.dryRun);
+  const now = options.now ?? Date.now();
+  const minAgeMs = (options.minAgeDays ?? 30) * 86400 * 1000;
+  const currentMonthKey = new Date(now).toISOString().slice(0, 7); // e.g. "2026-08"
+
+  const files = fs.readdirSync(logsDir);
+  const eligibleByMonth = new Map<string, Array<{ filePath: string; record: MemoRecord }>>();
+  const existingRollups = new Map<string, MemoRecord>();
+
+  for (const file of files) {
+    if (!file.endsWith('.md')) continue;
+    const filePath = path.join(logsDir, file);
+
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const record = parseRecord(content, filePath);
+
+      if (record.frontmatter.kind !== 'log') continue;
+
+      if (file.startsWith('log-rollup-') || record.frontmatter.compacted) {
+        const match = file.match(/^log-rollup-(\d{4}-\d{2})\.md$/);
+        const monthKey = match ? match[1] : (record.frontmatter.created || '').slice(0, 7);
+        if (monthKey) {
+          existingRollups.set(monthKey, record);
+        }
+        continue;
+      }
+
+      // Determine date and month
+      const createdStr = record.frontmatter.created || record.frontmatter.updated || '';
+      const eventTime = new Date(createdStr).getTime();
+      const monthKey = createdStr ? createdStr.slice(0, 7) : '';
+
+      if (!monthKey || isNaN(eventTime)) continue;
+
+      // Eligible if from prior month or older than minAge
+      const isPriorMonth = monthKey < currentMonthKey;
+      const isOldEnough = now - eventTime >= minAgeMs;
+
+      if (isPriorMonth || isOldEnough) {
+        if (!eligibleByMonth.has(monthKey)) {
+          eligibleByMonth.set(monthKey, []);
+        }
+        eligibleByMonth.get(monthKey)!.push({ filePath, record });
+      }
+    } catch {
+      // Ignore unparseable log file
+    }
+  }
+
+  let compactedCount = 0;
+  const rollupFiles: string[] = [];
+  const unlinkedFiles: string[] = [];
+  const db = openIndex(vaultRoot);
+
+  for (const [monthKey, items] of eligibleByMonth.entries()) {
+    if (items.length === 0) continue;
+
+    // Sort items chronologically
+    items.sort((a, b) => {
+      const ta = new Date(a.record.frontmatter.created || 0).getTime();
+      const tb = new Date(b.record.frontmatter.created || 0).getTime();
+      return ta - tb;
+    });
+
+    const rollupFilePath = path.join(logsDir, `log-rollup-${monthKey}.md`);
+    const existing = existingRollups.get(monthKey);
+
+    let existingBody = existing ? existing.body : '';
+    if (!existingBody.trim()) {
+      existingBody = `# Monthly Log Roll-up — ${monthKey}\n\nConsolidated event logs for project \`${projectId}\` (${monthKey}).\n`;
+    }
+
+    let appendSection = '';
+    for (const item of items) {
+      const fm = item.record.frontmatter;
+      const ts = fm.created || 'unknown date';
+      const eventId = fm.id;
+      const source = fm.source || 'agent';
+
+      appendSection += `\n---\n\n### Event: \`${eventId}\`\n- **Timestamp:** ${ts}\n- **Source:** ${source}\n`;
+      if (fm.details && typeof fm.details === 'object') {
+        appendSection += `- **Details:** \`${JSON.stringify(fm.details)}\`\n`;
+      }
+      appendSection += `\n${item.record.body.trim()}\n`;
+    }
+
+    const mergedBody = existingBody.trimEnd() + '\n' + appendSection;
+    const earliestCreated = existing?.frontmatter.created || items[0].record.frontmatter.created || new Date(now).toISOString();
+
+    const rollupFm: RecordFrontmatter = {
+      id: `log-rollup-${monthKey}`,
+      kind: 'log',
+      project: projectId,
+      status: 'active',
+      created: earliestCreated,
+      updated: new Date(now).toISOString(),
+      source: 'agent',
+      compacted: true,
+      tags: ['rollup', 'monthly-log', monthKey]
+    };
+
+    rollupFiles.push(rollupFilePath);
+
+    if (!dryRun) {
+      const serialized = serializeRecord({ frontmatter: rollupFm, body: mergedBody });
+      fs.writeFileSync(rollupFilePath, serialized, 'utf8');
+      indexRecord(db, { frontmatter: rollupFm, body: mergedBody }, rollupFilePath);
+
+      for (const item of items) {
+        try {
+          if (fs.existsSync(item.filePath)) {
+            recordTombstone(
+              vaultRoot,
+              projectId,
+              item.record.frontmatter.kind,
+              item.record.frontmatter.id,
+              String(item.record.frontmatter.slug || item.record.frontmatter.id)
+            );
+            fs.unlinkSync(item.filePath);
+            unlinkedFiles.push(item.filePath);
+            removeRecord(db, item.record.frontmatter.id, projectId);
+            compactedCount++;
+          }
+        } catch {
+          // Ignore
+        }
+      }
+    } else {
+      compactedCount += items.length;
+      for (const item of items) {
+        unlinkedFiles.push(item.filePath);
+      }
+    }
+  }
+
+  return { compactedCount, rollupFiles, unlinkedFiles };
+}
+
+/**
  * Execute curator garbage collection:
  * 1. Purge expired scratch records (TTL default 7 days).
  * 2. Purge stale review artifacts (TTL default 14 days).
  * 3. Compact shipped plan records into summary artifacts.
- * 4. Update SQLite FTS index and rebuild compiled views.
+ * 4. Compact historical log event records into monthly roll-up archives.
+ * 5. Update SQLite FTS index and rebuild compiled views.
  */
 export async function runGc(options: GcOptions = {}): Promise<GcResult> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
@@ -126,6 +281,13 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
             purgedScratchCount++;
             purgedFiles.push(filePath);
             if (!dryRun) {
+              recordTombstone(
+                vaultRoot,
+                projectId,
+                record.frontmatter.kind,
+                record.frontmatter.id,
+                String(record.frontmatter.slug || record.frontmatter.id)
+              );
               fs.unlinkSync(filePath);
               removeRecord(db, record.frontmatter.id, projectId);
             }
@@ -164,6 +326,13 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
             purgedReviewCount++;
             purgedFiles.push(filePath);
             if (!dryRun) {
+              recordTombstone(
+                vaultRoot,
+                projectId,
+                record.frontmatter.kind,
+                record.frontmatter.id,
+                String(record.frontmatter.slug || record.frontmatter.id)
+              );
               fs.unlinkSync(filePath);
               removeRecord(db, record.frontmatter.id, projectId);
             }
@@ -206,7 +375,11 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
     }
   }
 
-  // 4. Update index and compiled views
+  // 4. Compact historical monthly logs
+  const logCompaction = compactMonthlyLogs(projectDir, projectId, vaultRoot, { dryRun, now });
+  const compactedLogsCount = logCompaction.compactedCount;
+
+  // 5. Update index and compiled views
   let rebuiltFts = false;
   if (!dryRun) {
     rebuildCompiledViews(projectId, vaultRoot);
@@ -220,12 +393,14 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
     purgedScratchCount,
     purgedReviewCount,
     compactedPlansCount,
+    compactedLogsCount,
     rebuiltFts,
     rebuiltViews: !dryRun,
     dryRun,
     details: {
       purgedFiles,
-      compactedPlans
+      compactedPlans,
+      compactedLogs: logCompaction.unlinkedFiles
     }
   };
   });

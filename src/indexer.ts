@@ -422,6 +422,19 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   return results;
 }
 
+export function searchRecords(
+  vaultRoot: string = getVaultRoot(),
+  options: { query?: string; projectId?: string; kinds?: string[]; limit?: number } = {}
+): SearchHit[] {
+  return searchIndex({
+    vaultRoot,
+    query: options.query,
+    projectId: options.projectId,
+    kinds: options.kinds as unknown as RecordKind[] | undefined,
+    limit: options.limit
+  });
+}
+
 /**
  * Rebuild the entire SQLite FTS index from vault Markdown files.
  */

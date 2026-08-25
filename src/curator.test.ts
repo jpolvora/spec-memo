@@ -248,6 +248,101 @@ Created artifacts...
       assert.ok(foundIds.includes('recent-review'));
     });
 
+    it('should compact historical log event records into monthly roll-up files and update FTS index', async () => {
+      const now = new Date('2026-08-25T12:00:00.000Z').getTime();
+      const july1Date = new Date('2026-07-01T10:00:00.000Z').toISOString();
+      const july15Date = new Date('2026-07-15T15:30:00.000Z').toISOString();
+      const aug24Date = new Date('2026-08-24T09:00:00.000Z').toISOString();
+
+      // Create two log events in July (prior month)
+      const log1 = await upsertRecord({
+        vaultRoot,
+        cwd: productRepo,
+        kind: 'log',
+        slug: 'event-july-01',
+        frontmatter: {
+          id: 'log-2026-07-01-event1',
+          created: july1Date,
+          updated: july1Date,
+          source: 'agent',
+          details: { phase: 'setup', step: 1 }
+        },
+        body: 'July 1 setup event: Initialized project workspace successfully'
+      });
+
+      const log2 = await upsertRecord({
+        vaultRoot,
+        cwd: productRepo,
+        kind: 'log',
+        slug: 'event-july-15',
+        frontmatter: {
+          id: 'log-2026-07-15-event2',
+          created: july15Date,
+          updated: july15Date,
+          source: 'agent',
+          details: { phase: 'delivery', step: 5 }
+        },
+        body: 'July 15 delivery event: Deployed critical security patch to production'
+      });
+
+      // Create a fresh log event in August (current month)
+      const log3 = await upsertRecord({
+        vaultRoot,
+        cwd: productRepo,
+        kind: 'log',
+        slug: 'event-aug-24',
+        frontmatter: {
+          id: 'log-2026-08-24-event3',
+          created: aug24Date,
+          updated: aug24Date,
+          source: 'agent'
+        },
+        body: 'August 24 event: Current active sprint audit trace'
+      });
+
+      assert.strictEqual(fs.existsSync(log1.path), true);
+      assert.strictEqual(fs.existsSync(log2.path), true);
+      assert.strictEqual(fs.existsSync(log3.path), true);
+
+      // Run GC
+      const gcRes = await runGc({
+        vaultRoot,
+        cwd: productRepo,
+        dryRun: false
+      });
+
+      assert.strictEqual(gcRes.compactedLogsCount, 2);
+
+      // Verify individual July log files were removed
+      assert.strictEqual(fs.existsSync(log1.path), false);
+      assert.strictEqual(fs.existsSync(log2.path), false);
+
+      // Verify August log file remains untouched
+      assert.strictEqual(fs.existsSync(log3.path), true);
+
+      // Verify monthly roll-up file was created
+      const identity = (await import('./identity.js')).resolveProjectIdentity(productRepo, { vaultRoot });
+      const rollupPath = path.join(vaultRoot, 'projects', identity.projectId, 'logs', 'log-rollup-2026-07.md');
+      assert.strictEqual(fs.existsSync(rollupPath), true);
+
+      const rollupContent = fs.readFileSync(rollupPath, 'utf8');
+      assert.ok(rollupContent.includes('### Event: `log-2026-07-01-event1`'));
+      assert.ok(rollupContent.includes('Initialized project workspace successfully'));
+      assert.ok(rollupContent.includes('### Event: `log-2026-07-15-event2`'));
+      assert.ok(rollupContent.includes('Deployed critical security patch to production'));
+
+      // Verify SQLite FTS can find the compacted log content
+      const searchRes = searchIndex({
+        vaultRoot,
+        cwd: productRepo,
+        query: 'security patch',
+        kinds: ['log']
+      });
+
+      assert.strictEqual(searchRes.length, 1);
+      assert.strictEqual(searchRes[0].id, 'log-rollup-2026-07');
+    });
+
     it('should execute gc via executeTool successfully', async () => {
       const res = await executeTool('gc', {
         vaultRoot,

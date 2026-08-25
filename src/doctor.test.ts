@@ -83,9 +83,24 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     fs.mkdirSync(memDir, { recursive: true });
     fs.writeFileSync(path.join(memDir, 'trap-01.md'), '# In-repo trap\n', 'utf8');
 
+    // Plant nested memory file
+    const nestedShared = path.join(tempProductRepo, '.agents', 'skills', 'ws-shared');
+    fs.mkdirSync(nestedShared, { recursive: true });
+    fs.writeFileSync(path.join(nestedShared, 'MEMORY.md'), '# Nested in-repo memory\n', 'utf8');
+
     const pollution = scanForRepoPollution(tempProductRepo);
-    assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('MEMORY.md')));
+    assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path === 'MEMORY.md'));
     assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('trap-01.md')));
+    assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('ws-shared/MEMORY.md')));
+  });
+
+  it('should not flag legitimate product documentation containing memory in path', async () => {
+    const docsMemoryDir = path.join(tempProductRepo, 'docs', 'architecture', 'memory');
+    fs.mkdirSync(docsMemoryDir, { recursive: true });
+    fs.writeFileSync(path.join(docsMemoryDir, 'guide.md'), '# Architecture Memory Guide\n', 'utf8');
+
+    const pollution = scanForRepoPollution(tempProductRepo);
+    assert.equal(pollution.some((p) => p.path.includes('docs/architecture/memory/guide.md')), false);
   });
 
   it('should detect in-tree run.json, .state.md, and telemetry dumps as state/telemetry residue', async () => {

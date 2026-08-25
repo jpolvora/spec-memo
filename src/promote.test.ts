@@ -152,6 +152,121 @@ describe('Promote Engine (promoteRecord)', () => {
     );
   });
 
+  it('should reject promote when target destination is inside .git directory', async () => {
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'decision',
+      slug: 'adr-git-target',
+      frontmatter: {
+        id: 'adr-git-target',
+        title: 'ADR Git Target'
+      },
+      body: 'Body'
+    });
+
+    await assert.rejects(
+      async () => {
+        await promoteRecord({
+          cwd: tempProductRepo,
+          vaultRoot: tempVaultRoot,
+          id: 'adr-git-target',
+          destination: '.git/hooks/pre-commit'
+        });
+      },
+      {
+        message: /Promote destination must not target \.git directory/
+      }
+    );
+  });
+
+  it('should format decision records as standard ADR when requested or when format=adr', async () => {
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'decision',
+      slug: 'adr-002-crypto',
+      frontmatter: {
+        id: 'adr-002-crypto',
+        title: 'Use AES-256-GCM for encrypted vault backups',
+        status: 'active',
+        tags: ['security', 'encryption']
+      },
+      body: 'AES-256-GCM provides authenticated encryption with associated data.'
+    });
+
+    const result = await promoteRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      id: 'adr-002-crypto',
+      destination: 'docs/adr/002-crypto.md',
+      format: 'adr'
+    });
+
+    assert.equal(result.format, 'adr');
+    const content = fs.readFileSync(result.targetPath, 'utf8');
+    assert.ok(content.includes('# ADR: Use AES-256-GCM for encrypted vault backups'));
+    assert.ok(content.includes('## Context and Problem Statement'));
+    assert.ok(content.includes('## Decision Outcome'));
+    assert.ok(content.includes('## Consequences'));
+    assert.ok(content.includes('AES-256-GCM provides authenticated encryption'));
+  });
+
+  it('should format decision records as MADR when format=madr', async () => {
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'decision',
+      slug: 'adr-003-logging',
+      frontmatter: {
+        id: 'adr-003-logging',
+        title: 'Use monthly log roll-ups for curator compaction',
+        status: 'active'
+      },
+      body: 'Roll-ups prevent filesystem inode exhaustion while preserving FTS searchability.'
+    });
+
+    const result = await promoteRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      id: 'adr-003-logging',
+      destination: 'docs/adr/003-logging.md',
+      format: 'madr'
+    });
+
+    assert.equal(result.format, 'madr');
+    const content = fs.readFileSync(result.targetPath, 'utf8');
+    assert.ok(content.includes('# Use monthly log roll-ups for curator compaction'));
+    assert.ok(content.includes('Technical Story: `adr-003-logging`'));
+    assert.ok(content.includes('## Decision Drivers'));
+    assert.ok(content.includes('## Considered Options'));
+    assert.ok(content.includes('## Decision Outcome'));
+  });
+
+  it('should automatically resolve destination file path when directory is specified', async () => {
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'decision',
+      slug: 'storage-architecture',
+      frontmatter: {
+        id: 'storage-architecture',
+        title: 'Storage Architecture'
+      },
+      body: 'External vault filesystem isolation.'
+    });
+
+    const result = await promoteRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      id: 'storage-architecture',
+      destination: 'docs/architecture/'
+    });
+
+    assert.equal(result.destination, 'docs/architecture/0001-storage-architecture.md');
+    assert.ok(fs.existsSync(result.targetPath));
+  });
+
   it('should reject promote when record ID does not exist', async () => {
     await assert.rejects(
       async () => {

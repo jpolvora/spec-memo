@@ -21,3 +21,10 @@ coverage/
 secrets.yml
 credentials.json
 .aws/
+
+# Workflow memory & plans (stored outside git in spec-memo vault)
+.agents/plans/
+.agents/codereviews/
+.agents/skills/ws-shared/MEMORY.md
+.agents/skills/ws-shared/memory/
+

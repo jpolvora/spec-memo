@@ -122,9 +122,15 @@ describe('CLI Integration', () => {
       // Returns 0 or 1 depending on whether in-repo pollution is present
       assert.ok(codeJson === 0 || codeJson === 1);
       const parsed = JSON.parse(capturedLogs.trim());
-      assert.ok(parsed.vaultRoot);
+      assert.equal(parsed.vaultRoot, undefined);
+      assert.equal(parsed.fts?.dbPath, undefined);
       assert.ok(parsed.project);
       assert.ok(parsed.fts);
+      if (Array.isArray(parsed.pollution?.items)) {
+        for (const item of parsed.pollution.items) {
+          assert.equal(item.absolutePath, undefined);
+        }
+      }
 
       // Text mode
       capturedLogs = '';
@@ -317,6 +323,12 @@ describe('CLI Integration', () => {
       const parsed = JSON.parse(capturedLogs.trim());
       assert.equal(parsed.importedSpecsCount, 1);
       assert.ok(parsed.totalImported >= 1);
+      assert.equal(parsed.vaultRoot, undefined);
+      if (Array.isArray(parsed.records)) {
+        for (const rec of parsed.records) {
+          assert.equal(rec.vaultPath, undefined);
+        }
+      }
 
       // Text mode
       capturedLogs = '';
@@ -340,5 +352,244 @@ describe('CLI Integration', () => {
       }
     }
   });
+
+  it('should execute memo export-vault and memo import-vault via CLI', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-backup-test-'));
+    const sourceVault = path.join(tempDir, 'source-vault');
+    const targetVault = path.join(tempDir, 'target-vault');
+    const fixtureRepo = path.join(tempDir, 'repo');
+    const archiveFile = path.join(tempDir, 'archive.json');
+
+    fs.mkdirSync(sourceVault, { recursive: true });
+    fs.mkdirSync(targetVault, { recursive: true });
+    fs.mkdirSync(fixtureRepo, { recursive: true });
+    fs.mkdirSync(path.join(fixtureRepo, '.git'), { recursive: true });
+
+    try {
+      // Upsert a record first
+      await runCli([
+        'upsert',
+        '--kind',
+        'trap',
+        '--slug',
+        'cli-trap-test',
+        '--title',
+        'CLI Trap Test',
+        '--cwd',
+        fixtureRepo,
+        '--vaultRoot',
+        sourceVault,
+        '--body',
+        'Trap content for backup verification'
+      ]);
+
+      // Export vault via CLI
+      capturedLogs = '';
+      const exportCode = await runCli([
+        'export-vault',
+        '--vaultRoot',
+        sourceVault,
+        '--output',
+        archiveFile,
+        '--password',
+        'CliTestPassword123!',
+        '--json'
+      ]);
+      assert.equal(exportCode, 0);
+      const exportJson = JSON.parse(capturedLogs.trim());
+      assert.equal(exportJson.encrypted, true);
+      assert.equal(exportJson.recordsCount, 1);
+      assert.ok(fs.existsSync(archiveFile));
+
+      // Import vault via CLI
+      capturedLogs = '';
+      const importCode = await runCli([
+        'import-vault',
+        archiveFile,
+        '--vaultRoot',
+        targetVault,
+        '--password',
+        'CliTestPassword123!',
+        '--json'
+      ]);
+      assert.equal(importCode, 0);
+      const importJson = JSON.parse(capturedLogs.trim());
+      assert.equal(importJson.restoredRecordsCount, 1);
+      assert.equal(importJson.rebuiltFts, true);
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
+
+  it('should execute memo promote with --format adr via CLI', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-promote-test-'));
+    const vaultRoot = path.join(tempDir, 'vault');
+    const fixtureRepo = path.join(tempDir, 'repo');
+
+    fs.mkdirSync(vaultRoot, { recursive: true });
+    fs.mkdirSync(fixtureRepo, { recursive: true });
+    fs.mkdirSync(path.join(fixtureRepo, '.git'), { recursive: true });
+
+    try {
+      // Upsert a decision record
+      await runCli([
+        'upsert',
+        '--kind',
+        'decision',
+        '--slug',
+        'cli-adr-decision',
+        '--title',
+        'Architecture Decision for CLI',
+        '--cwd',
+        fixtureRepo,
+        '--vaultRoot',
+        vaultRoot,
+        '--body',
+        'ADR body explaining architectural choice'
+      ]);
+
+      // Promote with --format adr
+      capturedLogs = '';
+      const promoteCode = await runCli([
+        'promote',
+        'cli-adr-decision',
+        'docs/adr/0001-cli.md',
+        '--format',
+        'adr',
+        '--cwd',
+        fixtureRepo,
+        '--vaultRoot',
+        vaultRoot
+      ]);
+      assert.equal(promoteCode, 0);
+      assert.ok(capturedLogs.includes('[PROMOTE]'));
+      assert.ok(capturedLogs.includes('(format: adr)'));
+
+      const writtenFile = path.join(fixtureRepo, 'docs', 'adr', '0001-cli.md');
+      assert.ok(fs.existsSync(writtenFile));
+      const content = fs.readFileSync(writtenFile, 'utf8');
+      assert.ok(content.includes('# ADR: Architecture Decision for CLI'));
+      assert.ok(content.includes('## Context and Problem Statement'));
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
+
+  it('should print help for canvas, sync-vault, and serve commands', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      capturedLogs = '';
+      const canvasCode = await runCli(['canvas', '--help']);
+      assert.equal(canvasCode, 0);
+      assert.ok(capturedLogs.includes('Usage: memo canvas'));
+
+      capturedLogs = '';
+      const syncCode = await runCli(['sync-vault', '--help']);
+      assert.equal(syncCode, 0);
+      assert.ok(capturedLogs.includes('Usage: memo sync-vault'));
+
+      capturedLogs = '';
+      const serveCode = await runCli(['serve', '--help']);
+      assert.equal(serveCode, 0);
+      assert.ok(capturedLogs.includes('Usage: memo serve'));
+      assert.ok(capturedLogs.includes('--sse'));
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('should execute memo sync-vault between two vault directories', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-sync-test-'));
+    const vaultA = path.join(tempDir, 'vault-a');
+    const vaultB = path.join(tempDir, 'vault-b');
+    const fixtureRepo = path.join(tempDir, 'fixture-repo');
+    fs.mkdirSync(fixtureRepo, { recursive: true });
+
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      // 1. Create a trap in Vault A
+      await runCli([
+        'upsert',
+        '--kind',
+        'trap',
+        '--slug',
+        'cli-sync-trap',
+        '--cwd',
+        fixtureRepo,
+        '--vaultRoot',
+        vaultA,
+        '--body',
+        '# CLI Sync Trap Body'
+      ]);
+
+      // 2. Sync from Vault A to Vault B with --json
+      capturedLogs = '';
+      const syncJsonCode = await runCli([
+        'sync-vault',
+        vaultB,
+        '--vaultRoot',
+        vaultA,
+        '--two-way',
+        '--json'
+      ]);
+      assert.equal(syncJsonCode, 0);
+      const parsed = JSON.parse(capturedLogs.trim());
+      assert.ok(parsed.forward);
+      assert.ok(parsed.forward.applied >= 1);
+
+      // 3. Sync from Vault A to Vault B with standard text output
+      capturedLogs = '';
+      const syncTextCode = await runCli([
+        'sync-vault',
+        vaultB,
+        '--vaultRoot',
+        vaultA,
+        '--two-way'
+      ]);
+      assert.equal(syncTextCode, 0);
+      assert.ok(capturedLogs.includes('Vault Synchronization Complete'));
+      assert.ok(capturedLogs.includes('Forward Sync'));
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
 });
+
 

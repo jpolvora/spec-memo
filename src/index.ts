@@ -9,9 +9,17 @@ export * from './store.js';
 export * from './tools.js';
 export * from './safety.js';
 export * from './curator.js';
+export * from './promote.js';
+export * from './doctor.js';
+export * from './importer.js';
+export * from './backup.js';
 export * from './mcp.js';
 export * from './cli.js';
 export * from './adapter.js';
 export * from './hook.js';
+export * from './canvas.js';
+export * from './sync.js';
+export * from './server.js';
+
 
 
