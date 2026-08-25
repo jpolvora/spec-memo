@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GcOptions, GcResult, MemoRecord, RecordFrontmatter } from './types.js';
-import { getVaultRoot, ensureVaultStructure, ensureProjectVault, withVaultLock } from './vault.js';
+import { getVaultRoot, ensureVaultStructure, ensureProjectVault, withVaultLock, commitVaultChange } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { parseRecord, serializeRecord } from './schema.js';
 import { openIndex, indexRecord, removeRecord, rebuildIndex } from './indexer.js';
@@ -212,6 +212,7 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
     rebuildCompiledViews(projectId, vaultRoot);
     await rebuildIndex(vaultRoot);
     rebuiltFts = true;
+    commitVaultChange(`gc ${projectId}`, vaultRoot);
   }
 
   return {

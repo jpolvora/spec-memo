@@ -391,6 +391,7 @@ export async function appendEvent(options: AppendOptions): Promise<AppendResult>
 
   // Update compiled views
   rebuildCompiledViews(projectId, vaultRoot);
+  commitVaultChange(`append ${kind}:${logId}`, vaultRoot);
 
   return {
     id: logId,
@@ -443,6 +444,7 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
     }
 
     rebuildCompiledViews(projectId, vaultRoot);
+    commitVaultChange(`forget purge ${kind}:${id}`, vaultRoot);
 
     return {
       id,
@@ -476,6 +478,7 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
   }
 
   rebuildCompiledViews(projectId, vaultRoot);
+  commitVaultChange(`forget archive ${kind}:${id}`, vaultRoot);
 
   return {
     id,
