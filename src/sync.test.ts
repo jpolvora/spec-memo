@@ -209,4 +209,75 @@ test("Multi-Machine Vault Sync & Delta Engine", async (t) => {
     const trapsViewContent = fs.readFileSync(trapsViewPath, "utf8");
     assert.ok(trapsViewContent.includes("Compiled View Test Trap"), "TRAPS.md must contain newly synced trap");
   });
+
+  await t.test("should propagate deletions when changeset contains deletions", async () => {
+    // 1. Create record in vaultB
+    await upsertRecord({
+      vaultRoot: vaultB,
+      projectId: projA,
+      kind: "scratch",
+      slug: "to-delete-scratch",
+      body: "Scratch to be deleted"
+    });
+
+    const scratchPath = path.join(vaultB, "projects", projA, "scratch", "to-delete-scratch.md");
+    assert.ok(fs.existsSync(scratchPath));
+
+    // 2. Apply changeset with deletion
+    const delChangeset = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      records: [],
+      deletions: [
+        {
+          project: projA,
+          kind: "scratch" as const,
+          id: "to-delete-scratch",
+          slug: "to-delete-scratch"
+        }
+      ]
+    };
+
+    await applyChangeset(vaultB, delChangeset);
+    assert.ok(!fs.existsSync(scratchPath), "Deleted record must be removed from disk");
+  });
+
+  await t.test("should perform append-only merge for conflicting logs without dropping events", async () => {
+    // 1. Create log in vaultB
+    const log1 = await upsertRecord({
+      vaultRoot: vaultB,
+      projectId: projA,
+      kind: "log",
+      slug: "daily-log",
+      frontmatter: { created: "2026-08-01T00:00:00.000Z", updated: "2026-08-01T00:00:00.000Z" },
+      body: "Initial daily log entry"
+    });
+
+    // 2. Apply updated log from remote
+    const logChangeset = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          frontmatter: {
+            id: log1.id,
+            slug: "daily-log",
+            kind: "log" as const,
+            status: "active" as const,
+            source: "agent" as const,
+            created: "2026-08-01T00:00:00.000Z",
+            updated: "2026-08-02T00:00:00.000Z",
+            project: projA
+          },
+          body: "Updated daily log entry from remote",
+          project: projA
+        }
+      ]
+    };
+
+    await applyChangeset(vaultB, logChangeset);
+    const logsDir = path.join(vaultB, "projects", projA, "logs");
+    const logFiles = fs.readdirSync(logsDir);
+    assert.ok(logFiles.length >= 2, "Both original and merged remote log entries must be preserved");
+  });
 });

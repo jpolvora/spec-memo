@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { getVaultRoot, RECORD_SUBDIRS, initVault, withVaultLock, commitVaultChange } from "./vault.js";
 import { getSubdirForKind, upsertRecord } from "./store.js";
 import { parseRecord, serializeRecord, validateFrontmatter } from "./schema.js";
@@ -15,11 +16,19 @@ export interface ChangesetRecord {
   project: string;
 }
 
+export interface ChangesetDeletion {
+  project: string;
+  kind: RecordKind;
+  id: string;
+  slug: string;
+}
+
 export interface Changeset {
   schemaVersion: 1;
   generatedAt: string;
   sourceVaultRoot?: string;
   records: ChangesetRecord[];
+  deletions?: ChangesetDeletion[];
 }
 
 export interface SyncResult {
@@ -38,6 +47,34 @@ export interface ExportChangesetOptions {
 export interface ApplyChangesetOptions {
   dryRun?: boolean;
   force?: boolean;
+}
+
+export function readSyncCursor(vaultRoot: string, peerVault: string): string | undefined {
+  try {
+    const hash = crypto.createHash("sha256").update(path.resolve(peerVault)).digest("hex").substring(0, 16);
+    const cursorFile = path.join(vaultRoot, ".sync", "cursors", `${hash}.json`);
+    if (fs.existsSync(cursorFile)) {
+      const data = JSON.parse(fs.readFileSync(cursorFile, "utf8"));
+      return data.lastSyncAt;
+    }
+  } catch {
+    // Ignore read error
+  }
+  return undefined;
+}
+
+export function writeSyncCursor(vaultRoot: string, peerVault: string, cursor: string): void {
+  try {
+    const hash = crypto.createHash("sha256").update(path.resolve(peerVault)).digest("hex").substring(0, 16);
+    const cursorDir = path.join(vaultRoot, ".sync", "cursors");
+    if (!fs.existsSync(cursorDir)) {
+      fs.mkdirSync(cursorDir, { recursive: true });
+    }
+    const cursorFile = path.join(cursorDir, `${hash}.json`);
+    fs.writeFileSync(cursorFile, JSON.stringify({ peer: path.resolve(peerVault), lastSyncAt: cursor }, null, 2), "utf8");
+  } catch {
+    // Ignore write error
+  }
 }
 
 export function exportChangeset(vaultRootInput?: string, options: ExportChangesetOptions = {}): Changeset {
@@ -133,17 +170,25 @@ export async function applyChangeset(
         if (remoteTime > localTime || options.force) {
           if (!dryRun) {
             if (kind === "log") {
-              skipped++;
-              continue;
+              const mergedSlug = `${slug}.remote.${Date.now()}`;
+              await upsertRecord({
+                vaultRoot,
+                projectId: projId,
+                kind,
+                slug: mergedSlug,
+                frontmatter: item.frontmatter,
+                body: item.body
+              });
+            } else {
+              await upsertRecord({
+                vaultRoot,
+                projectId: projId,
+                kind,
+                slug,
+                frontmatter: item.frontmatter,
+                body: item.body
+              });
             }
-            await upsertRecord({
-              vaultRoot,
-              projectId: projId,
-              kind,
-              slug,
-              frontmatter: item.frontmatter,
-              body: item.body
-            });
           }
           applied++;
           recordsApplied.push(`${projId}/${kind}/${recId}`);
@@ -171,6 +216,23 @@ export async function applyChangeset(
         }
         applied++;
         recordsApplied.push(`${projId}/${kind}/${recId}`);
+      }
+    }
+
+    if (changeset.deletions && Array.isArray(changeset.deletions)) {
+      for (const del of changeset.deletions) {
+        const projDir = path.resolve(vaultRoot, "projects", del.project);
+        const kindDir = path.join(projDir, getSubdirForKind(del.kind));
+        const slug = del.slug || del.id;
+        const targetPath = path.resolve(kindDir, `${slug}.md`);
+        if (isPathInside(targetPath, projDir) && fs.existsSync(targetPath)) {
+          if (!dryRun) {
+            fs.unlinkSync(targetPath);
+          }
+          touchedProjects.add(del.project);
+          applied++;
+          recordsApplied.push(`${del.project}/${del.kind}/${del.id} (deleted)`);
+        }
       }
     }
 
@@ -208,14 +270,22 @@ export async function syncVaults(
 
   const doSync = async () => {
     // 1. Source -> Target
-    const changesetForward = exportChangeset(sourceVault, { since: options.since });
+    const sinceForward = options.since ?? readSyncCursor(sourceVault, targetVault);
+    const changesetForward = exportChangeset(sourceVault, { since: sinceForward });
     const forwardResult = await applyChangeset(targetVault, changesetForward, { dryRun: options.dryRun });
+    if (!options.dryRun) {
+      writeSyncCursor(sourceVault, targetVault, changesetForward.generatedAt);
+    }
 
     let backwardResult: SyncResult | undefined;
     if (options.twoWay) {
       // 2. Target -> Source
-      const changesetBackward = exportChangeset(targetVault, { since: options.since });
+      const sinceBackward = options.since ?? readSyncCursor(targetVault, sourceVault);
+      const changesetBackward = exportChangeset(targetVault, { since: sinceBackward });
       backwardResult = await applyChangeset(sourceVault, changesetBackward, { dryRun: options.dryRun });
+      if (!options.dryRun) {
+        writeSyncCursor(targetVault, sourceVault, changesetBackward.generatedAt);
+      }
     }
 
     return { forward: forwardResult, backward: backwardResult };
