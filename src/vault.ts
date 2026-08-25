@@ -54,6 +54,17 @@ function acquireVaultLockSync(vaultRoot: string): void {
       fd = fs.openSync(lockPath, 'wx');
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') {
+        try {
+          const st = fs.statSync(lockPath);
+          if (Date.now() - st.mtimeMs > 10000) {
+            fs.unlinkSync(lockPath);
+            continue;
+          }
+        } catch {
+          // lock disappeared or unreadable
+        }
+      }
       if (code !== 'EEXIST' || Date.now() >= deadline) {
         throw err;
       }

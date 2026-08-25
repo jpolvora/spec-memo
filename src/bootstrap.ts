@@ -277,9 +277,16 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       initialBrief.decisions = [];
       initialBrief.activeSlice = undefined;
       initialBrief.drift = undefined;
-      while (calculatePayloadSize(initialBrief) > budgetBytes && notices.length > 1) {
-        notices.pop();
-      }
+    }
+
+    while (calculatePayloadSize(initialBrief) > budgetBytes && notices.length > 0) {
+      notices.shift();
+    }
+    if (notices.length === 0 && initialBrief.truncated) {
+      notices.push(`Brief truncated to fit ${budgetBytes} byte budget.`);
+    }
+    if (calculatePayloadSize(initialBrief) > budgetBytes) {
+      notices.length = 0;
     }
 
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
