@@ -1,0 +1,59 @@
+name: Agentic Code Review (Cursor)
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22 }
+
+      - name: Run code reviewer
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          # Default 600000 (10m) is tight for Custom-stack / large diffs.
+          AGENTIC_CODE_REVIEWERS_TIMEOUT_MS: "1200000"
+          # Exclude internal agent plans and specs if present
+          AGENTIC_CODE_REVIEWERS_EXTRA_EXCLUDE_PATTERNS: ".agents/plans/**,.agents/specs/**"
+        run: |
+          set -euo pipefail
+          # Download to a file so BASH_SOURCE is bound (curl|bash leaves it unbound under set -u).
+          curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/release/run.sh \
+            -o /tmp/agentic-code-reviewers-run.sh
+          bash /tmp/agentic-code-reviewers-run.sh \
+            --engine cursor-sdk \
+            --model composer-2.5 \
+            --variant high \
+            --gh \
+            --stack Custom \
+            --custom-prompt .github/agentic-code-reviewers-prompt.md \
+            --score-min 3 \
+            --include-patterns "**/*.md,**/*.yml,**/*.yaml,**/*.json,**/*.sh,**/*.ps1,**/*.ts,**/*.js,**/*.cjs,**/*.prd" \
+            --source-branch "refs/heads/${{ github.head_ref }}" \
+            --target-branch "refs/heads/${{ github.event.pull_request.base.ref }}"
+
+      - name: Check for unresolved threads
+        id: check-threads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ACTIVE=$(gh pr view ${{ github.event.pull_request.number }} --json comments --jq '[.comments[] | select(.isResolved == false and .author.login != "github-actions[bot]" and .author.login != "github-actions")] | length' 2>/dev/null || echo 0)
+          echo "active_threads=$ACTIVE" >> $GITHUB_OUTPUT
+          echo "Unresolved threads: $ACTIVE"
+
+      - name: Block merge on unresolved threads
+        if: ${{ steps.check-threads.outputs.active_threads != '0' }}
+        run: |
+          echo "::error::PR has ${{ steps.check-threads.outputs.active_threads }} unresolved review thread(s). Resolve them before merging."
+          exit 1
