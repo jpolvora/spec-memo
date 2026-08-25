@@ -7,7 +7,7 @@ import { parseRecord, serializeRecord, validateFrontmatter } from "./schema.js";
 import { rebuildIndex } from "./indexer.js";
 import { rebuildCompiledViews } from "./compiler.js";
 import { getVaultProjectList, listProjectRecordsInternal } from "./canvas.js";
-import { isPathInside, assertNoSecrets } from "./safety.js";
+import { isPathInside, assertNoSecrets, assertValidProjectId } from "./safety.js";
 import { RecordFrontmatter, RecordKind } from "./types.js";
 
 export interface ChangesetRecord {
@@ -206,13 +206,10 @@ export async function applyChangeset(
     const touchedProjects = new Set<string>();
 
     for (const item of changeset.records) {
-      const projId = item.project;
+      const projId = assertValidProjectId(item.project, path.resolve(vaultRoot, "projects"));
       touchedProjects.add(projId);
 
       const projDir = path.resolve(vaultRoot, "projects", projId);
-      if (!isPathInside(projDir, path.resolve(vaultRoot, "projects"))) {
-        throw new Error("Changeset project path escapes vault projects directory");
-      }
       if (!dryRun && !fs.existsSync(projDir)) {
         initVault({ vaultRoot, projectId: projId, displayName: projId });
       }
@@ -300,18 +297,19 @@ export async function applyChangeset(
 
     if (changeset.deletions && Array.isArray(changeset.deletions)) {
       for (const del of changeset.deletions) {
-        const projDir = path.resolve(vaultRoot, "projects", del.project);
+        const projId = assertValidProjectId(del.project, path.resolve(vaultRoot, "projects"));
+        const projDir = path.resolve(vaultRoot, "projects", projId);
         const kindDir = path.join(projDir, getSubdirForKind(del.kind));
         const slug = del.slug || del.id;
         const targetPath = path.resolve(kindDir, `${slug}.md`);
         if (isPathInside(targetPath, projDir) && fs.existsSync(targetPath)) {
           if (!dryRun) {
             fs.unlinkSync(targetPath);
-            recordTombstone(vaultRoot, del.project, del.kind, del.id, slug);
+            recordTombstone(vaultRoot, projId, del.kind, del.id, slug);
           }
-          touchedProjects.add(del.project);
+          touchedProjects.add(projId);
           applied++;
-          recordsApplied.push(`${del.project}/${del.kind}/${del.id} (deleted)`);
+          recordsApplied.push(`${projId}/${del.kind}/${del.id} (deleted)`);
         }
       }
     }

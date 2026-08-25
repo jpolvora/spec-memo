@@ -225,3 +225,22 @@ export function assertNotInProductRoot(targetPath: string, productRoot: string |
     );
   }
 }
+
+/**
+ * Validate that a projectId string is non-empty, not . or .., and strictly inside projects directory.
+ */
+export function assertValidProjectId(projectId: string, projectsRoot: string): string {
+  if (!projectId || typeof projectId !== 'string') {
+    throw new Error('Archive project path escapes vault projects directory: Invalid project id');
+  }
+  const trimmed = projectId.trim();
+  if (!trimmed || trimmed === '.' || trimmed === '..' || trimmed.includes('/') || trimmed.includes('\\')) {
+    throw new Error(`Archive project path escapes vault projects directory: Invalid project id (${projectId})`);
+  }
+  const projDir = path.resolve(projectsRoot, trimmed);
+  const resolvedProjectsRoot = path.resolve(projectsRoot);
+  if (!isPathInside(projDir, resolvedProjectsRoot) || projDir === resolvedProjectsRoot) {
+    throw new Error(`Archive project path escapes vault projects directory (${projectId})`);
+  }
+  return trimmed;
+}

@@ -11,7 +11,7 @@ import {
 import { getVaultRoot, ensureVaultStructure, withVaultLock, commitVaultChange } from './vault.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { rebuildIndex } from './indexer.js';
-import { isPathInside, assertNoSecrets } from './safety.js';
+import { isPathInside, assertNoSecrets, assertValidProjectId } from './safety.js';
 import { parseRecord, validateFrontmatter } from './schema.js';
 import { upsertRecord } from './store.js';
 
@@ -289,10 +289,8 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
     const projectsRoot = path.resolve(vaultRoot, 'projects');
 
     for (const project of plainArchive.projects) {
-      const projDir = path.resolve(projectsRoot, project.projectId);
-      if (!isPathInside(projDir, projectsRoot)) {
-        throw new Error('Archive project path escapes vault projects directory');
-      }
+      const projId = assertValidProjectId(project.projectId, projectsRoot);
+      const projDir = path.resolve(projectsRoot, projId);
       if (!fs.existsSync(projDir)) {
         fs.mkdirSync(projDir, { recursive: true });
       }
