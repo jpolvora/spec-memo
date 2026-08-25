@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GcOptions, GcResult, MemoRecord, RecordFrontmatter } from './types.js';
-import { getVaultRoot, ensureVaultStructure, ensureProjectVault } from './vault.js';
+import { getVaultRoot, ensureVaultStructure, ensureProjectVault, withVaultLock } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { parseRecord, serializeRecord } from './schema.js';
 import { openIndex, indexRecord, removeRecord, rebuildIndex } from './indexer.js';
@@ -90,6 +90,7 @@ export function compactPlanRecord(record: MemoRecord): { frontmatter: RecordFron
  */
 export async function runGc(options: GcOptions = {}): Promise<GcResult> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
+  return withVaultLock(vaultRoot, async () => {
   const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
   const projectId = options.projectId || identity.projectId;
   const dryRun = Boolean(options.dryRun);
@@ -226,4 +227,5 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
       compactedPlans
     }
   };
+  });
 }

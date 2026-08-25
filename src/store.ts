@@ -330,6 +330,7 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
  */
 export async function appendEvent(options: AppendOptions): Promise<AppendResult> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
+  return withVaultLock(vaultRoot, async () => {
   const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
   const projectId = options.projectId || identity.projectId;
 
@@ -397,6 +398,7 @@ export async function appendEvent(options: AppendOptions): Promise<AppendResult>
     path: filePath,
     event: options.event
   };
+  });
 }
 
 /**
@@ -404,6 +406,7 @@ export async function appendEvent(options: AppendOptions): Promise<AppendResult>
  */
 export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
+  return withVaultLock(vaultRoot, async () => {
   const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
   const projectId = options.projectId || identity.projectId;
 
@@ -481,4 +484,5 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
     purged: false,
     path: record.path
   };
+  });
 }

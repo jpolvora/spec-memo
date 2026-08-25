@@ -260,6 +260,9 @@ Created artifacts...
       const data = res.data as import('./types.js').GcResult;
       assert.strictEqual(typeof data.purgedScratchCount, 'number');
       assert.strictEqual(typeof data.compactedPlansCount, 'number');
+      const details = (data as { details?: { purgedFiles?: string[]; compactedPlans?: string[] } }).details;
+      assert.equal(details?.purgedFiles, undefined);
+      assert.equal(details?.compactedPlans, undefined);
     });
   });
 });

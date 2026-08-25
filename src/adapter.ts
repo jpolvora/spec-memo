@@ -2,6 +2,7 @@ import { compileBootstrapBrief } from './bootstrap.js';
 import { upsertRecord, appendEvent, UpsertResult } from './store.js';
 import { getVaultRoot } from './vault.js';
 import { BootstrapBrief, AppendResult } from './types.js';
+import { sanitizeToolOutput } from './safety.js';
 
 export interface RecordTrapInput {
   scenario: string;
@@ -21,11 +22,12 @@ export class MemoryAdapter {
    * AC1: Session bootstrap loading path-relevant traps within 8 KB budget
    */
   async readMemoryBootstrap(cwd: string, query?: string): Promise<BootstrapBrief> {
-    return compileBootstrapBrief({
+    const brief = await compileBootstrapBrief({
       cwd,
       query,
       vaultRoot: this.vaultRoot
     });
+    return sanitizeToolOutput(brief) as BootstrapBrief;
   }
 
   /**
@@ -35,7 +37,7 @@ export class MemoryAdapter {
     const slug = `trap-${trap.scenario.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`;
     const body = `## Scenario\n${trap.scenario}\n\n## DO NOT\n${trap.doNot}\n\n## INSTEAD DO\n${trap.insteadDo}\n`;
 
-    return upsertRecord({
+    const result = await upsertRecord({
       cwd,
       vaultRoot: this.vaultRoot,
       kind: 'trap',
@@ -50,17 +52,19 @@ export class MemoryAdapter {
       },
       body
     });
+    return sanitizeToolOutput(result) as UpsertResult;
   }
 
   /**
    * AC3: Task completion changelog appending using write-only append log engine
    */
   async updateMemoryLog(cwd: string, logMessage: string, details?: Record<string, unknown>): Promise<AppendResult> {
-    return appendEvent({
+    const result = await appendEvent({
       cwd,
       vaultRoot: this.vaultRoot,
       event: logMessage,
       details
     });
+    return sanitizeToolOutput(result) as AppendResult;
   }
 }

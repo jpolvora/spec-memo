@@ -104,7 +104,7 @@ export function assertNoSecrets(payload: unknown, contextDesc = 'record payload'
   }
 }
 
-const VAULT_PATH_KEYS = new Set(['path', 'filepath', 'targetPath']);
+const VAULT_PATH_KEYS = new Set(['path', 'filepath', 'targetPath', 'purgedFiles', 'compactedPlans']);
 
 /**
  * Redact credential-like strings in a JSON-serializable payload (read-path fail-closed).

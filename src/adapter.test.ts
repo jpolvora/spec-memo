@@ -39,8 +39,12 @@ describe('MemoryAdapter (Phase 2 MCP Consumer Integration)', () => {
 
     assert.ok(res.id);
     assert.equal(res.kind, 'trap');
-    assert.ok(fs.existsSync(res.path));
-    assert.equal(res.path.includes(tempVaultRoot), true);
+    assert.equal((res as { path?: string }).path, undefined);
+    const projectDirs = fs.readdirSync(path.join(tempVaultRoot, 'projects'));
+    assert.ok(projectDirs.length > 0);
+    const trapsDir = path.join(tempVaultRoot, 'projects', projectDirs[0], 'traps');
+    const trapFiles = fs.readdirSync(trapsDir).filter((f) => f.endsWith('.md'));
+    assert.ok(trapFiles.length >= 1);
   });
 
   it('should append log event via updateMemoryLog', async () => {
@@ -50,6 +54,6 @@ describe('MemoryAdapter (Phase 2 MCP Consumer Integration)', () => {
 
     assert.ok(res.id);
     assert.equal(res.event, 'Completed Slice 10 implementation');
+    assert.equal((res as { path?: string }).path, undefined);
   });
-
 });
