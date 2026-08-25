@@ -126,8 +126,8 @@ export function isPathInside(targetPath: string, rootPath: string): boolean {
 /**
  * Assert that target file write is outside consumer product repository.
  */
-export function assertNotInProductRoot(targetPath: string, productRoot: string | null, isGit = true): void {
-  if (!productRoot || !isGit) {
+export function assertNotInProductRoot(targetPath: string, productRoot: string | null, _isGit = true): void {
+  if (!productRoot) {
     return;
   }
 
