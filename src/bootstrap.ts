@@ -41,7 +41,8 @@ export function checkSpecDrift(
 
     if (isGit) {
       try {
-        const statusOutput = execFileSync('git', ['status', '--porcelain', '--', relPath], {
+        const gitPath = relPath.replace(/\\/g, '/').replace(/^\.\//, '');
+        const statusOutput = execFileSync('git', ['status', '--porcelain', '--', gitPath], {
           cwd: productRoot,
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'ignore']
@@ -50,7 +51,7 @@ export function checkSpecDrift(
         let diverged = statusOutput.length > 0;
         if (!diverged) {
           try {
-            const atVerify = execFileSync('git', ['show', `${verifiedAtSha}:${relPath.replace(/\\/g, '/')}`], {
+            const atVerify = execFileSync('git', ['show', `${verifiedAtSha}:${gitPath}`], {
               cwd: productRoot,
               stdio: ['ignore', 'pipe', 'ignore']
             }) as Buffer;
@@ -229,6 +230,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
   if (initialBrief.byteLength > budgetBytes) {
     initialBrief.truncated = true;
 
+    // Add placeholder notice so its size is included during progressive trimming
+    notices.push(`Context brief truncated to fit ${budgetBytes} byte budget.`);
+
     // Drop lower-ranked traps first
     while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
       currentTraps.pop();
@@ -268,9 +272,16 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
     const droppedTraps = activeTraps.length - currentTraps.length;
     const droppedDecisions = activeDecisions.length - currentDecisions.length;
-    notices.push(
-      `Context brief truncated to fit ${budgetBytes} byte budget (dropped ${droppedTraps} trap(s), ${droppedDecisions} decision(s)).`
-    );
+    notices[notices.length - 1] =
+      `Context brief truncated to fit ${budgetBytes} byte budget (dropped ${droppedTraps} trap(s), ${droppedDecisions} decision(s)).`;
+
+    // If updating the notice message slightly increased payload size, trim one more item if needed
+    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+      currentTraps.pop();
+    }
+    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+      currentDecisions.pop();
+    }
 
     if (calculatePayloadSize(initialBrief) > budgetBytes) {
       initialBrief.traps = [];

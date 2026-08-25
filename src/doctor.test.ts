@@ -83,9 +83,15 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     fs.mkdirSync(memDir, { recursive: true });
     fs.writeFileSync(path.join(memDir, 'trap-01.md'), '# In-repo trap\n', 'utf8');
 
+    // Plant nested memory file
+    const nestedShared = path.join(tempProductRepo, '.agents', 'skills', 'ws-shared');
+    fs.mkdirSync(nestedShared, { recursive: true });
+    fs.writeFileSync(path.join(nestedShared, 'MEMORY.md'), '# Nested in-repo memory\n', 'utf8');
+
     const pollution = scanForRepoPollution(tempProductRepo);
-    assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('MEMORY.md')));
+    assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path === 'MEMORY.md'));
     assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('trap-01.md')));
+    assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('ws-shared/MEMORY.md')));
   });
 
   it('should detect in-tree run.json, .state.md, and telemetry dumps as state/telemetry residue', async () => {

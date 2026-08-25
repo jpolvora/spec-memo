@@ -40,10 +40,17 @@ export async function promoteRecord(options: PromoteOptions): Promise<PromoteRes
     ? path.resolve(destClean)
     : path.resolve(identity.rootPath, destClean);
 
-  // Strict default-deny: destination MUST be inside consumer product root
+  // Strict default-deny: destination MUST be inside consumer product root and not in .git
   if (!isPathInside(resolvedTarget, identity.rootPath)) {
     throw new Error(
       `Safety violation (Default Deny): Promote destination must be inside consumer product repository (${identity.rootPath}). Target: ${resolvedTarget}`
+    );
+  }
+
+  const relCheck = path.relative(identity.rootPath, resolvedTarget).replace(/\\/g, '/');
+  if (relCheck === '.git' || relCheck.startsWith('.git/')) {
+    throw new Error(
+      `Safety violation (Default Deny): Promote destination must not target .git directory. Target: ${resolvedTarget}`
     );
   }
 

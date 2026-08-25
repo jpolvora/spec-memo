@@ -167,8 +167,8 @@ export function stripVaultPaths(payload: unknown): unknown {
  */
 export function redactAbsolutePathsInText(text: string): string {
   return text
-    .replace(/[A-Za-z]:\\[^\s)'"`]+/g, '[path]')
-    .replace(/(^|[\s(])(\/(?:[^/\s)]+\/)+[^/\s)]+)/g, '$1[path]');
+    .replace(/(?:file:\/\/\/?)?[A-Za-z]:[/\\][^\s)'"`]+/g, '[path]')
+    .replace(/(^|[\s(])((?:file:\/\/\/?)?\/(?:[^/\s)]+\/)+[^/\s)]+)/g, '$1[path]');
 }
 
 export function sanitizeToolOutput(payload: unknown): unknown {

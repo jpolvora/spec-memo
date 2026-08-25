@@ -152,6 +152,34 @@ describe('Promote Engine (promoteRecord)', () => {
     );
   });
 
+  it('should reject promote when target destination is inside .git directory', async () => {
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'decision',
+      slug: 'adr-git-target',
+      frontmatter: {
+        id: 'adr-git-target',
+        title: 'ADR Git Target'
+      },
+      body: 'Body'
+    });
+
+    await assert.rejects(
+      async () => {
+        await promoteRecord({
+          cwd: tempProductRepo,
+          vaultRoot: tempVaultRoot,
+          id: 'adr-git-target',
+          destination: '.git/hooks/pre-commit'
+        });
+      },
+      {
+        message: /Promote destination must not target \.git directory/
+      }
+    );
+  });
+
   it('should reject promote when record ID does not exist', async () => {
     await assert.rejects(
       async () => {

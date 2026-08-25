@@ -387,37 +387,37 @@ export function syncVault(vaultRoot: string = getVaultRoot()): { pulled: boolean
 
   try {
     return withVaultLockSync(vaultRoot, () => {
-    const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (!config.vaultGit?.enabled) {
-      return { pulled: false, pushed: false, message: 'Vault git sync is disabled in config.json.' };
-    }
+      const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (!config.vaultGit?.enabled) {
+        return { pulled: false, pushed: false, message: 'Vault git sync is disabled in config.json.' };
+      }
 
-    initVaultGit(vaultRoot);
+      initVaultGit(vaultRoot);
 
-    let pulled = false;
-    let pushed = false;
+      let pulled = false;
+      let pushed = false;
 
-    try {
-      const branch = resolveVaultGitBranch(config, vaultRoot);
-      execFileSync('git', ['pull', '--rebase', 'origin', branch], { cwd: vaultRoot, stdio: 'ignore' });
-      pulled = true;
-    } catch {
-      // Pull optional fallback
-    }
+      try {
+        const branch = resolveVaultGitBranch(config, vaultRoot);
+        execFileSync('git', ['pull', '--rebase', 'origin', branch], { cwd: vaultRoot, stdio: 'ignore' });
+        pulled = true;
+      } catch {
+        // Pull optional fallback
+      }
 
-    try {
-      const branch = resolveVaultGitBranch(config, vaultRoot);
-      execFileSync('git', ['push', '-u', 'origin', branch], { cwd: vaultRoot, stdio: 'ignore' });
-      pushed = true;
-    } catch {
-      // Push optional fallback
-    }
+      try {
+        const branch = resolveVaultGitBranch(config, vaultRoot);
+        execFileSync('git', ['push', '-u', 'origin', branch], { cwd: vaultRoot, stdio: 'ignore' });
+        pushed = true;
+      } catch {
+        // Push optional fallback
+      }
 
-    return {
-      pulled,
-      pushed,
-      message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`
-    };
+      return {
+        pulled,
+        pushed,
+        message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`
+      };
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

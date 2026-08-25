@@ -266,6 +266,44 @@ describe('Bootstrap Brief Engine', () => {
     assert.equal(brief.drift, undefined);
   });
 
+  it('should handle linkedPaths with leading ./ without false drift flags', async () => {
+    const { execFileSync } = await import('node:child_process');
+    fs.mkdirSync(path.join(tempProject, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(tempProject, 'src', 'helper.ts'), 'export const val = 42;\n');
+    execFileSync('git', ['init'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['add', '.'], { cwd: tempProject, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'add helper'], { cwd: tempProject, stdio: 'ignore' });
+    const verifiedAtSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: tempProject,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'spec',
+      slug: 'dot-prefix-spec',
+      frontmatter: {
+        id: 'spec-dot-prefix-spec',
+        title: 'Dot Prefix Spec',
+        status: 'active',
+        linkedPaths: ['./src/helper.ts'],
+        verifiedAtSha
+      },
+      body: 'Spec body'
+    });
+
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault
+    });
+
+    assert.equal(brief.drift, undefined);
+  });
+
   it('should trim oversized activeSlice until the brief fits the byte budget', async () => {
     const hugeBody = 'x'.repeat(6000);
     await upsertRecord({

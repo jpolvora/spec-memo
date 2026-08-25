@@ -216,7 +216,10 @@ You should provide your token via environment variables rather than hardcoding i
       dbPath: '/home/user/.spec-memo/memo.sqlite',
       absolutePath: '/home/user/product/.agents/plans/foo.md',
       body: `token=${token}`,
-      error: 'Safety violation inside /home/user/product/src/store.ts'
+      error: 'Safety violation inside /home/user/product/src/store.ts',
+      winError: 'Failed at C:/Users/name/.spec-memo/projects/123/traps/t1.md',
+      winBackslash: 'Failed at C:\\Users\\name\\.spec-memo\\projects\\123\\traps\\t1.md',
+      fileUri: 'Failed at file:///C:/Users/name/.spec-memo/projects/123/traps/t1.md'
     }) as {
       path?: string;
       filepath?: string;
@@ -226,6 +229,9 @@ You should provide your token via environment variables rather than hardcoding i
       absolutePath?: string;
       body: string;
       error: string;
+      winError: string;
+      winBackslash: string;
+      fileUri: string;
     };
     assert.equal(out.path, undefined);
     assert.equal(out.filepath, undefined);
@@ -236,5 +242,8 @@ You should provide your token via environment variables rather than hardcoding i
     assert.match(out.body, /\[REDACTED:GitHub Personal Access Token\]/);
     assert.doesNotMatch(out.body, /ghp_/);
     assert.doesNotMatch(out.error, /\/home\/user/);
+    assert.doesNotMatch(out.winError, /C:\/Users/);
+    assert.doesNotMatch(out.winBackslash, /C:\\Users/);
+    assert.doesNotMatch(out.fileUri, /C:\/Users/);
   });
 });
