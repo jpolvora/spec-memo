@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { initVault } from "./vault.js";
-import { upsertRecord, getRecord } from "./store.js";
+import { upsertRecord, getRecord, forgetRecord } from "./store.js";
 import { searchIndex, closeIndex } from "./indexer.js";
 import { exportChangeset, applyChangeset, syncVaults } from "./sync.js";
 
@@ -279,5 +279,42 @@ test("Multi-Machine Vault Sync & Delta Engine", async (t) => {
     const logsDir = path.join(vaultB, "projects", projA, "logs");
     const logFiles = fs.readdirSync(logsDir);
     assert.ok(logFiles.length >= 2, "Both original and merged remote log entries must be preserved");
+  });
+
+  await t.test("should propagate purged records end-to-end via syncVaults", async () => {
+    // 1. Create scratch record on vaultA
+    const scratchRec = await upsertRecord({
+      vaultRoot: vaultA,
+      projectId: projA,
+      kind: "scratch",
+      slug: "e2e-scratch-test",
+      body: "Temporary scratch record for e2e sync test"
+    });
+
+    // 2. Sync to vaultB
+    await syncVaults(vaultA, vaultB, { twoWay: true });
+    const fetchedBefore = await getRecord({
+      vaultRoot: vaultB,
+      projectId: projA,
+      id: scratchRec.id
+    });
+    assert.ok(fetchedBefore, "Record should exist in vaultB after initial sync");
+
+    // 3. Purge record on vaultA
+    await forgetRecord({
+      vaultRoot: vaultA,
+      projectId: projA,
+      id: scratchRec.id,
+      purge: true
+    });
+
+    // 4. Sync again
+    await syncVaults(vaultA, vaultB, { twoWay: true });
+    const fetchedAfter = await getRecord({
+      vaultRoot: vaultB,
+      projectId: projA,
+      id: scratchRec.id
+    });
+    assert.strictEqual(fetchedAfter, null, "Purged record must be removed from vaultB after sync");
   });
 });

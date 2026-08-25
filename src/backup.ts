@@ -13,6 +13,7 @@ import { rebuildCompiledViews } from './compiler.js';
 import { rebuildIndex } from './indexer.js';
 import { isPathInside, assertNoSecrets } from './safety.js';
 import { parseRecord, validateFrontmatter } from './schema.js';
+import { upsertRecord } from './store.js';
 
 interface RawVaultRecord {
   relativePath: string;
@@ -145,9 +146,13 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
                 try {
                   const content = fs.readFileSync(filePath, 'utf8');
                   const relPath = `${dirName}/${file}`;
+                  assertNoSecrets(content, `export record ${relPath}`);
                   records.push({ relativePath: relPath, content });
                   totalRecords++;
-                } catch {
+                } catch (err: unknown) {
+                  if (err instanceof Error && err.message.includes('Safety violation')) {
+                    throw err;
+                  }
                   // Ignore
                 }
               }
@@ -318,7 +323,15 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
         }
 
         if (!fs.existsSync(targetPath) || options.overwrite !== false) {
-          fs.writeFileSync(targetPath, record.content, 'utf8');
+          await upsertRecord({
+            vaultRoot,
+            projectId: project.projectId,
+            kind: parsed.frontmatter.kind,
+            slug: (parsed.frontmatter.slug as string) || undefined,
+            frontmatter: parsed.frontmatter,
+            body: parsed.body,
+            allowDuplicate: parsed.frontmatter.kind !== 'trap'
+          });
           restoredRecordsCount++;
         }
       }

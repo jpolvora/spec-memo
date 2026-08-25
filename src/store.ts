@@ -8,6 +8,7 @@ import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
 import { assertNoSecrets, assertNotInProductRoot } from './safety.js';
+import { recordTombstone } from './sync.js';
 
 export interface UpsertOptions {
   cwd?: string;
@@ -467,6 +468,14 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
     if (fs.existsSync(record.path)) {
       fs.unlinkSync(record.path);
     }
+
+    recordTombstone(
+      vaultRoot,
+      projectId,
+      kind,
+      id,
+      (record.frontmatter.slug as string) || id
+    );
 
     try {
       const db = openIndex(vaultRoot);

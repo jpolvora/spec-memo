@@ -527,9 +527,12 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   // Handle memo export-vault command
   if (parsed.command === 'export-vault') {
     try {
+      if (parsed.options.password) {
+        console.error('Warning: --password is visible in process listings; prefer SPEC_MEMO_VAULT_PASSWORD or stdin.');
+      }
       const password =
-        (parsed.options.password as string | undefined) ||
         process.env.SPEC_MEMO_VAULT_PASSWORD ||
+        (parsed.options.password as string | undefined) ||
         undefined;
       const outputPath =
         (parsed.options.output as string) ||
@@ -583,9 +586,12 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         throw new Error('Archive file path is required to import vault.');
       }
 
+      if (parsed.options.password) {
+        console.error('Warning: --password is visible in process listings; prefer SPEC_MEMO_VAULT_PASSWORD or stdin.');
+      }
       const password =
-        (parsed.options.password as string | undefined) ||
         process.env.SPEC_MEMO_VAULT_PASSWORD ||
+        (parsed.options.password as string | undefined) ||
         undefined;
       const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
 

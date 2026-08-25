@@ -77,6 +77,82 @@ export function writeSyncCursor(vaultRoot: string, peerVault: string, cursor: st
   }
 }
 
+export function recordTombstone(
+  vaultRoot: string,
+  project: string,
+  kind: RecordKind,
+  id: string,
+  slug: string
+): void {
+  try {
+    const tombstonesDir = path.join(vaultRoot, ".sync", "tombstones");
+    if (!fs.existsSync(tombstonesDir)) {
+      fs.mkdirSync(tombstonesDir, { recursive: true });
+    }
+    const tombstoneFile = path.join(tombstonesDir, `${project}.json`);
+    let tombstones: Array<ChangesetDeletion & { deletedAt: string }> = [];
+    if (fs.existsSync(tombstoneFile)) {
+      try {
+        tombstones = JSON.parse(fs.readFileSync(tombstoneFile, "utf8"));
+      } catch {
+        tombstones = [];
+      }
+    }
+    tombstones.push({
+      project,
+      kind,
+      id,
+      slug,
+      deletedAt: new Date().toISOString()
+    });
+    fs.writeFileSync(tombstoneFile, JSON.stringify(tombstones, null, 2), "utf8");
+  } catch {
+    // Non-blocking
+  }
+}
+
+export function collectTombstones(
+  vaultRoot: string,
+  since?: string,
+  projectId?: string
+): ChangesetDeletion[] {
+  const result: ChangesetDeletion[] = [];
+  try {
+    const tombstonesDir = path.join(vaultRoot, ".sync", "tombstones");
+    if (!fs.existsSync(tombstonesDir)) {
+      return result;
+    }
+    const files = fs.readdirSync(tombstonesDir);
+    for (const file of files) {
+      if (!file.endsWith(".json")) continue;
+      const proj = file.replace(/\.json$/, "");
+      if (projectId && proj !== projectId) continue;
+      const filePath = path.join(tombstonesDir, file);
+      try {
+        const list: Array<ChangesetDeletion & { deletedAt: string }> = JSON.parse(
+          fs.readFileSync(filePath, "utf8")
+        );
+        for (const item of list) {
+          if (since && new Date(item.deletedAt) <= new Date(since)) {
+            continue;
+          }
+          result.push({
+            project: item.project,
+            kind: item.kind,
+            id: item.id,
+            slug: item.slug
+          });
+        }
+      } catch {
+        // Ignore unreadable
+      }
+    }
+  } catch {
+    // Ignore error
+  }
+  return result;
+}
+
 export function exportChangeset(vaultRootInput?: string, options: ExportChangesetOptions = {}): Changeset {
   const vaultRoot = getVaultRoot(vaultRootInput);
   const projects = getVaultProjectList(vaultRoot);
@@ -104,10 +180,13 @@ export function exportChangeset(vaultRootInput?: string, options: ExportChangese
     }
   }
 
+  const deletions = collectTombstones(vaultRoot, options.since, options.projectId);
+
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    records
+    records,
+    deletions: deletions.length > 0 ? deletions : undefined
   };
 }
 
