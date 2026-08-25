@@ -7,6 +7,7 @@ import { runDoctor } from './doctor.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
 import { syncVault } from './vault.js';
+import { exportVault, importVault } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { sanitizeToolOutput } from './safety.js';
 
@@ -75,23 +76,25 @@ Usage:
   memo serve
 
 Core Memory Commands:
-  bootstrap   Bind cwd's git remote; compile a session brief
-  search      Filtered retrieval across memory records
-  get         Read one record by id or kind+slug
-  upsert      Write or update a memory record (trap, decision, spec, etc.)
-  append      Append a changelog or audit run event
-  forget      Supersede or archive a memory record
-  gc          Apply TTL, compact shipped plans, rebuild FTS
-  promote     Copy one record into the product repository
+  bootstrap     Bind cwd's git remote; compile a session brief
+  search        Filtered retrieval across memory records
+  get           Read one record by id or kind+slug
+  upsert        Write or update a memory record (trap, decision, spec, etc.)
+  append        Append a changelog or audit run event
+  forget        Supersede or archive a memory record
+  gc            Apply TTL, compact shipped plans, compact logs, rebuild FTS
+  promote       Copy one record into the product repository
 
 Utility Commands:
-  doctor      Diagnose vault integrity and check product tree pollution
-  import      Import legacy .agents tree into external vault
-  serve       Run the stdio MCP server for agent integration
+  doctor        Diagnose vault integrity and check product tree pollution
+  import        Import legacy .agents tree into external vault
+  export-vault  Export vault records into portable archive (optional AES-256-GCM)
+  import-vault  Import vault archive into local vault
+  serve         Run the stdio MCP server for agent integration
 
 Global Options:
-  --json      Output machine-readable JSON to stdout
-  -h, --help  Show help for memo or a specific command
+  --json        Output machine-readable JSON to stdout
+  -h, --help    Show help for memo or a specific command
 `);
 }
 
@@ -100,6 +103,34 @@ function printCommandHelp(cmd: string): void {
     console.log(`Usage: memo serve
 
 Starts the spec-memo stdio MCP server for AI agent host integration.`);
+    return;
+  }
+
+  if (cmd === 'export-vault') {
+    console.log(`Usage: memo export-vault [options]
+
+Exports project vault records into a portable JSON archive with optional AES-256-GCM encryption.
+
+Options:
+  --password      Encryption password (uses AES-256-GCM + PBKDF2)
+  --output, -o    Output archive file path
+  --project       Specific project ID to export
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'import-vault') {
+    console.log(`Usage: memo import-vault <archiveFile> [options]
+
+Restores a vault archive into the local vault with automatic index rebuilding.
+
+Options:
+  --password      Decryption password (required if archive is encrypted)
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
     return;
   }
 
@@ -309,23 +340,86 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     }
   }
 
-  // Handle memo sync command
-  if (parsed.command === 'sync') {
+  // Handle memo export-vault command
+  if (parsed.command === 'export-vault') {
     try {
+      const password = (parsed.options.password as string) || undefined;
+      const outputPath =
+        (parsed.options.output as string) ||
+        (parsed.options.o as string) ||
+        parsed.positionals[0] ||
+        undefined;
+      const projectId = (parsed.options.project as string) || undefined;
       const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
-      const res = syncVault(vaultRoot);
+
+      const result = await exportVault({
+        vaultRoot,
+        projectId,
+        outputPath,
+        password
+      });
+
       if (parsed.isJson) {
-        printJson(res);
+        printJson(result);
       } else {
-        console.log(`[SYNC] ${res.message}`);
+        const encStr = result.encrypted ? ' (AES-256-GCM Encrypted)' : ' (Plaintext)';
+        console.log(`spec-memo — Exported Vault Archive${encStr}\n`);
+        console.log(`  Projects exported: ${result.projectsCount}`);
+        console.log(`  Records exported:  ${result.recordsCount}`);
+        if (result.outputPath) {
+          console.log(`  Saved archive to:  ${result.outputPath}`);
+        } else if (result.payload) {
+          console.log(`\n${result.payload}`);
+        }
       }
       return 0;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (parsed.isJson) {
-        printJson({ isError: true, error: msg, code: 'SYNC_ERROR' });
+        printJson({ isError: true, error: msg, code: 'EXPORT_VAULT_ERROR' });
       } else {
-        console.error(`Sync failed: ${msg}`);
+        console.error(`Export vault failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo import-vault command
+  if (parsed.command === 'import-vault') {
+    try {
+      const archivePath =
+        (parsed.options.file as string) ||
+        (parsed.options.archive as string) ||
+        parsed.positionals[0];
+
+      if (!archivePath) {
+        throw new Error('Archive file path is required to import vault.');
+      }
+
+      const password = (parsed.options.password as string) || undefined;
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+
+      const result = await importVault({
+        vaultRoot,
+        archivePath,
+        password
+      });
+
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(`spec-memo — Restored Vault Archive\n`);
+        console.log(`  Projects restored: ${result.restoredProjectsCount} (${result.restoredProjects.join(', ')})`);
+        console.log(`  Records restored:  ${result.restoredRecordsCount}`);
+        console.log(`  Rebuilt FTS index: ${result.rebuiltFts}`);
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'IMPORT_VAULT_ERROR' });
+      } else {
+        console.error(`Import vault failed: ${msg}`);
       }
       return 1;
     }
@@ -491,6 +585,9 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       if (payload.force === true || payload.force === 'true') {
         payload.force = true;
       }
+      if (payload.format) {
+        payload.format = String(payload.format);
+      }
     }
 
     const response = await executeTool(parsed.command, payload);
@@ -578,11 +675,13 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         console.log(`  Purged expired scratch records: ${g.purgedScratchCount}`);
         console.log(`  Purged stale review records:   ${g.purgedReviewCount}`);
         console.log(`  Compacted shipped plans:       ${g.compactedPlansCount}`);
+        console.log(`  Compacted historical logs:     ${g.compactedLogsCount || 0}`);
         console.log(`  Rebuilt FTS index:             ${g.rebuiltFts}`);
         console.log(`  Rebuilt compiled views:        ${g.rebuiltViews}`);
       } else if (parsed.command === 'promote' && response.data) {
         const p = response.data as import('./types.js').PromoteResult;
-        console.log(`[PROMOTE] Record ${p.id} (${p.kind}) exported to ${p.destination} (${p.bytesWritten} bytes)`);
+        const fmtStr = p.format ? ` (format: ${p.format})` : '';
+        console.log(`[PROMOTE] Record ${p.id} (${p.kind})${fmtStr} exported to ${p.destination} (${p.bytesWritten} bytes)`);
       } else {
         console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));
       }

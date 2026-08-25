@@ -55,7 +55,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 ### Phase 0: Dogfood remap (optional, outside this repo)
 
-- [ ] [`dogfood-remap`](dogfood-remap.spec.md): Consumer configuration remap proof under `~/.spec-memo-test`
+- [x] [`dogfood-remap`](dogfood-remap.spec.md): Consumer configuration remap proof under `~/.spec-memo-test`
 
 ### Phase 1: spec-memo MVP (this repository)
 
@@ -80,17 +80,20 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`vault-git`](vault-git.spec.md): Optional private git remote sync for vault persistence
 - [x] [`cross-project-search`](cross-project-search.spec.md): Opt-in cross-project search across local vault repositories
 - [x] [`embeddings-search`](embeddings-search.spec.md): Embeddings as optional search backend
+- [x] [`log-compaction`](log-compaction.spec.md): Monthly log roll-up compaction and archiving
 
 ### Phase 4: Human viewers (optional)
 
 - [x] [`cli-doctor`](cli-doctor.spec.md): CLI doctor diagnostic and repository health inspection UX
 - [x] [`viewer`](viewer.spec.md): Human viewer compatibility and Obsidian vault layout support
+- [x] [`promote-adr`](promote-adr.spec.md): Promote-to-ADR formatting templates and directory resolution
+- [x] [`vault-backup`](vault-backup.spec.md): Encrypted vault backup, export, and restoration engine
 
 ## 8. Next specs
 
 | # | Spec | Status | Target Phase | Summary |
 |---|------|--------|--------------|---------|
-| 0 | [`dogfood-remap`](dogfood-remap.spec.md) | `[ ] todo` | Phase 0 | Consumer configuration remap proof |
+| 0 | [`dogfood-remap`](dogfood-remap.spec.md) | `[x] done` | Phase 0 | Consumer configuration remap proof |
 | 1 | [`vault-and-identity`](vault-and-identity.spec.md) | `[x] done` | Phase 1 | Remote normalization, fallback path id, vault layout |
 | 2 | [`record-schema-and-indexes`](record-schema-and-indexes.spec.md) | `[x] done` | Phase 1 | Frontmatter validation, kinds, compiled md views |
 | 3 | [`fts-index`](fts-index.spec.md) | `[x] done` | Phase 1 | SQLite FTS5 index (`memo.sqlite`), rebuild from vault |
@@ -108,13 +111,14 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 15 | [`embeddings-search`](embeddings-search.spec.md) | `[x] done` | Phase 3 | Optional embeddings search backend after kinds/TTL |
 | 16 | [`cli-doctor`](cli-doctor.spec.md) | `[x] done` | Phase 4 | Polished interactive CLI doctor and health inspection |
 | 17 | [`viewer`](viewer.spec.md) | `[x] done` | Phase 4 | Obsidian and markdown viewer passive compatibility |
+| 18 | [`log-compaction`](log-compaction.spec.md) | `[x] done` | Phase 3 | Monthly log roll-up compaction and archiving |
+| 19 | [`promote-adr`](promote-adr.spec.md) | `[x] done` | Phase 4 | Promote-to-ADR formatting templates and directory resolution |
+| 20 | [`vault-backup`](vault-backup.spec.md) | `[x] done` | Phase 4 | Encrypted vault backup, export, and restoration engine |
 
 ## 9. Inbox (unscheduled ideas)
 
 - Host plugin / canvas UI for humans.
-- Encrypted vault / git-crypt.
-- Multi-machine sync beyond optional git remote on the vault.
-- Promote-to-ADR templates per product language.
+- Multi-machine sync beyond optional git remote on the vault and export-vault archives.
 
 ## 10. Done log
 
@@ -139,6 +143,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-16-embeddings-search | Optional vector similarity search backend fallback engine | Slice 16 delivery |
 | 2026-08-25 | slice-17-cli-doctor | Interactive CLI doctor health inspector with --rebuild and --fix options | Slice 17 delivery |
 | 2026-08-25 | slice-18-viewer | Passive Markdown & Obsidian wikilink viewer compatibility | Slice 18 delivery |
+| 2026-08-25 | slice-19-log-compaction | Monthly log roll-up compaction and FTS5 indexing | Slice 19 delivery |
+| 2026-08-25 | slice-20-promote-adr | Promote-to-ADR formatting templates and directory destination resolution | Slice 20 delivery |
+| 2026-08-25 | slice-21-vault-backup | Encrypted vault backup, export, and restoration engine (AES-256-GCM) | Slice 21 delivery |
 
 ## Archive
 
@@ -151,7 +158,7 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 
 - [x] All completed features logged in Done log.
 - [x] Linked `*.spec.md` files exist for all Next specs.
-- [x] All 18 canonical specifications validated against schema.
+- [x] All 21 canonical specifications validated against schema.
 
 ## 12. Related docs
 

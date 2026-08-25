@@ -352,5 +352,149 @@ describe('CLI Integration', () => {
       }
     }
   });
+
+  it('should execute memo export-vault and memo import-vault via CLI', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-backup-test-'));
+    const sourceVault = path.join(tempDir, 'source-vault');
+    const targetVault = path.join(tempDir, 'target-vault');
+    const fixtureRepo = path.join(tempDir, 'repo');
+    const archiveFile = path.join(tempDir, 'archive.json');
+
+    fs.mkdirSync(sourceVault, { recursive: true });
+    fs.mkdirSync(targetVault, { recursive: true });
+    fs.mkdirSync(fixtureRepo, { recursive: true });
+    fs.mkdirSync(path.join(fixtureRepo, '.git'), { recursive: true });
+
+    try {
+      // Upsert a record first
+      await runCli([
+        'upsert',
+        '--kind',
+        'trap',
+        '--slug',
+        'cli-trap-test',
+        '--title',
+        'CLI Trap Test',
+        '--cwd',
+        fixtureRepo,
+        '--vaultRoot',
+        sourceVault,
+        '--body',
+        'Trap content for backup verification'
+      ]);
+
+      // Export vault via CLI
+      capturedLogs = '';
+      const exportCode = await runCli([
+        'export-vault',
+        '--vaultRoot',
+        sourceVault,
+        '--output',
+        archiveFile,
+        '--password',
+        'CliTestPassword123!',
+        '--json'
+      ]);
+      assert.equal(exportCode, 0);
+      const exportJson = JSON.parse(capturedLogs.trim());
+      assert.equal(exportJson.encrypted, true);
+      assert.equal(exportJson.recordsCount, 1);
+      assert.ok(fs.existsSync(archiveFile));
+
+      // Import vault via CLI
+      capturedLogs = '';
+      const importCode = await runCli([
+        'import-vault',
+        archiveFile,
+        '--vaultRoot',
+        targetVault,
+        '--password',
+        'CliTestPassword123!',
+        '--json'
+      ]);
+      assert.equal(importCode, 0);
+      const importJson = JSON.parse(capturedLogs.trim());
+      assert.equal(importJson.restoredRecordsCount, 1);
+      assert.equal(importJson.rebuiltFts, true);
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
+
+  it('should execute memo promote with --format adr via CLI', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-promote-test-'));
+    const vaultRoot = path.join(tempDir, 'vault');
+    const fixtureRepo = path.join(tempDir, 'repo');
+
+    fs.mkdirSync(vaultRoot, { recursive: true });
+    fs.mkdirSync(fixtureRepo, { recursive: true });
+    fs.mkdirSync(path.join(fixtureRepo, '.git'), { recursive: true });
+
+    try {
+      // Upsert a decision record
+      await runCli([
+        'upsert',
+        '--kind',
+        'decision',
+        '--slug',
+        'cli-adr-decision',
+        '--title',
+        'Architecture Decision for CLI',
+        '--cwd',
+        fixtureRepo,
+        '--vaultRoot',
+        vaultRoot,
+        '--body',
+        'ADR body explaining architectural choice'
+      ]);
+
+      // Promote with --format adr
+      capturedLogs = '';
+      const promoteCode = await runCli([
+        'promote',
+        'cli-adr-decision',
+        'docs/adr/0001-cli.md',
+        '--format',
+        'adr',
+        '--cwd',
+        fixtureRepo,
+        '--vaultRoot',
+        vaultRoot
+      ]);
+      assert.equal(promoteCode, 0);
+      assert.ok(capturedLogs.includes('[PROMOTE]'));
+      assert.ok(capturedLogs.includes('(format: adr)'));
+
+      const writtenFile = path.join(fixtureRepo, 'docs', 'adr', '0001-cli.md');
+      assert.ok(fs.existsSync(writtenFile));
+      const content = fs.readFileSync(writtenFile, 'utf8');
+      assert.ok(content.includes('# ADR: Architecture Decision for CLI'));
+      assert.ok(content.includes('## Context and Problem Statement'));
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
 });
 

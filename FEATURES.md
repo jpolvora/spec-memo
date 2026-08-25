@@ -74,6 +74,7 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 - [x] **Same module as MCP.** `memo <command>` maps 1:1 to tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`.
 - [x] **`memo doctor`.** Vault exists, FTS rebuilds, project binds, reports in-repo pollution under a given product root (does not delete).
 - [x] **`memo import <productRoot>`.** See § Import.
+- [x] **`memo export-vault` / `memo import-vault`.** Backup and restore vault archives with optional AES-256-GCM encryption.
 - [x] **Help and errors on stderr; machine-readable JSON on stdout** when `--json` is passed.
 
 ---
@@ -83,7 +84,8 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 - [x] **Schema gate.** Invalid kind/status/frontmatter → error, no write.
 - [x] **TTL.** `scratch` 7 days; `review` 14 days after `relatedSlug` PR merged or 14 days from `updated` if unknown. `gc` applies this.
 - [x] **Plan compact.** `status=shipped` plans reduce to a short result record; detail files become `scratch` then expire.
-- [ ] **Log compact.** Monthly roll-up files; events remain searchable via FTS.
+- [x] **Log compact.** Monthly roll-up files; events remain searchable via FTS.
+- [x] **ADR promotion templates.** Format decisions into standard Nygard ADR or MADR Markdown on promotion.
 - [x] **Redaction.** `upsert` / `append` reject bodies that look like secrets (PEM headers, `api_key=` assignments, known env-file patterns). Caller must omit the secret; spec-memo does not store a redacted copy of the secret value.
 - [x] **Refuse product-tree write.** If `cwd` or `productRoot` is a git work tree, API/CLI refuse to write record files *under that tree*. Vault writes stay under `$SPEC_MEMO_ROOT`.
 - [x] **Trap dedup (Phase 3).** Same `pathPatterns` + similar DO NOT → supersede instead of a third entry.
@@ -133,5 +135,6 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime (Phase 1 MVP + Phase 2 Harness Adapters + Phase 3 Curator Hardening delivered) | `[x]` |
+| Runtime (Phase 1 MVP + Phase 2 Harness Adapters + Phase 3 Curator Hardening + Phase 4 Viewers delivered) | `[x]` |
+
 

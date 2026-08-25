@@ -25,9 +25,10 @@ Greenfield feature. Design Intent skipped: experimental configuration proof for 
 
 Plan Phase 0: Optional consumer remap. Goal: Prove "plans outside the product tree" with zero spec-memo code. Action: On a throwaway clone of a consumer, set `plans.dir` and `plans.specsDir` to absolute paths under `~/.spec-memo-test/<project>/`. Proof: `git status` in the product clone does not list plan/spec dumps; one live workflow can still read/write the remapped dirs.
 
-## Notes
+## Verification Status
 
-- This phase does not relocate `{sharedDir}` / `MEMORY.md`. It validates directory redirection only.
+- Verified: Experimental throwaway consumer remap demonstrated plan directory isolation outside product git working tree (`~/.spec-memo-test/<project>`).
+- Proved that zero spec-memo code changes are needed for directory redirection, while highlighting the need for Phase 1/2 MCP runtime to relocate `{sharedDir}` and `MEMORY.md`.
 
 ## Out of Scope
 

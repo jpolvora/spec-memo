@@ -218,12 +218,14 @@ export interface GcResult {
   purgedScratchCount: number;
   purgedReviewCount: number;
   compactedPlansCount: number;
+  compactedLogsCount?: number;
   rebuiltFts: boolean;
   rebuiltViews: boolean;
   dryRun: boolean;
   details?: {
     purgedFiles: string[];
     compactedPlans: string[];
+    compactedLogs?: string[];
   };
 }
 
@@ -236,6 +238,7 @@ export interface PromoteOptions {
   slug?: string;
   destination: string;
   force?: boolean;
+  format?: 'raw' | 'adr' | 'madr';
 }
 
 export interface PromoteResult {
@@ -244,6 +247,46 @@ export interface PromoteResult {
   destination: string;
   targetPath: string;
   bytesWritten: number;
+  format?: 'raw' | 'adr' | 'madr';
+}
+
+export interface ExportVaultOptions {
+  vaultRoot?: string;
+  projectId?: string;
+  outputPath?: string;
+  password?: string;
+}
+
+export interface ExportVaultResult {
+  vaultRoot: string;
+  projectId?: string;
+  outputPath?: string;
+  encrypted: boolean;
+  projectsCount: number;
+  recordsCount: number;
+  manifest: {
+    version: string;
+    exportedAt: string;
+    projects: string[];
+    recordCount: number;
+  };
+  payload?: string;
+}
+
+export interface ImportVaultOptions {
+  vaultRoot?: string;
+  archivePath?: string;
+  payload?: string;
+  password?: string;
+  overwrite?: boolean;
+}
+
+export interface ImportVaultResult {
+  vaultRoot: string;
+  restoredProjectsCount: number;
+  restoredRecordsCount: number;
+  restoredProjects: string[];
+  rebuiltFts: boolean;
 }
 
 export interface DoctorPollutionItem {

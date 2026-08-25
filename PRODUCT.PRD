@@ -143,7 +143,7 @@ See [`FEATURES.md`](FEATURES.md) § MCP tools for arguments and returns.
 
 ### Phase 0 — Dogfood remap (optional, outside this repo)
 
-- [ ] Point a **throwaway clone** of a consumer (e.g. workflow-skills) `plans.dir` / `specsDir` at a directory under `~/.spec-memo-test` (`spec: n/a — consumer config only`)
+- [x] Point a **throwaway clone** of a consumer (e.g. workflow-skills) `plans.dir` / `specsDir` at a directory under `~/.spec-memo-test` (`.agents/specs/dogfood-remap.spec.md`)
 
 Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. Not a spec-memo runtime.
 
@@ -172,16 +172,20 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 - [x] Optional private git remote on the vault (`.agents/specs/vault-git.spec.md`)
 - [x] Cross-project search opt-in (`.agents/specs/cross-project-search.spec.md`)
 - [x] Embeddings as an optional search backend (`.agents/specs/embeddings-search.spec.md`)
+- [x] Monthly log roll-up compaction and archiving (`.agents/specs/log-compaction.spec.md`)
 
 ### Phase 4 — Human viewers (optional)
 
 - [x] Polished interactive CLI doctor and health inspection (`.agents/specs/cli-doctor.spec.md`)
 - [x] Optional IDE plugin or Obsidian vault as **viewer only** (`.agents/specs/viewer.spec.md`)
+- [x] Promote-to-ADR formatting templates and directory resolution (`.agents/specs/promote-adr.spec.md`)
+- [x] Encrypted vault backup, export, and restoration engine (`.agents/specs/vault-backup.spec.md`)
 
 ## 9. Next specs
 
 | # | Slug | Status | Target phase | Notes |
 |---|------|--------|--------------|-------|
+| 0 | `dogfood-remap` | `[x]` | Phase 0 | Consumer configuration remap proof |
 | 1 | `vault-and-identity` | `[x]` | Phase 1 | Remote normalization, fallback path id, vault layout |
 | 2 | `record-schema-and-indexes` | `[x]` | Phase 1 | Frontmatter, kinds, compiled md |
 | 3 | `fts-index` | `[x]` | Phase 1 | Rebuild from files; never SoT |
@@ -199,15 +203,16 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 15 | `embeddings-search` | `[x]` | Phase 3 | Optional embeddings search backend |
 | 16 | `cli-doctor` | `[x]` | Phase 4 | Polished interactive CLI doctor UX |
 | 17 | `viewer` | `[x]` | Phase 4 | Obsidian and markdown viewer compatibility |
+| 18 | `log-compaction` | `[x]` | Phase 3 | Monthly log roll-up compaction and archiving |
+| 19 | `promote-adr` | `[x]` | Phase 4 | Promote-to-ADR formatting templates and directory resolution |
+| 20 | `vault-backup` | `[x]` | Phase 4 | Encrypted vault backup, export, and restoration engine |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
 ## 10. Inbox (unscheduled)
 
 - Host plugin / canvas UI for humans.
-- Encrypted vault / git-crypt.
-- Multi-machine sync beyond “optional git remote on the vault.”
-- Promote-to-ADR templates per product language.
+- Multi-machine sync beyond optional git remote on the vault and export-vault archives.
 
 ## 11. Done log
 
@@ -232,6 +237,9 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-25 | slice-16-embeddings-search | Optional vector similarity search backend fallback engine | Slice 16 delivery |
 | 2026-08-25 | slice-17-cli-doctor | Interactive CLI doctor health inspector with --rebuild and --fix options | Slice 17 delivery |
 | 2026-08-25 | slice-18-viewer | Passive Markdown & Obsidian wikilink viewer compatibility | Slice 18 delivery |
+| 2026-08-25 | slice-19-log-compaction | Monthly log roll-up compaction and FTS5 indexing | Slice 19 delivery |
+| 2026-08-25 | slice-20-promote-adr | Promote-to-ADR formatting templates and directory destination resolution | Slice 20 delivery |
+| 2026-08-25 | slice-21-vault-backup | Encrypted vault backup, export, and restoration engine (AES-256-GCM) | Slice 21 delivery |
 
 ## 12. Related docs
 
