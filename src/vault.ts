@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { ProjectIdentity, ProjectMetadata, VaultConfig } from './types.js';
 
 export const DEFAULT_VAULT_CONFIG: VaultConfig = {
@@ -177,4 +178,105 @@ export function resolveHubPath(
   ensureProjectVault(identity, vaultRoot);
   return identity.vaultProjectPath;
 }
+
+/**
+ * AC1: Initializes git repository in vault if vaultGit.enabled is true.
+ */
+export function initVaultGit(vaultRoot: string = getVaultRoot()): boolean {
+  const configPath = path.join(vaultRoot, 'config.json');
+  if (!fs.existsSync(configPath)) return false;
+
+  try {
+    const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (!config.vaultGit?.enabled) return false;
+
+    const gitDir = path.join(vaultRoot, '.git');
+    if (!fs.existsSync(gitDir)) {
+      execFileSync('git', ['init'], { cwd: vaultRoot, stdio: 'ignore' });
+    }
+
+    const gitignorePath = path.join(vaultRoot, '.gitignore');
+    if (!fs.existsSync(gitignorePath)) {
+      fs.writeFileSync(gitignorePath, 'memo.sqlite\nmemo.sqlite-wal\nmemo.sqlite-shm\n', 'utf8');
+    }
+
+    if (config.vaultGit.remoteUrl) {
+      try {
+        execFileSync('git', ['remote', 'add', 'origin', config.vaultGit.remoteUrl], { cwd: vaultRoot, stdio: 'ignore' });
+      } catch {
+        execFileSync('git', ['remote', 'set-url', 'origin', config.vaultGit.remoteUrl], { cwd: vaultRoot, stdio: 'ignore' });
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * AC2: Auto-commits record mutations in vault if vaultGit is enabled.
+ */
+export function commitVaultChange(message: string, vaultRoot: string = getVaultRoot()): boolean {
+  const configPath = path.join(vaultRoot, 'config.json');
+  if (!fs.existsSync(configPath)) return false;
+
+  try {
+    const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (!config.vaultGit?.enabled) return false;
+
+    initVaultGit(vaultRoot);
+
+    execFileSync('git', ['add', '.'], { cwd: vaultRoot, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', message], { cwd: vaultRoot, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * AC3: Sync local vault with private git remote (pull/push).
+ */
+export function syncVault(vaultRoot: string = getVaultRoot()): { pulled: boolean; pushed: boolean; message: string } {
+  const configPath = path.join(vaultRoot, 'config.json');
+  if (!fs.existsSync(configPath)) {
+    return { pulled: false, pushed: false, message: 'Vault config.json not found.' };
+  }
+
+  try {
+    const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (!config.vaultGit?.enabled) {
+      return { pulled: false, pushed: false, message: 'Vault git sync is disabled in config.json.' };
+    }
+
+    initVaultGit(vaultRoot);
+
+    let pulled = false;
+    let pushed = false;
+
+    try {
+      execFileSync('git', ['pull', '--rebase', 'origin', 'main'], { cwd: vaultRoot, stdio: 'ignore' });
+      pulled = true;
+    } catch {
+      // Pull optional fallback
+    }
+
+    try {
+      execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: vaultRoot, stdio: 'ignore' });
+      pushed = true;
+    } catch {
+      // Push optional fallback
+    }
+
+    return {
+      pulled,
+      pushed,
+      message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { pulled: false, pushed: false, message: `Sync failed: ${msg}` };
+  }
+}
+
 

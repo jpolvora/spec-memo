@@ -77,7 +77,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 - [~] [`trap-dedup`](trap-dedup.spec.md): Anti-regression trap deduplication and automatic superseding
 - [~] [`spec-drift`](spec-drift.spec.md): Specification git SHA drift detection on bootstrap
-- [ ] [`vault-git`](vault-git.spec.md): Optional private git remote sync for vault persistence
+- [~] [`vault-git`](vault-git.spec.md): Optional private git remote sync for vault persistence
 - [ ] [`cross-project-search`](cross-project-search.spec.md): Opt-in cross-project search across local vault repositories
 - [ ] [`embeddings-search`](embeddings-search.spec.md): Embeddings as optional search backend
 
@@ -103,7 +103,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 10 | [`write-block-hook`](write-block-hook.spec.md) | `[x] done` | Phase 2 | Git hook & skill rules blocking in-repo workflow writes |
 | 11 | [`trap-dedup`](trap-dedup.spec.md) | `[x] done` | Phase 3 | Deduplicate traps with matching paths & rules |
 | 12 | [`spec-drift`](spec-drift.spec.md) | `[x] done` | Phase 3 | Flag SHA drift between specs and code during bootstrap |
-| 13 | [`vault-git`](vault-git.spec.md) | `[ ] todo` | Phase 3 | Optional private git remote on vault root |
+| 13 | [`vault-git`](vault-git.spec.md) | `[x] done` | Phase 3 | Optional private git remote on vault root |
 | 14 | [`cross-project-search`](cross-project-search.spec.md) | `[ ] todo` | Phase 3 | Opt-in multi-project search across local vault |
 | 15 | [`embeddings-search`](embeddings-search.spec.md) | `[ ] todo` | Phase 3 | Optional embeddings search backend after kinds/TTL |
 | 16 | [`cli-doctor`](cli-doctor.spec.md) | `[ ] todo` | Phase 4 | Polished interactive CLI doctor and health inspection |
@@ -134,6 +134,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-11-write-block-hook | Pre-commit git hook generator and installer CLI command | Slice 11 delivery |
 | 2026-08-25 | slice-12-trap-dedup | Trap deduplication and automatic superseding engine | Slice 12 delivery |
 | 2026-08-25 | slice-13-spec-drift | Specification git SHA drift detection during session bootstrap | Slice 13 delivery |
+| 2026-08-25 | slice-14-vault-git | Opt-in private git remote sync for vault persistence | Slice 14 delivery |
 
 ## Archive
 

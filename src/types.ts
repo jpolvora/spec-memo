@@ -91,6 +91,11 @@ export interface ProjectMetadata {
 export interface VaultConfig {
   version: string;
   defaultRemote: string;
+  vaultGit?: {
+    enabled: boolean;
+    remoteUrl?: string;
+    autoCommit?: boolean;
+  };
   ttl: {
     scratchDays: number;
     reviewDays: number;

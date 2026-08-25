@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus, AppendOptions, AppendResult, ForgetOptions, ForgetResult } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
-import { ensureProjectVault, getVaultRoot } from './vault.js';
+import { ensureProjectVault, getVaultRoot, commitVaultChange } from './vault.js';
 import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
@@ -244,6 +244,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
 
   // Automatically update compiled views (TRAPS.md, DECISIONS.md, INDEX.md)
   rebuildCompiledViews(projectId, vaultRoot);
+  commitVaultChange(`upsert ${options.kind}:${recordId}`, vaultRoot);
 
   return {
     id: recordId,

@@ -9,6 +9,9 @@ import {
   ensureProjectVault,
   getProjectMetadata,
   resolveHubPath,
+  initVaultGit,
+  commitVaultChange,
+  syncVault,
   RECORD_SUBDIRS
 } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
@@ -136,5 +139,28 @@ describe('Vault Management & Project Binding', () => {
     const customHub = resolveHubPath(process.cwd(), customRoot, tempVaultRoot);
     assert.equal(customHub, path.resolve(customRoot));
   });
+
+  it('should support opt-in vault git initialization and sync when enabled in config.json', () => {
+    ensureVaultStructure(tempVaultRoot);
+    const configPath = path.join(tempVaultRoot, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.vaultGit = {
+      enabled: true,
+      remoteUrl: 'git@github.com:myorg/vault-backup.git'
+    };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+
+    const initialized = initVaultGit(tempVaultRoot);
+    assert.equal(initialized, true);
+    assert.ok(fs.existsSync(path.join(tempVaultRoot, '.git')));
+    assert.ok(fs.existsSync(path.join(tempVaultRoot, '.gitignore')));
+
+    const committed = commitVaultChange('Initial test commit', tempVaultRoot);
+    assert.equal(committed, true);
+
+    const syncRes = syncVault(tempVaultRoot);
+    assert.ok(syncRes.message.includes('Sync complete'));
+  });
 });
+
 

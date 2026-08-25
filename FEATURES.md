@@ -133,5 +133,5 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime (Phase 1 Slices 1–8 delivered) | `[x]` |
+| Runtime (Phase 1 MVP + Phase 2 Harness Adapters + Phase 3 Curator Hardening delivered) | `[x]` |
 

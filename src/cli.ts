@@ -6,6 +6,7 @@ import { startMcpServer } from './mcp.js';
 import { runDoctor } from './doctor.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
+import { syncVault } from './vault.js';
 import { serializeRecord } from './schema.js';
 
 interface ParsedCliArgs {
@@ -294,6 +295,28 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         console.log(JSON.stringify({ isError: true, error: msg, code: 'HOOK_ERROR' }, null, 2));
       } else {
         console.error(`Hook installation failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo sync command
+  if (parsed.command === 'sync') {
+    try {
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const res = syncVault(vaultRoot);
+      if (parsed.isJson) {
+        console.log(JSON.stringify(res, null, 2));
+      } else {
+        console.log(`[SYNC] ${res.message}`);
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        console.log(JSON.stringify({ isError: true, error: msg, code: 'SYNC_ERROR' }, null, 2));
+      } else {
+        console.error(`Sync failed: ${msg}`);
       }
       return 1;
     }
