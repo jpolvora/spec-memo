@@ -238,25 +238,29 @@ function ok(data: unknown): { data: unknown } {
   return { data: sanitizeToolOutput(data) };
 }
 
+function fail(code: string, err: unknown, details?: unknown): ToolResponse {
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    isError: true,
+    error: String(sanitizeToolOutput(message)),
+    code,
+    details: details !== undefined ? sanitizeToolOutput(details) : undefined
+  };
+}
+
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
-    return {
-      isError: true,
-      error: `Unknown tool: ${name}`,
-      code: 'UNKNOWN_TOOL',
-      details: { supportedTools: TOOL_NAMES }
-    };
+    return fail('UNKNOWN_TOOL', `Unknown tool: ${name}`, { supportedTools: TOOL_NAMES });
   }
 
   const tool = TOOL_DEFINITIONS[name as ToolName];
   const parseResult = tool.zodSchema.safeParse(args ?? {});
   if (!parseResult.success) {
-    return {
-      isError: true,
-      error: `Invalid arguments for ${name}: ${parseResult.error.message}`,
-      code: 'INVALID_ARGUMENTS',
-      details: parseResult.error.format()
-    };
+    return fail(
+      'INVALID_ARGUMENTS',
+      `Invalid arguments for ${name}: ${parseResult.error.message}`,
+      parseResult.error.format()
+    );
   }
 
   if (name === 'bootstrap') {
@@ -265,12 +269,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       const result = await compileBootstrapBrief(bootstrapOpts);
       return ok(result);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        error: message,
-        code: 'BOOTSTRAP_FAILED'
-      };
+      return fail('BOOTSTRAP_FAILED', err);
     }
   }
 
@@ -280,12 +279,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       const results = searchIndex(searchOpts);
       return ok(results);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        error: message,
-        code: 'SEARCH_FAILED'
-      };
+      return fail('SEARCH_FAILED', err);
     }
   }
 
@@ -311,12 +305,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       });
       return ok(result);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        error: message,
-        code: 'UPSERT_FAILED'
-      };
+      return fail('UPSERT_FAILED', err);
     }
   }
 
@@ -332,20 +321,11 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       };
       const record = await getRecord({ id, kind, slug, cwd, vaultRoot, projectId });
       if (!record) {
-        return {
-          isError: true,
-          error: `Record not found: id=${id || 'n/a'}, kind=${kind || 'n/a'}, slug=${slug || 'n/a'}`,
-          code: 'RECORD_NOT_FOUND'
-        };
+        return fail('RECORD_NOT_FOUND', `Record not found: id=${id || 'n/a'}, kind=${kind || 'n/a'}, slug=${slug || 'n/a'}`);
       }
       return ok(record);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        error: message,
-        code: 'GET_FAILED'
-      };
+      return fail('GET_FAILED', err);
     }
   }
 
@@ -355,12 +335,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       const result = await appendEvent(appendOpts);
       return ok(result);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        error: message,
-        code: 'APPEND_FAILED'
-      };
+      return fail('APPEND_FAILED', err);
     }
   }
 
@@ -370,12 +345,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       const result = await forgetRecord(forgetOpts);
       return ok(result);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        error: message,
-        code: 'FORGET_FAILED'
-      };
+      return fail('FORGET_FAILED', err);
     }
   }
 
@@ -385,12 +355,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       const result = await runGc(gcOpts);
       return ok(result);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        error: message,
-        code: 'GC_FAILED'
-      };
+      return fail('GC_FAILED', err);
     }
   }
 
@@ -400,12 +365,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       const result = await promoteRecord(promoteOpts);
       return ok(result);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        error: message,
-        code: 'PROMOTE_FAILED'
-      };
+      return fail('PROMOTE_FAILED', err);
     }
   }
 

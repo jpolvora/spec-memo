@@ -8,7 +8,8 @@ import {
   assertNoSecrets,
   assertNotInProductRoot,
   isPathInside,
-  scanPayloadForSecrets
+  scanPayloadForSecrets,
+  sanitizeToolOutput
 } from './safety.js';
 import { upsertRecord, appendEvent } from './store.js';
 import { closeIndex } from './indexer.js';
@@ -203,5 +204,20 @@ You should provide your token via environment variables rather than hardcoding i
       const productFiles = fs.readdirSync(productRepo).filter((f) => f !== '.git');
       assert.strictEqual(productFiles.length, 0);
     });
+  });
+
+  it('sanitizeToolOutput redacts secrets and strips vault paths', () => {
+    const token = `ghp_${'a'.repeat(36)}`;
+    const out = sanitizeToolOutput({
+      path: '/home/user/.spec-memo/projects/p/traps/t.md',
+      filepath: '/home/user/.spec-memo/projects/p/traps/t.md',
+      body: `token=${token}`,
+      error: 'Safety violation inside /home/user/product/src/store.ts'
+    }) as { path?: string; filepath?: string; body: string; error: string };
+    assert.equal(out.path, undefined);
+    assert.equal(out.filepath, undefined);
+    assert.match(out.body, /\[REDACTED:GitHub Personal Access Token\]/);
+    assert.doesNotMatch(out.body, /ghp_/);
+    assert.doesNotMatch(out.error, /\/home\/user/);
   });
 });

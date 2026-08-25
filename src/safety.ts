@@ -155,8 +155,31 @@ export function stripVaultPaths(payload: unknown): unknown {
 /**
  * Prepare a tool result for MCP/CLI callers: redact secrets then omit vault paths.
  */
+export function redactAbsolutePathsInText(text: string): string {
+  return text
+    .replace(/[A-Za-z]:\\[^\s)'"`]+/g, '[path]')
+    .replace(/(^|[\s(])(\/(?:[^/\s)]+\/)+[^/\s)]+)/g, '$1[path]');
+}
+
 export function sanitizeToolOutput(payload: unknown): unknown {
-  return stripVaultPaths(redactSecretsInPayload(payload));
+  return stripVaultPaths(redactSecretsInPayload(redactPathsDeep(payload)));
+}
+
+function redactPathsDeep(payload: unknown): unknown {
+  if (typeof payload === 'string') {
+    return redactAbsolutePathsInText(payload);
+  }
+  if (Array.isArray(payload)) {
+    return payload.map((item) => redactPathsDeep(item));
+  }
+  if (payload !== null && typeof payload === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+      out[key] = redactPathsDeep(value);
+    }
+    return out;
+  }
+  return payload;
 }
 
 /**
