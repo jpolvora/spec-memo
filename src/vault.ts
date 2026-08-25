@@ -325,9 +325,32 @@ export function initVaultGit(vaultRoot: string = getVaultRoot()): boolean {
 }
 
 /**
- * AC2: Auto-commits record mutations in vault if vaultGit is enabled.
+ * Paths to `git add` for a vault auto-commit. Never `.` — that sweeps unrelated dirty files.
  */
-export function commitVaultChange(message: string, vaultRoot: string = getVaultRoot()): boolean {
+function resolveVaultCommitAddPaths(vaultRoot: string, paths: string[]): string[] {
+  const raw = paths.length > 0 ? paths : ['projects', 'config.json'];
+  const normalized: string[] = [];
+  for (const p of raw) {
+    const rel = path.isAbsolute(p) ? path.relative(vaultRoot, p) : p;
+    const posix = rel.replace(/\\/g, '/');
+    if (!posix || posix === '.' || posix.startsWith('../') || posix === '..') continue;
+    if (!normalized.includes(posix)) normalized.push(posix);
+  }
+  if (fs.existsSync(path.join(vaultRoot, '.gitignore')) && !normalized.includes('.gitignore')) {
+    normalized.push('.gitignore');
+  }
+  return normalized;
+}
+
+/**
+ * AC2: Auto-commits record mutations in vault if vaultGit is enabled.
+ * Stages only `paths` (or projects + config.json), never the entire vault tree.
+ */
+export function commitVaultChange(
+  message: string,
+  vaultRoot: string = getVaultRoot(),
+  paths: string[] = []
+): boolean {
   const configPath = path.join(vaultRoot, 'config.json');
   if (!fs.existsSync(configPath)) return false;
 
@@ -339,7 +362,10 @@ export function commitVaultChange(message: string, vaultRoot: string = getVaultR
 
       initVaultGit(vaultRoot);
 
-      execFileSync('git', ['add', '.'], { cwd: vaultRoot, stdio: 'ignore' });
+      const toAdd = resolveVaultCommitAddPaths(vaultRoot, paths);
+      if (toAdd.length === 0) return false;
+
+      execFileSync('git', ['add', '--', ...toAdd], { cwd: vaultRoot, stdio: 'ignore' });
       execFileSync('git', ['commit', '-m', message], { cwd: vaultRoot, stdio: 'ignore' });
       return true;
     } finally {

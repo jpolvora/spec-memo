@@ -212,7 +212,7 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
     rebuildCompiledViews(projectId, vaultRoot);
     await rebuildIndex(vaultRoot);
     rebuiltFts = true;
-    commitVaultChange(`gc ${projectId}`, vaultRoot);
+    commitVaultChange(`gc ${projectId}`, vaultRoot, [path.join('projects', projectId)]);
   }
 
   return {

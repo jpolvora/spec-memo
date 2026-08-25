@@ -246,7 +246,9 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
 
   // Automatically update compiled views (TRAPS.md, DECISIONS.md, INDEX.md)
   rebuildCompiledViews(projectId, vaultRoot);
-  commitVaultChange(`upsert ${options.kind}:${recordId}`, vaultRoot);
+  commitVaultChange(`upsert ${options.kind}:${recordId}`, vaultRoot, [
+    path.join('projects', projectId)
+  ]);
 
   return {
     id: recordId,
@@ -391,7 +393,7 @@ export async function appendEvent(options: AppendOptions): Promise<AppendResult>
 
   // Update compiled views
   rebuildCompiledViews(projectId, vaultRoot);
-  commitVaultChange(`append ${kind}:${logId}`, vaultRoot);
+  commitVaultChange(`append ${kind}:${logId}`, vaultRoot, [path.join('projects', projectId)]);
 
   return {
     id: logId,
@@ -444,7 +446,9 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
     }
 
     rebuildCompiledViews(projectId, vaultRoot);
-    commitVaultChange(`forget purge ${kind}:${id}`, vaultRoot);
+    commitVaultChange(`forget purge ${kind}:${id}`, vaultRoot, [
+      path.join('projects', projectId)
+    ]);
 
     return {
       id,
@@ -478,7 +482,9 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
   }
 
   rebuildCompiledViews(projectId, vaultRoot);
-  commitVaultChange(`forget archive ${kind}:${id}`, vaultRoot);
+  commitVaultChange(`forget archive ${kind}:${id}`, vaultRoot, [
+    path.join('projects', projectId)
+  ]);
 
   return {
     id,

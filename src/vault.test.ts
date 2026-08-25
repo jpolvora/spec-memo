@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import {
   getVaultRoot,
   ensureVaultStructure,
@@ -155,8 +156,17 @@ describe('Vault Management & Project Binding', () => {
     assert.ok(fs.existsSync(path.join(tempVaultRoot, '.git')));
     assert.ok(fs.existsSync(path.join(tempVaultRoot, '.gitignore')));
 
+    fs.writeFileSync(path.join(tempVaultRoot, 'scratch-unrelated.md'), 'do not commit', 'utf8');
+
     const committed = commitVaultChange('Initial test commit', tempVaultRoot);
     assert.equal(committed, true);
+
+    const tracked = execFileSync('git', ['ls-files'], {
+      cwd: tempVaultRoot,
+      encoding: 'utf8'
+    });
+    assert.equal(tracked.includes('scratch-unrelated.md'), false);
+    assert.ok(tracked.includes('config.json'));
 
     const syncRes = syncVault(tempVaultRoot);
     assert.ok(syncRes.message.includes('Sync complete'));
