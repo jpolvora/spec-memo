@@ -13,9 +13,10 @@ import { sanitizeToolOutput } from './safety.js';
 import { startCanvasServer } from './canvas.js';
 import { syncVaults } from './sync.js';
 import { startSseServer } from './server.js';
-import { searchIndex } from './indexer.js';
-import { backfillTrapRecurrence } from './store.js';
-import { aliasLayer } from './recurrence.js';
+import { backfillTrapRecurrence, listProjectRecords } from './store.js';
+import { aliasLayer, rankActiveTraps, occurrenceOf, lastSeenOf, applyTrapClassification } from './recurrence.js';
+import { getVaultRoot } from './vault.js';
+import { resolveProjectIdentity } from './identity.js';
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -443,14 +444,27 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         backfillTrapRecurrence({ cwd, vaultRoot });
       }
 
-      const hits = searchIndex({
-        cwd,
-        vaultRoot,
-        kinds: ['trap'],
-        status: 'active',
-        sort: 'occurrences',
+      const root = vaultRoot || getVaultRoot();
+      const identity = resolveProjectIdentity(cwd, { vaultRoot: root });
+      const ranked = rankActiveTraps(listProjectRecords(root, identity.projectId), {
+        layer,
         limit: Number.isFinite(limit) && limit > 0 ? limit : 10
-      }).filter((hit) => !layer || hit.layer === layer);
+      });
+      const hits = ranked.map((record) => {
+        const classified = applyTrapClassification(record.frontmatter, record.body);
+        return {
+          id: record.frontmatter.id,
+          projectId: record.frontmatter.project,
+          kind: record.frontmatter.kind,
+          status: record.frontmatter.status,
+          title: record.frontmatter.title,
+          filepath: record.path || '',
+          occurrences: occurrenceOf(record.frontmatter),
+          lastSeen: lastSeenOf(record.frontmatter),
+          layer: record.frontmatter.layer || classified.layer,
+          severity: record.frontmatter.severity
+        };
+      });
 
       if (parsed.isJson) {
         printJson(hits);

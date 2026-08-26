@@ -169,7 +169,11 @@ export function rankActiveTraps(
   );
   if (options.layer) {
     const normalized = aliasLayer(options.layer) ?? options.layer;
-    traps = traps.filter((record) => record.frontmatter.layer === normalized);
+    traps = traps.filter((record) => {
+      const classified = applyTrapClassification(record.frontmatter, record.body);
+      const trapLayer = record.frontmatter.layer || classified.layer;
+      return trapLayer === normalized;
+    });
   }
   traps.sort(compareTrapRank);
   const limit = options.limit && options.limit > 0 ? options.limit : 10;
@@ -187,10 +191,11 @@ export function enrichHitFromFile(filepath: string): {
       return { occurrences: 1 };
     }
     const record = parseRecord(fs.readFileSync(filepath, 'utf8'), filepath);
+    const classified = applyTrapClassification(record.frontmatter, record.body);
     return {
       occurrences: occurrenceOf(record.frontmatter),
       lastSeen: lastSeenOf(record.frontmatter),
-      layer: typeof record.frontmatter.layer === 'string' ? record.frontmatter.layer : undefined,
+      layer: (record.frontmatter.layer || classified.layer) as TrapLayer | undefined,
       severity: record.frontmatter.severity
     };
   } catch {

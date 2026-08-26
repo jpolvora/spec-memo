@@ -288,7 +288,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const limit = options.limit && options.limit > 0 ? options.limit : 50;
   const sort = options.sort || 'relevance';
-  const fetchLimit = sort === 'occurrences' ? 10000 : limit * 2;
+  const limitSql = sort === 'occurrences' ? '' : `LIMIT ${limit * 2}`;
 
   let querySql: string;
   if (hasFtsQuery && ftsQuery) {
@@ -309,7 +309,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       FROM records_fts
       ${whereSql}
       ORDER BY rank
-      LIMIT ${fetchLimit}
+      ${limitSql}
     `;
   } else {
     const orderSql = sort === 'updated' ? 'ORDER BY updated DESC' : 'ORDER BY updated DESC';
@@ -330,7 +330,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       FROM records_fts
       ${whereSql}
       ${orderSql}
-      LIMIT ${fetchLimit}
+      ${limitSql}
     `;
   }
 

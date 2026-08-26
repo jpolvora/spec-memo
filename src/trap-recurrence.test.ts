@@ -594,4 +594,43 @@ describe('Trap recurrence ranking', () => {
       console.log = origLog;
     }
   });
+
+  it('rank --layer application matches traps with body Layer only', async () => {
+    const res = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'body-only-layer',
+      frontmatter: { id: 'trap-body-only-layer', title: 'Body only layer', pathPatterns: ['src/**'] },
+      body: TRAP_BODY
+    });
+    const stripped = fs.readFileSync(res.path, 'utf8').replace(/\nlayer: .+\r?\n/, '\n');
+    fs.writeFileSync(res.path, stripped, 'utf8');
+    const reloaded = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'trap-body-only-layer' });
+    assert.equal(reloaded?.frontmatter.layer, undefined);
+    assert.equal(rankActiveTraps([reloaded!], { layer: 'application' }).length, 1);
+
+    let captured = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      captured += args.join(' ') + '\n';
+    };
+    try {
+      const code = await runCli([
+        'rank',
+        '--layer',
+        'application',
+        '--cwd',
+        tempProject,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(code, 0);
+      const parsed = JSON.parse(captured.trim());
+      assert.ok(parsed.some((h: { id: string }) => h.id === 'trap-body-only-layer'));
+    } finally {
+      console.log = origLog;
+    }
+  });
 });
