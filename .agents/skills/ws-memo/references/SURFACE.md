@@ -103,6 +103,8 @@ Copy into the **product** tree. **Default deny** without `destination` inside th
 
 CLI: `memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md`
 
+When `format=skill` and `id` is omitted, ranking uses the same full-project universe as `memo rank`. If zero active traps rank, fail closed (do not write a header-only `SKILL.md`).
+
 ### `check_version`
 
 Compare running package version to npm `latest`. Soft-fails offline (`updateAvailable: "unknown"`, `latest: null`).
@@ -136,7 +138,7 @@ CLI: `memo install-skills --product-root <path> [--skill ws-memo] [--force] [--j
 | `memo serve` | Stdio MCP (default). `--sse` HTTP SSE on `--port` (default 3000). `--status-port` (default 3001). `--no-status`. `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
 | `memo canvas` | Graph UI default port 4100. `--project`, `--host`, `--json`. |
 | `memo doctor [productRoot]` | Vault + FTS + pollution. `--rebuild` FTS. `--fix` delete leftover in-repo residue. `--json`. |
-| `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Same ranking as `search.sort=occurrences`. |
+| `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Same ranking as `search.sort=occurrences` (full project scan; not an FTS recency pre-cap). |
 | `memo import` | Legacy `.agents` / `memory/` / plans → vault. `--from`. |
 | `memo hook install` | Pre-commit write-block. `--productRoot`. Bypass: `SKIP_MEMO_HOOK=1`. |
 | `memo sync` | Push vault git remote when vault-git enabled. |

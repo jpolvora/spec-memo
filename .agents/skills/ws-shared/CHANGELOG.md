@@ -1,5 +1,15 @@
 # Changelog
 
+### [2026-08-26 12:35] Agent: Cursor Composer
+- **Prompt**: Update ws-memo skill for 10-tool surface; update README/AGENTS; bump version; ship next version
+- **Done**: Bumped package/MCP/vault/skill to 0.3.1; aligned ws-memo Rules + SURFACE (rank universe, empty skill promote guard); README/FEATURES/AGENTS + tracking Done logs
+- **Result**: Preparing verify + ship-pr develop → master
+
+### [2026-08-26 12:35] Agent: Cursor Composer
+- **Prompt**: Update ws-memo skill for 10-tool surface; update README/AGENTS; bump version; ship next version
+- **Done**: Bumped package/MCP/vault/skill to 0.3.1; aligned ws-memo Rules + SURFACE (rank universe, empty skill promote guard); README/FEATURES/AGENTS + tracking Done logs
+- **Result**: Preparing verify + ship-pr develop → master
+
 ### [2026-08-26 11:35] Agent: Cursor Composer
 - **Prompt**: Implement mcp-version-and-skill-install.spec.md (check_version + install_skills MCP tools + docs)
 - **Done**: Added tools/CLI/modules/tests; amended PRODUCT/FEATURES/AGENTS/README/ws-memo to 10-tool surface; package.json files includes skill tree
