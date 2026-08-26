@@ -90,4 +90,18 @@ describe('Git Remote and Project Identity', () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('should ignore a client cwd that is not a path on this host', () => {
+    const foreignCwd =
+      process.platform === 'win32' ? '/home/lab/no-such-consumer' : 'L:\\source\\no-such-consumer';
+    assert.equal(findGitRoot(foreignCwd), null);
+
+    const identity = resolveProjectIdentity(foreignCwd);
+    assert.ok(fs.existsSync(identity.rootPath), 'rootPath must exist on the MCP host');
+    assert.equal(identity.rootPath, path.resolve(process.cwd()));
+    assert.ok(
+      !identity.rootPath.includes('no-such-consumer'),
+      'must not nest a foreign client path under process.cwd()'
+    );
+  });
 });

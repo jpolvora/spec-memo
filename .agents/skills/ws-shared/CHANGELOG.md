@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-26 15:25] Agent: Cursor Grok 4.6
+- **Prompt**: Fix memo/search SEARCH_FAILED bindings paths from Cursor client to MCP SSE server
+- **Done**: Load better-sqlite3 via package-relative nativeBinding (`src/sqlite.ts`); ignore foreign/nonexistent client cwd in identity; tests for binding path, chdir, SSE search with foreign cwd
+- **Result**: `npm test` exit 0 (205 pass / 0 fail). Redeploy/restart the SSE daemon on the lab host so search stops returning SEARCH_FAILED.
+
 ### [2026-08-26 14:45] Agent: Cursor Grok 4.6
 - **Prompt**: Make npx spec-memo docs/references point to GitHub instead of the npm default server
 - **Done**: Added package.json homepage/repository/bugs; switched docs, README, MCP-TEMPLATE, and ws-memo skill npx/install snippets to `github:jpolvora/spec-memo`; added prepare build so git npx compiles dist
