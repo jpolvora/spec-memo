@@ -187,6 +187,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 **Spec.** [`.agents/specs/mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md) — 49 ACs.
 
 | 2026-08-26 | mcp-status-monitor | MCP status monitor with Activity Event Bus, :3001 companion, live SSE log; npm test 178 pass |
+| 2026-08-26 | release-0.2.0 | Package, MCP server, and vault config version bumped to 0.2.0 for Phase 6 |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

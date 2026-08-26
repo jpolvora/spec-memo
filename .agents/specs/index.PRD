@@ -170,6 +170,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-24-mcp-sse-transport | HTTP and Server-Sent Events (SSE) MCP Transport | Slice 24 delivery |
 | 2026-08-26 | trap-recurrence | Trap recurrence ranking and owner-skill export | Slice 25 delivery |
 | 2026-08-26 | mcp-status-monitor | MCP status monitor with live activity log | npm test 178 pass |
+| 2026-08-26 | release-0.2.0 | Package, MCP server, and vault config version bumped to 0.2.0 | 0.2.0 |
 
 ## Archive
 

@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-26 00:41] Agent: Cursor Grok 4.6
+- **Prompt**: Increment version, update docs/specs, commit develop, ship PR to master, wait CI/code-review and fix
+- **Done**: Bumped package/MCP/vault version to 0.2.0; tracking docs; removed hardcoded auth token from vault-push script
+- **Result**: `npm test` exit 0 (178 pass / 0 fail). Preparing PR develop → master
+
 ### [2026-08-26 00:00] Agent: Cursor Grok 4.6
 - **Prompt**: Implement trap-recurrence ranking (layer/module, occurrence counter, memo rank, promote format:skill)
 - **Done**: Schema + upsert bump-in-place, search.sort=occurrences, CLI `memo rank --backfill`, promote `format:skill`, TRAPS.md headings; 15 new tests

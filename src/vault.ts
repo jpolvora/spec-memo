@@ -6,7 +6,7 @@ import { ProjectIdentity, ProjectMetadata, VaultConfig } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 
 export const DEFAULT_VAULT_CONFIG: VaultConfig = {
-  version: '0.1.0',
+  version: '0.2.0',
   defaultRemote: 'origin',
   ttl: {
     scratchDays: 7,

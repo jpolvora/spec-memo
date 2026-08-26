@@ -12,12 +12,13 @@ import matter from 'gray-matter';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
-const SSE_URL = process.env.SPEC_MEMO_SSE_URL || 'http://192.168.0.3:3000/sse';
-const TOKEN =
-  process.env.SPEC_MEMO_AUTH_TOKEN ||
-  '49c696b064f8ae17f7edf098bf09996ed8ece837c7090cd693cc69b20948cfa8';
+const SSE_URL = process.env.SPEC_MEMO_SSE_URL || 'http://127.0.0.1:3000/sse';
+const TOKEN = process.env.SPEC_MEMO_AUTH_TOKEN;
+if (!TOKEN) {
+  throw new Error('SPEC_MEMO_AUTH_TOKEN is required (do not hardcode tokens in this script).');
+}
 const ARCHIVE =
-  process.argv[2] || path.join(process.env.USERPROFILE || process.env.HOME, 'spec-memo-marchanteerp-export.json');
+  process.argv[2] || path.join(process.env.USERPROFILE || process.env.HOME, 'spec-memo-vault-export.json');
 const PROJECT_ID = process.argv[3] || process.env.SPEC_MEMO_PROJECT_ID || null;
 
 const DIR_TO_KIND = {

@@ -313,7 +313,7 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
       configPath,
       JSON.stringify(
         {
-          version: '0.1.0',
+          version: '0.2.0',
           embeddings: {
             enabled: true,
             minSimilarity: 0.4
