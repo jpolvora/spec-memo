@@ -129,7 +129,8 @@ export function extractRule(body: string, label: string): string {
 export function formatAsSkill(records: MemoRecord[]): string {
   const groups = new Map<string, MemoRecord[]>();
   for (const record of records) {
-    const layer = String(record.frontmatter.layer || 'other');
+    const classified = applyTrapClassification(record.frontmatter, record.body);
+    const layer = String(classified.layer || 'other');
     const list = groups.get(layer) || [];
     list.push(record);
     groups.set(layer, list);

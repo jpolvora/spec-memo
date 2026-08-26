@@ -200,6 +200,35 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     }
   });
 
+  await t.test("should capture failed tool invocations with ok:false", async () => {
+    const combined = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      statusPort: 0
+    });
+
+    try {
+      const sseUrl = new URL(`${combined.url}/sse`);
+      const transport = new SSEClientTransport(sseUrl);
+      const client = new Client({ name: "test-fail-client", version: "1.0.0" });
+      await client.connect(transport);
+
+      await client.callTool({
+        name: "search",
+        arguments: { sort: "popularity" }
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      const failed = combined.activityBus.list().filter((e) => e.type === "tool" && e.ok === false);
+      assert.ok(failed.length >= 1);
+      assert.match(failed[failed.length - 1].summary, /search failed/i);
+
+      await client.close();
+    } finally {
+      await combined.close();
+    }
+  });
+
   await t.test("should skip status monitor when enableStatus is false", async () => {
     const noStatus = await startSseServer({
       vaultRoot,
