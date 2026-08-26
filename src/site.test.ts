@@ -56,6 +56,14 @@ describe('Website and GitHub Pages deploy pipeline', () => {
     );
   });
 
+  it('docs/llms.txt contains the canonical package.json version', () => {
+    const llmsContent = fs.readFileSync(path.join(docsDir, 'llms.txt'), 'utf-8');
+    assert.ok(
+      llmsContent.includes(`spec-memo v${pkgVersion}`),
+      `docs/llms.txt must contain "spec-memo v${pkgVersion}"`
+    );
+  });
+
   it('.github/workflows/deploy-site.yml exists and defines GitHub Pages deploy step', () => {
     const wfPath = path.join(root, '.github', 'workflows', 'deploy-site.yml');
     assert.ok(fs.existsSync(wfPath), '.github/workflows/deploy-site.yml must exist');

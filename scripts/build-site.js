@@ -99,6 +99,17 @@ if (shouldCheck) {
     );
     process.exit(1);
   }
+  const llmsPath = path.join(root, 'docs', 'llms.txt');
+  if (fs.existsSync(llmsPath)) {
+    const llms = fs.readFileSync(llmsPath, 'utf-8');
+    const llmsMatch = llms.match(/spec-memo\s+v(\d+\.\d+\.\d+)/);
+    if (!llmsMatch || llmsMatch[1] !== siteVersion) {
+      console.error(
+        `Version mismatch: docs/llms.txt (v${llmsMatch?.[1] ?? 'missing'}) != package.json (v${siteVersion}). Run: npm run build:site`
+      );
+      process.exit(1);
+    }
+  }
   console.log(`Check passed: site version matches package.json (v${siteVersion})`);
   process.exit(0);
 }

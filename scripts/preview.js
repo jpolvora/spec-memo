@@ -18,8 +18,16 @@ const mimeTypes = {
 };
 
 const server = http.createServer((req, res) => {
-  const reqUrl = req.url === '/' ? '/index.html' : req.url.split('?')[0];
-  const filePath = path.join(docsDir, reqUrl);
+  const reqPath = req.url === '/' ? '/index.html' : req.url.split('?')[0];
+  const relative = reqPath.replace(/^\/+/, '');
+  const docsRoot = path.resolve(docsDir);
+  const filePath = path.resolve(docsRoot, relative);
+
+  if (filePath !== docsRoot && !filePath.startsWith(docsRoot + path.sep)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+    return;
+  }
 
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath).toLowerCase();
