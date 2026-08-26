@@ -73,7 +73,7 @@ npm run watch
 
 ### 2. Run the Full Test Suite
 ```bash
-# Runs full pretest build and all 25 test suites (154 tests)
+# Runs full pretest build and all 25 test suites (178 tests)
 npm test
 ```
 
@@ -249,7 +249,7 @@ Always work in strict synchronization with [`.agents/specs/index.PRD`](.agents/s
 
 ### Phase 2: Surgical Implementation & Verification
 1. Apply minimal, surgical diffs following Karpathy guidelines.
-2. Run `npm test` and verify that all 154 tests pass with zero regressions.
+2. Run `npm test` and verify that all 178 tests pass with zero regressions.
 
 ### Phase 3: Post-Execution Tracking Updates (Canonical Order)
 Once tests pass, update tracking documents in this exact order:

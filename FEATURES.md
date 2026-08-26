@@ -126,7 +126,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 ## 10. Recurrence learning & ops visibility (Phase 6)
 
 - [x] **Trap recurrence ranking.** `memo rank` lists active traps by `occurrences`; optional `--layer`, `--backfill`; `memo promote --format skill` exports owner skill from ranked traps.
-- [~] **MCP status monitor.** Companion HTTP page (default `:3001`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream). Spec: [`mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md).
+- [x] **MCP status monitor.** Companion HTTP page (default `:3001`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream).
 
 ---
 
@@ -150,8 +150,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime (Phases 1–5 + trap-recurrence delivered) | `[x]` |
-| MCP status monitor (Phase 6) | `[~]` spec ready; implementation next |
+| Runtime (Phases 1–6 complete) | `[x]` |
 
 
 

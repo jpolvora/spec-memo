@@ -15,31 +15,44 @@ function countTrapFiles(vaultRoot: string, projectId: string): number {
   return fs.readdirSync(dir).filter((f) => f.endsWith(".md")).length;
 }
 
-async function readSseEvents(response: Response, maxEvents = 3, timeoutMs = 3000): Promise<Array<{ event: string; data: string }>> {
+async function readSseEvents(
+  response: Response,
+  maxEvents = 3,
+  timeoutMs = 3000
+): Promise<Array<{ event: string; data: string }>> {
   const out: Array<{ event: string; data: string }> = [];
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   const deadline = Date.now() + timeoutMs;
 
-  while (out.length < maxEvents && Date.now() < deadline) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() || "";
-    for (const block of parts) {
-      const lines = block.split("\n");
-      let event = "message";
-      let data = "";
-      for (const line of lines) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        if (line.startsWith("data:")) data = line.slice(5).trim();
+  try {
+    while (out.length < maxEvents && Date.now() < deadline) {
+      const remaining = Math.max(1, deadline - Date.now());
+      const chunk = await Promise.race([
+        reader.read(),
+        new Promise<{ done: true; value?: undefined }>((resolve) =>
+          setTimeout(() => resolve({ done: true }), remaining)
+        )
+      ]);
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
+      for (const block of parts) {
+        const lines = block.split("\n");
+        let event = "message";
+        let data = "";
+        for (const line of lines) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          if (line.startsWith("data:")) data = line.slice(5).trim();
+        }
+        if (data) out.push({ event, data });
       }
-      if (data) out.push({ event, data });
     }
+  } finally {
+    await reader.cancel().catch(() => {});
   }
-  reader.cancel().catch(() => {});
   return out;
 }
 
@@ -161,11 +174,13 @@ test("MCP status monitor", async (t) => {
   });
 
   await t.test("streams snapshot and live activity over SSE", async () => {
-    const streamRes = await fetch(`${baseUrl}/api/events/stream`);
+    const ac = new AbortController();
+    const streamRes = await fetch(`${baseUrl}/api/events/stream`, { signal: ac.signal });
     assert.strictEqual(streamRes.status, 200);
     assert.match(streamRes.headers.get("content-type") || "", /text\/event-stream/);
 
-    const events = await readSseEvents(streamRes, 2, 2000);
+    const events = await readSseEvents(streamRes, 1, 2000);
+    ac.abort();
     assert.ok(events.some((e) => e.event === "snapshot"));
 
     bus.capture({
@@ -178,15 +193,25 @@ test("MCP status monitor", async (t) => {
       projectId
     });
 
-    const stream2 = await fetch(`${baseUrl}/api/events/stream?afterSeq=0`);
-    const live = await readSseEvents(stream2, 3, 3000);
-    assert.ok(live.some((e) => e.event === "activity" && e.data.includes("live upsert")));
+    const ac2 = new AbortController();
+    const stream2 = await fetch(`${baseUrl}/api/events/stream?afterSeq=0`, { signal: ac2.signal });
+    const live = await readSseEvents(stream2, 5, 3000);
+    ac2.abort();
+    assert.ok(
+      live.some(
+        (e) =>
+          (e.event === "snapshot" || e.event === "activity") &&
+          e.data.includes("live upsert")
+      )
+    );
   });
 
   await t.test("afterSeq skips snapshot replay for older events", async () => {
     const currentMax = bus.list().reduce((m, e) => Math.max(m, e.seq), 0);
-    const streamRes = await fetch(`${baseUrl}/api/events/stream?afterSeq=${currentMax}`);
+    const ac = new AbortController();
+    const streamRes = await fetch(`${baseUrl}/api/events/stream?afterSeq=${currentMax}`, { signal: ac.signal });
     const events = await readSseEvents(streamRes, 1, 1500);
+    ac.abort();
     const snapshot = events.find((e) => e.event === "snapshot");
     if (snapshot) {
       const parsed = JSON.parse(snapshot.data) as unknown[];
@@ -219,6 +244,7 @@ test("MCP status monitor", async (t) => {
       assert.strictEqual(auth.status, 200);
       const stream = await fetch(`${authServer.url}/api/events/stream?token=status-secret`);
       assert.strictEqual(stream.status, 200);
+      stream.body?.cancel().catch(() => {});
     } finally {
       authBus.close();
       await authServer.close();

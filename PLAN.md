@@ -186,7 +186,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 
 **Spec.** [`.agents/specs/mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md) — 49 ACs.
 
-**Status.** `[~]` Spec registered; implementation pending Spec→PR batch.
+| 2026-08-26 | mcp-status-monitor | MCP status monitor with Activity Event Bus, :3001 companion, live SSE log; npm test 178 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

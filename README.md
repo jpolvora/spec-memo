@@ -148,7 +148,7 @@ Add to your extension's MCP configuration settings:
      ```
    - Append an audit or task event:
      ```bash
-     memo append --event "Refactored vault locking mechanism and passed all 154 tests"
+     memo append --event "Refactored vault locking mechanism and passed all 178 tests"
      ```
 
 3. **Query Memory (`search` & `get`)**:
