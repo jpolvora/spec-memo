@@ -528,7 +528,40 @@ ${TRAP_BODY}
     assert.equal(one.includes('Conferencia snapshot'), false);
   });
 
+  it('rejects ranked skill export when vault has no active traps', async () => {
+    await assert.rejects(
+      () =>
+        promoteRecord({
+          cwd: tempProject,
+          vaultRoot: tempVault,
+          destination: '.agents/skills/ws-recurrence/SKILL.md',
+          format: 'skill'
+        }),
+      /No active traps to compile for skill export/i
+    );
+    assert.equal(
+      fs.existsSync(path.join(tempProject, '.agents/skills/ws-recurrence/SKILL.md')),
+      false
+    );
+  });
+
   it('keeps promote default-deny for skill export', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'deny-seed',
+      frontmatter: {
+        id: 'trap-deny-seed',
+        title: 'Seed for deny paths',
+        layer: 'application',
+        occurrences: 1,
+        pathPatterns: ['src/**']
+      },
+      body: TRAP_BODY,
+      allowDuplicate: true
+    });
+
     await assert.rejects(
       () =>
         promoteRecord({

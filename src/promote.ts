@@ -122,6 +122,11 @@ export async function promoteRecord(options: PromoteOptions): Promise<PromoteRes
       layer: options.layer,
       limit: options.limit
     });
+    if (skillRecords.length === 0) {
+      throw new Error(
+        'No active traps to compile for skill export. Record traps in the vault or pass an explicit id.'
+      );
+    }
   } else {
     record = await getRecord({
       cwd: options.cwd,
