@@ -6,7 +6,7 @@ import { startMcpServer } from './mcp.js';
 import { runDoctor } from './doctor.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
-import { syncVault } from './vault.js';
+import { syncVault, ensureVaultStructure, getVaultRoot } from './vault.js';
 import { exportVault, importVault } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { sanitizeToolOutput } from './safety.js';
@@ -15,8 +15,10 @@ import { syncVaults } from './sync.js';
 import { startSseServer } from './server.js';
 import { backfillTrapRecurrence, listProjectRecords } from './store.js';
 import { aliasLayer, rankActiveTraps, occurrenceOf, lastSeenOf, applyTrapClassification } from './recurrence.js';
-import { getVaultRoot } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
+import { runSetup } from './setup.js';
+import { syncHybrid } from './hybrid-sync.js';
+import { callRemoteTool } from './mcp-proxy.js';
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -95,7 +97,9 @@ Core Memory Commands:
   install_skills  Install ws-memo skill into a consumer repo (alias: install-skills)
 
 Utility Commands:
+  setup         Configure deployment mode (local, hybrid, remote) and host MCP wiring
   doctor        Diagnose vault integrity and check product tree pollution
+  sync          Synchronize vault records (hybrid mode or vault-git)
   rank          List traps by recurrence (occurrences)
   import        Import legacy .agents tree into external vault
   export-vault  Export vault records into portable archive (optional AES-256-GCM)
@@ -111,6 +115,38 @@ Global Options:
 }
 
 function printCommandHelp(cmd: string): void {
+  if (cmd === 'setup' || cmd === 'config') {
+    console.log(`Usage: memo setup [options]
+
+Configure spec-memo deployment mode (local, hybrid, remote) and agent host MCP wiring.
+
+Options:
+  --mode          Deployment mode: local (default), hybrid, or remote
+  --url           Remote daemon origin URL (required for hybrid and remote modes)
+  --host          Target agent host (cursor, vscode, opencode, antigravity, claude, generic)
+  --print-mcp     Print host MCP configuration snippet to stdout
+  --write-mcp     Write/merge host MCP configuration to host config file
+  --auth-token    Bearer authentication token override
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'sync') {
+    console.log(`Usage: memo sync [options]
+
+Synchronize vault records against remote daemon (hybrid mode) or git remote (vaultGit).
+
+Options:
+  --all           Synchronize all projects in vault (default: current project)
+  --dry-run       Preview changes without modifying local records
+  --vaultRoot     Override vault root directory
+  --json          Output report as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
   if (cmd === 'serve') {
     console.log(`Usage: memo serve [options]
 
@@ -275,6 +311,90 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   if (parsed.subcommandHelp) {
     printCommandHelp(parsed.command);
     return 0;
+  }
+
+  const vaultRootArg = (parsed.options.vaultRoot as string) || undefined;
+  const activeVaultConfig = ensureVaultStructure(getVaultRoot(vaultRootArg));
+  const isRemoteMode = activeVaultConfig.mode === 'remote';
+
+  // Remote mode command restrictions (AC29)
+  if (
+    isRemoteMode &&
+    ['canvas', 'serve-canvas', 'sync-vault', 'export-vault', 'import-vault', 'hook'].includes(parsed.command || '')
+  ) {
+    const msg = `Command '${parsed.command}' is not available in remote mode (data resides on remote daemon).`;
+    if (parsed.isJson) {
+      printJson({ isError: true, error: msg, code: 'REMOTE_MODE_RESTRICTION' });
+    } else {
+      console.error(msg);
+    }
+    return 1;
+  }
+
+  // Handle memo setup / memo config command
+  if (parsed.command === 'setup' || parsed.command === 'config') {
+    try {
+      const mode = (parsed.options.mode as import('./types.js').DeploymentMode) || undefined;
+      const url = (parsed.options.url as string) || undefined;
+      const host = (parsed.options.host as string) || undefined;
+      const printMcp =
+        parsed.options['print-mcp'] === true ||
+        parsed.options['print-mcp'] === 'true' ||
+        parsed.options.printMcp === true;
+      const writeMcp =
+        parsed.options['write-mcp'] === true ||
+        parsed.options['write-mcp'] === 'true' ||
+        parsed.options.writeMcp === true;
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const authToken =
+        (parsed.options['auth-token'] as string) ||
+        (parsed.options.authToken as string) ||
+        undefined;
+
+      const result = runSetup({
+        mode,
+        url,
+        host,
+        printMcp,
+        writeMcp,
+        vaultRoot,
+        authToken
+      });
+
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(`spec-memo — Setup Complete\n`);
+        console.log(`  Mode:             ${result.mode}`);
+        if (result.remoteUrl) {
+          console.log(`  Remote URL:       ${result.remoteUrl}`);
+        }
+        console.log(`  Token Configured: ${result.tokenConfigured ? 'Yes' : 'No (set SPEC_MEMO_AUTH_TOKEN)'}`);
+        console.log(`  Vault Config:     ${result.configPath}`);
+        if (result.hostSnippet) {
+          console.log(`\nHost MCP Configuration (${parsed.options.host}):`);
+          if (result.writtenMcp && result.hostConfigPath) {
+            console.log(`  Written to:       ${result.hostConfigPath}`);
+          } else {
+            console.log(JSON.stringify(result.hostSnippet, null, 2));
+          }
+        }
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const partial = (err as Error & { partialResult?: import('./types.js').SetupResult }).partialResult;
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'SETUP_ERROR', ...(partial ? { data: partial } : {}) });
+      } else {
+        console.error(`Setup failed: ${msg}`);
+        if (partial?.hostSnippet) {
+          console.log(`\nHost MCP Configuration (${parsed.options.host}):`);
+          console.log(JSON.stringify(partial.hostSnippet, null, 2));
+        }
+      }
+      return 1;
+    }
   }
 
   if (parsed.command === 'serve') {
@@ -454,6 +574,59 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const limit = typeof limitRaw === 'string' ? parseInt(limitRaw, 10) : 10;
       const doBackfill = parsed.options.backfill === true || parsed.options.backfill === 'true';
 
+      if (isRemoteMode) {
+        const remoteRes = await callRemoteTool(
+          'search',
+          {
+            query: '',
+            kinds: ['trap'],
+            status: 'active',
+            sort: 'occurrences',
+            limit: Number.isFinite(limit) && limit > 0 ? limit : 10,
+            cwd
+          },
+          { vaultRoot }
+        );
+
+        if (remoteRes.isError) {
+          throw new Error(remoteRes.error);
+        }
+
+        const rawHits = (Array.isArray(remoteRes.data) ? remoteRes.data : []) as Array<any>;
+        let hits = rawHits.map((h) => ({
+          id: h.id,
+          projectId: h.projectId,
+          kind: h.kind,
+          status: h.status,
+          title: h.title,
+          filepath: h.filepath || '',
+          occurrences: h.occurrences || 1,
+          lastSeen: h.lastSeen,
+          layer: h.layer || 'other',
+          severity: h.severity
+        }));
+
+        if (layer) {
+          hits = hits.filter((h) => h.layer === layer);
+        }
+
+        if (parsed.isJson) {
+          printJson(hits);
+        } else {
+          console.log(`spec-memo — Recurring traps (${hits.length})\n`);
+          if (hits.length === 0) {
+            console.log('No active traps.');
+          } else {
+            for (const hit of hits) {
+              const occ = hit.occurrences || 1;
+              const layerLabel = hit.layer || 'other';
+              console.log(`[${occ}x] [${layerLabel}] ${hit.title || hit.id}`);
+            }
+          }
+        }
+        return 0;
+      }
+
       if (doBackfill) {
         backfillTrapRecurrence({ cwd, vaultRoot });
       }
@@ -531,13 +704,28 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         printJson(result);
       } else {
         console.log(`spec-memo — Doctor Diagnostic Report\n`);
-        console.log(`Vault Location: ${result.vaultRoot} (exists: ${result.vaultExists})`);
+        console.log(`Deployment Mode: ${result.mode || 'local'}`);
+        if (result.remoteUrl) {
+          console.log(`Remote Origin:   ${result.remoteUrl}`);
+          console.log(`Token Present:   ${result.tokenConfigured ? 'Yes' : 'No'}`);
+          if (result.remoteHealth) {
+            console.log(
+              `Remote Health:   ${result.remoteHealth.reachable ? 'Reachable' : `Unreachable (${result.remoteHealth.message || 'error'})`}`
+            );
+          }
+        }
+        if (result.hybridState) {
+          console.log(
+            `Hybrid State:    dirty=${result.hybridState.dirty}, lastSync=${result.hybridState.lastSyncAt || 'never'}${result.hybridState.lastError ? `, lastError=${result.hybridState.lastError}` : ''}`
+          );
+        }
+        console.log(`Vault Location:  ${result.vaultRoot} (exists: ${result.vaultExists})`);
         console.log(
-          `Project ID:     ${result.project.projectId} (remote: ${result.project.gitRemote || 'local-fallback'})`
+          `Project ID:      ${result.project.projectId} (remote: ${result.project.gitRemote || 'local-fallback'})`
         );
-        console.log(`Product Root:   ${result.project.rootPath} (git: ${result.project.isGit})`);
+        console.log(`Product Root:    ${result.project.rootPath} (git: ${result.project.isGit})`);
         console.log(
-          `SQLite FTS:     Indexed ${result.fts.indexedRecordsCount} records (healthy: ${result.fts.healthy})\n`
+          `SQLite FTS:      Indexed ${result.fts.indexedRecordsCount} records (healthy: ${result.fts.healthy})\n`
         );
 
         console.log(`Repository Pollution Scan:`);
@@ -644,17 +832,58 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     }
   }
 
-  // Handle memo sync command (vault git remote sync per vault-git spec AC3)
+  // Handle memo sync command (hybrid HTTP sync per AC21 or vault git remote sync per AC3)
   if (parsed.command === 'sync') {
     try {
       const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
-      const res = syncVault(vaultRoot);
-      if (parsed.isJson) {
-        printJson(res);
-      } else {
-        console.log(`[SYNC] ${res.message}`);
+      const config = ensureVaultStructure(getVaultRoot(vaultRoot));
+      const all = parsed.options.all === true || parsed.options.all === 'true';
+      const dryRun =
+        parsed.options['dry-run'] === true ||
+        parsed.options['dry-run'] === 'true' ||
+        parsed.options.dryRun === true;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const identity = resolveProjectIdentity(cwd, { vaultRoot: getVaultRoot(vaultRoot) });
+
+      if (config.mode === 'hybrid') {
+        const report = await syncHybrid({
+          vaultRoot,
+          projectId: identity.projectId,
+          all,
+          dryRun
+        });
+        if (parsed.isJson) {
+          printJson(report);
+        } else {
+          console.log(`spec-memo — Hybrid Synchronization Complete\n`);
+          console.log(`  Scope:    ${report.all ? 'All Projects' : `Project ${report.projectId}`}`);
+          console.log(
+            `  Pulled:   applied=${report.pulled.applied}, skipped=${report.pulled.skipped}, conflicts=${report.pulled.conflicts}`
+          );
+          console.log(
+            `  Pushed:   applied=${report.pushed.applied}, skipped=${report.pushed.skipped}, conflicts=${report.pushed.conflicts}`
+          );
+        }
+        return 0;
       }
-      return 0;
+
+      if (config.mode === 'remote') {
+        throw new Error('memo sync is not available in remote mode (data resides on remote daemon).');
+      }
+
+      if (config.vaultGit?.enabled) {
+        const res = syncVault(vaultRoot);
+        if (parsed.isJson) {
+          printJson(res);
+        } else {
+          console.log(`[SYNC] ${res.message}`);
+        }
+        return 0;
+      }
+
+      throw new Error(
+        `memo sync requires hybrid mode or vaultGit.enabled in config.json (current mode: ${config.mode || 'local'}).`
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (parsed.isJson) {
@@ -958,7 +1187,10 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       }
     }
 
-    const response = await executeTool(parsed.command, payload);
+    const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+    const response = isRemoteMode
+      ? await callRemoteTool(parsed.command, payload, { vaultRoot })
+      : await executeTool(parsed.command, payload);
 
     if (parsed.isJson) {
       if (response.isError) {

@@ -30,7 +30,7 @@ describe('Vault Management & Project Binding', () => {
 
   it('should initialize vault structure and default config.json without touching home dir', () => {
     const config = ensureVaultStructure(tempVaultRoot);
-    assert.equal(config.version, '0.3.2');
+    assert.equal(config.version, '0.4.0');
     assert.equal(config.defaultRemote, 'origin');
     assert.equal(config.bootstrap.maxBytes, 8192);
 

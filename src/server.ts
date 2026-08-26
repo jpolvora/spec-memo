@@ -5,6 +5,33 @@ import { getVaultRoot } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, createActivityBus } from "./activity.js";
 import { startStatusServer, StatusServerInstance } from "./status.js";
+import { exportChangeset, applyChangeset } from "./sync.js";
+
+function readJsonBody(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 50 * 1024 * 1024) {
+        req.destroy();
+        reject(new Error("Payload too large"));
+      }
+    });
+    req.on("end", () => {
+      if (!body.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(body));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+  });
+}
 
 export interface SseServerOptions {
   port?: number;
@@ -127,6 +154,65 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         return;
       }
 
+      // Authenticated HTTP changeset sync endpoints (deployment-modes AC16, AC17)
+      if (method === "POST" && pathname === "/api/sync/pull") {
+        try {
+          const body = await readJsonBody(req);
+          const changeset = exportChangeset(vaultRoot, {
+            projectId: typeof body.projectId === "string" ? body.projectId : undefined,
+            since: typeof body.since === "string" ? body.since : undefined
+          });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(changeset));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: msg }));
+        }
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/sync/push") {
+        try {
+          const body = await readJsonBody(req);
+          const rawChangeset = body.changeset || body;
+          const force = Boolean(body.force);
+          const result = await applyChangeset(vaultRoot, rawChangeset, { force });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: msg }));
+        }
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/sync") {
+        try {
+          const body = await readJsonBody(req);
+          let appliedResult: import('./sync.js').SyncResult | undefined;
+          if (body.push) {
+            const rawChangeset = body.push.changeset || body.push;
+            appliedResult = await applyChangeset(vaultRoot, rawChangeset, { force: Boolean(body.push.force) });
+          }
+          let pulledChangeset: import('./sync.js').Changeset | undefined;
+          if (body.pull) {
+            pulledChangeset = exportChangeset(vaultRoot, {
+              projectId: typeof body.pull.projectId === "string" ? body.pull.projectId : undefined,
+              since: typeof body.pull.since === "string" ? body.pull.since : undefined
+            });
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ applied: appliedResult, changeset: pulledChangeset }));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: msg }));
+        }
+        return;
+      }
+
       if (method === "GET" && (pathname === "/sse" || pathname === "/")) {
         const tokenInQuery = url.searchParams.get("token") || url.searchParams.get("authToken");
         const messageEndpoint = tokenInQuery
@@ -243,6 +329,14 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             }
           }
           transports.clear();
+          if (typeof (server as any).closeAllConnections === 'function') {
+            (server as any).closeAllConnections();
+          }
+          try {
+            server.unref();
+          } catch {
+            // ignore
+          }
           await new Promise<void>((res) => {
             server.close(() => res());
           });

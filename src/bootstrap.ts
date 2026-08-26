@@ -2,11 +2,12 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { BootstrapBrief, BootstrapOptions, MemoRecord } from './types.js';
-import { getProjectMetadata, getVaultRoot } from './vault.js';
+import { getProjectMetadata, getVaultRoot, ensureVaultStructure } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { scanProjectRecords } from './compiler.js';
 import { getRecord } from './store.js';
 import { matchesAnyPattern } from './indexer.js';
+import { pullHybridProject } from './hybrid-sync.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -128,6 +129,19 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
   const projectId = options.projectId || identity.projectId;
   const projectDir = path.join(vaultRoot, 'projects', projectId);
 
+  const notices: string[] = [];
+
+  // Best-effort hybrid pull prior to compiling brief (AC19)
+  const config = ensureVaultStructure(vaultRoot);
+  if (config.mode === 'hybrid') {
+    try {
+      await pullHybridProject(vaultRoot, projectId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notices.push(`Hybrid sync pull notice for '${projectId}': ${msg}`);
+    }
+  }
+
   const metadata = getProjectMetadata(projectId, vaultRoot);
   const allRecords = scanProjectRecords(projectDir);
 
@@ -201,7 +215,6 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
   const budgetBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 8192;
   const currentTraps = [...activeTraps];
   const currentDecisions = [...activeDecisions];
-  const notices: string[] = [];
 
   if (driftList.length > 0) {
     for (const d of driftList) {

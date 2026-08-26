@@ -22,6 +22,7 @@ import { promoteRecord } from './promote.js';
 import { checkVersion } from './version.js';
 import { installSkills } from './skills-install.js';
 import { sanitizeToolOutput } from './safety.js';
+import { scheduleHybridPush } from './hybrid-sync.js';
 
 export interface ToolDefinition {
   name: ToolName;
@@ -365,6 +366,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
         vaultRoot,
         projectId
       });
+      scheduleHybridPush(vaultRoot, projectId);
       return ok(result);
     } catch (err: unknown) {
       return fail('UPSERT_FAILED', err);
@@ -395,6 +397,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const appendOpts = parseResult.data as AppendOptions;
       const result = await appendEvent(appendOpts);
+      scheduleHybridPush(appendOpts.vaultRoot, appendOpts.projectId);
       return ok(result);
     } catch (err: unknown) {
       return fail('APPEND_FAILED', err);
@@ -405,6 +408,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const forgetOpts = parseResult.data as ForgetOptions;
       const result = await forgetRecord(forgetOpts);
+      scheduleHybridPush(forgetOpts.vaultRoot, forgetOpts.projectId);
       return ok(result);
     } catch (err: unknown) {
       return fail('FORGET_FAILED', err);
@@ -415,6 +419,9 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const gcOpts = parseResult.data as GcOptions;
       const result = await runGc(gcOpts);
+      if (!gcOpts.dryRun) {
+        scheduleHybridPush(gcOpts.vaultRoot, gcOpts.projectId || result.projectId);
+      }
       return ok(result);
     } catch (err: unknown) {
       return fail('GC_FAILED', err);

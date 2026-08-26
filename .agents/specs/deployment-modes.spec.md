@@ -4,7 +4,7 @@ slug: deployment-modes
 title: "Local, hybrid, and remote deployment modes with portable MCP wiring"
 source: local
 specDate: 2026-08-26
-status: draft
+status: complete
 target_phase: Phase 7
 ---
 

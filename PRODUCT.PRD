@@ -223,6 +223,8 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 23 | `mcp-sse-transport` | `[x]` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
 | 24 | `trap-recurrence` | `[x]` | Phase 6 | Trap recurrence ranking and owner-skill export |
 | 25 | `mcp-status-monitor` | `[x]` | Phase 6 | MCP status monitor page with live activity log |
+| 26 | `mcp-version-and-skill-install` | `[x]` | Ops | check_version and install_skills MCP tools |
+| 27 | `deployment-modes` | `[x]` | Phase 7 | Local, Hybrid, Remote modes and portable stdio MCP wiring |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
@@ -265,6 +267,8 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-26 | mcp-version-and-skill-install | MCP tools check_version + install_skills; 10-tool surface + docs | npm test 196 pass |
 | 2026-08-26 | release-0.3.1 | Align ws-memo skill + docs to 10-tool surface; bump package/MCP/vault to 0.3.1 | 0.3.1 |
 | 2026-08-26 | release-0.3.2 | Fix MCP SSE initial connect with query-token auth & CORS; add documentation website & GitHub Pages deploy workflow | 0.3.2 |
+| 2026-08-26 | deployment-modes | Deployment modes (Local, Hybrid, Remote), memo setup, daemon HTTP sync routes, hybrid debounced push & fail-open pull, remote stdio MCP proxy, 32 ACs | npm test 215 pass |
+| 2026-08-26 | release-0.4.0 | Phase 7 deployment modes (Local, Hybrid, Remote), memo setup, stdio MCP proxy | 0.4.0 |
 
 ## 12. Related docs
 

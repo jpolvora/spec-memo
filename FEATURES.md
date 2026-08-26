@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.3.2** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.4.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -133,18 +133,31 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 
 ---
 
-## 11. Explicitly not features (v1)
+## 11. Deployment modes & portable MCP wiring (Phase 7)
+
+- [x] **Local, Hybrid, and Remote Deployment Modes.** Configured via `mode` in `config.json` (`memo setup --mode local|hybrid|remote`).
+- [x] **Uniform Stdio MCP Wiring.** All agent hosts (Cursor, VS Code, OpenCode, Antigravity, Claude Desktop) spawn `memo serve` locally. Mode switching is managed entirely inside the vault.
+- [x] **Setup & Host Wiring Helper (`memo setup`).** Configures mode, remote URL, checks environment bearer tokens without persisting them to disk, and prints/writes editor MCP configs (`--host`, `--print-mcp`, `--write-mcp`).
+- [x] **Daemon HTTP Sync Routes.** `/api/sync/pull`, `/api/sync/push`, and `/api/sync` on the SSE daemon origin with bearer token authentication.
+- [x] **Hybrid Bidirectional Sync & Debounced Push.** Low-latency local cache with automatic remote delta pulls on `bootstrap` (fail open) and debounced push scheduling after mutating operations (`upsert`, `append`, `forget`, `gc`).
+- [x] **Remote Stdio Proxy Server.** In `remote` mode, `memo serve` transparently proxies all 10 MCP tools to the remote daemon over SSE with bearer authentication. Fails closed with structured `REMOTE_UNREACHABLE` errors.
+- [x] **Remote Mode CLI Restrictions.** Extras (`canvas`, `sync-vault`, `export-vault`, `import-vault`, `hook`) refuse with exit code 1. `doctor`, `setup`, and `check-version` run locally. `rank` proxies to the daemon.
+
+---
+
+## 12. Explicitly not features (v1)
 
 | Idea | Why not |
 |------|---------|
-| Ninth MCP tool for “list files in vault” | Leaks layout; use `search` |
+| Eleventh MCP tool for sync | Sync is daemon HTTP transport route, not an MCP tool |
+| Extra MCP tool for “list files in vault” | Leaks layout; use `search` |
 | Auto-rewrite specs when code changes | Drift is a flag, not an author |
 | Auto-`promote` into README | Default deny |
 | Bundling the vault in the product clone | Violates UC1 |
 
 ---
 
-## 12. Shipped in this repository today
+## 13. Shipped in this repository today
 
 | Capability | Status |
 |------------|--------|
@@ -153,7 +166,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime (Phases 1–6 complete) | `[x]` |
+| Runtime (Phases 1–7 complete) | `[x]` |
 
 
 

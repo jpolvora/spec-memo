@@ -35,6 +35,7 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 
 | Intent | Step |
 |--------|------|
+| Configure deployment mode & host MCP wiring | **configure** |
 | Session start / brief / traps for this cwd | **session** |
 | Find / read vault records | **recall** |
 | Write trap, decision, spec, plan, state, review, scratch | **remember** |
@@ -44,14 +45,20 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 | Check running vs latest package version | **version** |
 | Install this skill into a consumer repo | **install** |
 | Canvas / SSE / status page | **observe** |
-| Import, backup, restore, peer sync, vault-git | **move** |
+| Import, backup, restore, peer sync, hybrid sync | **move** |
 | Write-block hook | **guard** |
 
 ## Steps
 
+### configure
+
+1. Configure deployment mode and generate/write host MCP config: `memo setup [--mode local|hybrid|remote] [--url {remoteUrl}] [--host cursor|vscode|opencode|antigravity|claude|generic] [--print-mcp] [--write-mcp] [--json]`.
+2. Uniformity rule: All host MCP snippets execute `memo serve` locally over stdio. Mode switching is managed entirely inside vault `config.json`.
+   - Done when: setup report or merged host config path is returned.
+
 ### session
 
-1. Call MCP `bootstrap` (or `memo bootstrap`) with `cwd` = product root. Add `query`, `path`, `slug` when known. Cap is 8 KB (`maxBytes` default 8192).
+1. Call MCP `bootstrap` (or `memo bootstrap`) with `cwd` = product root. Add `query`, `path`, `slug` when known. Cap is 8 KB (`maxBytes` default 8192). In hybrid mode, bootstrap pulls remote deltas first (fail open).
 2. Apply returned traps (DO NOT / INSTEAD DO) before planning or coding.
    - Done when: a brief is in context (or truncated notice recorded).
 
@@ -64,7 +71,7 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 ### remember
 
 1. Load [`references/RECORDS.md`](references/RECORDS.md) for kind, trap body, and frontmatter rules.
-2. `upsert` with required `kind` + `body`. Never write the same payload under product `.agents/plans`, `.agents/specs`, or `**/MEMORY.md`.
+2. `upsert` with required `kind` + `body`. Never write the same payload under product `.agents/plans`, `.agents/specs`, or `**/MEMORY.md`. In hybrid mode, mutating calls schedule background debounced push.
    - Done when: tool returns an id (schema errors fail closed — fix payload, do not write files).
 
 ### log
@@ -74,7 +81,7 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 
 ### maintain
 
-1. Health / pollution: CLI `memo doctor [--json] [--rebuild] [--fix] [productRoot]` (not an MCP tool).
+1. Health / pollution / mode diagnostics: CLI `memo doctor [--json] [--rebuild] [--fix] [productRoot]`.
 2. Recurrence list: CLI `memo rank [--layer] [--limit] [--backfill] [--json]` (or `search` with `sort=occurrences` + `kinds: ["trap"]`).
 3. TTL / compact: MCP `gc` (`dryRun` first when unsure).
 4. Archive: MCP `forget` (`purge: true` only with explicit user confirm).
@@ -109,7 +116,7 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 1. Legacy tree → vault: `memo import --from {repoRoot}`.
 2. Archive: `memo export-vault` / `memo import-vault` (password via `SPEC_MEMO_VAULT_PASSWORD`, not committed scripts).
 3. Peer vaults: `memo sync-vault <target> [--two-way] [--dry-run]`.
-4. Vault git remote: `memo sync` when vault-git is enabled in vault `config.json`.
+4. Hybrid daemon sync: `memo sync [--all] [--dry-run]` (or vault git remote when vaultGit is enabled).
    - Done when: command report is shown. Never embed tokens in helper scripts.
 
 ### guard
@@ -120,7 +127,8 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 ## Rules
 
 - MCP surface is exactly **10** tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`, `check_version`, `install_skills`. Further growth needs a PRODUCT.PRD amendment.
-- CLI extras (`doctor`, `rank`, `canvas`, `serve`, `import`, `hook`, `sync`, `sync-vault`, `export-vault`, `import-vault`) stay CLI-only.
+- CLI extras (`setup`, `doctor`, `rank`, `canvas`, `serve`, `import`, `hook`, `sync`, `sync-vault`, `export-vault`, `import-vault`) stay CLI-only.
+- Remote mode restrictions: CLI extras (`canvas`, `sync-vault`, `export-vault`, `import-vault`, `hook`) refuse with exit code 1. `memo setup`, `memo doctor`, and `memo check-version` execute locally. Tools proxy transparently over stdio to remote daemon.
 - Prefer MCP when registered; CLI when MCP is absent or the extra is CLI-only.
 - `search.sort=occurrences` and `memo rank` share the same ranking universe (full project scan; do not invent a `rank` MCP tool).
 - `promote format=skill` with no `id` fails closed when zero active traps rank (do not write a header-only SKILL.md).

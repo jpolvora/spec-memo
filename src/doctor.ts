@@ -2,9 +2,36 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Database from 'better-sqlite3';
 import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
-import { getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { openIndex, rebuildIndex } from './indexer.js';
+import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
+import { readHybridState } from './hybrid-state.js';
+
+export async function checkRemoteHealth(
+  origin: string,
+  token?: string
+): Promise<{ reachable: boolean; statusCode?: number; message?: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const healthUrl = `${origin.replace(/\/+$/, '')}/health`;
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(healthUrl, { headers, signal: controller.signal });
+    if (res.ok) {
+      return { reachable: true, statusCode: res.status };
+    }
+    return { reachable: false, statusCode: res.status, message: `HTTP ${res.status}` };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { reachable: false, message: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Recursively find all files in a directory, ignoring node_modules, .git, and dist.
@@ -214,16 +241,68 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     );
   }
 
-  const healthy = vaultExists && ftsHealthy && pollutionItems.length === 0;
+  // Deployment mode diagnostics (AC11, AC12, AC13)
+  const config = ensureVaultStructure(vaultRoot);
+  const effectiveMode = config.mode || 'local';
+  const remoteUrl = config.remote?.url || null;
+  const tokenConfigured = isTokenConfigured();
+  const token = getResolvedAuthToken();
+
+  let hybridState: import('./types.js').HybridState | null = null;
+  let remoteHealth: { reachable: boolean; statusCode?: number; message?: string } | null = null;
+
+  if (effectiveMode === 'hybrid') {
+    hybridState = readHybridState(vaultRoot);
+    if (remoteUrl) {
+      remoteHealth = await checkRemoteHealth(remoteUrl, token);
+      if (!remoteHealth.reachable) {
+        warnings.push(
+          `Remote daemon unreachable at ${remoteUrl} (${remoteHealth.message || 'connection failed'}). Local vault remains operational.`
+        );
+      }
+    } else {
+      warnings.push(`Hybrid mode configured without a valid remote URL.`);
+    }
+    if (!tokenConfigured) {
+      warnings.push(`Hybrid mode requires SPEC_MEMO_AUTH_TOKEN or SPEC_MEMO_SSE_TOKEN in the environment.`);
+    }
+  } else if (effectiveMode === 'remote') {
+    if (!remoteUrl) {
+      warnings.push(`Remote mode configured without a remote URL.`);
+    } else {
+      remoteHealth = await checkRemoteHealth(remoteUrl, token);
+      if (!remoteHealth.reachable) {
+        warnings.push(
+          `Remote daemon unreachable at ${remoteUrl} (${remoteHealth.message || 'connection failed'}). Cannot proxy in remote mode.`
+        );
+      }
+    }
+    if (!tokenConfigured) {
+      warnings.push(`Remote mode requires SPEC_MEMO_AUTH_TOKEN or SPEC_MEMO_SSE_TOKEN in the environment.`);
+    }
+  }
+
+  let healthy = vaultExists && ftsHealthy && pollutionItems.length === 0;
+  if (effectiveMode === 'remote') {
+    healthy =
+      Boolean(remoteHealth?.reachable) &&
+      tokenConfigured &&
+      pollutionItems.length === 0;
+  }
 
   const summary = healthy
-    ? `spec-memo vault is healthy and product repository is clean (${indexedRecordsCount} records indexed).`
-    : `spec-memo doctor detected issues (${warnings.length} warning${warnings.length === 1 ? '' : 's'}).`;
+    ? `spec-memo vault is healthy and product repository is clean (${indexedRecordsCount} records indexed, mode: ${effectiveMode}).`
+    : `spec-memo doctor detected issues (${warnings.length} warning${warnings.length === 1 ? '' : 's'}, mode: ${effectiveMode}).`;
 
   return {
     healthy,
     vaultRoot,
     vaultExists,
+    mode: effectiveMode,
+    remoteUrl,
+    tokenConfigured,
+    hybridState,
+    remoteHealth,
     project: {
       projectId: identity.projectId,
       gitRemote: identity.normalizedRemote,
