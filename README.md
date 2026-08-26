@@ -227,7 +227,29 @@ curl -s http://127.0.0.1:3001/api/vaults
 # Live stream (SSE): GET http://127.0.0.1:3001/api/events/stream
 ```
 
-When a token is set, send `Authorization: Bearer <token>` (streams also accept `?token=`). Status routes are **read-only** — they never mutate the vault. Canvas (`:4100`) remains a separate graph UI.
+When a token is set, send `Authorization: Bearer <token>` (streams also accept `?token=`). All diagnostic status routes remain read-only; only the dedicated backup routes (`POST /api/vaults/export` and `POST /api/vaults/import`) mutate the vault. Canvas (`:4100`) remains a separate graph UI.
+
+### Status monitor backup (UI export & import)
+
+The status monitor on port `:3001` provides a zero-friction UI for routine vault snapshots and disaster recovery:
+
+1. **Export a project vault:**
+   - Select a project in the **Vault filter** dropdown.
+   - Click **Export vault** in the sidebar.
+   - Enter an optional encryption password (AES-256-GCM) or leave blank for plaintext.
+   - The browser downloads `spec-memo-vault-{projectId}-{YYYYMMDD-HHmmss}.zip` containing `vault-backup.json`.
+
+2. **Import & restore a project vault:**
+   - Click **Choose backup zip…** and select a previously exported `.zip` archive.
+   - Click **Run import**.
+   - Review the confirmation modal (shows target vault summary and overwrite warning) and enter the password if the archive is encrypted.
+   - Click **Confirm & Restore** — records are restored, views and FTS index are rebuilt, and the vault list refreshes immediately without a full page reload.
+
+> [!TIP]
+> **Daily backup tip & CLI parity:**
+> - Keep regular daily `.zip` exports in your cloud or sync folder for peace of mind.
+> - **CLI compatibility:** To restore a UI zip via CLI, extract `vault-backup.json` and run `memo import-vault --archive vault-backup.json`. Conversely, JSON archives created via `memo export-vault --output file.json` can be zipped as `vault-backup.json` and uploaded directly through the UI.
+> - **Daemon note:** In hybrid/remote deployments, the status companion operates on the daemon host's `$SPEC_MEMO_ROOT` vault.
 
 ### How to diagnose
 

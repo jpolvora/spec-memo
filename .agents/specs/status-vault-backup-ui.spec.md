@@ -4,6 +4,8 @@ slug: status-vault-backup-ui
 title: "Status monitor vault export and import UI"
 source: local
 specDate: 2026-08-26
+status: completed
+target_phase: Phase 7
 ---
 
 # Specification — Status monitor vault export and import UI
