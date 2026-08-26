@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-26 11:20] Agent: Cursor Composer
+- **Prompt**: Update README.md (humans) and AGENTS.md (agents) with run/serve/diagnose/status-monitor/autoboot service workflows; commit, push, `/ws-ship-pr`
+- **Done**: Expanded README ops section (ports, stdio vs SSE, status UI curls, systemd + Windows Task Scheduler); AGENTS agent workflow table for serve/diagnose/status/autoboot; committed on `develop`
+- **Result**: Docs-only ship. Learning: N/A (no new project trap)
+
 ### [2026-08-26 00:50] Agent: Cursor Grok 4.6
 - **Prompt**: Create ws-memo skill covering full spec-memo MCP/CLI; open workflow-skills issue to improve ws-spec-memo handoff
 - **Done**: Added `.agents/skills/ws-memo/` (SKILL.md + SURFACE/RECORDS/MCP-TEMPLATE + evals); pointers in AGENTS.md, FEATURES.md, README.md; opened jpolvora/workflow-skills#243
