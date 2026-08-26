@@ -9,6 +9,7 @@ import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
 import { assertNoSecrets, assertNotInProductRoot } from './safety.js';
 import { recordTombstone } from './sync.js';
+import { applyTrapClassification, occurrenceOf, lastSeenOf } from './recurrence.js';
 
 export interface UpsertOptions {
   cwd?: string;
@@ -28,6 +29,7 @@ export interface UpsertResult {
   slug: string;
   path: string;
   superseded: boolean;
+  recurrence?: boolean;
 }
 
 export interface GetOptions {
@@ -116,6 +118,43 @@ export function getSubdirForKind(kind: RecordKind): string {
   }
 }
 
+function findMatchingTrap(
+  projectDir: string,
+  recordId: string,
+  slug: string,
+  pathPatterns: string[] | undefined,
+  body: string
+): MemoRecord | null {
+  const newPatterns = (pathPatterns || []).slice().sort();
+  const trapsDir = path.join(projectDir, 'traps');
+  if (!fs.existsSync(trapsDir)) return null;
+  const files = fs.readdirSync(trapsDir);
+  for (const file of files) {
+    if (!file.endsWith('.md')) continue;
+    const trapPath = path.join(trapsDir, file);
+    try {
+      const existing = parseRecord(fs.readFileSync(trapPath, 'utf8'), trapPath);
+      if (
+        existing.frontmatter.status !== 'active' ||
+        existing.frontmatter.id === recordId ||
+        existing.frontmatter.id === slug
+      ) {
+        continue;
+      }
+      const existingPatterns = (existing.frontmatter.pathPatterns || []).slice().sort();
+      const samePatterns =
+        newPatterns.length === existingPatterns.length &&
+        newPatterns.every((p, idx) => p === existingPatterns[idx]);
+      if (samePatterns && calculateTextOverlap(body, existing.body) >= 0.7) {
+        return existing;
+      }
+    } catch {
+      // Ignore unparseable
+    }
+  }
+  return null;
+}
+
 /**
  * Upsert a memory record (trap, decision, spec, plan, state, log, scratch, review)
  * and update compiled index views.
@@ -149,47 +188,6 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
   const fileName = `${slug}.md`;
   const filePath = path.join(targetDir, fileName);
 
-  // AC1-AC4 (Slice 12 Trap Dedup): Automatically find and supersede matching traps
-  if (options.kind === 'trap' && !options.allowDuplicate && !options.frontmatter?.supersedes) {
-    const newPatterns = (options.frontmatter?.pathPatterns || []).slice().sort();
-    const trapsDir = path.join(projectDir, 'traps');
-    if (fs.existsSync(trapsDir)) {
-      const files = fs.readdirSync(trapsDir);
-      for (const file of files) {
-        if (file.endsWith('.md')) {
-          const trapPath = path.join(trapsDir, file);
-          try {
-            const existing = parseRecord(fs.readFileSync(trapPath, 'utf8'), trapPath);
-            if (
-              existing.frontmatter.status === 'active' &&
-              existing.frontmatter.id !== recordId &&
-              existing.frontmatter.id !== slug
-            ) {
-              const existingPatterns = (existing.frontmatter.pathPatterns || []).slice().sort();
-              const samePatterns =
-                newPatterns.length === existingPatterns.length &&
-                newPatterns.every((p, idx) => p === existingPatterns[idx]);
-
-              if (samePatterns) {
-                const overlap = calculateTextOverlap(options.body, existing.body);
-                if (overlap >= 0.7) {
-                  options.frontmatter = {
-                    ...(options.frontmatter || {}),
-                    supersedes: existing.frontmatter.id
-                  };
-                  break;
-                }
-              }
-            }
-          } catch {
-            // Ignore unparseable
-          }
-        }
-      }
-    }
-  }
-
-
   let existingRecord: MemoRecord | null = null;
   if (fs.existsSync(filePath)) {
     try {
@@ -200,6 +198,44 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
   }
 
   const now = new Date().toISOString();
+
+  if (
+    options.kind === 'trap' &&
+    !options.allowDuplicate &&
+    !options.frontmatter?.supersedes &&
+    !existingRecord
+  ) {
+    const match = findMatchingTrap(projectDir, recordId, slug, options.frontmatter?.pathPatterns, options.body);
+    if (match && match.path) {
+      const bumpedFm: RecordFrontmatter = {
+        ...match.frontmatter,
+        occurrences: occurrenceOf(match.frontmatter) + 1,
+        lastSeen: now,
+        updated: now
+      };
+      const bumpedContent = serializeRecord({ frontmatter: bumpedFm, body: match.body });
+      fs.writeFileSync(match.path, bumpedContent, 'utf8');
+      try {
+        const db = openIndex(vaultRoot);
+        indexRecord(db, { frontmatter: bumpedFm, body: match.body }, match.path);
+      } catch {
+        // Non-blocking if index fails
+      }
+      rebuildCompiledViews(projectId, vaultRoot);
+      commitVaultChange(`recurrence ${options.kind}:${match.frontmatter.id}`, vaultRoot, [
+        path.join('projects', projectId)
+      ]);
+      return {
+        id: match.frontmatter.id,
+        kind: options.kind,
+        slug: String(match.frontmatter.slug || match.frontmatter.id),
+        path: match.path,
+        superseded: false,
+        recurrence: true
+      };
+    }
+  }
+
   const rawFrontmatter: RecordFrontmatter = {
     ...(existingRecord?.frontmatter || {}),
     ...(options.frontmatter || {}),
@@ -212,6 +248,36 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     updated: options.frontmatter?.updated || now,
     source: options.source || options.frontmatter?.source || existingRecord?.frontmatter.source || 'agent'
   };
+
+  if (options.kind === 'trap') {
+    const classified = applyTrapClassification(rawFrontmatter, options.body);
+    rawFrontmatter.layer = classified.layer;
+    if (classified.module) {
+      rawFrontmatter.module = classified.module;
+    }
+    if (classified.tags) {
+      rawFrontmatter.tags = classified.tags;
+    }
+    if (!existingRecord) {
+      if (rawFrontmatter.occurrences == null) {
+        rawFrontmatter.occurrences = 1;
+      }
+      if (!rawFrontmatter.lastSeen) {
+        rawFrontmatter.lastSeen = rawFrontmatter.created || now;
+      }
+    }
+    if (rawFrontmatter.supersedes && options.frontmatter?.occurrences == null && !existingRecord) {
+      const older = await getRecord({
+        projectId,
+        vaultRoot,
+        id: String(rawFrontmatter.supersedes),
+        kind: 'trap'
+      });
+      if (older) {
+        rawFrontmatter.occurrences = occurrenceOf(older.frontmatter) + 1;
+      }
+    }
+  }
 
   const validation = validateFrontmatter(rawFrontmatter);
   if (!validation.success) {
@@ -533,4 +599,55 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
     path: record.path
   };
   });
+}
+
+export function backfillTrapRecurrence(options: {
+  cwd?: string;
+  vaultRoot?: string;
+  projectId?: string;
+}): { updated: number; projectId: string } {
+  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+  const projectId = options.projectId || identity.projectId;
+  const records = listProjectRecords(vaultRoot, projectId);
+  let updated = 0;
+  const db = openIndex(vaultRoot);
+
+  for (const record of records) {
+    if (record.frontmatter.kind !== 'trap' || !record.path) continue;
+    const classified = applyTrapClassification(record.frontmatter, record.body);
+    const next: RecordFrontmatter = {
+      ...record.frontmatter,
+      layer: record.frontmatter.layer || classified.layer,
+      occurrences: occurrenceOf(record.frontmatter),
+      lastSeen: lastSeenOf(record.frontmatter)
+    };
+    if (!next.module && classified.module) {
+      next.module = classified.module;
+    }
+    if (classified.tags) {
+      next.tags = classified.tags;
+    }
+    for (const key of Object.keys(next)) {
+      if (next[key] === undefined) {
+        delete next[key];
+      }
+    }
+    const changed =
+      next.layer !== record.frontmatter.layer ||
+      next.module !== record.frontmatter.module ||
+      next.occurrences !== record.frontmatter.occurrences ||
+      next.lastSeen !== record.frontmatter.lastSeen ||
+      JSON.stringify(next.tags || []) !== JSON.stringify(record.frontmatter.tags || []);
+    if (!changed) continue;
+    fs.writeFileSync(record.path, serializeRecord({ frontmatter: next, body: record.body }), 'utf8');
+    indexRecord(db, { frontmatter: next, body: record.body }, record.path);
+    updated += 1;
+  }
+
+  if (updated > 0) {
+    rebuildCompiledViews(projectId, vaultRoot);
+  }
+
+  return { updated, projectId };
 }

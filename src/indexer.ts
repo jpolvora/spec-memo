@@ -5,6 +5,7 @@ import { MemoRecord, RecordFrontmatter, RecordKind, RecordStatus, SearchHit, Sea
 import { getVaultRoot, withVaultLock } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { parseRecord } from './schema.js';
+import { compareSearchHits, enrichHitFromFile } from './recurrence.js';
 
 const dbPool = new Map<string, Database.Database>();
 
@@ -286,6 +287,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
 
   const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const limit = options.limit && options.limit > 0 ? options.limit : 50;
+  const sort = options.sort || 'relevance';
+  const fetchLimit = sort === 'occurrences' ? 10000 : limit * 2;
 
   let querySql: string;
   if (hasFtsQuery && ftsQuery) {
@@ -306,9 +309,10 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       FROM records_fts
       ${whereSql}
       ORDER BY rank
-      LIMIT ${limit * 2}
+      LIMIT ${fetchLimit}
     `;
   } else {
+    const orderSql = sort === 'updated' ? 'ORDER BY updated DESC' : 'ORDER BY updated DESC';
     querySql = `
       SELECT
         id,
@@ -325,8 +329,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         0 AS rank
       FROM records_fts
       ${whereSql}
-      ORDER BY updated DESC
-      LIMIT ${limit * 2}
+      ${orderSql}
+      LIMIT ${fetchLimit}
     `;
   }
 
@@ -414,9 +418,25 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       updated: row.updated || undefined
     });
 
-    if (results.length >= limit) {
+    if (sort !== 'occurrences' && results.length >= limit) {
       break;
     }
+  }
+
+  if (sort === 'occurrences') {
+    for (const hit of results) {
+      const extra = enrichHitFromFile(hit.filepath);
+      hit.occurrences = extra.occurrences;
+      hit.lastSeen = extra.lastSeen;
+      hit.layer = extra.layer as SearchHit['layer'];
+      hit.severity = extra.severity;
+    }
+    results.sort(compareSearchHits);
+    return results.slice(0, limit);
+  }
+
+  if (sort === 'updated') {
+    results.sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
   }
 
   return results;

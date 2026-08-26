@@ -226,5 +226,15 @@
     "autoAudit": true,
     "autoDetectDomain": true,
     "auditVerdictsBlockShip": "refuted"
+  },
+  "specMemo": {
+    "enabled": false,
+    "mode": "vault",
+    "cli": "memo",
+    "vaultRoot": "",
+    "bootstrapOnSession": true,
+    "writeBlockHook": false,
+    "importOnEnable": true,
+    "mcpServerName": "spec-memo"
   }
 }

@@ -127,7 +127,7 @@ $SPEC_MEMO_ROOT/                    # default ~/.spec-memo
 
 Required: `id`, `kind`, `project`, `status`, `created`, `updated`, `source` (`agent` \| `human` \| `imported`).
 
-Optional: `ttl`, `pathPatterns`, `tags`, `supersedes`, `gitRemote`, `relatedSlug`, `severity` (traps), `linkedPaths` + `verifiedAtSha` (specs).
+Optional: `ttl`, `pathPatterns`, `tags`, `supersedes`, `gitRemote`, `relatedSlug`, `severity` (traps), `layer` / `module` / `occurrences` / `lastSeen` (traps), `linkedPaths` + `verifiedAtSha` (specs).
 
 `status`: `active` \| `paused` \| `shipped` \| `superseded` \| `archived`.
 
@@ -187,6 +187,10 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 - [x] Multi-Machine Vault Synchronization and Delta Engine (`.agents/specs/multi-machine-sync.spec.md`)
 - [x] HTTP and Server-Sent Events (SSE) MCP Transport (`.agents/specs/mcp-sse-transport.spec.md`)
 
+### Phase 6 — Recurrence learning
+
+- [x] Trap recurrence ranking and owner-skill export (`.agents/specs/trap-recurrence.spec.md`)
+
 ## 9. Next specs
 
 | # | Slug | Status | Target phase | Notes |
@@ -215,6 +219,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 21 | `canvas-viewer` | `[x]` | Phase 5 | Interactive Canvas UI and Visual Graph Viewer |
 | 22 | `multi-machine-sync` | `[x]` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
 | 23 | `mcp-sse-transport` | `[x]` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
+| 24 | `trap-recurrence` | `[x]` | Phase 6 | Trap recurrence ranking and owner-skill export |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
@@ -252,6 +257,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-25 | slice-22-canvas-viewer | Interactive Canvas UI and Visual Graph Viewer | Slice 22 delivery |
 | 2026-08-25 | slice-23-multi-machine-sync | Multi-Machine Vault Synchronization and Delta Engine | Slice 23 delivery |
 | 2026-08-25 | slice-24-mcp-sse-transport | HTTP and Server-Sent Events (SSE) MCP Transport | Slice 24 delivery |
+| 2026-08-26 | trap-recurrence | Trap recurrence ranking, occurrence counters, and skill export | Slice 25 delivery |
 
 ## 12. Related docs
 

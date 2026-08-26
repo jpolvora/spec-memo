@@ -269,13 +269,14 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | Command / Tool | Role | Key Options |
 |---|---|---|
 | `bootstrap` | Compile token-budgeted session brief | `--maxBytes`, `--query`, `--path`, `--slug` |
-| `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all` (cross-project) |
+| `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` |
 | `get` | Fetch single record by ID or kind+slug | `--id`, `--kind`, `--slug` |
 | `upsert` | Create or update typed memory record | `--kind`, `--title`, `--severity`, `--path-patterns`, `--body` |
 | `append` | Append chronological event log | `--event`, `--kind` |
 | `forget` | Archive or permanently delete record | `--id`, `--purge` |
 | `gc` | Apply TTL retention and compact plans | `--dry-run`, `--project` |
-| `promote` | Safe export of record to product repo | `--id`, `--to`, `--format`, `--force` |
+| `promote` | Safe export of record to product repo | `--id`, `--to`, `--format` (`raw`/`adr`/`madr`/`skill`), `--force`, `--limit` |
+| `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
 | `doctor` | Diagnose health & fix repo pollution | `--fix`, `--rebuild`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |
 | `export-vault` | Export encrypted portable archive | `--password`, `--output`, `--project` |

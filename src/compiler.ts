@@ -85,7 +85,7 @@ export function generateTrapsView(metadata: ProjectMetadata | null, traps: MemoR
 
       md += `### [${sev}] ${name} ([${trap.frontmatter.id}](${relPath}))\n\n`;
       md += `- **Path Patterns:** \`${patterns}\` | **Wikilink:** \`[[${trap.frontmatter.id}]]\`\n`;
-      md += `- **Severity:** \`${trap.frontmatter.severity || 'medium'}\` | **Source:** \`${trap.frontmatter.source}\` | **Updated:** \`${trap.frontmatter.updated}\`\n`;
+      md += `- **Severity:** \`${trap.frontmatter.severity || 'medium'}\` | **Layer:** \`${trap.frontmatter.layer || 'other'}\` | **Occurrences:** \`${trap.frontmatter.occurrences || 1}\` | **Source:** \`${trap.frontmatter.source}\` | **Updated:** \`${trap.frontmatter.updated}\`\n`;
       if (trap.frontmatter.supersedes) {
         md += `- **Supersedes:** \`[[${trap.frontmatter.supersedes}]]\`\n`;
       }

@@ -50,7 +50,11 @@ export const RecordFrontmatterSchema = z.object({
   severity: SeveritySchema.optional(),
   linkedPaths: z.array(z.string()).optional(),
   verifiedAtSha: z.string().optional(),
-  rationale: z.string().optional()
+  rationale: z.string().optional(),
+  layer: z.enum(['application', 'domain', 'web', 'infrastructure', 'tests', 'devops', 'other']).optional(),
+  module: z.string().optional(),
+  occurrences: z.coerce.number().int().min(1).optional(),
+  lastSeen: DateOrStringSchema.optional()
 }).passthrough();
 
 export type ValidatedFrontmatter = z.infer<typeof RecordFrontmatterSchema> & RecordFrontmatter;
@@ -95,5 +99,12 @@ export function serializeRecord(record: { frontmatter: RecordFrontmatter; body: 
     throw new Error(`Cannot serialize invalid frontmatter: ${validation.errors.join(', ')}`);
   }
 
-  return matter.stringify(record.body.trim() + '\n', record.frontmatter);
+  const frontmatter: Record<string, unknown> = { ...validation.data };
+  for (const key of Object.keys(frontmatter)) {
+    if (frontmatter[key] === undefined) {
+      delete frontmatter[key];
+    }
+  }
+
+  return matter.stringify(record.body.trim() + '\n', frontmatter);
 }

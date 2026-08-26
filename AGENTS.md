@@ -134,8 +134,8 @@ node --test dist/server.test.js
 
 ### 2. `search`
 - **Purpose**: Filtered full-text search across vault records via SQLite FTS5.
-- **Parameters**: `query` (string), `kinds` (string[]), `status` (string), `tags` (string[]), `path` (string), `includeScratch` (boolean), `crossProject` (boolean), `limit` (number).
-- **CLI Example**: `memo search "database lock" --kind trap --path src/db/client.ts`
+- **Parameters**: `query` (string), `kinds` (string[]), `status` (string), `tags` (string[]), `path` (string), `includeScratch` (boolean), `crossProject` (boolean), `limit` (number), `sort` (`relevance` \| `occurrences` \| `updated`).
+- **CLI Example**: `memo search "database lock" --kind trap --path src/db/client.ts --sort occurrences`
 
 ### 3. `get`
 - **Purpose**: Retrieve a single record by ID or kind+slug.
@@ -145,7 +145,7 @@ node --test dist/server.test.js
 ### 4. `upsert`
 - **Purpose**: Write or update a memory record (trap, decision, spec, plan, state, log, scratch, review).
 - **Parameters**: `kind` (required), `body` (required), `slug` (optional), `frontmatter` (optional object).
-- **Frontmatter Fields**: `id`, `title`, `severity` (low/medium/high/critical), `pathPatterns` (string[]), `tags` (string[]), `supersedes` (string), `linkedPaths` (string[]), `verifiedAtSha` (string).
+- **Frontmatter Fields**: `id`, `title`, `severity` (low/medium/high/critical), `pathPatterns` (string[]), `tags` (string[]), `layer`, `module`, `occurrences`, `lastSeen`, `supersedes` (string), `linkedPaths` (string[]), `verifiedAtSha` (string).
 - **CLI Example**:
   ```bash
   memo upsert --kind trap --title "Close SQLite DB before unlink on Windows" --severity critical --path-patterns "src/**/*.ts" --body "Windows holds file lock on open SQLite handles. Call closeIndex() before deleting test directories."
@@ -168,8 +168,8 @@ node --test dist/server.test.js
 
 ### 8. `promote`
 - **Purpose**: Copy a record into the product repository as documentation (default-deny without destination).
-- **Parameters**: `id` (string), `destination` (required string), `format` (optional `adr` or `raw`), `force` (boolean).
-- **CLI Example**: `memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite.md --format adr`
+- **Parameters**: `id` (string, optional when `format=skill`), `destination` (required string), `format` (optional `raw` \| `adr` \| `madr` \| `skill`), `limit` (number), `force` (boolean).
+- **CLI Example**: `memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md`
 
 ---
 
@@ -201,6 +201,17 @@ memo doctor --fix
    - `run.json` or `.state.md`
    - `telemetry.jsonl`
    - Agent audit logs (`*.log.md`, `.agents/*.log`)
+
+## Recurring traps (`memo rank`)
+
+CLI-only (not a ninth MCP tool). Lists active traps by `occurrences`.
+
+```bash
+memo rank --json
+memo rank --layer web --limit 10
+memo rank --backfill
+memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md
+```
 
 ---
 

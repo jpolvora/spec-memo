@@ -273,7 +273,7 @@ describe('Store Engine (upsert and get)', () => {
     assert.equal(purgedRecord, null);
   });
 
-  it('should automatically detect duplicate trap and set supersedes status when >70% token overlap', async () => {
+  it('should automatically detect duplicate trap and bump occurrences when >70% token overlap', async () => {
     // 1. Create first trap
     await upsertRecord({
       cwd: tempProject,
@@ -302,7 +302,8 @@ describe('Store Engine (upsert and get)', () => {
       body: '## DO NOT\nNever execute raw unescaped SQL query strings directly.\n\n## INSTEAD DO\nUse parameterized query builders.'
     });
 
-    assert.equal(res2.superseded, true);
+    assert.equal(res2.recurrence, true);
+    assert.equal(res2.id, 'trap-no-raw-sql');
 
     const oldTrap = await getRecord({
       cwd: tempProject,
@@ -310,16 +311,15 @@ describe('Store Engine (upsert and get)', () => {
       id: 'trap-no-raw-sql'
     });
     assert.ok(oldTrap);
-    assert.equal(oldTrap.frontmatter.status, 'superseded');
+    assert.equal(oldTrap.frontmatter.status, 'active');
+    assert.equal(oldTrap.frontmatter.occurrences, 2);
 
     const newTrap = await getRecord({
       cwd: tempProject,
       vaultRoot: tempVault,
       id: 'trap-no-raw-sql-v2'
     });
-    assert.ok(newTrap);
-    assert.equal(newTrap.frontmatter.supersedes, 'trap-no-raw-sql');
-    assert.equal(newTrap.frontmatter.status, 'active');
+    assert.equal(newTrap, null);
   });
 
   it('should not treat empty pathPatterns as a wildcard match against patterned traps', async () => {

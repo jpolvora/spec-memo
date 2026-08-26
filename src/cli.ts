@@ -13,6 +13,8 @@ import { sanitizeToolOutput } from './safety.js';
 import { startCanvasServer } from './canvas.js';
 import { syncVaults } from './sync.js';
 import { startSseServer } from './server.js';
+import { searchIndex } from './indexer.js';
+import { backfillTrapRecurrence } from './store.js';
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -90,6 +92,7 @@ Core Memory Commands:
 
 Utility Commands:
   doctor        Diagnose vault integrity and check product tree pollution
+  rank          List traps by recurrence (occurrences)
   import        Import legacy .agents tree into external vault
   export-vault  Export vault records into portable archive (optional AES-256-GCM)
   import-vault  Import vault archive into local vault
@@ -169,6 +172,22 @@ Restores a vault archive into the local vault with automatic index rebuilding.
 
 Options:
   --password      Decryption password (required if archive is encrypted)
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'rank') {
+    console.log(`Usage: memo rank [options]
+
+List active traps ordered by occurrences, then lastSeen, then severity.
+
+Options:
+  --layer         Filter by closed layer enum
+  --limit         Maximum traps to list (default 10)
+  --backfill      Write layer, module, occurrences, lastSeen onto existing traps
+  --cwd           Product repository working directory
   --vaultRoot     Override vault root directory
   --json          Output result as JSON
   -h, --help      Show this help message`);
@@ -359,6 +378,55 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         printJson({ isError: true, error: msg, code: 'SYNC_VAULT_ERROR' });
       } else {
         console.error(`Sync vault failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo rank command (CLI-only; not an MCP tool)
+  if (parsed.command === 'rank') {
+    try {
+      const vaultRoot = parsed.options.vaultRoot as string | undefined;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const layer = parsed.options.layer ? String(parsed.options.layer) : undefined;
+      const limitRaw = parsed.options.limit;
+      const limit = typeof limitRaw === 'string' ? parseInt(limitRaw, 10) : 10;
+      const doBackfill = parsed.options.backfill === true || parsed.options.backfill === 'true';
+
+      if (doBackfill) {
+        backfillTrapRecurrence({ cwd, vaultRoot });
+      }
+
+      const hits = searchIndex({
+        cwd,
+        vaultRoot,
+        kinds: ['trap'],
+        status: 'active',
+        sort: 'occurrences',
+        limit: Number.isFinite(limit) && limit > 0 ? limit : 10
+      }).filter((hit) => !layer || hit.layer === layer);
+
+      if (parsed.isJson) {
+        printJson(hits);
+      } else {
+        console.log(`spec-memo — Recurring traps (${hits.length})\n`);
+        if (hits.length === 0) {
+          console.log('No active traps.');
+        } else {
+          for (const hit of hits) {
+            const occ = hit.occurrences || 1;
+            const layerLabel = hit.layer || 'other';
+            console.log(`[${occ}x] [${layerLabel}] ${hit.title || hit.id}`);
+          }
+        }
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'RANK_ERROR' });
+      } else {
+        console.error(`Rank failed: ${msg}`);
       }
       return 1;
     }
@@ -665,6 +733,9 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       if (typeof payload.limit === 'string') {
         payload.limit = parseInt(payload.limit, 10);
       }
+      if (payload.sort) {
+        payload.sort = String(payload.sort);
+      }
     }
 
     // Normalization for get command
@@ -783,6 +854,9 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       }
       if (payload.format) {
         payload.format = String(payload.format);
+      }
+      if (typeof payload.limit === 'string') {
+        payload.limit = parseInt(payload.limit, 10);
       }
     }
 
