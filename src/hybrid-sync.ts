@@ -91,10 +91,21 @@ export async function pullHybridProject(
           }
         }
       }
-      writeHybridState(vaultRoot, {
-        lastSyncAt: now,
-        cursors: cursorsUpdate
-      });
+
+      if (applyResult.conflicts > 0) {
+        writeHybridState(vaultRoot, {
+          dirty: true,
+          dirtyProjects: projectId ? { [projectId]: true } : undefined,
+          lastError: `Hybrid sync pull wrote ${applyResult.conflicts} conflict sidecar(s); review and run memo sync`,
+          lastSyncAt: now,
+          cursors: cursorsUpdate
+        });
+      } else {
+        writeHybridState(vaultRoot, {
+          lastSyncAt: now,
+          cursors: cursorsUpdate
+        });
+      }
     }
 
     return applyResult;
@@ -189,6 +200,28 @@ export async function pushHybridProject(
             cursorsUpdate[p] = cursorVal;
           }
         }
+      }
+
+      const exportedCount = changeset.records.length + (changeset.deletions?.length ?? 0);
+      const pushHadConflicts = pushResult.conflicts > 0;
+      const pushUnapplied =
+        exportedCount > 0 &&
+        pushResult.applied === 0 &&
+        pushResult.conflicts === 0 &&
+        pushResult.skipped < exportedCount;
+
+      if (pushHadConflicts || pushUnapplied) {
+        const conflictErr = pushHadConflicts
+          ? `Remote sync push reported ${pushResult.conflicts} conflict(s)`
+          : `Remote sync push applied 0 of ${exportedCount} exported record(s)`;
+        writeHybridState(vaultRoot, {
+          dirty: true,
+          dirtyProjects: projectId ? { [projectId]: true } : undefined,
+          lastError: conflictErr,
+          lastSyncAt: now,
+          cursors: cursorsUpdate
+        });
+        return pushResult;
       }
 
       if (projectId) {

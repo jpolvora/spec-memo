@@ -1138,4 +1138,162 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       closeIndex(clientVault);
     }
   });
+
+  await t.test('Phase 2: hybrid push retains dirty and reports error when daemon encounters conflict sidecar (AC25)', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'conflict-push-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'conflict-push-client-vault'));
+    const authToken = 'conflict-push-token';
+    const pid = 'conflict-push-proj';
+
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(daemonVault, 'projects', pid)
+      },
+      daemonVault
+    );
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(clientVault, 'projects', pid)
+      },
+      clientVault
+    );
+
+    const sameTimestamp = '2026-08-26T12:00:00.000Z';
+
+    // Seed daemon with body A at sameTimestamp
+    await upsertRecord({
+      vaultRoot: daemonVault,
+      projectId: pid,
+      kind: 'trap',
+      slug: 'conflict-trap',
+      body: 'Daemon body A',
+      frontmatter: { title: 'Conflict Trap', created: sameTimestamp, updated: sameTimestamp }
+    });
+
+    // Seed client with body B at sameTimestamp
+    await upsertRecord({
+      vaultRoot: clientVault,
+      projectId: pid,
+      kind: 'trap',
+      slug: 'conflict-trap',
+      body: 'Client body B',
+      frontmatter: { title: 'Conflict Trap', created: sameTimestamp, updated: sameTimestamp }
+    });
+
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    try {
+      const pushRes = await pushHybridProject(clientVault, pid, daemonServer.url, authToken);
+      assert.strictEqual(pushRes.conflicts, 1, 'Daemon should report 1 conflict');
+
+      // Client state must remain dirty and record the conflict error
+      const state = readHybridState(clientVault);
+      assert.strictEqual(state.dirty, true, 'Hybrid state must remain dirty on conflict');
+      assert.ok(state.lastError?.includes('conflict'), 'lastError must mention conflict');
+
+      // Verify sidecar exists on daemon
+      const daemonTrapsDir = path.join(daemonVault, 'projects', pid, 'traps');
+      const files = fs.readdirSync(daemonTrapsDir);
+      assert.ok(files.some((f) => f.includes('conflict-trap.conflict.')), 'Daemon must create conflict sidecar');
+    } finally {
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
+
+  await t.test('Phase 2: hybrid pull sets dirty and reports error when conflict sidecar is written locally (AC25)', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'conflict-pull-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'conflict-pull-client-vault'));
+    const authToken = 'conflict-pull-token';
+    const pid = 'conflict-pull-proj';
+
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(daemonVault, 'projects', pid)
+      },
+      daemonVault
+    );
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(clientVault, 'projects', pid)
+      },
+      clientVault
+    );
+
+    const sameTimestamp = '2026-08-26T12:00:00.000Z';
+
+    // Seed client with body A at sameTimestamp
+    await upsertRecord({
+      vaultRoot: clientVault,
+      projectId: pid,
+      kind: 'trap',
+      slug: 'pull-conflict-trap',
+      body: 'Local body A',
+      frontmatter: { title: 'Pull Conflict Trap', created: sameTimestamp, updated: sameTimestamp }
+    });
+
+    // Seed daemon with body B at sameTimestamp
+    await upsertRecord({
+      vaultRoot: daemonVault,
+      projectId: pid,
+      kind: 'trap',
+      slug: 'pull-conflict-trap',
+      body: 'Remote body B',
+      frontmatter: { title: 'Pull Conflict Trap', created: sameTimestamp, updated: sameTimestamp }
+    });
+
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    try {
+      const pullRes = await pullHybridProject(clientVault, pid, daemonServer.url, authToken);
+      assert.strictEqual(pullRes.conflicts, 1, 'Pull should report 1 conflict');
+
+      // Client state must be dirty and record the conflict error
+      const state = readHybridState(clientVault);
+      assert.strictEqual(state.dirty, true, 'Hybrid state must be dirty on local conflict');
+      assert.ok(state.lastError?.includes('conflict'), 'lastError must mention conflict');
+
+      // Verify sidecar exists on client
+      const clientTrapsDir = path.join(clientVault, 'projects', pid, 'traps');
+      const files = fs.readdirSync(clientTrapsDir);
+      assert.ok(files.some((f) => f.includes('pull-conflict-trap.conflict.')), 'Client must create conflict sidecar');
+    } finally {
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
 });
