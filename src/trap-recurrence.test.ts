@@ -305,6 +305,61 @@ describe('Trap recurrence ranking', () => {
     assert.equal(hit.occurrences, 1);
   });
 
+  it('ranks a stale high-occurrence trap above many newer low-occurrence traps', async () => {
+    const stale = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'stale-hot',
+      frontmatter: {
+        id: 'trap-stale-hot',
+        title: 'Stale hot',
+        occurrences: 99,
+        lastSeen: '2020-01-01T00:00:00.000Z',
+        updated: '2020-01-01T00:00:00.000Z',
+        pathPatterns: ['src/stale.ts']
+      },
+      body: TRAP_BODY,
+      allowDuplicate: true
+    });
+
+    const trapsDir = path.dirname(stale.path);
+    const projectId = path.basename(path.dirname(trapsDir));
+    for (let i = 0; i < 220; i++) {
+      const id = `trap-fresh-low-${i}`;
+      const content = `---
+id: ${id}
+kind: trap
+project: ${projectId}
+status: active
+created: 2026-08-26T00:00:00.000Z
+updated: 2026-08-26T12:00:00.000Z
+source: agent
+title: Fresh low ${i}
+occurrences: 1
+lastSeen: 2026-08-26T12:00:00.000Z
+pathPatterns:
+  - src/fresh-${i}.ts
+---
+
+${TRAP_BODY}
+`;
+      fs.writeFileSync(path.join(trapsDir, `${id}.md`), content, 'utf8');
+    }
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kinds: ['trap'],
+      status: 'active',
+      sort: 'occurrences',
+      limit: 10
+    });
+    assert.ok(hits.length >= 1);
+    assert.equal(hits[0].id, 'trap-stale-hot');
+    assert.equal(hits[0].occurrences, 99);
+  });
+
   it('rejects invalid search sort values', async () => {
     const res = await executeTool('search', { sort: 'popularity', vaultRoot: tempVault, cwd: tempProject });
     assert.equal(res.isError, true);
