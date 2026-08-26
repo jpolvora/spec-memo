@@ -360,6 +360,83 @@ ${TRAP_BODY}
     assert.equal(hits[0].occurrences, 99);
   });
 
+  it('defaults occurrences search to active traps like memo rank', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'active-rank-default',
+      frontmatter: {
+        id: 'trap-active-rank-default',
+        title: 'Active',
+        occurrences: 3,
+        pathPatterns: ['src/a.ts']
+      },
+      body: TRAP_BODY,
+      allowDuplicate: true
+    });
+    const archived = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'archived-rank-default',
+      frontmatter: {
+        id: 'trap-archived-rank-default',
+        title: 'Archived',
+        occurrences: 99,
+        pathPatterns: ['src/b.ts']
+      },
+      body: TRAP_BODY,
+      allowDuplicate: true
+    });
+    const raw = fs.readFileSync(archived.path, 'utf8').replace(/status: active/, 'status: archived');
+    fs.writeFileSync(archived.path, raw, 'utf8');
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      sort: 'occurrences',
+      limit: 20
+    });
+    assert.ok(hits.every((h) => h.kind === 'trap' && h.status === 'active'));
+    assert.ok(hits.some((h) => h.id === 'trap-active-rank-default'));
+    assert.equal(hits.some((h) => h.id === 'trap-archived-rank-default'), false);
+  });
+
+  it('ignores sync conflict sidecars when ranking by occurrences', async () => {
+    const res = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'canonical-conflict',
+      frontmatter: {
+        id: 'trap-canonical-conflict',
+        title: 'Canonical',
+        occurrences: 2,
+        pathPatterns: ['src/c.ts']
+      },
+      body: TRAP_BODY,
+      allowDuplicate: true
+    });
+    const conflictPath = res.path.replace(/\.md$/, `.conflict.${Date.now()}.md`);
+    fs.writeFileSync(
+      conflictPath,
+      fs.readFileSync(res.path, 'utf8').replace('trap-canonical-conflict', 'trap-conflict-sidecar').replace('occurrences: 2', 'occurrences: 50'),
+      'utf8'
+    );
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      sort: 'occurrences',
+      kinds: ['trap'],
+      status: 'active',
+      limit: 50
+    });
+    assert.equal(hits.some((h) => h.id === 'trap-conflict-sidecar'), false);
+    assert.ok(hits.some((h) => h.id === 'trap-canonical-conflict'));
+  });
+
   it('rejects invalid search sort values', async () => {
     const res = await executeTool('search', { sort: 'popularity', vaultRoot: tempVault, cwd: tempProject });
     assert.equal(res.isError, true);

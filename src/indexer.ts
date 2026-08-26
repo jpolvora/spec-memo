@@ -238,7 +238,7 @@ function listProjectMarkdownRecords(vaultRoot: string, projectId: string): MemoR
     if (!entry.isDirectory()) continue;
     const subDir = path.join(projectDir, entry.name);
     for (const file of fs.readdirSync(subDir)) {
-      if (!file.endsWith('.md')) continue;
+      if (!file.endsWith('.md') || file.includes('.conflict.')) continue;
       const filePath = path.join(subDir, file);
       try {
         results.push(parseRecord(fs.readFileSync(filePath, 'utf8'), filePath));
@@ -332,7 +332,15 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   // Occurrences ranking must evaluate the full active set (same semantics as `memo rank`),
   // not an updated-DESC / FTS-relevance pre-cap. Skip FTS for this sort path.
   if ((options.sort || 'relevance') === 'occurrences') {
-    return searchIndexByOccurrences(options, vaultRoot, targetProjectId);
+    return searchIndexByOccurrences(
+      {
+        ...options,
+        kinds: options.kinds && options.kinds.length > 0 ? options.kinds : (['trap'] as RecordKind[]),
+        status: options.status ?? 'active'
+      },
+      vaultRoot,
+      targetProjectId
+    );
   }
 
   const db = openIndex(vaultRoot);

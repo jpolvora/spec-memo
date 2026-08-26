@@ -51,7 +51,7 @@ export function listProjectRecords(vaultRoot: string = getVaultRoot(), projectId
       const subPath = path.join(projectDir, entry.name);
       const files = fs.readdirSync(subPath);
       for (const file of files) {
-        if (file.endsWith('.md')) {
+        if (file.endsWith('.md') && !file.includes('.conflict.')) {
           const filePath = path.join(subPath, file);
           try {
             results.push(parseRecord(fs.readFileSync(filePath, 'utf8'), filePath));
@@ -130,7 +130,7 @@ function findMatchingTrap(
   if (!fs.existsSync(trapsDir)) return null;
   const files = fs.readdirSync(trapsDir);
   for (const file of files) {
-    if (!file.endsWith('.md')) continue;
+    if (!file.endsWith('.md') || file.includes('.conflict.')) continue;
     const trapPath = path.join(trapsDir, file);
     try {
       const existing = parseRecord(fs.readFileSync(trapPath, 'utf8'), trapPath);
