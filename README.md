@@ -80,7 +80,15 @@ Add to your extension's MCP configuration settings:
 }
 ```
 
-*(Optional HTTP / SSE Transport: Run `node dist/server.js` or configure SSE client connecting to `http://127.0.0.1:3000/sse`)*
+*(Optional HTTP / SSE Transport: Run `memo serve --sse` or configure SSE client connecting to `http://127.0.0.1:3000/sse`. A companion **status monitor** page on port `3001` is in active development — see [`.agents/specs/mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md).)*
+
+### Default ports
+
+| Service | Default port | CLI |
+|---------|--------------|-----|
+| MCP SSE transport | `3000` | `memo serve --sse` |
+| Status monitor (Phase 6, in progress) | `3001` | co-starts with `--sse` (`--no-status` to disable) |
+| Canvas graph viewer | `4100` | `memo canvas` |
 
 ---
 
@@ -140,7 +148,7 @@ Add to your extension's MCP configuration settings:
      ```
    - Append an audit or task event:
      ```bash
-     memo append --event "Refactored vault locking mechanism and passed all 122 tests"
+     memo append --event "Refactored vault locking mechanism and passed all 154 tests"
      ```
 
 3. **Query Memory (`search` & `get`)**:

@@ -4,7 +4,7 @@ slug: mcp-status-monitor
 title: "MCP status monitor page with live activity log"
 source: local
 specDate: 2026-08-26
-status: draft
+status: in_progress
 target_phase: Phase 6
 ---
 
@@ -191,3 +191,7 @@ Field rules:
 | Status refresh | Poll `/api/status` every 5s | Keeps uptime/transports current without SSE for metadata | y |
 | Stdio-only serve | No status companion | No HTTP MCP surface to monitor | y |
 | Implicit dimensions (TTL, idempotency, external deps) | N/A because this slice is an ephemeral in-process read-only ops UI with no new persistence class or third-party service | Existing vault locks and redaction cover data safety | y |
+
+### Revision History
+
+### [2026-08-26] Revision: Index sync — marked in progress for batch Spec→PR delivery (Prompt: "sync specs with index, prepare batch till deploy")

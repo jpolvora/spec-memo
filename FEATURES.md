@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **not shipped**. Status marks: `[ ]` planned · `[~]` in design · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.1.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -123,7 +123,14 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 
 ---
 
-## 10. Explicitly not features (v1)
+## 10. Recurrence learning & ops visibility (Phase 6)
+
+- [x] **Trap recurrence ranking.** `memo rank` lists active traps by `occurrences`; optional `--layer`, `--backfill`; `memo promote --format skill` exports owner skill from ranked traps.
+- [~] **MCP status monitor.** Companion HTTP page (default `:3001`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream). Spec: [`mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md).
+
+---
+
+## 11. Explicitly not features (v1)
 
 | Idea | Why not |
 |------|---------|
@@ -134,7 +141,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 
 ---
 
-## 11. Shipped in this repository today
+## 12. Shipped in this repository today
 
 | Capability | Status |
 |------------|--------|
@@ -143,7 +150,8 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime (Phase 1 MVP + Phase 2 Harness Adapters + Phase 3 Curator Hardening + Phase 4 Viewers + Phase 5 Ecosystem delivered) | `[x]` |
+| Runtime (Phases 1–5 + trap-recurrence delivered) | `[x]` |
+| MCP status monitor (Phase 6) | `[~]` spec ready; implementation next |
 
 
 

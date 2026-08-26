@@ -4,6 +4,8 @@ slug: trap-recurrence
 title: "Trap recurrence ranking and owner-skill export"
 source: local
 specDate: 2026-08-25
+status: completed
+target_phase: Phase 6
 ---
 
 # Specification — Trap recurrence ranking and owner-skill export

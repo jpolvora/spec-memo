@@ -2,7 +2,7 @@
 
 **Audience: humans and agents.** Scope and proof live here. Requirements live in [`PRODUCT.PRD`](PRODUCT.PRD). Capabilities live in [`FEATURES.md`](FEATURES.md).
 
-Status: **design**. No runtime yet.
+Status: **shipped** (Phases 0–5 complete; Phase 6 in progress). Runtime on `develop`; 154 tests passing.
 
 ---
 
@@ -173,6 +173,20 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-25 | slice-23-multi-machine-sync | Multi-Machine Vault Synchronization and Delta Engine, test suite |
 | 2026-08-25 | slice-24-mcp-sse-transport | HTTP and Server-Sent Events (SSE) MCP Transport, test suite |
 | 2026-08-26 | trap-recurrence | Trap recurrence ranking, occurrence counters, memo rank, promote format:skill; npm test 154 pass |
+
+---
+
+## Phase 6 — Recurrence learning & ops visibility
+
+### Slice 26 — MCP status monitor (`mcp-status-monitor`)
+
+**Deliver.** Activity Event Bus (`src/activity.ts`); status companion HTTP server on default port `3001` co-hosted with `memo serve --sse`; vault-filtered live activity log UI (`src/status.ts`); tool + HTTP event capture; CLI flags `--status-port`, `--no-status`; README/AGENTS port map.
+
+**Proof.** `npm test` exit 0 including `activity.test.ts` and `status.test.ts`; status page at `http://127.0.0.1:3001/` shows vault list + live stream; read-only (no vault writes from status routes).
+
+**Spec.** [`.agents/specs/mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md) — 49 ACs.
+
+**Status.** `[~]` Spec registered; implementation pending Spec→PR batch.
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

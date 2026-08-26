@@ -190,6 +190,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 ### Phase 6 — Recurrence learning
 
 - [x] Trap recurrence ranking and owner-skill export (`.agents/specs/trap-recurrence.spec.md`)
+- [~] MCP status monitor page with live activity log (`.agents/specs/mcp-status-monitor.spec.md`)
 
 ## 9. Next specs
 
@@ -220,6 +221,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 22 | `multi-machine-sync` | `[x]` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
 | 23 | `mcp-sse-transport` | `[x]` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
 | 24 | `trap-recurrence` | `[x]` | Phase 6 | Trap recurrence ranking and owner-skill export |
+| 25 | `mcp-status-monitor` | `[~]` | Phase 6 | MCP status monitor page with live activity log |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
