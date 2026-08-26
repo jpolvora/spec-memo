@@ -643,7 +643,11 @@ export function backfillTrapRecurrence(options: {
         JSON.stringify(next.tags || []) !== JSON.stringify(record.frontmatter.tags || []);
       if (!changed) continue;
       fs.writeFileSync(record.path, serializeRecord({ frontmatter: next, body: record.body }), 'utf8');
-      indexRecord(db, { frontmatter: next, body: record.body }, record.path);
+      try {
+        indexRecord(db, { frontmatter: next, body: record.body }, record.path);
+      } catch {
+        // Non-blocking if index fails; doctor --rebuild can repair FTS
+      }
       updated += 1;
     }
 

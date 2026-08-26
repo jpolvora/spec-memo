@@ -288,7 +288,11 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const limit = options.limit && options.limit > 0 ? options.limit : 50;
   const sort = options.sort || 'relevance';
-  const limitSql = sort === 'occurrences' ? '' : `LIMIT ${limit * 2}`;
+  // Occurrences sort needs a wider candidate pool than the final limit, but must stay
+  // bounded so enrichHitFromFile does not sync-parse the entire vault.
+  const candidateCap =
+    sort === 'occurrences' ? Math.min(Math.max(limit * 20, 200), 2000) : limit * 2;
+  const limitSql = `LIMIT ${candidateCap}`;
 
   let querySql: string;
   if (hasFtsQuery && ftsQuery) {
@@ -364,7 +368,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         FROM records_fts
         ${fallbackWhere}
         ORDER BY updated DESC
-        LIMIT ${limit * 2}
+        LIMIT ${candidateCap}
       `;
       rows = db.prepare(fallbackSql).all(...fallbackParams) as SqlRow[];
     } catch {
