@@ -4,7 +4,7 @@ slug: mcp-version-and-skill-install
 title: "MCP tools: check_version and install_skills (+ docs surface)"
 source: local
 specDate: 2026-08-26
-status: draft
+status: completed
 target_phase: Phase 6
 ---
 
