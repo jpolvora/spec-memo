@@ -5,6 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { createActivityBus } from "./activity.js";
 import { generateStatusHtml, startStatusServer } from "./status.js";
+import { getPackageVersion } from "./version.js";
 import { ensureProjectVault } from "./vault.js";
 import { closeIndex } from "./indexer.js";
 import { executeTool } from "./tools.js";
@@ -78,9 +79,12 @@ test("MCP status monitor", async (t) => {
   const bus = createActivityBus({ capacity: 200 });
 
   await t.test("generateStatusHtml is self-contained with spec-memo title", () => {
-    const html = generateStatusHtml();
+    const version = getPackageVersion();
+    const html = generateStatusHtml(version);
     assert.ok(html.includes("spec-memo"));
     assert.ok(html.includes("<title>spec-memo"));
+    assert.ok(html.includes("(status monitor v" + version + ")"));
+    assert.ok(html.includes('id="stat-version"'));
     assert.ok(!html.includes("cdn.jsdelivr"));
   });
 
@@ -112,12 +116,14 @@ test("MCP status monitor", async (t) => {
     assert.match(htmlRes.headers.get("content-type") || "", /text\/html/);
     const html = await htmlRes.text();
     assert.ok(html.includes("Status Monitor"));
+    assert.ok(html.includes("(status monitor v"));
 
     const statusRes = await fetch(`${baseUrl}/api/status`);
     assert.strictEqual(statusRes.status, 200);
     const status = await statusRes.json() as Record<string, unknown>;
     assert.strictEqual(status.status, "ok");
     assert.strictEqual(status.service, "spec-memo-status-monitor");
+    assert.strictEqual(status.version, getPackageVersion());
     assert.ok(typeof status.uptimeMs === "number");
     assert.ok(typeof status.eventsBuffered === "number");
     assert.ok(status.mcp && (status.mcp as { available: boolean }).available);

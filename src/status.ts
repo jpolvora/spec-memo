@@ -2,6 +2,7 @@ import http from "node:http";
 import { getVaultRoot } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
+import { getPackageVersion } from "./version.js";
 
 export interface McpStatusSummary {
   host: string;
@@ -64,7 +65,8 @@ function filterEventsForSnapshot(events: ActivityEvent[], projectId?: string, af
   );
 }
 
-export function generateStatusHtml(): string {
+export function generateStatusHtml(version = getPackageVersion()): string {
+  const versionLabel = `v${version}`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -104,6 +106,7 @@ export function generateStatusHtml(): string {
     }
     header h1 { color: var(--bright); font-size: 1.35rem; font-weight: 600; }
     header h1 span { color: var(--accent); font-weight: 500; font-size: 0.85rem; margin-left: 8px; }
+    header h1 .version-tag { color: var(--muted); font-weight: 400; font-size: 0.75rem; margin-left: 6px; }
     .badges { display: flex; gap: 8px; flex-wrap: wrap; }
     .badge {
       font-size: 0.75rem;
@@ -204,7 +207,7 @@ export function generateStatusHtml(): string {
 </head>
 <body>
   <header>
-    <h1>spec-memo <span>Status Monitor</span></h1>
+    <h1>spec-memo <span>Status Monitor <span class="version-tag">(status monitor ${versionLabel})</span></span></h1>
     <div class="badges">
       <span id="stream-badge" class="badge offline">Offline</span>
       <span id="server-badge" class="badge">Checking…</span>
@@ -216,6 +219,7 @@ export function generateStatusHtml(): string {
         <h2>Server</h2>
         <div class="stat-grid">
           <div class="stat"><label>Status</label><div class="value" id="stat-status">—</div></div>
+          <div class="stat"><label>Version</label><div class="value" id="stat-version">${versionLabel}</div></div>
           <div class="stat"><label>MCP SSE</label><div class="value" id="stat-mcp">—</div></div>
           <div class="stat"><label>Vaults</label><div class="value" id="stat-vaults">—</div></div>
           <div class="stat"><label>Uptime</label><div class="value" id="stat-uptime">—</div></div>
@@ -413,6 +417,9 @@ export function generateStatusHtml(): string {
         const res = await fetch("/api/status", { headers: apiHeaders() });
         const data = await res.json();
         document.getElementById("stat-status").textContent = data.status || "—";
+        if (data.version) {
+          document.getElementById("stat-version").textContent = "v" + data.version;
+        }
         document.getElementById("stat-vaults").textContent = String(data.projectsCount ?? "—");
         document.getElementById("stat-buffered").textContent = String(data.eventsBuffered ?? "—");
         document.getElementById("stat-uptime").textContent = data.uptimeMs != null ? formatUptime(data.uptimeMs) : "—";
@@ -481,7 +488,8 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
     );
   }
 
-  const html = generateStatusHtml();
+  const packageVersion = getPackageVersion();
+  const html = generateStatusHtml(packageVersion);
 
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
@@ -515,6 +523,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         writeJson(res, 200, {
           status: "ok",
           service: "spec-memo-status-monitor",
+          version: packageVersion,
           host,
           port: (server.address() as { port: number } | null)?.port ?? port,
           mcp: mcp?.available
