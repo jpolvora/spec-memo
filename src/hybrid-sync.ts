@@ -205,8 +205,30 @@ export async function syncHybrid(
   };
 }
 
-// Debounced push state
-const debounceTimers = new Map<string, NodeJS.Timeout>();
+// Debounced push state (timers coalesce bursts; in-flight + pending single-flight per project)
+const debounceTimers = new Map<string, { timer: NodeJS.Timeout; fire: () => void }>();
+const pushInFlight = new Map<string, Promise<void | SyncResult>>();
+const pushPending = new Set<string>();
+
+function startDebouncedPush(vaultRoot: string, projectId: string | undefined, key: string): void {
+  if (pushInFlight.has(key)) {
+    pushPending.add(key);
+    return;
+  }
+
+  const job = pushHybridProject(vaultRoot, projectId)
+    .catch(() => {
+      // Fail open: push error is already recorded in hybrid-state.json
+    })
+    .finally(() => {
+      pushInFlight.delete(key);
+      if (pushPending.delete(key)) {
+        startDebouncedPush(vaultRoot, projectId, key);
+      }
+    });
+
+  pushInFlight.set(key, job);
+}
 
 /**
  * Schedules debounced push for a projectId in hybrid mode (coalescing rapid bursts).
@@ -226,31 +248,50 @@ export function scheduleHybridPush(
   const key = `${vaultRoot}::${projectId || '*'}`;
   const existing = debounceTimers.get(key);
   if (existing) {
-    clearTimeout(existing);
+    clearTimeout(existing.timer);
   }
 
-  const timer = setTimeout(async () => {
+  const fire = (): void => {
     debounceTimers.delete(key);
-    try {
-      await pushHybridProject(vaultRoot, projectId);
-    } catch {
-      // Fail open: push error is already recorded in hybrid-state.json
-    }
-  }, delayMs);
+    startDebouncedPush(vaultRoot, projectId, key);
+  };
+
+  const timer = setTimeout(fire, delayMs);
 
   if (typeof timer.unref === 'function') {
     timer.unref();
   }
 
-  debounceTimers.set(key, timer);
+  debounceTimers.set(key, { timer, fire });
 }
 
 /**
  * Clears all pending debounced push timers (useful for test teardown).
  */
 export function clearDebouncedPushes(): void {
-  for (const timer of debounceTimers.values()) {
-    clearTimeout(timer);
+  for (const entry of debounceTimers.values()) {
+    clearTimeout(entry.timer);
   }
   debounceTimers.clear();
+  pushPending.clear();
+}
+
+/**
+ * Fire pending debounce timers and wait for in-flight (and trailing) pushes.
+ */
+export async function flushDebouncedPushes(): Promise<void> {
+  const drainTimers = (): void => {
+    const entries = [...debounceTimers.values()];
+    debounceTimers.clear();
+    for (const entry of entries) {
+      clearTimeout(entry.timer);
+      entry.fire();
+    }
+  };
+
+  drainTimers();
+  while (pushInFlight.size > 0 || debounceTimers.size > 0) {
+    drainTimers();
+    await Promise.all([...pushInFlight.values()]);
+  }
 }

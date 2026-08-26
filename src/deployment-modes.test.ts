@@ -3,16 +3,27 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { ensureVaultStructure, ensureProjectVault, getVaultRoot } from './vault.js';
+import http from 'node:http';
+import { ensureVaultStructure, ensureProjectVault, getVaultRoot, withVaultLockSync } from './vault.js';
 import { closeIndex, rebuildIndex } from './indexer.js';
 import { normalizeRemoteUrl, generateHostMcpSnippet, runSetup, SUPPORTED_HOSTS } from './setup.js';
 import { readHybridState, writeHybridState } from './hybrid-state.js';
 import { runDoctor } from './doctor.js';
 import { startSseServer } from './server.js';
-import { syncHybrid, pullHybridProject, pushHybridProject, clearDebouncedPushes } from './hybrid-sync.js';
+import {
+  syncHybrid,
+  pullHybridProject,
+  pushHybridProject,
+  scheduleHybridPush,
+  clearDebouncedPushes,
+  flushDebouncedPushes
+} from './hybrid-sync.js';
 import { callRemoteTool, createRemoteClient } from './mcp-proxy.js';
 import { runCli } from './cli.js';
 import { upsertRecord } from './store.js';
+import { exportChangeset } from './sync.js';
+import { resolveProjectIdentity } from './identity.js';
+import { executeTool } from './tools.js';
 
 test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-modes-test-'));
@@ -276,6 +287,262 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       closeIndex(daemonVault);
       closeIndex(clientVault);
     }
+  });
+
+  await t.test('Phase 2: hybrid push dry-run does not apply on daemon (AC21)', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'dryrun-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'dryrun-client-vault'));
+    const authToken = 'dryrun-token';
+    const pid = 'dryrun-proj';
+
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(daemonVault, 'projects', pid)
+      },
+      daemonVault
+    );
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(clientVault, 'projects', pid)
+      },
+      clientVault
+    );
+
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    const clientCfgPath = path.join(clientVault, 'config.json');
+    const clientCfg = JSON.parse(fs.readFileSync(clientCfgPath, 'utf8'));
+    clientCfg.mode = 'hybrid';
+    clientCfg.remote = { url: daemonServer.url };
+    fs.writeFileSync(clientCfgPath, JSON.stringify(clientCfg, null, 2), 'utf8');
+
+    await upsertRecord({
+      vaultRoot: clientVault,
+      projectId: pid,
+      kind: 'trap',
+      slug: 'dry-run-trap',
+      body: 'should not land on daemon',
+      frontmatter: { title: 'Dry Run Trap' }
+    });
+
+    const trapsDir = path.join(daemonVault, 'projects', pid, 'traps');
+    const before = fs.existsSync(trapsDir) ? fs.readdirSync(trapsDir).sort() : [];
+
+    try {
+      const report = await syncHybrid({
+        vaultRoot: clientVault,
+        projectId: pid,
+        remoteUrl: daemonServer.url,
+        authToken,
+        dryRun: true
+      });
+      assert.strictEqual(report.pushed.dryRun, true);
+      const after = fs.existsSync(trapsDir) ? fs.readdirSync(trapsDir).sort() : [];
+      assert.deepStrictEqual(after, before);
+      assert.ok(!fs.existsSync(path.join(trapsDir, 'dry-run-trap.md')));
+
+      const changeset = exportChangeset(clientVault, { projectId: pid });
+      const twoWay = await fetch(`${daemonServer.url}/api/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ push: { changeset, dryRun: true } })
+      });
+      assert.strictEqual(twoWay.status, 200);
+      const twoWayJson = (await twoWay.json()) as { applied: { dryRun: boolean } };
+      assert.strictEqual(twoWayJson.applied.dryRun, true);
+      assert.ok(!fs.existsSync(path.join(trapsDir, 'dry-run-trap.md')));
+    } finally {
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
+
+  await t.test('Phase 2: debounced push is scoped to cwd project (AC18/AC25)', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'scope-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'scope-client-vault'));
+    const authToken = 'scope-token';
+    const cwdA = path.join(tempDir, 'repo-a');
+    const cwdB = path.join(tempDir, 'repo-b');
+    fs.mkdirSync(cwdA, { recursive: true });
+    fs.mkdirSync(cwdB, { recursive: true });
+
+    const idA = resolveProjectIdentity(cwdA, { vaultRoot: clientVault }).projectId;
+    const idB = resolveProjectIdentity(cwdB, { vaultRoot: clientVault }).projectId;
+    assert.notStrictEqual(idA, idB);
+
+    for (const [id, cwd] of [
+      [idA, cwdA],
+      [idB, cwdB]
+    ] as const) {
+      ensureProjectVault(
+        {
+          projectId: id,
+          normalizedRemote: null,
+          rootPath: cwd,
+          isGit: false,
+          isFallback: true,
+          vaultProjectPath: path.join(clientVault, 'projects', id)
+        },
+        clientVault
+      );
+      ensureProjectVault(
+        {
+          projectId: id,
+          normalizedRemote: null,
+          rootPath: cwd,
+          isGit: false,
+          isFallback: true,
+          vaultProjectPath: path.join(daemonVault, 'projects', id)
+        },
+        daemonVault
+      );
+    }
+
+    await upsertRecord({
+      vaultRoot: clientVault,
+      projectId: idB,
+      kind: 'trap',
+      slug: 'b-only-trap',
+      body: 'B only',
+      frontmatter: { title: 'B Only' }
+    });
+
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    const clientCfgPath = path.join(clientVault, 'config.json');
+    const clientCfg = JSON.parse(fs.readFileSync(clientCfgPath, 'utf8'));
+    clientCfg.mode = 'hybrid';
+    clientCfg.remote = { url: daemonServer.url };
+    fs.writeFileSync(clientCfgPath, JSON.stringify(clientCfg, null, 2), 'utf8');
+
+    const prevAuth = process.env.SPEC_MEMO_AUTH_TOKEN;
+    process.env.SPEC_MEMO_AUTH_TOKEN = authToken;
+
+    try {
+      const upsertRes = await executeTool('upsert', {
+        kind: 'trap',
+        slug: 'a-only-trap',
+        body: 'A only',
+        frontmatter: { title: 'A Only' },
+        cwd: cwdA,
+        vaultRoot: clientVault
+      });
+      assert.strictEqual(upsertRes.isError, undefined);
+      assert.ok(fs.existsSync(path.join(clientVault, 'projects', idA, 'traps', 'a-only-trap.md')));
+      await flushDebouncedPushes();
+
+      assert.ok(fs.existsSync(path.join(daemonVault, 'projects', idA, 'traps', 'a-only-trap.md')));
+      assert.ok(!fs.existsSync(path.join(daemonVault, 'projects', idB, 'traps', 'b-only-trap.md')));
+    } finally {
+      if (prevAuth === undefined) {
+        delete process.env.SPEC_MEMO_AUTH_TOKEN;
+      } else {
+        process.env.SPEC_MEMO_AUTH_TOKEN = prevAuth;
+      }
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
+
+  await t.test('Phase 2: debounced push single-flights per projectId', async () => {
+    const clientVault = trackVault(path.join(tempDir, 'flight-client-vault'));
+    ensureVaultStructure(clientVault);
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let pushCount = 0;
+
+    const slow = http.createServer((req, res) => {
+      if (req.method === 'POST' && (req.url || '').startsWith('/api/sync/push')) {
+        req.resume();
+        req.on('end', () => {
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          pushCount++;
+          setTimeout(() => {
+            inFlight--;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                applied: 0,
+                skipped: 0,
+                conflicts: 0,
+                dryRun: false,
+                recordsApplied: []
+              })
+            );
+          }, 150);
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => {
+      slow.listen(0, '127.0.0.1', () => resolve());
+    });
+    const addr = slow.address() as { port: number };
+    const url = `http://127.0.0.1:${addr.port}`;
+
+    const cfgPath = path.join(clientVault, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.mode = 'hybrid';
+    cfg.remote = { url };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+
+    try {
+      scheduleHybridPush(clientVault, 'flight-proj', 0);
+      await new Promise((r) => setTimeout(r, 15));
+      scheduleHybridPush(clientVault, 'flight-proj', 0);
+      await new Promise((r) => setTimeout(r, 15));
+      await flushDebouncedPushes();
+      assert.strictEqual(maxInFlight, 1);
+      assert.ok(pushCount >= 2);
+    } finally {
+      await new Promise<void>((r) => slow.close(() => r()));
+      closeIndex(clientVault);
+    }
+  });
+
+  await t.test('Phase 2: writeHybridState serializes via vault lock (AC23)', () => {
+    const lockVault = trackVault(path.join(tempDir, 'hybrid-lock-vault'));
+    ensureVaultStructure(lockVault);
+    withVaultLockSync(lockVault, () => {
+      writeHybridState(lockVault, { dirty: true });
+      writeHybridState(lockVault, { lastError: 'nested' });
+    });
+    const state = readHybridState(lockVault);
+    assert.strictEqual(state.dirty, true);
+    assert.strictEqual(state.lastError, 'nested');
+    closeIndex(lockVault);
   });
 
   // -------------------------------------------------------------

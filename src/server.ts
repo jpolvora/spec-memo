@@ -177,7 +177,8 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           const body = await readJsonBody(req);
           const rawChangeset = body.changeset || body;
           const force = Boolean(body.force);
-          const result = await applyChangeset(vaultRoot, rawChangeset, { force });
+          const dryRun = Boolean(body.dryRun);
+          const result = await applyChangeset(vaultRoot, rawChangeset, { force, dryRun });
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err: unknown) {
@@ -194,7 +195,10 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           let appliedResult: import('./sync.js').SyncResult | undefined;
           if (body.push) {
             const rawChangeset = body.push.changeset || body.push;
-            appliedResult = await applyChangeset(vaultRoot, rawChangeset, { force: Boolean(body.push.force) });
+            appliedResult = await applyChangeset(vaultRoot, rawChangeset, {
+              force: Boolean(body.push.force),
+              dryRun: Boolean(body.push.dryRun ?? body.dryRun)
+            });
           }
           let pulledChangeset: import('./sync.js').Changeset | undefined;
           if (body.pull) {

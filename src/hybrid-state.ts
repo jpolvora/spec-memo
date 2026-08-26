@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { HybridState } from './types.js';
-import { getVaultRoot } from './vault.js';
+import { getVaultRoot, withVaultLockSync } from './vault.js';
 
 export const DEFAULT_HYBRID_STATE: HybridState = {
   dirty: false,
@@ -39,21 +39,23 @@ export function writeHybridState(
   updates: Partial<HybridState>
 ): HybridState {
   const vaultRoot = getVaultRoot(vaultRootInput);
-  const filePath = getHybridStatePath(vaultRoot);
-  const syncDir = path.dirname(filePath);
+  return withVaultLockSync(vaultRoot, () => {
+    const filePath = getHybridStatePath(vaultRoot);
+    const syncDir = path.dirname(filePath);
 
-  if (!fs.existsSync(syncDir)) {
-    fs.mkdirSync(syncDir, { recursive: true });
-  }
+    if (!fs.existsSync(syncDir)) {
+      fs.mkdirSync(syncDir, { recursive: true });
+    }
 
-  const current = readHybridState(vaultRoot);
-  const merged: HybridState = {
-    dirty: updates.dirty !== undefined ? updates.dirty : current.dirty,
-    lastSyncAt: updates.lastSyncAt !== undefined ? updates.lastSyncAt : current.lastSyncAt,
-    lastError: updates.lastError !== undefined ? updates.lastError : current.lastError,
-    cursors: updates.cursors !== undefined ? { ...current.cursors, ...updates.cursors } : current.cursors
-  };
+    const current = readHybridState(vaultRoot);
+    const merged: HybridState = {
+      dirty: updates.dirty !== undefined ? updates.dirty : current.dirty,
+      lastSyncAt: updates.lastSyncAt !== undefined ? updates.lastSyncAt : current.lastSyncAt,
+      lastError: updates.lastError !== undefined ? updates.lastError : current.lastError,
+      cursors: updates.cursors !== undefined ? { ...current.cursors, ...updates.cursors } : current.cursors
+    };
 
-  fs.writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf8');
-  return merged;
+    fs.writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf8');
+    return merged;
+  });
 }

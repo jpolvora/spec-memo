@@ -1,5 +1,11 @@
 # Changelog
 
+### [2026-08-26 17:16] Agent: Cursor Grok 4.6
+- **Prompt**: /ws-goal-fix-pr fix 6 session dry-run hybrid-sync findings (not a GitHub PR)
+- **Done**: Daemon `/api/sync/push` and `/api/sync` honor `dryRun`; mutating tools resolve cwd `projectId` before `scheduleHybridPush`; debounce single-flights with one trailing push; `writeHybridState` uses `withVaultLockSync`; added AC21/AC18/AC25 tests
+- **Result**: `npm test` exit 0 (219 pass / 0 fail). No PR resolve/push (session-local). Learning: Hybrid sync must honor dryRun, cwd projectId, vault lock, and single-flight debounce
+
+
 ### [2026-08-26 15:25] Agent: Cursor Grok 4.6
 - **Prompt**: Fix memo/search SEARCH_FAILED bindings paths from Cursor client to MCP SSE server
 - **Done**: Load better-sqlite3 via package-relative nativeBinding (`src/sqlite.ts`); ignore foreign/nonexistent client cwd in identity; tests for binding path, chdir, SSE search with foreign cwd

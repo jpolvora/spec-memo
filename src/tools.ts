@@ -23,6 +23,21 @@ import { checkVersion } from './version.js';
 import { installSkills } from './skills-install.js';
 import { sanitizeToolOutput } from './safety.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
+import { resolveProjectIdentity } from './identity.js';
+import { getVaultRoot } from './vault.js';
+
+function resolveHybridPushProjectId(opts: {
+  cwd?: string;
+  vaultRoot?: string;
+  projectId?: string;
+}): string {
+  if (opts.projectId && opts.projectId.trim().length > 0) {
+    return opts.projectId;
+  }
+  return resolveProjectIdentity(opts.cwd || process.cwd(), {
+    vaultRoot: getVaultRoot(opts.vaultRoot)
+  }).projectId;
+}
 
 export interface ToolDefinition {
   name: ToolName;
@@ -366,7 +381,7 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
         vaultRoot,
         projectId
       });
-      scheduleHybridPush(vaultRoot, projectId);
+      scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
       return ok(result);
     } catch (err: unknown) {
       return fail('UPSERT_FAILED', err);
@@ -397,7 +412,10 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const appendOpts = parseResult.data as AppendOptions;
       const result = await appendEvent(appendOpts);
-      scheduleHybridPush(appendOpts.vaultRoot, appendOpts.projectId);
+      scheduleHybridPush(
+        appendOpts.vaultRoot,
+        resolveHybridPushProjectId(appendOpts)
+      );
       return ok(result);
     } catch (err: unknown) {
       return fail('APPEND_FAILED', err);
@@ -408,7 +426,10 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     try {
       const forgetOpts = parseResult.data as ForgetOptions;
       const result = await forgetRecord(forgetOpts);
-      scheduleHybridPush(forgetOpts.vaultRoot, forgetOpts.projectId);
+      scheduleHybridPush(
+        forgetOpts.vaultRoot,
+        resolveHybridPushProjectId(forgetOpts)
+      );
       return ok(result);
     } catch (err: unknown) {
       return fail('FORGET_FAILED', err);
@@ -420,7 +441,14 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       const gcOpts = parseResult.data as GcOptions;
       const result = await runGc(gcOpts);
       if (!gcOpts.dryRun) {
-        scheduleHybridPush(gcOpts.vaultRoot, gcOpts.projectId || result.projectId);
+        scheduleHybridPush(
+          gcOpts.vaultRoot,
+          resolveHybridPushProjectId({
+            cwd: gcOpts.cwd,
+            vaultRoot: gcOpts.vaultRoot,
+            projectId: gcOpts.projectId || result.projectId
+          })
+        );
       }
       return ok(result);
     } catch (err: unknown) {

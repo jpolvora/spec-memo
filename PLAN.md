@@ -203,6 +203,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-26 | release-0.3.2 | Fix MCP SSE initial connect with query-token auth & CORS; add documentation website & GitHub Pages deploy workflow; bump version to 0.3.2 |
 | 2026-08-26 | deployment-modes | Deployment modes (Local, Hybrid, Remote), memo setup, daemon HTTP sync routes, hybrid debounced push & fail-open pull, remote stdio MCP proxy, 32 ACs; npm test 215 pass |
 | 2026-08-26 | release-0.4.0 | Phase 7 deployment modes (Local, Hybrid, Remote), memo setup, stdio MCP proxy; bump version to 0.4.0 |
+| 2026-08-26 | hybrid-sync-review-fixes | Honor daemon dryRun, cwd-scoped hybrid push, debounce single-flight, hybrid-state vault lock; npm test 219 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 
