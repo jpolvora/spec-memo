@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.2.0
+version: 0.3.1
 description: >-
   Route agent working memory through spec-memo MCP (10 tools) and matching CLI extras.
   Trigger on spec-memo, memo vault, bootstrap brief, upsert trap/decision/spec/plan,
@@ -119,8 +119,10 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 
 ## Rules
 
-- MCP surface is **10** tools (`bootstrap` … `promote`, `check_version`, `install_skills`). Further growth needs a PRODUCT.PRD amendment.
+- MCP surface is exactly **10** tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`, `check_version`, `install_skills`. Further growth needs a PRODUCT.PRD amendment.
 - CLI extras (`doctor`, `rank`, `canvas`, `serve`, `import`, `hook`, `sync`, `sync-vault`, `export-vault`, `import-vault`) stay CLI-only.
 - Prefer MCP when registered; CLI when MCP is absent or the extra is CLI-only.
+- `search.sort=occurrences` and `memo rank` share the same ranking universe (full project scan; do not invent a `rank` MCP tool).
+- `promote format=skill` with no `id` fails closed when zero active traps rank (do not write a header-only SKILL.md).
 - Language for vault bodies, CLI help, and tool args: **en-us**.
 - Consumer harness setup (`specMemo.enabled`, hybrid MEMORY fallback) stays in workflow-skills **ws-spec-memo**. After that setup, this skill owns day-to-day vault ops.

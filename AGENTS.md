@@ -53,7 +53,7 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 
 ### Vault / spec-memo runtime
 
-When the task means using the spec-memo **vault** (bootstrap, search, upsert, doctor, canvas, SSE status), load **only** [`ws-memo`](.agents/skills/ws-memo/SKILL.md). Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
+When the task means using the spec-memo **vault** (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills), load **only** [`ws-memo`](.agents/skills/ws-memo/SKILL.md) (documents all **10** MCP tools + CLI extras). Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
 
 ---
 
