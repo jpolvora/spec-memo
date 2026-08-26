@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jpolvora.github.io/spec-memo/sitemap.xml

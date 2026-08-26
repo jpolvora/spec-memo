@@ -115,7 +115,7 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     );
   });
 
-  await t.test("should enforce authToken when configured", async () => {
+  await t.test("should enforce authToken and support query parameters and headers", async () => {
     const authServer = await startSseServer({
       vaultRoot,
       port: 0,
@@ -129,11 +129,33 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
       const unauthRes = await fetch(`${authServer.url}/health`);
       assert.strictEqual(unauthRes.status, 401);
 
-      // 2. Authenticated request accepted
-      const authRes = await fetch(`${authServer.url}/health`, {
+      // 2. Authenticated request accepted via Authorization header
+      const authHeaderRes = await fetch(`${authServer.url}/health`, {
         headers: { Authorization: "Bearer secret-token-123" }
       });
-      assert.strictEqual(authRes.status, 200);
+      assert.strictEqual(authHeaderRes.status, 200);
+
+      // 3. Authenticated request accepted via ?token= query param
+      const authTokenRes = await fetch(`${authServer.url}/health?token=secret-token-123`);
+      assert.strictEqual(authTokenRes.status, 200);
+
+      // 4. Authenticated request accepted via ?authToken= query param
+      const authParamRes = await fetch(`${authServer.url}/health?authToken=secret-token-123`);
+      assert.strictEqual(authParamRes.status, 200);
+
+      // 5. CORS headers & OPTIONS preflight
+      const optionsRes = await fetch(`${authServer.url}/sse`, { method: "OPTIONS" });
+      assert.strictEqual(optionsRes.status, 204);
+      assert.strictEqual(optionsRes.headers.get("access-control-allow-origin"), "*");
+
+      // 6. Connect via SSEClientTransport with query token
+      const sseUrlWithToken = new URL(`${authServer.url}/sse?token=secret-token-123`);
+      const transport = new SSEClientTransport(sseUrlWithToken);
+      const client = new Client({ name: "test-query-token-client", version: "1.0.0" });
+      await client.connect(transport);
+      const toolsResult = await client.listTools();
+      assert.strictEqual(toolsResult.tools.length, 10);
+      await client.close();
     } finally {
       await authServer.close();
     }

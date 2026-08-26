@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>spec-memo — Working Memory for Coding Agents Outside the Repository</title>
+  <meta name="description" content="Local, token-budgeted working memory for AI coding agents outside product git repositories. Query anti-regression traps, architecture decisions, and specs via MCP.">
+  <meta name="keywords" content="mcp, model context protocol, agent memory, coding agents, ai developer tools, anti-regression traps, adr, cursor, claude desktop, antigravity">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="spec-memo — Working Memory for Coding Agents">
+  <meta property="og:description" content="Local, token-budgeted working memory for AI coding agents outside the product git repository.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://jpolvora.github.io/spec-memo/">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Navigation Header -->
+  <header class="header">
+    <div class="container nav-container">
+      <a href="#" class="brand-link">
+        <div class="brand-logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
+        </div>
+        <span>spec-memo</span>
+        <span class="version-badge brand-badge">v0.3.2</span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#problem" class="nav-link">Why Vault?</a></li>
+        <li><a href="#hosts" class="nav-link">Quick Start</a></li>
+        <li><a href="#kinds" class="nav-link">Memory Kinds</a></li>
+        <li><a href="#catalog" class="nav-link">Tool Reference</a></li>
+        <li><a href="#architecture" class="nav-link">Architecture</a></li>
+        <li><a href="#status" class="nav-link">Status Monitor</a></li>
+        <li><a href="#contribute" class="nav-link">Contribute</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="btn-github">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>Star on GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="container">
+      <div class="hero-pill">
+        <span class="hero-pill-dot"></span>
+        <span>Local Working Memory for AI Coding Agents</span>
+        <span class="version-badge">v0.3.2</span>
+      </div>
+
+      <h1 class="hero-title">
+        Your product Git is not a memory store.<br>
+        <span class="hero-title-gradient">Put agent state in a curated vault.</span>
+      </h1>
+
+      <p class="hero-subtitle">
+        Fast, token-budgeted working memory (sub-8 KB brief) outside your repository.
+        Prevents commit pollution, stops repeating bug traps across sessions, and keeps your product clones clean.
+      </p>
+
+      <div class="hero-cta-group">
+        <a href="#hosts" class="btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span>Quick Start (MCP)</span>
+        </a>
+        <a href="#catalog" class="btn-secondary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span>Explore 10 MCP Tools</span>
+        </a>
+      </div>
+
+      <div class="hero-quick-install">
+        <div class="quick-install-code">
+          <span class="prompt-sym">$</span>
+          <code>npm install -g spec-memo</code>
+        </div>
+        <button type="button" class="copy-btn" data-copy="npm install -g spec-memo" aria-label="Copy install command">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copy</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem vs Solution Section -->
+  <section id="problem" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">The Memory Boundary Thesis</span>
+        <h2 class="section-title">Why Git Is The Wrong Place For Agent Memory</h2>
+        <p class="section-subtitle">
+          Product repositories belong to your product: clean source code, tests, and documentation.
+          Agent scratchpads, execution logs, and repetitive traps belong in an external vault.
+        </p>
+      </div>
+
+      <div class="compare-grid">
+        <!-- Problem Card -->
+        <div class="compare-card problem">
+          <div class="compare-header">
+            <div class="compare-icon">✕</div>
+            <h3 class="compare-title">The In-Repo Memory Trap</h3>
+          </div>
+          <ul class="compare-list">
+            <li class="compare-item">
+              <span class="compare-bullet">✕</span>
+              <div><strong>Polluted Working Trees:</strong> Hundreds of temporary plan files (<code>.agents/plans/</code>, <code>MEMORY.md</code>) clutter git status and bloating commits.</div>
+            </li>
+            <li class="compare-item">
+              <span class="compare-bullet">✕</span>
+              <div><strong>Token Budget Exhaustion:</strong> Agents waste 40KB+ reading entire unstructured memory logs instead of focused code context.</div>
+            </li>
+            <li class="compare-item">
+              <span class="compare-bullet">✕</span>
+              <div><strong>Memory Lost Across Clones:</strong> Work in a new branch clone and the agent forgets previous architectural decisions and known bug traps.</div>
+            </li>
+            <li class="compare-item">
+              <span class="compare-bullet">✕</span>
+              <div><strong>Git Merge Conflicts:</strong> Concurrent sessions produce unresolvable merge conflicts on append-only memory markdown files.</div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Solution Card -->
+        <div class="compare-card solution">
+          <div class="compare-header">
+            <div class="compare-icon">✓</div>
+            <h3 class="compare-title">The spec-memo Vault Advantage</h3>
+          </div>
+          <ul class="compare-list">
+            <li class="compare-item">
+              <span class="compare-bullet">✓</span>
+              <div><strong>100% Clean Product Git:</strong> Zero files committed in your product repository. Pre-commit write-block hook prevents accidental leaks.</div>
+            </li>
+            <li class="compare-item">
+              <span class="compare-bullet">✓</span>
+              <div><strong>Token-Budgeted Brief (&lt;8 KB):</strong> <code>bootstrap</code> delivers ranked anti-regression traps, active decisions, and code drift warnings instantly.</div>
+            </li>
+            <li class="compare-item">
+              <span class="compare-bullet">✓</span>
+              <div><strong>Automatic Project Remote Binding:</strong> Multiple repository clones automatically share the exact same working memory via git remote hash.</div>
+            </li>
+            <li class="compare-item">
+              <span class="compare-bullet">✓</span>
+              <div><strong>Disposable SQLite FTS5 Index:</strong> Instant full-text search with Porter stemming, path globbing, and automatic markdown re-indexing.</div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start & Host Configurations -->
+  <section id="hosts" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Zero-Config MCP Integration</span>
+        <h2 class="section-title">Enable In Your AI Coding Environment</h2>
+        <p class="section-subtitle">
+          spec-memo runs as a standard Model Context Protocol (MCP) server.
+          Configure it in seconds for your favorite coding assistant.
+        </p>
+      </div>
+
+      <div class="host-config-wrapper">
+        <div class="host-tabs">
+          <button type="button" class="host-tab active" data-host="cursor">Cursor</button>
+          <button type="button" class="host-tab" data-host="claude">Claude Desktop</button>
+          <button type="button" class="host-tab" data-host="antigravity">Antigravity / Gemini</button>
+          <button type="button" class="host-tab" data-host="vscode">VS Code / Cline / Roo</button>
+          <button type="button" class="host-tab" data-host="cli">CLI Standalone</button>
+        </div>
+
+        <div class="host-tab-content">
+          <!-- Cursor -->
+          <div class="host-pane active" data-host="cursor">
+            <div class="host-pane-header">
+              <div>
+                <strong>Cursor MCP Configuration</strong>
+                <span class="host-path-pill">~/.cursor/mcp.json</span>
+              </div>
+              <button type="button" class="code-copy-btn copy-btn" aria-label="Copy configuration">Copy JSON</button>
+            </div>
+            <div class="code-block-wrapper">
+              <pre><code>{
+  "mcpServers": {
+    "spec-memo": {
+      "command": "memo",
+      "args": ["serve"]
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <!-- Claude Desktop -->
+          <div class="host-pane" data-host="claude">
+            <div class="host-pane-header">
+              <div>
+                <strong>Claude Desktop Configuration</strong>
+                <span class="host-path-pill">%APPDATA%\Claude\claude_desktop_config.json</span>
+              </div>
+              <button type="button" class="code-copy-btn copy-btn" aria-label="Copy configuration">Copy JSON</button>
+            </div>
+            <div class="code-block-wrapper">
+              <pre><code>{
+  "mcpServers": {
+    "spec-memo": {
+      "command": "npx",
+      "args": ["-y", "spec-memo", "serve"]
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <!-- Antigravity / Gemini -->
+          <div class="host-pane" data-host="antigravity">
+            <div class="host-pane-header">
+              <div>
+                <strong>Antigravity / Gemini IDE Config</strong>
+                <span class="host-path-pill">~/.gemini/config/mcp_config.json</span>
+              </div>
+              <button type="button" class="code-copy-btn copy-btn" aria-label="Copy configuration">Copy JSON</button>
+            </div>
+            <div class="code-block-wrapper">
+              <pre><code>{
+  "mcpServers": {
+    "spec-memo": {
+      "command": "memo",
+      "args": ["serve"]
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <!-- VS Code / Cline / Roo -->
+          <div class="host-pane" data-host="vscode">
+            <div class="host-pane-header">
+              <div>
+                <strong>VS Code / Cline / Roo Code Settings</strong>
+                <span class="host-path-pill">cline_mcp_settings.json</span>
+              </div>
+              <button type="button" class="code-copy-btn copy-btn" aria-label="Copy configuration">Copy JSON</button>
+            </div>
+            <div class="code-block-wrapper">
+              <pre><code>{
+  "mcpServers": {
+    "spec-memo": {
+      "command": "node",
+      "args": ["/path/to/spec-memo/dist/mcp.js"]
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <!-- CLI -->
+          <div class="host-pane" data-host="cli">
+            <div class="host-pane-header">
+              <div>
+                <strong>Local Terminal &amp; Server Modes</strong>
+                <span class="host-path-pill">Bash / PowerShell</span>
+              </div>
+              <button type="button" class="code-copy-btn copy-btn" aria-label="Copy configuration">Copy Bash</button>
+            </div>
+            <div class="code-block-wrapper">
+              <pre><code># Run session bootstrap brief in any repository
+memo bootstrap
+
+# Start HTTP / SSE server on :3000 + Status Monitor on :3001
+memo serve --sse --port 3000 --status-port 3001
+
+# Run repository pollution diagnostic & cleanup
+memo doctor --fix</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Memory Kinds -->
+  <section id="kinds" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Structured Knowledge</span>
+        <h2 class="section-title">The 6 Pillars of Working Memory</h2>
+        <p class="section-subtitle">
+          Every memory entry is stored as a clean Markdown file with YAML frontmatter,
+          typed and indexed for precision retrieval.
+        </p>
+      </div>
+
+      <div class="kinds-grid">
+        <!-- Trap -->
+        <div class="kind-card">
+          <div class="kind-card-header">
+            <span class="kind-badge trap">Trap</span>
+            <span class="text-dim">Anti-Regression</span>
+          </div>
+          <h3 class="kind-title">Anti-Regression Bug Traps</h3>
+          <p class="kind-desc">
+            Captures tricky pitfalls, concurrency races, and platform quirks. Path-matched globbing and 70% automatic superseding prevents duplicate warnings.
+          </p>
+          <div class="kind-snippet">
+            <code>memo upsert --kind trap --title "SQLite WAL Lock" --severity high --path-patterns "src/db/*.ts"</code>
+          </div>
+        </div>
+
+        <!-- Decision -->
+        <div class="kind-card">
+          <div class="kind-card-header">
+            <span class="kind-badge decision">Decision</span>
+            <span class="text-dim">Architecture</span>
+          </div>
+          <h3 class="kind-title">Architecture Decisions (ADRs)</h3>
+          <p class="kind-desc">
+            Documents system design choices, trade-offs, and invariants. Can be promoted into human product docs on-demand via <code>memo promote</code>.
+          </p>
+          <div class="kind-snippet">
+            <code>memo upsert --kind decision --title "Use SQLite FTS5 for Search" --body "ADR: Zero daemon overhead"</code>
+          </div>
+        </div>
+
+        <!-- Spec -->
+        <div class="kind-card">
+          <div class="kind-card-header">
+            <span class="kind-badge spec">Spec</span>
+            <span class="text-dim">Contract</span>
+          </div>
+          <h3 class="kind-title">Feature Specifications</h3>
+          <p class="kind-desc">
+            Feature definitions with linked paths and verified commit SHAs. Automatic drift detection flags when source code changes away from the spec.
+          </p>
+          <div class="kind-snippet">
+            <code>memo upsert --kind spec --slug "auth-jwt" --body "Spec: JWT Auth Flow"</code>
+          </div>
+        </div>
+
+        <!-- Plan -->
+        <div class="kind-card">
+          <div class="kind-card-header">
+            <span class="kind-badge plan">Plan</span>
+            <span class="text-dim">Execution</span>
+          </div>
+          <h3 class="kind-title">Execution Plans &amp; State</h3>
+          <p class="kind-desc">
+            Task graphs, DAG execution state, and progress trackers. Garbage collection automatically compacts completed plans to save vault space.
+          </p>
+          <div class="kind-snippet">
+            <code>memo upsert --kind plan --slug "auth-dag" --body "Tasks: 1. DB 2. Route 3. Test"</code>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div class="kind-card">
+          <div class="kind-card-header">
+            <span class="kind-badge log">Log</span>
+            <span class="text-dim">Audit Trail</span>
+          </div>
+          <h3 class="kind-title">Append-Only Audit Logs</h3>
+          <p class="kind-desc">
+            Chronological task events and milestone markers. Never pollutes context briefs, but fully searchable and rolled up monthly.
+          </p>
+          <div class="kind-snippet">
+            <code>memo append --event "Refactored token verification and passed 196 tests"</code>
+          </div>
+        </div>
+
+        <!-- Scratch & Reviews -->
+        <div class="kind-card">
+          <div class="kind-card-header">
+            <span class="kind-badge scratch">Scratch</span>
+            <span class="text-dim">TTL Retention</span>
+          </div>
+          <h3 class="kind-title">Ephemeral Scratch &amp; Reviews</h3>
+          <p class="kind-desc">
+            Temporary code review notes and prompt scratchpads. Auto-purged via curator GC with 7-day (scratch) and 14-day (reviews) TTL retention.
+          </p>
+          <div class="kind-snippet">
+            <code>memo gc --dry-run   # Cleans expired scratch & reviews</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Command & Tool Catalog -->
+  <section id="catalog" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">API &amp; CLI Reference</span>
+        <h2 class="section-title">Explore 10 MCP Tools &amp; CLI Commands</h2>
+        <p class="section-subtitle">
+          Every tool is available through MCP for AI agents and matching CLI commands for developers.
+        </p>
+      </div>
+
+      <div class="catalog-controls">
+        <div class="search-box-wrapper">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="tool-search" class="search-input" placeholder="Search tools by name, intent, or keywords... (Press '/' to focus)" aria-label="Search tools">
+          <span class="search-shortcut-badge">/</span>
+        </div>
+
+        <div class="filter-pills">
+          <button type="button" class="filter-pill active" data-filter="all">All Tools &amp; Commands</button>
+          <button type="button" class="filter-pill" data-filter="mcp">Core MCP (10)</button>
+          <button type="button" class="filter-pill" data-filter="session">Session Ops</button>
+          <button type="button" class="filter-pill" data-filter="vault">Vault Ops</button>
+          <button type="button" class="filter-pill" data-filter="diag">Diagnostics</button>
+          <button type="button" class="filter-pill" data-filter="sync">Sync &amp; Backup</button>
+        </div>
+      </div>
+
+      <div class="tools-grid" id="tools-grid">
+        <!-- 1. bootstrap -->
+        <div class="tool-card" data-name="bootstrap" data-desc="compile token-budgeted brief <8kb traps decisions drift" data-category="mcp" data-tags="session mcp core brief">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">bootstrap</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge plan">Session Start</span>
+          </div>
+          <p class="tool-desc">
+            Binds repository working directory to project identity; returns a token-budgeted brief (&lt;8 KB) with top-ranked traps, active decisions, live slug, and SHA drift warnings.
+          </p>
+          <div class="tool-example-box">
+            <code>memo bootstrap --slug feature-auth --path src/auth.ts</code>
+          </div>
+        </div>
+
+        <!-- 2. search -->
+        <div class="tool-card" data-name="search" data-desc="filtered full-text search across vault records via sqlite fts5" data-category="mcp" data-tags="mcp search fts5 query">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">search</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge spec">Query</span>
+          </div>
+          <p class="tool-desc">
+            Full-text search across all vault records using Porter stemming, tags filter, path pattern globbing, and recurrence-weighted ranking.
+          </p>
+          <div class="tool-example-box">
+            <code>memo search "database lock" --kind trap --path src/db/*.ts</code>
+          </div>
+        </div>
+
+        <!-- 3. get -->
+        <div class="tool-card" data-name="get" data-desc="retrieve single memory record by id or kind and slug" data-category="mcp" data-tags="mcp get read">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">get</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge scratch">Read</span>
+          </div>
+          <p class="tool-desc">
+            Fetches a single record by exact ID or kind+slug combination with full YAML frontmatter and markdown body.
+          </p>
+          <div class="tool-example-box">
+            <code>memo get --id trap-sqlite-wal-lock</code>
+          </div>
+        </div>
+
+        <!-- 4. upsert -->
+        <div class="tool-card" data-name="upsert" data-desc="create or update typed memory record trap decision spec plan" data-category="mcp" data-tags="mcp write upsert trap">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">upsert</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge trap">Write</span>
+          </div>
+          <p class="tool-desc">
+            Writes or updates a memory record. Validates schema, redacts secrets, checks token overlap for deduplication, and updates index views.
+          </p>
+          <div class="tool-example-box">
+            <code>memo upsert --kind trap --title "Close statement before connection"</code>
+          </div>
+        </div>
+
+        <!-- 5. append -->
+        <div class="tool-card" data-name="append" data-desc="append write-only execution log or audit event record" data-category="mcp" data-tags="mcp log append audit">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">append</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge log">Log</span>
+          </div>
+          <p class="tool-desc">
+            Appends a timestamped audit event or task execution milestone without polluting the primary context brief.
+          </p>
+          <div class="tool-example-box">
+            <code>memo append --event "Passed all 196 test suites"</code>
+          </div>
+        </div>
+
+        <!-- 6. forget -->
+        <div class="tool-card" data-name="forget" data-desc="soft-archive or permanently purge memory record" data-category="mcp" data-tags="mcp archive delete forget">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">forget</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge scratch">Archive</span>
+          </div>
+          <p class="tool-desc">
+            Soft-archives a memory record (marks status=archived) or permanently purges it from disk with the purge flag.
+          </p>
+          <div class="tool-example-box">
+            <code>memo forget --id scratch-old-notes --purge</code>
+          </div>
+        </div>
+
+        <!-- 7. gc -->
+        <div class="tool-card" data-name="gc" data-desc="apply ttl retention 7-day scratch 14-day review compact plans" data-category="mcp" data-tags="mcp gc curator cleanup">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">gc</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge plan">Curator</span>
+          </div>
+          <p class="tool-desc">
+            Applies TTL retention (7-day scratch, 14-day review), compacts completed execution plans, and rolls up monthly logs.
+          </p>
+          <div class="tool-example-box">
+            <code>memo gc --dry-run</code>
+          </div>
+        </div>
+
+        <!-- 8. promote -->
+        <div class="tool-card" data-name="promote" data-desc="copy record into product repository as adr or documentation" data-category="mcp" data-tags="mcp promote export adr">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">promote</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge decision">Export</span>
+          </div>
+          <p class="tool-desc">
+            Promotes a vault record into the product repository as documentation (e.g. ADR or MADR template). Default-deny without destination.
+          </p>
+          <div class="tool-example-box">
+            <code>memo promote decision-01 --to docs/adr/001.md --format adr</code>
+          </div>
+        </div>
+
+        <!-- 9. check_version -->
+        <div class="tool-card" data-name="check_version" data-desc="compare running spec-memo package version to latest npm release" data-category="mcp" data-tags="mcp version npm check">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">check_version</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge spec">Version</span>
+          </div>
+          <p class="tool-desc">
+            Compares the active spec-memo package version against the latest npm registry release. Soft-fails cleanly when offline.
+          </p>
+          <div class="tool-example-box">
+            <code>memo check-version --json</code>
+          </div>
+        </div>
+
+        <!-- 10. install_skills -->
+        <div class="tool-card" data-name="install_skills" data-desc="install packaged ws-memo skill into consumer product repo" data-category="mcp" data-tags="mcp skills install ws-memo">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">install_skills</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge plan">Install</span>
+          </div>
+          <p class="tool-desc">
+            Installs packaged runtime agent skills (such as <code>ws-memo</code>) directly into a consumer product's <code>.agents/skills/</code> directory.
+          </p>
+          <div class="tool-example-box">
+            <code>memo install-skills --product-root /path/to/project --force</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: serve -->
+        <div class="tool-card" data-name="serve" data-desc="start stdio or http sse transport server and status companion" data-category="session" data-tags="cli server sse stdio transport">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo serve</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge plan">Transport</span>
+          </div>
+          <p class="tool-desc">
+            Runs the MCP server in stdio mode (default) or HTTP/SSE mode on port :3000 with a live status companion UI on port :3001.
+          </p>
+          <div class="tool-example-box">
+            <code>memo serve --sse --port 3000 --status-port 3001</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: doctor -->
+        <div class="tool-card" data-name="doctor" data-desc="diagnose vault structure fts integrity and scan in-repo pollution" data-category="diag" data-tags="cli doctor diag health fix">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo doctor</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge decision">Diagnostic</span>
+          </div>
+          <p class="tool-desc">
+            Validates vault structure, checks SQLite FTS5 integrity, and scans the product tree for forbidden workflow residue with automated <code>--fix</code>.
+          </p>
+          <div class="tool-example-box">
+            <code>memo doctor --fix --rebuild</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: rank -->
+        <div class="tool-card" data-name="rank" data-desc="list traps by recurrence frequency and export owner skill" data-category="diag" data-tags="cli rank traps recurrence">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo rank</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge trap">Recurrence</span>
+          </div>
+          <p class="tool-desc">
+            Ranks active anti-regression traps by occurrence frequency, filters by architectural layer, and exports to reusable skills.
+          </p>
+          <div class="tool-example-box">
+            <code>memo rank --layer web --limit 10</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: canvas -->
+        <div class="tool-card" data-name="canvas" data-desc="interactive visual graph viewer on port 4100" data-category="vault" data-tags="cli canvas graph ui visual">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo canvas</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge spec">Visual Graph</span>
+          </div>
+          <p class="tool-desc">
+            Starts an interactive visual node graph viewer and REST API on port :4100 for browsing memory relationships.
+          </p>
+          <div class="tool-example-box">
+            <code>memo canvas --port 4100</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: hook -->
+        <div class="tool-card" data-name="hook" data-desc="install pre-commit write-block hook in consumer repository" data-category="vault" data-tags="cli hook git write-block">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo hook install</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge trap">Safety</span>
+          </div>
+          <p class="tool-desc">
+            Installs a git pre-commit write-block hook into the consumer repository to prevent accidental commits of in-repo memory files.
+          </p>
+          <div class="tool-example-box">
+            <code>memo hook install --productRoot /path/to/repo</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: export/import vault -->
+        <div class="tool-card" data-name="export-vault" data-desc="encrypted vault backup export and restore aes-256-gcm" data-category="sync" data-tags="cli backup export import crypto sync">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo export-vault</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge scratch">Encryption</span>
+          </div>
+          <p class="tool-desc">
+            Exports or restores encrypted portable vault archives using AES-256-GCM and PBKDF2 key derivation.
+          </p>
+          <div class="tool-example-box">
+            <code>memo export-vault --password "secret" -o ~/vault-backup.json</code>
+          </div>
+        </div>
+      </div>
+
+      <div id="no-tools-results" class="no-results-box hidden">
+        <h3>No matching tools found</h3>
+        <p>Try searching for another keyword or clear your filter.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture & Data Flow -->
+  <section id="architecture" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">System Architecture</span>
+        <h2 class="section-title">How spec-memo Isolates Memory</h2>
+        <p class="section-subtitle">
+          A hybrid architecture combining human-readable Markdown files, disposable SQLite FTS5 search,
+          and zero-friction MCP protocol bridges.
+        </p>
+      </div>
+
+      <div class="arch-diagram-wrapper">
+        <div class="code-block-wrapper">
+          <pre><code>┌────────────────────────────────────────────────────────────────────────┐
+│                        AI CODING AGENT SESSION                         │
+│             (Cursor, Claude Desktop, Antigravity, VS Code)             │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Model Context Protocol (MCP)
+                                    ▼ Stdio / SSE Transport (:3000)
+┌────────────────────────────────────────────────────────────────────────┐
+│                          SPEC-MEMO ENGINE                              │
+│  ┌─────────────────────────┐  ┌─────────────────────────────────────┐  │
+│  │   Secret Redaction      │  │    Trap Deduplication Engine        │  │
+│  │   Write-Block Guard     │  │    Recurrence Ranking &amp; TTL GC       │  │
+│  └────────────┬────────────┘  └──────────────────┬──────────────────┘  │
+│               │                                  │                     │
+│               ▼                                  ▼                     │
+│  ┌─────────────────────────┐  ┌─────────────────────────────────────┐  │
+│  │   Disposable SQLite     │  │      Markdown Source of Truth       │  │
+│  │   FTS5 Index (memo.db)  │  │      (~/.spec-memo/projects/&lt;id&gt;/)  │  │
+│  └─────────────────────────┘  └─────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                         ZERO IN-REPO ARTIFACTS
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                       PRODUCT GIT REPOSITORY                           │
+│              (Pure source code, tests, and documentation)              │
+└────────────────────────────────────────────────────────────────────────┘</code></pre>
+        </div>
+
+        <div class="arch-boxes-grid">
+          <div class="arch-box">
+            <div class="arch-box-title">
+              <span>📄</span> Markdown Source of Truth
+            </div>
+            <p class="arch-box-desc">
+              Every memory record is stored as an individual Markdown file with structured YAML frontmatter. Human-auditable, diffable, and resilient.
+            </p>
+          </div>
+
+          <div class="arch-box">
+            <div class="arch-box-title">
+              <span>⚡</span> Disposable SQLite FTS5
+            </div>
+            <p class="arch-box-desc">
+              Search is powered by SQLite FTS5 with Porter stemming. If deleted or corrupted, the entire index automatically rebuilds from markdown in milliseconds.
+            </p>
+          </div>
+
+          <div class="arch-box">
+            <div class="arch-box-title">
+              <span>🔗</span> Git Remote Identity
+            </div>
+            <p class="arch-box-desc">
+              Projects are automatically identified by normalized git remote URL. Multiple local checkouts share identical working memory seamlessly.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Status Monitor Showcase -->
+  <section id="status" class="section">
+    <div class="container">
+      <div class="status-companion-banner">
+        <div>
+          <div class="status-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+            <span>Live Companion Companion (:3001)</span>
+          </div>
+          <h3 class="status-title">Real-Time Status Monitor &amp; Live Activity Log</h3>
+          <p class="status-desc">
+            When running <code>memo serve --sse</code>, a read-only web companion starts automatically on <code>http://127.0.0.1:3001/</code>.
+            View vault health cards, active projects, and watch tool executions and HTTP events stream live via SSE.
+          </p>
+          <div class="hero-cta-group" style="justify-content: flex-start; margin-bottom: 0;">
+            <div class="quick-install-code" style="background: rgba(0,0,0,0.5); padding: 0.5rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-card);">
+              <span class="prompt-sym">$</span>
+              <code>memo serve --sse --port 3000 --status-port 3001</code>
+            </div>
+          </div>
+        </div>
+
+        <div class="status-preview-box">
+          <div class="status-preview-header">
+            <span>LIVE ACTIVITY EVENT STREAM</span>
+            <span class="text-emerald">● CONNECTED</span>
+          </div>
+          <div class="status-log-line">
+            <span class="status-log-time">12:51:02</span>
+            <span class="status-log-event">BOOTSTRAP</span>
+            <span>github.com-jpolvora-spec-memo (2778B)</span>
+          </div>
+          <div class="status-log-line">
+            <span class="status-log-time">12:51:15</span>
+            <span class="status-log-event">SEARCH</span>
+            <span>query="sqlite" hits=4</span>
+          </div>
+          <div class="status-log-line">
+            <span class="status-log-time">12:51:40</span>
+            <span class="status-log-event">UPSERT</span>
+            <span>kind=trap id=trap-sqlite-wal-lock</span>
+          </div>
+          <div class="status-log-line">
+            <span class="status-log-time">12:52:10</span>
+            <span class="status-log-event">GC</span>
+            <span>purged=2 scratch records</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contribute Section -->
+  <section id="contribute" class="section contribute-section">
+    <div class="container">
+      <div class="contribute-card">
+        <span class="section-tag">Open Source Community</span>
+        <h2 class="section-title">Contribute to spec-memo</h2>
+        <p class="section-subtitle">
+          spec-memo is open source under the MIT license. We welcome contributions from developers and AI practitioners building the future of coding agent infrastructure.
+        </p>
+
+        <div class="contribute-grid">
+          <div class="contribute-item">
+            <div class="contribute-item-title">🧩 MCP Host Adapters</div>
+            <div class="contribute-item-desc">Add configuration recipes and test harnesses for new agent frameworks and IDE hosts.</div>
+          </div>
+          <div class="contribute-item">
+            <div class="contribute-item-title">🛡️ Anti-Regression Traps</div>
+            <div class="contribute-item-desc">Contribute refined deduplication heuristics, layer aliases, and trap recurrence patterns.</div>
+          </div>
+          <div class="contribute-item">
+            <div class="contribute-item-title">⚡ Curator &amp; Search GC</div>
+            <div class="contribute-item-desc">Optimize SQLite FTS5 queries, log roll-up algorithms, and automated secret redaction filters.</div>
+          </div>
+        </div>
+
+        <div class="hero-cta-group" style="margin-bottom: 0;">
+          <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            <span>Open a Pull Request on GitHub</span>
+          </a>
+          <a href="https://github.com/jpolvora/spec-memo/blob/develop/AGENTS.md" target="_blank" rel="noopener" class="btn-secondary">
+            <span>Read AGENTS.md Contract</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-container">
+      <ul class="footer-nav">
+        <li><a href="#problem">Why Vault?</a></li>
+        <li><a href="#hosts">Quick Start</a></li>
+        <li><a href="#kinds">Memory Kinds</a></li>
+        <li><a href="#catalog">Tool Reference</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#status">Status Monitor</a></li>
+        <li><a href="#contribute">Contribute</a></li>
+        <li><a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">GitHub</a></li>
+      </ul>
+
+      <p class="footer-copy">
+        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.3.2</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
+      </p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

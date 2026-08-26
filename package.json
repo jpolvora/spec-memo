@@ -1,6 +1,6 @@
 {
   "name": "spec-memo",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Local working memory for coding agents outside the product repository",
   "type": "module",
   "main": "dist/index.js",
@@ -18,6 +18,8 @@
     "watch": "tsc -w",
     "pretest": "npm run build",
     "test": "node --test dist/**/*.test.js",
+    "build:site": "node scripts/build-site.js",
+    "check:site": "node scripts/build-site.js --check",
     "start": "node dist/mcp.js"
   },
   "keywords": [
