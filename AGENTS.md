@@ -48,11 +48,15 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 | Deliver feature Spec→PR (standard FSM) | `ws-spec-to-pr` | Not for batch; not for format-only edits |
 | Deliver feature Spec→PR (fast lite) | `ws-spec-to-pr-lite` | Not for complex multi-phase work |
 
+### Vault / spec-memo runtime
+
+When the task means using the spec-memo **vault** (bootstrap, search, upsert, doctor, canvas, SSE status), load **only** [`ws-memo`](.agents/skills/ws-memo/SKILL.md). Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
+
 ---
 
 ## 🚀 Session Start Protocol
 
-1. **Invoke Bootstrap**: Call the `bootstrap` MCP tool or run `memo bootstrap` to retrieve active anti-regression traps, open architecture decisions, the active spec/plan slice, and code drift warnings.
+1. **Invoke Bootstrap**: Load [`ws-memo`](.agents/skills/ws-memo/SKILL.md). Call the `bootstrap` MCP tool or run `memo bootstrap` to retrieve active anti-regression traps, open architecture decisions, the active spec/plan slice, and code drift warnings.
 2. **Review Product Docs**: Check [`PRODUCT.PRD`](PRODUCT.PRD), [`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), and [`.agents/specs/index.PRD`](.agents/specs/index.PRD) for active phase constraints and slice definitions.
 3. **Respect Git Boundaries**: Never create in-repo `.agents/plans/`, `MEMORY.md`, `.state.md`, or session log dumps in the product repository.
 

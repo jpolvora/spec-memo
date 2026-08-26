@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-26 00:50] Agent: Cursor Grok 4.6
+- **Prompt**: Create ws-memo skill covering full spec-memo MCP/CLI; open workflow-skills issue to improve ws-spec-memo handoff
+- **Done**: Added `.agents/skills/ws-memo/` (SKILL.md + SURFACE/RECORDS/MCP-TEMPLATE + evals); pointers in AGENTS.md, FEATURES.md, README.md; opened jpolvora/workflow-skills#243
+- **Result**: Runtime skill lives in spec-memo; consumer setup stays in workflow-skills ws-spec-memo
+
 ### [2026-08-26 00:41] Agent: Cursor Grok 4.6
 - **Prompt**: Increment version, update docs/specs, commit develop, ship PR to master, wait CI/code-review and fix
 - **Done**: Bumped package/MCP/vault version to 0.2.0; tracking docs; removed hardcoded auth token from vault-push script

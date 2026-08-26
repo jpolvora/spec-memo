@@ -90,6 +90,14 @@ Add to your extension's MCP configuration settings:
 | Status monitor | `3001` | co-starts with `memo serve --sse` (`--no-status` to disable; `--status-port` to override) |
 | Canvas graph viewer | `4100` | `memo canvas` |
 
+### Agent skill (`ws-memo`)
+
+Day-to-day vault ops (all 8 MCP tools + CLI extras) are documented as a project skill:
+
+- [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)
+
+Copy or symlink that folder into a consumer `{skillsRoot}/ws-memo/` (or load it from this clone). **Setup** of `specMemo.enabled` in workflow-skills consumers remains [`ws-spec-memo`](https://github.com/jpolvora/workflow-skills) — do not duplicate that bridge here.
+
 ---
 
 ### 3. Enable in Consumer Repositories & Agents

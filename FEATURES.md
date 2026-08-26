@@ -112,6 +112,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] Relocatable consumer hub data (`MEMORY`, `memory/*`, changelog) off `{sharedDir}`-fixed layout.
 - [x] `read-memory` / `update-memory` call spec-memo MCP (or CLI) instead of `Read`/`Write` in the product tree.
 - [x] Skill or git hook blocks new files under product `{plansDir}` / `{specsDir}` / hub memory once the project is bound.
+- [x] **`ws-memo` runtime skill** (this repo, [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)): routes all 8 MCP tools plus CLI extras. Consumer enable/setup remains workflow-skills `ws-spec-memo`.
 
 ---
 
