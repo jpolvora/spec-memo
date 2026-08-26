@@ -4,8 +4,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 import { ActivityBus } from './activity.js';
 import { resolveProjectIdentity } from './identity.js';
-import { getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { ToolName, ToolResponse } from './types.js';
+import { startRemoteMcpProxyServer } from './mcp-proxy.js';
 
 const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get', 'check_version']);
 const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote', 'install_skills']);
@@ -73,7 +74,7 @@ export function createMcpServer(opts: {
   const server = new Server(
     {
       name: 'spec-memo',
-      version: '0.3.2'
+      version: '0.4.0'
     },
     {
       capabilities: {
@@ -142,8 +143,16 @@ export function createMcpServer(opts: {
   return server;
 }
 
-export async function startMcpServer(): Promise<void> {
-  const server = createMcpServer();
+export async function startMcpServer(options: { vaultRoot?: string } = {}): Promise<void> {
+  const vaultRoot = getVaultRoot(options.vaultRoot);
+  const config = ensureVaultStructure(vaultRoot);
+
+  if (config.mode === 'remote') {
+    await startRemoteMcpProxyServer(options);
+    return;
+  }
+
+  const server = createMcpServer({ defaultVaultRoot: vaultRoot });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

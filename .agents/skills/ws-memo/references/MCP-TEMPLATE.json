@@ -7,7 +7,7 @@
     },
     "spec-memo-npx": {
       "command": "npx",
-      "args": ["-y", "spec-memo", "serve"]
+      "args": ["-y", "github:jpolvora/spec-memo", "serve"]
     }
   }
 }

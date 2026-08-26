@@ -103,9 +103,17 @@ export interface ProjectMetadata {
   updatedAt: string;
 }
 
+export type DeploymentMode = 'local' | 'hybrid' | 'remote';
+
+export type HostName = 'cursor' | 'vscode' | 'opencode' | 'antigravity' | 'claude' | 'generic';
+
 export interface VaultConfig {
   version: string;
   defaultRemote: string;
+  mode?: DeploymentMode;
+  remote?: {
+    url: string;
+  };
   vaultGit?: {
     enabled: boolean;
     remoteUrl?: string;
@@ -367,10 +375,50 @@ export interface DoctorOptions {
   fix?: boolean;
 }
 
+export interface HybridState {
+  dirty: boolean;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  cursors?: Record<string, string>;
+  dirtyProjects?: Record<string, boolean>;
+}
+
+export interface SetupOptions {
+  mode?: DeploymentMode;
+  url?: string;
+  host?: HostName | string;
+  printMcp?: boolean;
+  writeMcp?: boolean;
+  vaultRoot?: string;
+  interactive?: boolean;
+  urlPrompt?: () => string;
+  authToken?: string;
+}
+
+export interface SetupResult {
+  mode: DeploymentMode;
+  remoteUrl?: string;
+  tokenConfigured: boolean;
+  configPath: string;
+  hostSnippet?: Record<string, unknown> | string;
+  hostConfigPath?: string;
+  writtenMcp?: boolean;
+  message?: string;
+}
+
 export interface DoctorResult {
   healthy: boolean;
   vaultRoot: string;
   vaultExists: boolean;
+  mode?: DeploymentMode;
+  remoteUrl?: string | null;
+  tokenConfigured?: boolean;
+  hybridState?: HybridState | null;
+  remoteHealth?: {
+    reachable: boolean;
+    statusCode?: number;
+    message?: string;
+  } | null;
   project: {
     projectId: string;
     gitRemote: string | null;

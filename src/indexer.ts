@@ -1,9 +1,10 @@
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordStatus, SearchHit, SearchOptions } from './types.js';
 import { getVaultRoot, withVaultLock, getVaultProjects } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
+import { createSqliteDatabase } from './sqlite.js';
 import { parseRecord } from './schema.js';
 import {
   compareSearchHits,
@@ -30,7 +31,7 @@ export function openIndex(vaultRoot: string = getVaultRoot()): Database.Database
     fs.mkdirSync(vaultRoot, { recursive: true });
   }
 
-  db = new Database(dbPath);
+  db = createSqliteDatabase(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
 

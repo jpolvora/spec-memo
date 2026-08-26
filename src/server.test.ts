@@ -83,6 +83,18 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
         }
       });
       assert.strictEqual(searchResult.isError, undefined);
+
+      // Client hosts (Cursor) inject laptop cwd; a remote SSE daemon must still load sqlite.
+      const foreignCwd =
+        process.platform === "win32" ? "/home/lab/no-such-consumer" : "L:\\source\\no-such-consumer";
+      const searchForeign = await client.callTool({
+        name: "search",
+        arguments: {
+          query: "connections",
+          cwd: foreignCwd
+        }
+      });
+      assert.strictEqual(searchForeign.isError, undefined);
       const searchContent = searchResult.content as Array<{ type: string; text?: string }>;
       assert.ok(searchContent && searchContent.length > 0);
       const hits = JSON.parse(searchContent[0].text as string);

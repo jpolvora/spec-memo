@@ -76,10 +76,45 @@ export function generateProjectIdFromPath(canonicalPath: string): string {
 }
 
 /**
+ * True when `input` is an absolute path for a different OS than this process
+ * (Windows drive/UNC on POSIX).
+ */
+export function isForeignHostPath(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (process.platform === 'win32') {
+    return false;
+  }
+  return /^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith('\\\\');
+}
+
+/**
+ * Map a client-supplied cwd onto a directory that exists on this host.
+ * MCP SSE clients inject laptop paths; a remote daemon must not treat those as
+ * relative children of process.cwd() or walk them into the daemon git repo.
+ */
+export function resolveUsableCwd(cwd: string = process.cwd()): string {
+  const trimmed = cwd.trim();
+  if (!trimmed || isForeignHostPath(trimmed)) {
+    return path.resolve(process.cwd());
+  }
+  const resolved = path.resolve(trimmed);
+  if (!fs.existsSync(resolved)) {
+    return path.resolve(process.cwd());
+  }
+  return resolved;
+}
+
+/**
  * Find the closest enclosing Git repository root from a start path.
  */
 export function findGitRoot(startPath: string): string | null {
   let current = path.resolve(startPath);
+  if (!fs.existsSync(current)) {
+    return null;
+  }
   while (true) {
     const gitDir = path.join(current, '.git');
     if (fs.existsSync(gitDir)) {
@@ -90,6 +125,9 @@ export function findGitRoot(startPath: string): string | null {
       break;
     }
     current = parent;
+    if (!fs.existsSync(current)) {
+      return null;
+    }
   }
   return null;
 }
@@ -145,7 +183,8 @@ export function resolveProjectIdentity(
   options: { remoteName?: string; vaultRoot?: string } = {}
 ): ProjectIdentity {
   const resolvedVaultRoot = options.vaultRoot || getVaultRoot();
-  const gitRoot = findGitRoot(cwd);
+  const usableCwd = resolveUsableCwd(cwd);
+  const gitRoot = findGitRoot(usableCwd);
   const remoteName = options.remoteName || 'origin';
 
   let normalizedRemote: string | null = null;
@@ -166,7 +205,7 @@ export function resolveProjectIdentity(
       projectId = generateProjectIdFromPath(rootPath);
     }
   } else {
-    rootPath = path.resolve(cwd);
+    rootPath = usableCwd;
     projectId = generateProjectIdFromPath(rootPath);
   }
 

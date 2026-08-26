@@ -101,6 +101,11 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`mcp-status-monitor`](mcp-status-monitor.spec.md): MCP status monitor page with live activity log
 - [x] MCP tools: check_version and install_skills (+ docs surface) (`spec: mcp-version-and-skill-install.spec.md`)
 
+### Phase 7: Deployment modes
+
+- [x] [`deployment-modes`](deployment-modes.spec.md): Local, hybrid, and remote deployment modes with portable MCP wiring
+
+
 
 
 
@@ -133,10 +138,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 22 | [`multi-machine-sync`](multi-machine-sync.spec.md) | `[x] done` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
 | 23 | [`mcp-sse-transport`](mcp-sse-transport.spec.md) | `[x] done` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
 | 24 | [`trap-recurrence`](trap-recurrence.spec.md) | `[x] done` | Phase 6 | Trap recurrence ranking and owner-skill export |
-
 | 25 | [`mcp-status-monitor`](mcp-status-monitor.spec.md) | `[x] done` | Phase 6 | MCP status monitor page with live activity log |
-
 | 26 | `mcp-version-and-skill-install` | `[x]` done | Phase 6: Recurrence learning | MCP tools: check_version and install_skills (+ docs surface) |
+| 27 | [`deployment-modes`](deployment-modes.spec.md) | `[x] done` | Phase 7 | Local, hybrid, and remote deployment modes with portable MCP wiring |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -153,7 +157,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-23 | slice-4-fts-index | SQLite FTS5 disposable index (memo.sqlite), Porter stemmer, pathPatterns glob filter, rebuildIndex, search CLI & MCP tool | 66771e4 |
 | 2026-08-23 | slice-5-remaining-kinds-and-events | Full record kinds matrix, append-only event logging, forget soft-archive & purge | 1dbc5ac |
 | 2026-08-23 | slice-6-bootstrap-brief | Bootstrap session brief generation with 8 KB budget cap and trap ranking | 4884172 |
-| 2026-08-25 | slice-7-curator-gc-safety | Curator GC, secret redaction, and product-tree write guard | Slice 7 delivery |
+| 2026-08-25 | slice-7-curator-gc-safety | Curator GC, secret redaction & product write guard | Slice 7 delivery |
 | 2026-08-25 | slice-8-import-and-doctor | CLI parity, memo import, memo doctor diagnostics, memo promote export | Slice 8 delivery |
 | 2026-08-25 | slice-9-relocatable-hub | Relocatable hub storage resolution and vault path resolver | Slice 9 delivery |
 | 2026-08-25 | slice-10-memory-adapter-mcp | Consumer memory adapter module for MCP/CLI integration | Slice 10 delivery |
@@ -176,6 +180,10 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-26 | release-0.2.0 | Package, MCP server, and vault config version bumped to 0.2.0 | 0.2.0 |
 | 2026-08-26 | mcp-version-and-skill-install | MCP tools check_version + install_skills; 10-tool surface + docs | npm test 196 pass |
 | 2026-08-26 | release-0.3.1 | Align ws-memo skill + docs to 10-tool surface; bump package/MCP/vault to 0.3.1 | 0.3.1 |
+| 2026-08-26 | release-0.3.2 | Fix MCP SSE initial connect with query-token auth & CORS; add documentation website & GitHub Pages deploy workflow | 0.3.2 |
+| 2026-08-26 | deployment-modes | Local, hybrid, and remote deployment modes with portable MCP wiring, 32 ACs | npm test 215 pass |
+| 2026-08-26 | release-0.4.0 | Phase 7 deployment modes (Local, Hybrid, Remote), memo setup, stdio MCP proxy | 0.4.0 |
+| 2026-08-26 | hybrid-sync-review-fixes | Daemon dryRun, cwd-scoped hybrid push, debounce single-flight, hybrid-state vault lock | npm test 219 pass |
 
 ## Archive
 
@@ -189,8 +197,8 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 
 - [x] All completed features logged in Done log.
 - [x] Linked `*.spec.md` files exist for all Next specs.
-- [x] All 26 canonical specifications validated against schema.
-- [x] Phase 6 complete — all scheduled specs delivered.
+- [x] All 27 canonical specifications validated against schema.
+- [x] Phase 7 complete — all scheduled specs delivered.
 
 ## 12. Related docs
 

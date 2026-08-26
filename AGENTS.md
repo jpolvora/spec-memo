@@ -148,17 +148,25 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 
 | Intent | Do |
 |--------|-----|
-| Session start | MCP/`memo` `bootstrap` with `cwd` = product root; apply traps before coding |
+| Configure mode | `memo setup [--mode local|hybrid|remote] [--url <url>] [--host <host>] [--print-mcp|--write-mcp]` |
+| Session start | MCP/`memo` `bootstrap` with `cwd` = product root; apply traps before coding (hybrid pulls remote deltas) |
 | Recall | `search` → `get` |
-| Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git) |
+| Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git; hybrid schedules debounced push) |
 | Audit event | `append` |
+| Sync | `memo sync [--all] [--dry-run]` (hybrid HTTP sync or vault-git) |
 | Housekeep | `gc` (`dryRun` first when unsure); `forget` (purge only with explicit user confirm) |
+
+### Deployment Modes
+
+- **`local` (default):** Local records, indexing, and tool execution in `~/.spec-memo/`.
+- **`hybrid`:** Local vault is authoritative cache; auto-pulls deltas during `bootstrap` and debounces pushes on mutations. Manual sync via `memo sync`. Fails open when daemon is down.
+- **`remote`:** Local agent hosts run stdio proxy `memo serve` forwarding the 10 tools to remote daemon. Zero local records. Fails closed when daemon is down.
 
 ### Serve (MCP transport)
 
 | Mode | Command | Notes |
 |------|---------|--------|
-| Stdio | `memo serve` | Default for Cursor/Claude Desktop host spawn |
+| Stdio | `memo serve` | Default for Cursor/Claude Desktop host spawn (proxies in remote mode) |
 | SSE | `memo serve --sse` | Prints SSE URL + status URL; `--json` emits `url` / `statusUrl` |
 | Flags | `--host` `--port` `--status-port` `--no-status` `--auth-token` `--vaultRoot` | Non-loopback without token **must fail** (`SPEC_MEMO_SSE_TOKEN` / `SPEC_MEMO_AUTH_TOKEN` / `--auth-token`) |
 
@@ -167,7 +175,7 @@ On status companion bind failure: close SSE listener + activity bus before rejec
 ### Diagnose
 
 ```bash
-memo doctor              # vault structure, FTS, in-repo pollution
+memo doctor              # vault structure, FTS, deployment mode, remote health, in-repo pollution
 memo doctor --json
 memo doctor --rebuild    # rebuild FTS from markdown
 memo doctor --fix       # delete leftover in-tree residue (plans/MEMORY/.state…)

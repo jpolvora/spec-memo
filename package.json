@@ -1,6 +1,6 @@
 {
   "name": "spec-memo",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Local working memory for coding agents outside the product repository",
   "type": "module",
   "main": "dist/index.js",
@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
+    "prepare": "npm run build",
     "pretest": "npm run build",
     "test": "node --test dist/**/*.test.js",
     "build:site": "node scripts/build-site.js",
@@ -29,6 +30,14 @@
     "context",
     "developer-tools"
   ],
+  "homepage": "https://github.com/jpolvora/spec-memo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jpolvora/spec-memo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jpolvora/spec-memo/issues"
+  },
   "author": "",
   "license": "MIT",
   "dependencies": {

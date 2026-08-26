@@ -1,5 +1,21 @@
 # Changelog
 
+### [2026-08-26 17:16] Agent: Cursor Grok 4.6
+- **Prompt**: /ws-goal-fix-pr fix 6 session dry-run hybrid-sync findings (not a GitHub PR)
+- **Done**: Daemon `/api/sync/push` and `/api/sync` honor `dryRun`; mutating tools resolve cwd `projectId` before `scheduleHybridPush`; debounce single-flights with one trailing push; `writeHybridState` uses `withVaultLockSync`; added AC21/AC18/AC25 tests
+- **Result**: `npm test` exit 0 (219 pass / 0 fail). No PR resolve/push (session-local). Learning: Hybrid sync must honor dryRun, cwd projectId, vault lock, and single-flight debounce
+
+
+### [2026-08-26 15:25] Agent: Cursor Grok 4.6
+- **Prompt**: Fix memo/search SEARCH_FAILED bindings paths from Cursor client to MCP SSE server
+- **Done**: Load better-sqlite3 via package-relative nativeBinding (`src/sqlite.ts`); ignore foreign/nonexistent client cwd in identity; tests for binding path, chdir, SSE search with foreign cwd
+- **Result**: `npm test` exit 0 (205 pass / 0 fail). Redeploy/restart the SSE daemon on the lab host so search stops returning SEARCH_FAILED.
+
+### [2026-08-26 14:45] Agent: Cursor Grok 4.6
+- **Prompt**: Make npx spec-memo docs/references point to GitHub instead of the npm default server
+- **Done**: Added package.json homepage/repository/bugs; switched docs, README, MCP-TEMPLATE, and ws-memo skill npx/install snippets to `github:jpolvora/spec-memo`; added prepare build so git npx compiles dist
+- **Result**: `npm test` exit 0. `npm docs`/`npx` now resolve to GitHub rather than registry.npmjs.org
+
 ### [2026-08-26 12:35] Agent: Cursor Composer
 - **Prompt**: Update ws-memo skill for 10-tool surface; update README/AGENTS; bump version; ship next version
 - **Done**: Bumped package/MCP/vault/skill to 0.3.1; aligned ws-memo Rules + SURFACE (rank universe, empty skill promote guard); README/FEATURES/AGENTS + tracking Done logs

@@ -1,4 +1,4 @@
-# spec-memo v0.3.3
+# spec-memo v0.4.0
 > Local working memory for coding agents outside the product repository.
 
 ## Summary
@@ -11,7 +11,7 @@ spec-memo gives AI coding agents a curated working memory outside the product gi
 - Server Transports: Stdio for local agent hosts, HTTP/SSE on port 3000, and status monitor UI on port 3001.
 
 ## Installation
-npm install -g spec-memo
+npm install -g github:jpolvora/spec-memo
 
 ## Documentation & Repository
 Website: https://jpolvora.github.io/spec-memo/

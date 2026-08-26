@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.3.3**.
+**Local working memory for coding agents outside the product repository.** Version **0.4.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -12,11 +12,11 @@ Product git repositories should contain product code: source, tests, and shipped
 
 ### 1. Installation
 
-Install `spec-memo` globally via npm or run directly with `npx`:
+Install `spec-memo` globally from GitHub or run directly with `npx`:
 
 ```bash
 # Global install (gives you the `memo` CLI)
-npm install -g spec-memo
+npm install -g github:jpolvora/spec-memo
 
 # Or build from source
 git clone https://github.com/jpolvora/spec-memo.git
@@ -26,18 +26,54 @@ npm run build
 npm link
 ```
 
-### 2. Enable in an MCP Server / Agent Host
+### 2. Deployment Modes & Agent Host Setup
 
-`spec-memo` runs as a standard Model Context Protocol (MCP) stdio server (`memo serve` or `node dist/mcp.js`). Configure it in your AI coding environment:
+`spec-memo` supports **three operational deployment modes** configured via `memo setup`:
+
+1. **Local Mode (Default):** All memory records, indexing, and queries run directly on the local machine in `~/.spec-memo/`. Zero network dependencies.
+2. **Hybrid Mode:** Local vault remains the primary low-latency cache; transparently pulls updates from a shared daemon during `bootstrap` and debounces pushes on mutating operations (`upsert`, `append`, `forget`, `gc`). Works offline seamlessly (fails open).
+3. **Remote Mode:** Agent hosts run a local stdio MCP proxy (`memo serve`) that forwards all 10 tools to a central remote daemon. Zero memory records stored on local disk. Fails closed with structured errors when unreachable.
+
+#### Configure with `memo setup`
+
+```bash
+# Configure Local mode (default)
+memo setup --mode local
+
+# Configure Hybrid mode with a remote SSE daemon
+memo setup --mode hybrid --url http://daemon.internal:3000
+
+# Configure Remote mode with a remote SSE daemon
+memo setup --mode remote --url http://daemon.internal:3000
+```
+
+> **Note on Authentication:** Bearer tokens are read exclusively from environment variables (`SPEC_MEMO_AUTH_TOKEN` or `SPEC_MEMO_SSE_TOKEN`). `memo setup` verifies token presence in your environment without storing secrets in plain text on disk.
+
+#### Generate or Write Host MCP Configuration
+
+All agent hosts (Cursor, VS Code, OpenCode, Antigravity, Claude Desktop) use the same **uniform stdio MCP wiring** (`memo serve`). Mode switching is controlled entirely via `~/.spec-memo/config.json`.
+
+```bash
+# Print MCP configuration snippet for your editor
+memo setup --host cursor --print-mcp
+memo setup --host vscode --print-mcp
+memo setup --host claude --print-mcp
+
+# Automatically write/merge MCP configuration directly to your editor's config file
+memo setup --host cursor --write-mcp
+memo setup --host vscode --write-mcp
+```
+
+#### Manual Host Configuration Snippets
 
 #### Claude Desktop
-Add to `claude_desktop_config.json` (`%APPDATA%\Claude\claude_desktop_config.json` on Windows or `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "spec-memo": {
-      "command": "npx",
-      "args": ["-y", "spec-memo", "serve"]
+      "command": "memo",
+      "args": ["serve"]
     }
   }
 }
@@ -75,8 +111,8 @@ Add to your extension's MCP configuration settings:
 {
   "mcpServers": {
     "spec-memo": {
-      "command": "node",
-      "args": ["/path/to/spec-memo/dist/mcp.js"]
+      "command": "memo",
+      "args": ["serve"]
     }
   }
 }
@@ -244,7 +280,7 @@ curl -s -H "Authorization: Bearer replace-me" http://127.0.0.1:3000/health
 
 #### Windows — Task Scheduler (autoboot at logon)
 
-1. Install Node 22 and `npm install -g spec-memo` (or build this repo and use the full path to `node` + `dist\cli.js`).
+1. Install Node 22 and `npm install -g github:jpolvora/spec-memo` (or build this repo and use the full path to `node` + `dist\cli.js`).
 2. Create a vault dir, e.g. `C:\spec-memo-vault`.
 3. **Task Scheduler → Create Task**:
    - Trigger: **At log on** (or **At startup** with a service account).
@@ -446,6 +482,7 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 
 | Command / Tool | Role | Key Options |
 |---|---|---|
+| `setup` | Configure deployment mode & agent host MCP wiring | `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json` |
 | `bootstrap` | Compile token-budgeted session brief | `--maxBytes`, `--query`, `--path`, `--slug` |
 | `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` |
 | `get` | Fetch single record by ID or kind+slug | `--id`, `--kind`, `--slug` |
@@ -457,7 +494,8 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `check_version` / `check-version` | Compare running version to npm latest | `--json` |
 | `install_skills` / `install-skills` | Install `ws-memo` into a consumer repo | `--product-root`, `--skill`, `--force`, `--json` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
-| `doctor` | Diagnose health & fix repo pollution | `--fix`, `--rebuild`, `--json` |
+| `doctor` | Diagnose health, mode, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
+| `sync` | Synchronize vault records (hybrid mode or vault-git) | `--all`, `--dry-run`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |
 | `export-vault` | Export encrypted portable archive | `--password`, `--output`, `--project` |
 | `import-vault` | Restore portable archive into vault | `<file>`, `--password` |

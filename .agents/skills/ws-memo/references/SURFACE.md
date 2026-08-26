@@ -135,17 +135,24 @@ CLI: `memo install-skills --product-root <path> [--skill ws-memo] [--force] [--j
 
 | Command | Job |
 |---------|-----|
-| `memo serve` | Stdio MCP (default). `--sse` HTTP SSE on `--port` (default 3000). `--status-port` (default 3001). `--no-status`. `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
-| `memo canvas` | Graph UI default port 4100. `--project`, `--host`, `--json`. |
-| `memo doctor [productRoot]` | Vault + FTS + pollution. `--rebuild` FTS. `--fix` delete leftover in-repo residue. `--json`. |
-| `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Same ranking as `search.sort=occurrences` (full project scan; not an FTS recency pre-cap). |
+| `memo setup` | Configure deployment mode (`local`, `hybrid`, `remote`) and host MCP snippets (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
+| `memo serve` | Stdio MCP (default). In remote mode, proxies over stdio to remote daemon. `--sse` HTTP SSE on `--port` (default 3000). `--status-port` (default 3001). `--no-status`. `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
+| `memo canvas` | Graph UI default port 4100. `--project`, `--host`, `--json`. (Not available in remote mode). |
+| `memo doctor [productRoot]` | Vault + FTS + pollution + mode + remote health + hybrid state. `--rebuild` FTS. `--fix` delete leftover in-repo residue. `--json`. |
+| `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Proxies in remote mode. |
 | `memo import` | Legacy `.agents` / `memory/` / plans → vault. `--from`. |
-| `memo hook install` | Pre-commit write-block. `--productRoot`. Bypass: `SKIP_MEMO_HOOK=1`. |
-| `memo sync` | Push vault git remote when vault-git enabled. |
-| `memo sync-vault <target>` | Peer vault delta sync. `--two-way` `--dry-run`. |
-| `memo export-vault` / `memo import-vault` | Portable archive; optional AES-256-GCM. Prefer `SPEC_MEMO_VAULT_PASSWORD`. |
+| `memo hook install` | Pre-commit write-block. `--productRoot`. Bypass: `SKIP_MEMO_HOOK=1`. (Not available in remote mode). |
+| `memo sync` | Hybrid bidirectional HTTP delta sync with remote daemon (`--all`, `--dry-run`), or vault git remote when vaultGit is enabled. |
+| `memo sync-vault <target>` | Peer vault delta sync. `--two-way` `--dry-run`. (Not available in remote mode). |
+| `memo export-vault` / `memo import-vault` | Portable archive; optional AES-256-GCM. Prefer `SPEC_MEMO_VAULT_PASSWORD`. (Not available in remote mode). |
 
 Global: `--json` on stdout; help/errors on stderr. `--vaultRoot` / `$SPEC_MEMO_ROOT` (default `~/.spec-memo`).
+
+### Deployment Modes
+
+- **`local` (default):** Everything stored and queried directly on the local machine under `~/.spec-memo/`. Zero network requirements.
+- **`hybrid`:** Local vault is authoritative; transparently pulls deltas on `bootstrap` and debounces pushes on mutating operations. Manual sync via `memo sync`. Fails open if remote daemon is unreachable.
+- **`remote`:** Local agent hosts connect to local `memo serve` stdio proxy, which forwards all 10 tools to a shared remote daemon. Local disk stores no memory records. Fails closed if remote daemon is unreachable.
 
 ### Default ports
 
@@ -159,7 +166,14 @@ Status page: vault list, health, live activity (`GET /api/events/stream`). Read-
 
 ## Host registration
 
-See [`MCP-TEMPLATE.json`](MCP-TEMPLATE.json). Typical Cursor `~/.cursor/mcp.json`:
+All host agent environments (Cursor, VS Code, OpenCode, Antigravity, Claude Desktop) run `memo serve` locally over stdio. Generate or write config via:
+
+```bash
+memo setup --host cursor --print-mcp
+memo setup --host cursor --write-mcp
+```
+
+Example Cursor `~/.cursor/mcp.json`:
 
 ```json
 {

@@ -605,6 +605,9 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         url: serverUrl,
         close: () =>
           new Promise<void>((res) => {
+            if (typeof (server as any).closeAllConnections === 'function') {
+              (server as any).closeAllConnections();
+            }
             server.close(() => res());
           })
       });

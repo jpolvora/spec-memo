@@ -176,8 +176,6 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 
 ---
 
-## Phase 6 — Recurrence learning & ops visibility
-
 ### Slice 26 — MCP status monitor (`mcp-status-monitor`)
 
 **Deliver.** Activity Event Bus (`src/activity.ts`); status companion HTTP server on default port `3001` co-hosted with `memo serve --sse`; vault-filtered live activity log UI (`src/status.ts`); tool + HTTP event capture; CLI flags `--status-port`, `--no-status`; README/AGENTS port map.
@@ -186,11 +184,26 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 
 **Spec.** [`.agents/specs/mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md) — 49 ACs.
 
+---
+
+## Phase 7 — Deployment Modes & Portable MCP Wiring
+
+### Slice 27 — Deployment Modes (`deployment-modes`)
+
+**Deliver.** Local, Hybrid, and Remote deployment modes in `config.json`; `memo setup` config and host MCP generation/writing (`--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`); doctor mode and remote health diagnostics; daemon HTTP sync routes (`POST /api/sync/pull`, `POST /api/sync/push`, `POST /api/sync`); hybrid background debounced push scheduler and fail-open bootstrap pull; remote stdio MCP proxy server forwarding 10 tools over SSE; remote mode CLI restrictions.
+
+**Proof.** `npm test` exit 0 (28 suites, 215 tests pass) including comprehensive `deployment-modes.test.ts`.
+
+**Spec.** [`.agents/specs/deployment-modes.spec.md`](.agents/specs/deployment-modes.spec.md) — 32 ACs.
+
 | 2026-08-26 | mcp-status-monitor | MCP status monitor with Activity Event Bus, :3001 companion, live SSE log; npm test 178 pass |
 | 2026-08-26 | release-0.2.0 | Package, MCP server, and vault config version bumped to 0.2.0 for Phase 6 |
 | 2026-08-26 | mcp-version-and-skill-install | check_version + install_skills MCP/CLI; PRODUCT 10-tool amendment; docs/skill surface; npm test 196 pass |
 | 2026-08-26 | release-0.3.1 | Align ws-memo skill + docs to 10-tool surface; bump package/MCP/vault versions to 0.3.1 |
 | 2026-08-26 | release-0.3.2 | Fix MCP SSE initial connect with query-token auth & CORS; add documentation website & GitHub Pages deploy workflow; bump version to 0.3.2 |
+| 2026-08-26 | deployment-modes | Deployment modes (Local, Hybrid, Remote), memo setup, daemon HTTP sync routes, hybrid debounced push & fail-open pull, remote stdio MCP proxy, 32 ACs; npm test 215 pass |
+| 2026-08-26 | release-0.4.0 | Phase 7 deployment modes (Local, Hybrid, Remote), memo setup, stdio MCP proxy; bump version to 0.4.0 |
+| 2026-08-26 | hybrid-sync-review-fixes | Honor daemon dryRun, cwd-scoped hybrid push, debounce single-flight, hybrid-state vault lock; npm test 219 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 
