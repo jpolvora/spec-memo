@@ -272,6 +272,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-26 | release-0.4.0 | Phase 7 deployment modes (Local, Hybrid, Remote), memo setup, stdio MCP proxy | 0.4.0 |
 | 2026-08-26 | hybrid-sync-review-fixes | Daemon dryRun, cwd-scoped hybrid push, debounce single-flight, hybrid-state vault lock | npm test 219 pass |
 | 2026-08-26 | status-vault-backup-ui | Status monitor vault export and import UI | npm test 236 pass |
+| 2026-08-26 | release-0.4.1 | Status monitor vault export and import UI, SSE error logger, ws-memo skill docs update | 0.4.1 |
 
 ## 12. Related docs
 

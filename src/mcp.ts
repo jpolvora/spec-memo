@@ -76,7 +76,7 @@ export function createMcpServer(opts: {
   const server = new Server(
     {
       name: 'spec-memo',
-      version: '0.4.0'
+      version: '0.4.1'
     },
     {
       capabilities: {

@@ -61,7 +61,7 @@ export async function createRemoteClient(options: RemoteProxyOptions = {}): Prom
   const client = new Client(
     {
       name: 'spec-memo-remote-proxy',
-      version: '0.4.0'
+      version: '0.4.1'
     },
     {
       capabilities: {}
@@ -187,7 +187,7 @@ export function createRemoteMcpProxyServer(options: RemoteProxyOptions = {}): Se
   const server = new Server(
     {
       name: 'spec-memo-remote-proxy',
-      version: '0.4.0'
+      version: '0.4.1'
     },
     {
       capabilities: {
