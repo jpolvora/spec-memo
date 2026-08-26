@@ -8,12 +8,19 @@ import { openIndex, rebuildIndex } from './indexer.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { readHybridState } from './hybrid-state.js';
 
+export const DEFAULT_HEALTH_TIMEOUT_MS = 10000;
+
+export function getHealthTimeoutMs(): number {
+  const envVal = Number(process.env.SPEC_MEMO_HEALTH_TIMEOUT_MS || process.env.SPEC_MEMO_SYNC_TIMEOUT_MS);
+  return envVal > 0 ? envVal : DEFAULT_HEALTH_TIMEOUT_MS;
+}
+
 export async function checkRemoteHealth(
   origin: string,
   token?: string
 ): Promise<{ reachable: boolean; statusCode?: number; message?: string }> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3000);
+  const timer = setTimeout(() => controller.abort(), getHealthTimeoutMs());
   try {
     const healthUrl = `${origin.replace(/\/+$/, '')}/health`;
     const headers: Record<string, string> = {};

@@ -21,6 +21,13 @@ export interface HybridSyncReport {
   timestamp: string;
 }
 
+export const DEFAULT_SYNC_TIMEOUT_MS = 30000;
+
+export function getSyncTimeoutMs(): number {
+  const envVal = Number(process.env.SPEC_MEMO_SYNC_TIMEOUT_MS);
+  return envVal > 0 ? envVal : DEFAULT_SYNC_TIMEOUT_MS;
+}
+
 function buildHeaders(authToken?: string): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
@@ -55,7 +62,7 @@ export async function pullHybridProject(
   const since = projectId && state.cursors ? state.cursors[projectId] : undefined;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3000);
+  const timer = setTimeout(() => controller.abort(), getSyncTimeoutMs());
   try {
     const res = await fetch(`${remoteOrigin}/api/sync/pull`, {
       method: 'POST',
@@ -168,7 +175,7 @@ export async function pushHybridProject(
   );
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3000);
+  const timer = setTimeout(() => controller.abort(), getSyncTimeoutMs());
   try {
     const res = await fetch(`${remoteOrigin}/api/sync/push`, {
       method: 'POST',
@@ -187,37 +194,40 @@ export async function pushHybridProject(
       const now = new Date().toISOString();
       const cursorVal = changeset.generatedAt || now;
       let cursorsUpdate: Record<string, string> | undefined;
-      if (projectId) {
-        cursorsUpdate = { [projectId]: cursorVal };
-      } else {
-        const projects = new Set<string>();
-        for (const r of changeset.records) {
-          if (r.project) projects.add(r.project);
-        }
-        if (projects.size > 0) {
-          cursorsUpdate = {};
-          for (const p of projects) {
-            cursorsUpdate[p] = cursorVal;
+      if (pushResult.applied > 0) {
+        if (projectId) {
+          cursorsUpdate = { [projectId]: cursorVal };
+        } else {
+          const projects = new Set<string>();
+          for (const r of changeset.records) {
+            if (r.project) projects.add(r.project);
+          }
+          if (projects.size > 0) {
+            cursorsUpdate = {};
+            for (const p of projects) {
+              cursorsUpdate[p] = cursorVal;
+            }
           }
         }
       }
 
       const exportedCount = changeset.records.length + (changeset.deletions?.length ?? 0);
       const pushHadConflicts = pushResult.conflicts > 0;
-      const pushUnapplied =
-        exportedCount > 0 &&
-        pushResult.applied === 0 &&
-        pushResult.conflicts === 0 &&
-        pushResult.skipped < exportedCount;
+      const pushIncomplete =
+        (exportedCount > 0 && pushResult.applied === 0 && pushResult.skipped > 0) ||
+        (exportedCount > 0 &&
+          pushResult.applied + pushResult.skipped + pushResult.conflicts < exportedCount);
 
-      if (pushHadConflicts || pushUnapplied) {
-        const conflictErr = pushHadConflicts
+      if (pushHadConflicts || pushIncomplete) {
+        const errorMsg = pushHadConflicts
           ? `Remote sync push reported ${pushResult.conflicts} conflict(s)`
-          : `Remote sync push applied 0 of ${exportedCount} exported record(s)`;
+          : pushResult.skipped > 0
+            ? `Remote sync push skipped ${pushResult.skipped} record(s); pull to reconcile`
+            : `Remote sync push applied 0 of ${exportedCount} exported record(s)`;
         writeHybridState(vaultRoot, {
           dirty: true,
           dirtyProjects: projectId ? { [projectId]: true } : undefined,
-          lastError: conflictErr,
+          lastError: errorMsg,
           lastSyncAt: now,
           cursors: cursorsUpdate
         });
