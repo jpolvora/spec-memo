@@ -1,7 +1,7 @@
 import http from "node:http";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createMcpServer } from "./mcp.js";
-import { getVaultRoot } from "./vault.js";
+import { getVaultRoot, withVaultLockSync } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, createActivityBus } from "./activity.js";
 import { startStatusServer, StatusServerInstance } from "./status.js";
@@ -158,10 +158,12 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       if (method === "POST" && pathname === "/api/sync/pull") {
         try {
           const body = await readJsonBody(req);
-          const changeset = exportChangeset(vaultRoot, {
-            projectId: typeof body.projectId === "string" ? body.projectId : undefined,
-            since: typeof body.since === "string" ? body.since : undefined
-          });
+          const changeset = withVaultLockSync(vaultRoot, () =>
+            exportChangeset(vaultRoot, {
+              projectId: typeof body.projectId === "string" ? body.projectId : undefined,
+              since: typeof body.since === "string" ? body.since : undefined
+            })
+          );
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(changeset));
         } catch (err: unknown) {
@@ -202,10 +204,12 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           }
           let pulledChangeset: import('./sync.js').Changeset | undefined;
           if (body.pull) {
-            pulledChangeset = exportChangeset(vaultRoot, {
-              projectId: typeof body.pull.projectId === "string" ? body.pull.projectId : undefined,
-              since: typeof body.pull.since === "string" ? body.pull.since : undefined
-            });
+            pulledChangeset = withVaultLockSync(vaultRoot, () =>
+              exportChangeset(vaultRoot, {
+                projectId: typeof body.pull.projectId === "string" ? body.pull.projectId : undefined,
+                since: typeof body.pull.since === "string" ? body.pull.since : undefined
+              })
+            );
           }
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ applied: appliedResult, changeset: pulledChangeset }));

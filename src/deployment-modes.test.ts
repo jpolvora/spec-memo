@@ -107,13 +107,32 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
     const testVault = trackVault(path.join(tempDir, 'vault-token-test'));
     ensureVaultStructure(testVault);
 
-    // Missing URL
+    // Missing URL in non-interactive mode
     assert.throws(() => {
-      runSetup({ vaultRoot: testVault, mode: 'hybrid' });
+      runSetup({ vaultRoot: testVault, mode: 'hybrid', interactive: false });
     }, /Remote URL \(--url\) is required/);
 
-    // Missing Token (URL is saved before error thrown per AC5)
+    // Interactive TTY path accepts injected prompt (AC4)
     const prevAuth = process.env.SPEC_MEMO_AUTH_TOKEN;
+    process.env.SPEC_MEMO_AUTH_TOKEN = 'setup-test-token';
+    try {
+      const prompted = runSetup({
+        vaultRoot: testVault,
+        mode: 'hybrid',
+        interactive: true,
+        urlPrompt: () => 'http://127.0.0.1:3000/sse'
+      });
+      assert.strictEqual(prompted.remoteUrl, 'http://127.0.0.1:3000');
+    } finally {
+      if (prevAuth) {
+        process.env.SPEC_MEMO_AUTH_TOKEN = prevAuth;
+      } else {
+        delete process.env.SPEC_MEMO_AUTH_TOKEN;
+      }
+    }
+
+    // Missing Token (URL is saved before error thrown per AC5)
+    const prevAuth2 = process.env.SPEC_MEMO_AUTH_TOKEN;
     const prevSse = process.env.SPEC_MEMO_SSE_TOKEN;
     delete process.env.SPEC_MEMO_AUTH_TOKEN;
     delete process.env.SPEC_MEMO_SSE_TOKEN;
@@ -127,7 +146,7 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       assert.strictEqual(cfg.mode, 'hybrid');
       assert.strictEqual(cfg.remote.url, 'http://127.0.0.1:3000');
     } finally {
-      if (prevAuth) process.env.SPEC_MEMO_AUTH_TOKEN = prevAuth;
+      if (prevAuth2) process.env.SPEC_MEMO_AUTH_TOKEN = prevAuth2;
       if (prevSse) process.env.SPEC_MEMO_SSE_TOKEN = prevSse;
       closeIndex(testVault);
     }
@@ -282,6 +301,9 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       assert.strictEqual(syncReport.all, false);
       assert.ok(syncReport.pulled);
       assert.ok(syncReport.pushed);
+
+      const stateAfterSync = readHybridState(clientVault);
+      assert.strictEqual(stateAfterSync.dirty, false);
     } finally {
       await daemonServer.close();
       closeIndex(daemonVault);
@@ -465,6 +487,86 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       } else {
         process.env.SPEC_MEMO_AUTH_TOKEN = prevAuth;
       }
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
+
+  await t.test('Phase 2: memo sync --all syncs every vault project (AC18)', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'all-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'all-client-vault'));
+    const authToken = 'all-sync-token';
+    const cwdA = path.join(tempDir, 'all-repo-a');
+    const cwdB = path.join(tempDir, 'all-repo-b');
+    fs.mkdirSync(cwdA, { recursive: true });
+    fs.mkdirSync(cwdB, { recursive: true });
+
+    const idA = resolveProjectIdentity(cwdA, { vaultRoot: clientVault }).projectId;
+    const idB = resolveProjectIdentity(cwdB, { vaultRoot: clientVault }).projectId;
+
+    for (const [id, cwd, vault] of [
+      [idA, cwdA, daemonVault],
+      [idB, cwdB, daemonVault],
+      [idA, cwdA, clientVault],
+      [idB, cwdB, clientVault]
+    ] as const) {
+      ensureProjectVault(
+        {
+          projectId: id,
+          normalizedRemote: null,
+          rootPath: cwd,
+          isGit: false,
+          isFallback: true,
+          vaultProjectPath: path.join(vault, 'projects', id)
+        },
+        vault
+      );
+    }
+
+    await upsertRecord({
+      vaultRoot: clientVault,
+      projectId: idA,
+      kind: 'trap',
+      slug: 'all-a-trap',
+      body: 'Project A trap',
+      frontmatter: { title: 'All A Trap' }
+    });
+    await upsertRecord({
+      vaultRoot: clientVault,
+      projectId: idB,
+      kind: 'trap',
+      slug: 'all-b-trap',
+      body: 'Project B trap',
+      frontmatter: { title: 'All B Trap' }
+    });
+
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    const clientCfgPath = path.join(clientVault, 'config.json');
+    const clientCfg = JSON.parse(fs.readFileSync(clientCfgPath, 'utf8'));
+    clientCfg.mode = 'hybrid';
+    clientCfg.remote = { url: daemonServer.url };
+    fs.writeFileSync(clientCfgPath, JSON.stringify(clientCfg, null, 2), 'utf8');
+
+    try {
+      const report = await syncHybrid({
+        vaultRoot: clientVault,
+        all: true,
+        remoteUrl: daemonServer.url,
+        authToken
+      });
+      assert.strictEqual(report.all, true);
+      assert.ok(fs.existsSync(path.join(daemonVault, 'projects', idA, 'traps', 'all-a-trap.md')));
+      assert.ok(fs.existsSync(path.join(daemonVault, 'projects', idB, 'traps', 'all-b-trap.md')));
+      assert.strictEqual(readHybridState(clientVault).dirty, false);
+    } finally {
       await daemonServer.close();
       closeIndex(daemonVault);
       closeIndex(clientVault);

@@ -358,7 +358,8 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         printMcp,
         writeMcp,
         vaultRoot,
-        authToken
+        authToken,
+        interactive: process.stdin.isTTY && process.stdout.isTTY
       });
 
       if (parsed.isJson) {
@@ -575,6 +576,12 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const doBackfill = parsed.options.backfill === true || parsed.options.backfill === 'true';
 
       if (isRemoteMode) {
+        if (doBackfill) {
+          throw new Error(
+            'memo rank --backfill is not available in remote mode (trap backfill requires local vault access).'
+          );
+        }
+
         const remoteRes = await callRemoteTool(
           'search',
           {

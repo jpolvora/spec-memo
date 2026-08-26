@@ -390,6 +390,7 @@ export interface SetupOptions {
   writeMcp?: boolean;
   vaultRoot?: string;
   interactive?: boolean;
+  urlPrompt?: () => string;
   authToken?: string;
 }
 

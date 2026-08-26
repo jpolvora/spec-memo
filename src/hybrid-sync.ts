@@ -1,5 +1,5 @@
 import { exportChangeset, applyChangeset, Changeset, SyncResult } from './sync.js';
-import { ensureVaultStructure, getVaultProjects, getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultProjects, getVaultRoot, withVaultLockSync } from './vault.js';
 import { readHybridState, writeHybridState } from './hybrid-state.js';
 import { isTokenConfigured, getResolvedAuthToken, normalizeRemoteUrl } from './setup.js';
 
@@ -78,6 +78,7 @@ export async function pullHybridProject(
         updatedCursors[projectId] = changeset.generatedAt || now;
       }
       writeHybridState(vaultRoot, {
+        dirty: false,
         lastSyncAt: now,
         lastError: null,
         cursors: updatedCursors
@@ -119,7 +120,9 @@ export async function pushHybridProject(
 
   const state = readHybridState(vaultRoot);
   const since = projectId && state.cursors ? state.cursors[projectId] : undefined;
-  const changeset = exportChangeset(vaultRoot, { projectId, since });
+  const changeset = withVaultLockSync(vaultRoot, () =>
+    exportChangeset(vaultRoot, { projectId, since })
+  );
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 3000);
@@ -144,6 +147,7 @@ export async function pushHybridProject(
         updatedCursors[projectId] = changeset.generatedAt || now;
       }
       writeHybridState(vaultRoot, {
+        dirty: false,
         lastSyncAt: now,
         lastError: null,
         cursors: updatedCursors

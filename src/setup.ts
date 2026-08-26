@@ -172,6 +172,44 @@ export function writeHostMcpConfig(
   return { configPath, written: true };
 }
 
+function promptRemoteUrlLine(): string {
+  process.stdout.write('Remote daemon URL (http://host:port): ');
+  const buf = Buffer.alloc(4096);
+  const bytes = fs.readSync(0, buf, 0, 4096, null);
+  return buf.toString('utf8', 0, bytes).trim();
+}
+
+function resolveRemoteUrlForMode(
+  targetMode: DeploymentMode,
+  rawUrl: string | undefined,
+  options: SetupOptions
+): string | undefined {
+  if (targetMode !== 'hybrid' && targetMode !== 'remote') {
+    if (rawUrl && rawUrl.trim().length > 0) {
+      return normalizeRemoteUrl(rawUrl);
+    }
+    return undefined;
+  }
+
+  let resolved = rawUrl?.trim();
+  if (!resolved) {
+    if (options.urlPrompt) {
+      resolved = options.urlPrompt()?.trim();
+    } else {
+      const isInteractive = options.interactive ?? (process.stdin.isTTY && process.stdout.isTTY);
+      if (isInteractive) {
+        resolved = promptRemoteUrlLine();
+      }
+    }
+  }
+
+  if (!resolved) {
+    throw new Error(`Remote URL (--url) is required when mode is '${targetMode}'.`);
+  }
+
+  return normalizeRemoteUrl(resolved);
+}
+
 /**
  * Configure spec-memo deployment mode and remote daemon wiring.
  */
@@ -190,16 +228,17 @@ export function runSetup(options: SetupOptions = {}): SetupResult {
     let normalizedUrl: string | undefined;
     const rawUrl = options.url || existing.remote?.url;
 
-    if (targetMode === 'hybrid' || targetMode === 'remote') {
-      if (!rawUrl || rawUrl.trim().length === 0) {
-        throw new Error(`Remote URL (--url) is required when mode is '${targetMode}'.`);
-      }
-      normalizedUrl = normalizeRemoteUrl(rawUrl);
-    } else if (rawUrl && rawUrl.trim().length > 0) {
-      try {
-        normalizedUrl = normalizeRemoteUrl(rawUrl);
-      } catch {
-        // In local mode, ignore invalid URL if not explicitly changing
+    try {
+      normalizedUrl = resolveRemoteUrlForMode(targetMode, rawUrl, options);
+    } catch (err) {
+      if (targetMode === 'local' && rawUrl && rawUrl.trim().length > 0) {
+        try {
+          normalizedUrl = normalizeRemoteUrl(rawUrl);
+        } catch {
+          // In local mode, ignore invalid URL if not explicitly changing
+        }
+      } else {
+        throw err;
       }
     }
 
