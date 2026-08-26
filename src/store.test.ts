@@ -322,6 +322,46 @@ describe('Store Engine (upsert and get)', () => {
     assert.equal(newTrap, null);
   });
 
+  it('should reject secret-bearing duplicate traps before recurrence short-circuit', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'no-raw-sql-secret',
+      frontmatter: {
+        id: 'trap-no-raw-sql-secret',
+        title: 'Prevent Raw SQL Queries',
+        pathPatterns: ['src/db/*.ts']
+      },
+      body: '## DO NOT\nNever execute raw unescaped SQL strings in database handlers.\n\n## INSTEAD DO\nUse parameterized queries.'
+    });
+
+    const awsKey = ['AKIA', 'IOSFODNN7EXAMPLE'].join('');
+    await assert.rejects(
+      () =>
+        upsertRecord({
+          cwd: tempProject,
+          vaultRoot: tempVault,
+          kind: 'trap',
+          slug: 'no-raw-sql-secret-v2',
+          frontmatter: {
+            id: 'trap-no-raw-sql-secret-v2',
+            title: 'Prevent Raw SQL Queries Updated',
+            pathPatterns: ['src/db/*.ts']
+          },
+          body: `## DO NOT\nNever execute raw unescaped SQL query strings directly.\n\n## INSTEAD DO\nUse parameterized query builders.\nkey=${awsKey}`
+        }),
+      /Safety violation: Secret detected/
+    );
+
+    const oldTrap = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-no-raw-sql-secret'
+    });
+    assert.equal(oldTrap?.frontmatter.occurrences, 1);
+  });
+
   it('should not treat empty pathPatterns as a wildcard match against patterned traps', async () => {
     await upsertRecord({
       cwd: tempProject,

@@ -4,12 +4,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { validateFrontmatter } from './schema.js';
-import { upsertRecord, getRecord } from './store.js';
+import { upsertRecord, getRecord, backfillTrapRecurrence } from './store.js';
 import { searchIndex, closeIndex } from './indexer.js';
 import { executeTool } from './tools.js';
 import { promoteRecord } from './promote.js';
 import { runCli } from './cli.js';
 import { TOOL_NAMES } from './types.js';
+import { ensureVaultStructure, initVaultGit } from './vault.js';
+import { execFileSync } from 'node:child_process';
 
 const TRAP_BODY = `### Repeat trap
 - **Layer**: Application
@@ -513,5 +515,37 @@ describe('Trap recurrence ranking', () => {
     assert.ok(after?.frontmatter.lastSeen);
     assert.equal(after?.body.trim(), bodyBefore);
     void captured;
+  });
+
+  it('acquires vault lock and commits backfill when vaultGit is enabled', async () => {
+    const res = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'needs-git-backfill',
+      frontmatter: { id: 'trap-needs-git-backfill', title: 'Needs git backfill', pathPatterns: ['src/**'] },
+      body: TRAP_BODY
+    });
+    ensureVaultStructure(tempVault);
+    const configPath = path.join(tempVault, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.vaultGit = { enabled: true };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    assert.equal(initVaultGit(tempVault), true);
+
+    const stripped = fs
+      .readFileSync(res.path, 'utf8')
+      .replace(/\nlayer: .+\r?\n/, '\n')
+      .replace(/\nmodule: .+\r?\n/, '\n')
+      .replace(/\noccurrences: .+\r?\n/, '\n')
+      .replace(/\nlastSeen: .+\r?\n/, '\n');
+    fs.writeFileSync(res.path, stripped, 'utf8');
+
+    const result = backfillTrapRecurrence({ cwd: tempProject, vaultRoot: tempVault });
+    assert.ok(result.updated >= 1);
+
+    const log = execFileSync('git', ['log', '--oneline'], { cwd: tempVault, encoding: 'utf8' });
+    assert.match(log, /backfill trap recurrence/);
+    assert.equal(fs.existsSync(path.join(tempVault, '.memo.lock')), false);
   });
 });

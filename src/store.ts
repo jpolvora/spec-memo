@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus, AppendOptions, AppendResult, ForgetOptions, ForgetResult } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 import { randomBytes } from 'node:crypto';
-import { ensureProjectVault, getVaultRoot, commitVaultChange, withVaultLock } from './vault.js';
+import { ensureProjectVault, getVaultRoot, commitVaultChange, withVaultLock, withVaultLockSync } from './vault.js';
 import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
@@ -199,6 +199,11 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
 
   const now = new Date().toISOString();
 
+  assertNoSecrets(options.body, 'record body');
+  if (options.frontmatter) {
+    assertNoSecrets(options.frontmatter, 'record frontmatter');
+  }
+
   if (
     options.kind === 'trap' &&
     !options.allowDuplicate &&
@@ -284,11 +289,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     throw new Error(`Invalid record frontmatter: ${validation.errors.join(', ')}`);
   }
 
-  // Safety checks: assert no secrets in body or frontmatter, and protect product tree
-  assertNoSecrets(options.body, 'record body');
-  if (options.frontmatter) {
-    assertNoSecrets(options.frontmatter, 'record frontmatter');
-  }
+  // Safety checks: protect product tree (secrets already scanned above)
   assertNotInProductRoot(filePath, identity.rootPath, identity.isGit);
 
   // If this record supersedes an existing one, update the older record
@@ -607,47 +608,52 @@ export function backfillTrapRecurrence(options: {
   projectId?: string;
 }): { updated: number; projectId: string } {
   const vaultRoot = options.vaultRoot || getVaultRoot();
-  const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
-  const projectId = options.projectId || identity.projectId;
-  const records = listProjectRecords(vaultRoot, projectId);
-  let updated = 0;
-  const db = openIndex(vaultRoot);
+  return withVaultLockSync(vaultRoot, () => {
+    const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+    const projectId = options.projectId || identity.projectId;
+    const records = listProjectRecords(vaultRoot, projectId);
+    let updated = 0;
+    const db = openIndex(vaultRoot);
 
-  for (const record of records) {
-    if (record.frontmatter.kind !== 'trap' || !record.path) continue;
-    const classified = applyTrapClassification(record.frontmatter, record.body);
-    const next: RecordFrontmatter = {
-      ...record.frontmatter,
-      layer: record.frontmatter.layer || classified.layer,
-      occurrences: occurrenceOf(record.frontmatter),
-      lastSeen: lastSeenOf(record.frontmatter)
-    };
-    if (!next.module && classified.module) {
-      next.module = classified.module;
-    }
-    if (classified.tags) {
-      next.tags = classified.tags;
-    }
-    for (const key of Object.keys(next)) {
-      if (next[key] === undefined) {
-        delete next[key];
+    for (const record of records) {
+      if (record.frontmatter.kind !== 'trap' || !record.path) continue;
+      const classified = applyTrapClassification(record.frontmatter, record.body);
+      const next: RecordFrontmatter = {
+        ...record.frontmatter,
+        layer: record.frontmatter.layer || classified.layer,
+        occurrences: occurrenceOf(record.frontmatter),
+        lastSeen: lastSeenOf(record.frontmatter)
+      };
+      if (!next.module && classified.module) {
+        next.module = classified.module;
       }
+      if (classified.tags) {
+        next.tags = classified.tags;
+      }
+      for (const key of Object.keys(next)) {
+        if (next[key] === undefined) {
+          delete next[key];
+        }
+      }
+      const changed =
+        next.layer !== record.frontmatter.layer ||
+        next.module !== record.frontmatter.module ||
+        next.occurrences !== record.frontmatter.occurrences ||
+        next.lastSeen !== record.frontmatter.lastSeen ||
+        JSON.stringify(next.tags || []) !== JSON.stringify(record.frontmatter.tags || []);
+      if (!changed) continue;
+      fs.writeFileSync(record.path, serializeRecord({ frontmatter: next, body: record.body }), 'utf8');
+      indexRecord(db, { frontmatter: next, body: record.body }, record.path);
+      updated += 1;
     }
-    const changed =
-      next.layer !== record.frontmatter.layer ||
-      next.module !== record.frontmatter.module ||
-      next.occurrences !== record.frontmatter.occurrences ||
-      next.lastSeen !== record.frontmatter.lastSeen ||
-      JSON.stringify(next.tags || []) !== JSON.stringify(record.frontmatter.tags || []);
-    if (!changed) continue;
-    fs.writeFileSync(record.path, serializeRecord({ frontmatter: next, body: record.body }), 'utf8');
-    indexRecord(db, { frontmatter: next, body: record.body }, record.path);
-    updated += 1;
-  }
 
-  if (updated > 0) {
-    rebuildCompiledViews(projectId, vaultRoot);
-  }
+    if (updated > 0) {
+      rebuildCompiledViews(projectId, vaultRoot);
+      commitVaultChange(`backfill trap recurrence ${projectId}`, vaultRoot, [
+        path.join('projects', projectId)
+      ]);
+    }
 
-  return { updated, projectId };
+    return { updated, projectId };
+  });
 }
