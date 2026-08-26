@@ -6,7 +6,7 @@ import { createMcpServer } from './mcp.js';
 import { TOOL_NAMES } from './types.js';
 
 describe('MCP Server Integration', () => {
-  it('should list all 8 tools via MCP handshake', async () => {
+  it('should list all 10 tools via MCP handshake', async () => {
     const server = createMcpServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -17,7 +17,7 @@ describe('MCP Server Integration', () => {
 
     const toolsResult = await client.listTools();
     assert.ok(toolsResult.tools);
-    assert.equal(toolsResult.tools.length, 8);
+    assert.equal(toolsResult.tools.length, 10);
 
     const toolNames = toolsResult.tools.map((t) => t.name);
     for (const name of TOOL_NAMES) {

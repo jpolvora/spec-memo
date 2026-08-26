@@ -2,7 +2,7 @@
 
 **Audience: agents.** Humans: [`README.md`](README.md).
 
-This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, and task tracking.
+This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, task tracking, and **ship next version** (`ws-ship-pr`).
 
 **Humans / operators** (install, autoboot systemd/Task Scheduler, favorite status URL): [`README.md`](README.md).
 
@@ -49,6 +49,7 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 | Spec text drifted from implemented code | `ws-sync-spec` | Does not update `index.PRD` checkboxes |
 | Deliver feature Spec→PR (standard FSM) | `ws-spec-to-pr` | Not for batch; not for format-only edits |
 | Deliver feature Spec→PR (fast lite) | `ws-spec-to-pr-lite` | Not for complex multi-phase work |
+| Ship next product version (bump + PR) | § Ship next version (`ws-ship-pr`) below + load `ws-ship-pr` | Not a feature-slice orch; does not invent scope |
 
 ### Vault / spec-memo runtime
 
@@ -79,7 +80,7 @@ npm run watch
 
 ### 2. Run the Full Test Suite
 ```bash
-# Runs full pretest build and all 25 test suites (178 tests)
+# Runs full pretest build and all 26 test suites (196 tests)
 npm test
 ```
 
@@ -198,7 +199,7 @@ When the user asks to install a boot service for the SSE daemon:
 
 ## 🛠️ How to Use (MCP Tools & CLI Commands)
 
-`spec-memo` exposes exactly 8 core tools through MCP stdio and matching CLI commands (`memo <command>`):
+`spec-memo` exposes exactly **10** core tools through MCP stdio and matching CLI commands (`memo <command>`):
 
 ### 1. `bootstrap`
 - **Purpose**: Bind working directory to project identity; return token-budgeted brief (<8 KB).
@@ -244,6 +245,16 @@ When the user asks to install a boot service for the SSE daemon:
 - **Parameters**: `id` (string, optional when `format=skill`), `destination` (required string), `format` (optional `raw` \| `adr` \| `madr` \| `skill`), `limit` (number), `force` (boolean).
 - **CLI Example**: `memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md`
 
+### 9. `check_version`
+- **Purpose**: Compare the running spec-memo package version to the latest npm release (soft-fail offline).
+- **Parameters**: none.
+- **CLI Example**: `memo check-version --json`
+
+### 10. `install_skills`
+- **Purpose**: Install packaged runtime skill(s) (default `ws-memo`) into a consumer product `{skillsRoot}`.
+- **Parameters**: `productRoot` (string), `cwd` (string), `skills` (string[]), `skillsRoot` (string), `force` (boolean).
+- **CLI Example**: `memo install-skills --product-root /path/to/consumer --force`
+
 ---
 
 ## 🩺 How to Check & Diagnose (`memo doctor`)
@@ -277,7 +288,7 @@ memo doctor --fix
 
 ## Recurring traps (`memo rank`)
 
-CLI-only (not a ninth MCP tool). Lists active traps by `occurrences`.
+CLI-only (not an MCP tool). Lists active traps by `occurrences`.
 
 ```bash
 memo rank --json
@@ -314,7 +325,7 @@ Always work in strict synchronization with [`.agents/specs/index.PRD`](.agents/s
 
 ### Phase 2: Surgical Implementation & Verification
 1. Apply minimal, surgical diffs following Karpathy guidelines.
-2. Run `npm test` and verify that all 178 tests pass with zero regressions.
+2. Run `npm test` and verify that all 196 tests pass with zero regressions.
 
 ### Phase 3: Post-Execution Tracking Updates (Canonical Order)
 Once tests pass, update tracking documents in this exact order:
@@ -328,3 +339,20 @@ Once tests pass, update tracking documents in this exact order:
 5. **Changelog & Learning**:
    - Log task completion via `ws-changelog`.
    - Record newly discovered traps via `ws-self-learning` (`memo upsert --kind trap ...`).
+
+---
+
+## 🚀 Ship next version (`ws-ship-pr`)
+
+When the user says **ship next version** (or equivalent: bump + ship / release next version via `ws-ship-pr`), follow this checklist **in order**. Do not skip steps or merge early.
+
+| Step | Do | Done when |
+|---|---|---|
+| 1. Verify | Run tests and verifications (`npm test`; add `npm run build` / targeted suites if the slice touched them). Fix failures before any version bump. | Full suite green |
+| 2. Bump | Bump the product version in `package.json` (semver patch/minor/major per shipped scope). Keep lockfile / embedded version strings consistent if the repo mirrors them. | `package.json` `version` matches the release intent |
+| 3. README | Update [`README.md`](README.md) with the latest features just implemented (version badge/line, Command & Tool Reference, operator-facing deltas). Align with [`FEATURES.md`](FEATURES.md) — do not claim unfinished work. | README reflects this version’s shipped surface |
+| 4. Commit + push | Commit ship-scope changes (version, README, tracking docs, code). Push `shipHead` (`config.project.workingBranch`, default `develop`). Product specs of record may need `SKIP_MEMO_HOOK=1` in this repo. | Branch pushed; no uncommitted ship-scope files |
+| 5. `ws-ship-pr` | Load and run [`ws-ship-pr`](https://github.com/jpolvora/workflow-skills/tree/develop/.agents/skills/ws-ship-pr): prepare board → create PR to `config.project.baseBranch`. | PR URL captured |
+| 6. `ws-goal-fix-pr` | After PR exists, run [`ws-goal-fix-pr`](https://github.com/jpolvora/workflow-skills/tree/develop/.agents/skills/ws-goal-fix-pr): wait for CI / agentic review, converge threads, merge only when checks green and `activeThreads == 0` (unless user said `no-merge`). | PR merged or explicitly left open per user |
+
+**Rules:** announce each checklist row as you complete it; never bump version on a red test run; never push secrets; never delete `shipHead` after merge.

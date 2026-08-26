@@ -7,8 +7,8 @@ import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot } from './vault.js';
 import { ToolName, ToolResponse } from './types.js';
 
-const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get']);
-const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote']);
+const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get', 'check_version']);
+const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote', 'install_skills']);
 
 export function resolveToolProjectId(
   name: ToolName,
@@ -57,6 +57,10 @@ export function buildToolSummary(name: ToolName, args: Record<string, unknown>, 
       return `promote ${args.id || 'ranked'}${args.destination ? ` to ${String(args.destination)}` : ''}`;
     case 'bootstrap':
       return `bootstrap${args.slug ? ` slug=${String(args.slug)}` : ''}${args.path ? ` path=${String(args.path)}` : ''}`;
+    case 'check_version':
+      return 'check_version';
+    case 'install_skills':
+      return `install_skills${args.skills ? ` ${(args.skills as string[]).join(',')}` : ' ws-memo'}`;
     default:
       return name;
   }

@@ -2,11 +2,11 @@
 
 **Audience:** agents running `ws-memo`. Product SoT remains [`AGENTS.md`](../../../../AGENTS.md) / [`FEATURES.md`](../../../../FEATURES.md).
 
-Transport: MCP stdio (`memo serve`) or SSE (`memo serve --sse`). Tool names match CLI commands 1:1 for the eight core tools.
+Transport: MCP stdio (`memo serve`) or SSE (`memo serve --sse`). Tool names match CLI commands 1:1 for the ten core tools (CLI also accepts kebab aliases `check-version` / `install-skills`).
 
-## Eight MCP tools (frozen)
+## Ten MCP tools
 
-Do not add a ninth tool without a PRODUCT.PRD §6 amendment.
+Further growth needs a PRODUCT.PRD §6 amendment. Do not invent tools outside this list.
 
 ### `bootstrap`
 
@@ -103,6 +103,32 @@ Copy into the **product** tree. **Default deny** without `destination` inside th
 
 CLI: `memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md`
 
+### `check_version`
+
+Compare running package version to npm `latest`. Soft-fails offline (`updateAvailable: "unknown"`, `latest: null`).
+
+| Arg | Type | Notes |
+|-----|------|--------|
+| _(none)_ | | No inputs |
+
+Returns: `current`, `latest`, `updateAvailable` (`true` \| `false` \| `"unknown"`), `source` (`npm` \| `offline`).
+
+CLI: `memo check-version --json`
+
+### `install_skills`
+
+Copy packaged runtime skill(s) into a consumer product tree. Default skill: `ws-memo`. Default-deny outside product root / vault root.
+
+| Arg | Type | Notes |
+|-----|------|--------|
+| `productRoot` | string | Preferred consumer root |
+| `cwd` | string | Resolve product root when `productRoot` omitted |
+| `skills` | string[] | Default `["ws-memo"]`; unknown ids fail closed |
+| `skillsRoot` | string | Default `.agents/skills` |
+| `force` | boolean | Overwrite when destination differs |
+
+CLI: `memo install-skills --product-root <path> [--skill ws-memo] [--force] [--json]`
+
 ## CLI-only (not MCP tools)
 
 | Command | Job |
@@ -146,7 +172,7 @@ See [`MCP-TEMPLATE.json`](MCP-TEMPLATE.json). Typical Cursor `~/.cursor/mcp.json
 
 ## Explicit non-goals
 
-- Ninth MCP tool to list vault files (use `search`).
+- Extra MCP tool to list vault files (use `search`).
 - Auto-rewrite specs on code change (drift is a flag).
 - Auto-promote into README.
 - Bundling the vault inside the product clone.

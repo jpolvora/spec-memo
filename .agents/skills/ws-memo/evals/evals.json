@@ -7,7 +7,7 @@
       "expected_output": "Calls MCP bootstrap (or memo bootstrap) and applies returned DO NOT / INSTEAD DO",
       "assertions": [
         "Does not Grep MEMORY.md as the primary path when MCP/CLI is available",
-        "Does not invent a ninth MCP tool"
+        "Does not invent MCP tools outside the documented 10-tool surface"
       ]
     },
     {
@@ -44,6 +44,24 @@
       "assertions": [
         "Does not write specMemo.* in config.json (that is ws-spec-memo)",
         "Does not claim to replace ws-spec-memo"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Check whether this machine is running the latest spec-memo",
+      "expected_output": "Calls check_version or memo check-version and reports current/latest/updateAvailable",
+      "assertions": [
+        "Does not invent a self-update MCP tool",
+        "Treats offline registry as updateAvailable unknown"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Install the ws-memo skill into another product repo",
+      "expected_output": "Calls install_skills with productRoot (or memo install-skills --product-root)",
+      "assertions": [
+        "Does not write skills outside the product root",
+        "Does not overwrite a diverged destination without force"
       ]
     }
   ]

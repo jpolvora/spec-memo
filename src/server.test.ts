@@ -57,7 +57,7 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
       // 1. List tools
       const toolsResult = await client.listTools();
       assert.ok(toolsResult.tools);
-      assert.strictEqual(toolsResult.tools.length, 8);
+      assert.strictEqual(toolsResult.tools.length, 10);
 
       const exposedNames = toolsResult.tools.map(t => t.name);
       for (const expected of TOOL_NAMES) {

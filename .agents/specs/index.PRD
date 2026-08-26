@@ -99,6 +99,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 - [x] [`trap-recurrence`](trap-recurrence.spec.md): Trap recurrence ranking and owner-skill export
 - [x] [`mcp-status-monitor`](mcp-status-monitor.spec.md): MCP status monitor page with live activity log
+- [x] MCP tools: check_version and install_skills (+ docs surface) (`spec: mcp-version-and-skill-install.spec.md`)
+
 
 
 
@@ -134,10 +136,11 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 25 | [`mcp-status-monitor`](mcp-status-monitor.spec.md) | `[x] done` | Phase 6 | MCP status monitor page with live activity log |
 
+| 26 | `mcp-version-and-skill-install` | `[x]` done | Phase 6: Recurrence learning | MCP tools: check_version and install_skills (+ docs surface) |
+
 ## 9. Inbox (unscheduled ideas)
 
 - Mobile companion web dashboard.
-- Live CRDT collaboration mode for team vaults.
 
 ## 10. Done log
 
@@ -171,6 +174,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-26 | trap-recurrence | Trap recurrence ranking and owner-skill export | Slice 25 delivery |
 | 2026-08-26 | mcp-status-monitor | MCP status monitor with live activity log | npm test 178 pass |
 | 2026-08-26 | release-0.2.0 | Package, MCP server, and vault config version bumped to 0.2.0 | 0.2.0 |
+| 2026-08-26 | mcp-version-and-skill-install | MCP tools check_version + install_skills; 10-tool surface + docs | npm test 196 pass |
 
 ## Archive
 
@@ -178,6 +182,7 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 
 | Slug | Outcome | Last state | PR / Commit | Summary |
 |------|---------|------------|-------------|---------|
+| live-crdt-collaboration | wont-implement | cancelled (Step 2) | — | Inbox idea rejected: WILL NOT IMPLEMENT / out of scope (live CRDT team vaults). Draft spec + workflow discarded. |
 
 ## 11. Maintenance checklist
 

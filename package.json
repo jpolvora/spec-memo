@@ -1,6 +1,6 @@
 {
   "name": "spec-memo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local working memory for coding agents outside the product repository",
   "type": "module",
   "main": "dist/index.js",
@@ -8,6 +8,11 @@
   "bin": {
     "memo": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    ".agents/skills/ws-memo",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
