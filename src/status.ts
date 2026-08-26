@@ -36,11 +36,24 @@ function parseAfterSeq(raw: string | null): number {
 function isAuthorized(req: http.IncomingMessage, url: URL, authToken?: string): boolean {
   if (!authToken) return true;
   const header = req.headers.authorization;
-  if (header === `Bearer ${authToken}`) return true;
-  return url.searchParams.get("token") === authToken;
+  if (header) {
+    const match = header.match(/^Bearer\s+(.+)$/i);
+    if (match && match[1].trim() === authToken) return true;
+    if (header === authToken) return true;
+  }
+  const queryToken = url.searchParams.get("token") || url.searchParams.get("authToken");
+  return queryToken === authToken;
+}
+
+function setCorsHeaders(res: http.ServerResponse): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, X-Requested-With");
+  res.setHeader("Access-Control-Expose-Headers", "*");
 }
 
 function writeJson(res: http.ServerResponse, statusCode: number, body: unknown): void {
+  setCorsHeaders(res);
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
 }
@@ -474,6 +487,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
     const server = http.createServer((req, res) => {
       const url = new URL(req.url || "/", `http://${host}:${port}`);
       const pathname = url.pathname;
+
+      setCorsHeaders(res);
+
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
 
       if (pathname.startsWith("/api/")) {
         if (!isAuthorized(req, url, authToken)) {

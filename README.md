@@ -1,6 +1,8 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.3.1**.
+**Local working memory for coding agents outside the product repository.** Version **0.3.2**.
+
+[Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
 Product git repositories should contain product code: source, tests, and shipped documentation. Agent working state—anti-regression traps, architecture decisions, feature specifications, implementation plans, execution state, and changelogs—belongs in a curated vault **outside** the product repository, queried through an MCP server and matching CLI.
 

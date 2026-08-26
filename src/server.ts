@@ -48,6 +48,25 @@ function captureHttpEvent(
   });
 }
 
+function isAuthorized(req: http.IncomingMessage, url: URL, authToken?: string): boolean {
+  if (!authToken) return true;
+  const header = req.headers.authorization;
+  if (header) {
+    const match = header.match(/^Bearer\s+(.+)$/i);
+    if (match && match[1].trim() === authToken) return true;
+    if (header === authToken) return true;
+  }
+  const queryToken = url.searchParams.get("token") || url.searchParams.get("authToken");
+  return queryToken === authToken;
+}
+
+function setCorsHeaders(res: http.ServerResponse): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, mcp-session-id, X-Requested-With");
+  res.setHeader("Access-Control-Expose-Headers", "*");
+}
+
 export function startSseServer(options: SseServerOptions = {}): Promise<SseServerInstance> {
   const port = options.port ?? 3000;
   const host = options.host || "127.0.0.1";
@@ -70,8 +89,16 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       const pathname = url.pathname;
       const method = req.method || "GET";
 
+      setCorsHeaders(res);
+
+      if (method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
       const finishCapture = (statusCode: number) => {
-        if (pathname === "/health" || pathname === "/sse" || pathname === "/message") {
+        if (pathname === "/health" || pathname === "/sse" || pathname === "/" || pathname === "/message") {
           captureHttpEvent(bus, method, pathname, statusCode, Date.now() - started);
         }
       };
@@ -80,17 +107,13 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         finishCapture(res.statusCode || 500);
       });
 
-      if (authToken) {
-        const authHeader = req.headers.authorization;
-        const authorized = authHeader === `Bearer ${authToken}`;
-        if (!authorized) {
-          res.writeHead(401, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Unauthorized" }));
-          return;
-        }
+      if (!isAuthorized(req, url, authToken)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
       }
 
-      if (req.method === "GET" && pathname === "/health") {
+      if (method === "GET" && pathname === "/health") {
         const projects = getVaultProjectList(vaultRoot);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
@@ -104,8 +127,12 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         return;
       }
 
-      if (req.method === "GET" && pathname === "/sse") {
-        const transport = new SSEServerTransport("/message", res);
+      if (method === "GET" && (pathname === "/sse" || pathname === "/")) {
+        const tokenInQuery = url.searchParams.get("token") || url.searchParams.get("authToken");
+        const messageEndpoint = tokenInQuery
+          ? `/message?token=${encodeURIComponent(tokenInQuery)}`
+          : "/message";
+        const transport = new SSEServerTransport(messageEndpoint, res);
         const mcpServer = createMcpServer({ defaultVaultRoot: vaultRoot, activityBus: bus });
         let cleaned = false;
         const cleanup = () => {
@@ -125,7 +152,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         return;
       }
 
-      if (req.method === "POST" && pathname === "/message") {
+      if (method === "POST" && pathname === "/message") {
         const sessionId = url.searchParams.get("sessionId");
         if (!sessionId || !transports.has(sessionId)) {
           res.writeHead(400, { "Content-Type": "application/json" });
