@@ -16,21 +16,22 @@ describe('Write-Block Pre-Commit Hook (Phase 2)', () => {
     fs.rmSync(tempRepo, { recursive: true, force: true });
   });
 
-  it('should block workflow artifact paths (.agents/plans, .agents/specs/*.spec.md, MEMORY.md)', () => {
+  it('should block workflow artifact paths (.agents/plans, MEMORY.md, memory/*.md)', () => {
     assert.equal(isBlockedWorkflowPath('.agents/plans/step-01.md'), true);
-    assert.equal(isBlockedWorkflowPath('.agents/specs/feature-x.spec.md'), true);
     assert.equal(isBlockedWorkflowPath('MEMORY.md'), true);
     assert.equal(isBlockedWorkflowPath('subfolder/MEMORY.md'), true);
     assert.equal(isBlockedWorkflowPath('memory/trap-1.md'), true);
   });
 
-  it('should allow legitimate product docs and source files', () => {
+  it('should allow legitimate product docs, specs of record, and source files', () => {
     assert.equal(isBlockedWorkflowPath('README.md'), false);
     assert.equal(isBlockedWorkflowPath('PRODUCT.PRD'), false);
     assert.equal(isBlockedWorkflowPath('FEATURES.md'), false);
     assert.equal(isBlockedWorkflowPath('PLAN.md'), false);
     assert.equal(isBlockedWorkflowPath('AGENTS.md'), false);
     assert.equal(isBlockedWorkflowPath('.agents/specs/index.PRD'), false);
+    assert.equal(isBlockedWorkflowPath('.agents/specs/feature-x.spec.md'), false);
+    assert.equal(isBlockedWorkflowPath('.agents/specs/feature-x.context.md'), false);
     assert.equal(isBlockedWorkflowPath('src/main.ts'), false);
   });
 
