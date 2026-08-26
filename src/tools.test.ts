@@ -4,8 +4,8 @@ import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 import { TOOL_NAMES, ToolName } from './types.js';
 
 describe('Tool Definitions and Execution', () => {
-  it('should define all 8 core tools', () => {
-    assert.equal(TOOL_NAMES.length, 8);
+  it('should define all 10 core tools', () => {
+    assert.equal(TOOL_NAMES.length, 10);
     for (const name of TOOL_NAMES) {
       assert.ok(TOOL_DEFINITIONS[name], `Missing definition for ${name}`);
       assert.equal(TOOL_DEFINITIONS[name].name, name);
@@ -117,9 +117,8 @@ describe('Tool Definitions and Execution', () => {
     }
   });
 
-  it('should execute all 8 tools without NOT_IMPLEMENTED errors', () => {
-    // All 8 tools are now implemented in Phase 1
-    assert.equal(TOOL_NAMES.length, 8);
+  it('should execute all 10 tools without NOT_IMPLEMENTED errors', () => {
+    assert.equal(TOOL_NAMES.length, 10);
   });
 
   it('should omit vaultRoot from advertised MCP schemas and strip vault paths from search hits', async () => {

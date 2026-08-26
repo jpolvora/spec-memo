@@ -133,9 +133,9 @@ Optional: `ttl`, `pathPatterns`, `tags`, `supersedes`, `gitRemote`, `relatedSlug
 
 Invalid frontmatter → `upsert` fails. Body is Markdown.
 
-### MCP tools (v1 surface — do not grow without §6 amendment)
+### MCP tools (v1 surface — amended to 10 tools; do not grow further without §6 amendment)
 
-`bootstrap` · `search` · `get` · `upsert` · `append` · `forget` · `gc` · `promote`
+`bootstrap` · `search` · `get` · `upsert` · `append` · `forget` · `gc` · `promote` · `check_version` · `install_skills`
 
 See [`FEATURES.md`](FEATURES.md) § MCP tools for arguments and returns.
 
@@ -262,6 +262,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-26 | trap-recurrence | Trap recurrence ranking, occurrence counters, and skill export | Slice 25 delivery |
 | 2026-08-26 | mcp-status-monitor | MCP status monitor with Activity Event Bus and live SSE log | Slice 26 delivery |
 | 2026-08-26 | release-0.2.0 | Package, MCP server, and vault config version bumped to 0.2.0 | 0.2.0 |
+| 2026-08-26 | mcp-version-and-skill-install | MCP tools check_version + install_skills; 10-tool surface + docs | npm test 196 pass |
 
 ## 12. Related docs
 

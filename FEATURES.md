@@ -56,8 +56,10 @@ One stdio MCP server. Tool descriptions are the interface; vault paths are not.
 | `forget` | [x] | Supersede or archive | New status. Traps archive unless the caller passes an explicit purge confirmed by the user |
 | `gc` | [x] | Apply TTL, compact shipped plans, rebuild FTS | Counts archived/compacted/deleted (scratch only) |
 | `promote` | [x] | Copy one record into the product repo | Product-relative path. **Default deny** without `destination` inside the product root |
+| `check_version` | [x] | Compare running package version to npm `latest` | `current`, `latest`, `updateAvailable`, `source` (soft-fail offline) |
+| `install_skills` | [x] | Install packaged runtime skill(s) (default `ws-memo`) into consumer `{skillsRoot}` | Destination path(s); default-deny outside product root; `force` to overwrite |
 
-Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
+Do not add an eleventh tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
 ### Bootstrap include / exclude
 
@@ -71,9 +73,9 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
 ## 5. CLI
 
-- [x] **Same module as MCP.** `memo <command>` maps 1:1 to tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`.
+- [x] **Same module as MCP.** `memo <command>` maps 1:1 to tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`, `check_version` (`check-version`), `install_skills` (`install-skills`).
 - [x] **`memo doctor`.** Vault exists, FTS rebuilds, project binds, reports in-repo pollution under a given product root (does not delete).
-- [x] **`memo rank`.** CLI-only list of active traps by `occurrences` (optional `--layer`, `--backfill`). Not a ninth MCP tool.
+- [x] **`memo rank`.** CLI-only list of active traps by `occurrences` (optional `--layer`, `--backfill`). Not an MCP tool.
 - [x] **`memo import <productRoot>`.** See § Import.
 - [x] **`memo export-vault` / `memo import-vault`.** Backup and restore vault archives with optional AES-256-GCM encryption.
 - [x] **Help and errors on stderr; machine-readable JSON on stdout** when `--json` is passed.
@@ -112,7 +114,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] Relocatable consumer hub data (`MEMORY`, `memory/*`, changelog) off `{sharedDir}`-fixed layout.
 - [x] `read-memory` / `update-memory` call spec-memo MCP (or CLI) instead of `Read`/`Write` in the product tree.
 - [x] Skill or git hook blocks new files under product `{plansDir}` / `{specsDir}` / hub memory once the project is bound.
-- [x] **`ws-memo` runtime skill** (this repo, [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)): routes all 8 MCP tools plus CLI extras. Consumer enable/setup remains workflow-skills `ws-spec-memo`.
+- [x] **`ws-memo` runtime skill** (this repo, [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)): routes all 10 MCP tools plus CLI extras. Install into consumers via `memo install-skills` / MCP `install_skills`. Consumer enable/setup remains workflow-skills `ws-spec-memo`.
 
 ---
 

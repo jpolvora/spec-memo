@@ -2,10 +2,10 @@
 name: ws-memo
 version: 0.2.0
 description: >-
-  Route agent working memory through spec-memo MCP (8 tools) and matching CLI extras.
+  Route agent working memory through spec-memo MCP (10 tools) and matching CLI extras.
   Trigger on spec-memo, memo vault, bootstrap brief, upsert trap/decision/spec/plan,
-  search vault, promote ADR, memo doctor, rank traps, canvas, serve --sse, status monitor,
-  import/export vault, or sync-vault.
+  search vault, promote ADR, check version, install skills, memo doctor, rank traps,
+  canvas, serve --sse, status monitor, import/export vault, or sync-vault.
 invocation_names:
   - ws-memo
   - memo
@@ -20,12 +20,12 @@ invocation_names:
 
 Full tool/CLI map → [`references/SURFACE.md`](references/SURFACE.md). Record kinds and git boundary → [`references/RECORDS.md`](references/RECORDS.md). Host snippet → [`references/MCP-TEMPLATE.json`](references/MCP-TEMPLATE.json).
 
-**Not this skill:** `ws-spec-to-pr*` orch; editing spec-memo source; a ninth MCP tool; writing `{plansDir}` / `MEMORY.md` into product git.
+**Not this skill:** `ws-spec-to-pr*` orch; editing spec-memo source; writing `{plansDir}` / `MEMORY.md` into product git. Ops tools `check_version` and `install_skills` are part of the 10-tool MCP surface.
 
 ## Transport (prefer MCP)
 
 1. If the host exposes a spec-memo MCP namespace (`spec-memo`, `user-spec-memo`, or `specMemo.mcpServerName`), call those tools. Discover schema before invoke.
-2. Else run `{cli}` (default `memo`; or `npx -y spec-memo`) for the same 8 commands plus CLI-only extras in SURFACE.md.
+2. Else run `{cli}` (default `memo`; or `npx -y spec-memo`) for the same 10 commands plus CLI-only extras in SURFACE.md.
 3. If neither is available: print install (`npm install -g spec-memo`) and MCP-TEMPLATE.json. STOP unless the user only asked for docs.
    - Done when: a live MCP namespace or `{cli}` is chosen, or STOP with install text.
 
@@ -41,6 +41,8 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 | Task-done / audit event | **log** |
 | Archive, TTL, doctor, rank | **maintain** |
 | Copy vault record into product tree | **publish** |
+| Check running vs latest package version | **version** |
+| Install this skill into a consumer repo | **install** |
 | Canvas / SSE / status page | **observe** |
 | Import, backup, restore, peer sync, vault-git | **move** |
 | Write-block hook | **guard** |
@@ -84,6 +86,18 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 2. `format=skill` with omitted `id` compiles top `limit` (default 10) ranked traps.
    - Done when: destination path is returned, or default-deny error is shown (missing dest / outside product / under `.git/`).
 
+### version
+
+1. Call MCP `check_version` (or `memo check-version [--json]`).
+2. Read `current`, `latest`, `updateAvailable` (`true` \| `false` \| `"unknown"`), and `source` (`npm` \| `offline`).
+   - Done when: structured version payload is returned (offline soft-fails with `updateAvailable: "unknown"`).
+
+### install
+
+1. Call MCP `install_skills` with `productRoot` (or `cwd`) targeting the consumer repo. Default skill: `ws-memo`.
+2. Pass `force: true` only when overwriting a diverged destination. Do not invent skill ids outside the allow-list.
+   - Done when: destination path(s) are returned, or a default-deny / unknown-skill error is shown.
+
 ### observe
 
 1. Graph UI: `memo canvas` (default `http://127.0.0.1:4100`).
@@ -105,7 +119,8 @@ Match intent, then execute the matching step. Load SURFACE.md only for argument 
 
 ## Rules
 
-- MCP surface is frozen at 8 tools. CLI extras (`doctor`, `rank`, `canvas`, `serve`, `import`, `hook`, `sync`, `sync-vault`, `export-vault`, `import-vault`) stay CLI-only.
+- MCP surface is **10** tools (`bootstrap` … `promote`, `check_version`, `install_skills`). Further growth needs a PRODUCT.PRD amendment.
+- CLI extras (`doctor`, `rank`, `canvas`, `serve`, `import`, `hook`, `sync`, `sync-vault`, `export-vault`, `import-vault`) stay CLI-only.
 - Prefer MCP when registered; CLI when MCP is absent or the extra is CLI-only.
 - Language for vault bodies, CLI help, and tool args: **en-us**.
 - Consumer harness setup (`specMemo.enabled`, hybrid MEMORY fallback) stays in workflow-skills **ws-spec-memo**. After that setup, this skill owns day-to-day vault ops.

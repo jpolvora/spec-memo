@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-26 11:35] Agent: Cursor Composer
+- **Prompt**: Implement mcp-version-and-skill-install.spec.md (check_version + install_skills MCP tools + docs)
+- **Done**: Added tools/CLI/modules/tests; amended PRODUCT/FEATURES/AGENTS/README/ws-memo to 10-tool surface; package.json files includes skill tree
+- **Result**: `npm test` exit 0 (196 pass / 0 fail)
+
 ### [2026-08-26 11:20] Agent: Cursor Composer
 - **Prompt**: Update README.md (humans) and AGENTS.md (agents) with run/serve/diagnose/status-monitor/autoboot service workflows; commit, push, `/ws-ship-pr`
 - **Done**: Expanded README ops section (ports, stdio vs SSE, status UI curls, systemd + Windows Task Scheduler); AGENTS agent workflow table for serve/diagnose/status/autoboot; committed on `develop`

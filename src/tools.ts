@@ -8,6 +8,8 @@ import {
   ForgetOptions,
   GcOptions,
   PromoteOptions,
+  CheckVersionOptions,
+  InstallSkillsOptions,
   RecordKind,
   RecordStatus,
   SearchOptions
@@ -17,6 +19,8 @@ import { searchIndex } from './indexer.js';
 import { compileBootstrapBrief } from './bootstrap.js';
 import { runGc } from './curator.js';
 import { promoteRecord } from './promote.js';
+import { checkVersion } from './version.js';
+import { installSkills } from './skills-install.js';
 import { sanitizeToolOutput } from './safety.js';
 
 export interface ToolDefinition {
@@ -245,6 +249,50 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       cwd: z.string().optional(),
       vaultRoot: z.string().optional()
     })
+  },
+  check_version: {
+    name: 'check_version',
+    description:
+      'Compare the running spec-memo package version to the latest npm release so agents can detect stale installs.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    },
+    zodSchema: z.object({})
+  },
+  install_skills: {
+    name: 'install_skills',
+    description:
+      'Install packaged spec-memo runtime skill(s) (default ws-memo) into a consumer product {skillsRoot}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        productRoot: {
+          type: 'string',
+          description: 'Consumer product repository root (required unless cwd resolves one)'
+        },
+        cwd: { type: 'string', description: 'Working directory used to resolve product root when productRoot omitted' },
+        skills: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Skill ids to install (default ["ws-memo"])'
+        },
+        skillsRoot: {
+          type: 'string',
+          description: 'Relative skills directory under product root (default .agents/skills)'
+        },
+        force: { type: 'boolean', description: 'Overwrite destination when it differs from packaged skill' }
+      }
+    },
+    zodSchema: z.object({
+      productRoot: z.string().optional(),
+      cwd: z.string().optional(),
+      skills: z.array(z.string()).optional(),
+      skillsRoot: z.string().optional(),
+      force: z.boolean().optional(),
+      vaultRoot: z.string().optional(),
+      packageRoot: z.string().optional()
+    })
   }
 };
 
@@ -380,6 +428,26 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
       return ok(result);
     } catch (err: unknown) {
       return fail('PROMOTE_FAILED', err);
+    }
+  }
+
+  if (name === 'check_version') {
+    try {
+      const versionOpts = parseResult.data as CheckVersionOptions;
+      const result = await checkVersion(versionOpts);
+      return ok(result);
+    } catch (err: unknown) {
+      return fail('CHECK_VERSION_FAILED', err);
+    }
+  }
+
+  if (name === 'install_skills') {
+    try {
+      const installOpts = parseResult.data as InstallSkillsOptions;
+      const result = await installSkills(installOpts);
+      return ok(result);
+    } catch (err: unknown) {
+      return fail('INSTALL_SKILLS_FAILED', err);
     }
   }
 

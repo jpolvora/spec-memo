@@ -8,6 +8,11 @@
   "bin": {
     "memo": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    ".agents/skills/ws-memo",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",

@@ -79,7 +79,7 @@ npm run watch
 
 ### 2. Run the Full Test Suite
 ```bash
-# Runs full pretest build and all 25 test suites (178 tests)
+# Runs full pretest build and all 26 test suites (196 tests)
 npm test
 ```
 
@@ -198,7 +198,7 @@ When the user asks to install a boot service for the SSE daemon:
 
 ## 🛠️ How to Use (MCP Tools & CLI Commands)
 
-`spec-memo` exposes exactly 8 core tools through MCP stdio and matching CLI commands (`memo <command>`):
+`spec-memo` exposes exactly **10** core tools through MCP stdio and matching CLI commands (`memo <command>`):
 
 ### 1. `bootstrap`
 - **Purpose**: Bind working directory to project identity; return token-budgeted brief (<8 KB).
@@ -244,6 +244,16 @@ When the user asks to install a boot service for the SSE daemon:
 - **Parameters**: `id` (string, optional when `format=skill`), `destination` (required string), `format` (optional `raw` \| `adr` \| `madr` \| `skill`), `limit` (number), `force` (boolean).
 - **CLI Example**: `memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md`
 
+### 9. `check_version`
+- **Purpose**: Compare the running spec-memo package version to the latest npm release (soft-fail offline).
+- **Parameters**: none.
+- **CLI Example**: `memo check-version --json`
+
+### 10. `install_skills`
+- **Purpose**: Install packaged runtime skill(s) (default `ws-memo`) into a consumer product `{skillsRoot}`.
+- **Parameters**: `productRoot` (string), `cwd` (string), `skills` (string[]), `skillsRoot` (string), `force` (boolean).
+- **CLI Example**: `memo install-skills --product-root /path/to/consumer --force`
+
 ---
 
 ## 🩺 How to Check & Diagnose (`memo doctor`)
@@ -277,7 +287,7 @@ memo doctor --fix
 
 ## Recurring traps (`memo rank`)
 
-CLI-only (not a ninth MCP tool). Lists active traps by `occurrences`.
+CLI-only (not an MCP tool). Lists active traps by `occurrences`.
 
 ```bash
 memo rank --json
@@ -314,7 +324,7 @@ Always work in strict synchronization with [`.agents/specs/index.PRD`](.agents/s
 
 ### Phase 2: Surgical Implementation & Verification
 1. Apply minimal, surgical diffs following Karpathy guidelines.
-2. Run `npm test` and verify that all 178 tests pass with zero regressions.
+2. Run `npm test` and verify that all 196 tests pass with zero regressions.
 
 ### Phase 3: Post-Execution Tracking Updates (Canonical Order)
 Once tests pass, update tracking documents in this exact order:

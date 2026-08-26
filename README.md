@@ -82,11 +82,18 @@ Add to your extension's MCP configuration settings:
 
 ### Agent skill (`ws-memo`)
 
-Day-to-day vault ops (all 8 MCP tools + CLI extras) are documented as a project skill:
+Day-to-day vault ops (all **10** MCP tools + CLI extras) are documented as a project skill:
 
 - [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)
 
-Copy or symlink that folder into a consumer `{skillsRoot}/ws-memo/` (or load it from this clone). **Setup** of `specMemo.enabled` in workflow-skills consumers remains [`ws-spec-memo`](https://github.com/jpolvora/workflow-skills) — do not duplicate that bridge here.
+**Preferred install into a consumer repo:**
+
+```bash
+memo install-skills --product-root /path/to/consumer
+# or MCP tool: install_skills { "productRoot": "/path/to/consumer" }
+```
+
+Manual copy/symlink of `.agents/skills/ws-memo/` remains a fallback. **Setup** of `specMemo.enabled` in workflow-skills consumers remains [`ws-spec-memo`](https://github.com/jpolvora/workflow-skills) — do not duplicate that bridge here.
 
 ---
 
@@ -445,6 +452,8 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `forget` | Archive or permanently delete record | `--id`, `--purge` |
 | `gc` | Apply TTL retention and compact plans | `--dry-run`, `--project` |
 | `promote` | Safe export of record to product repo | `--id`, `--to`, `--format` (`raw`/`adr`/`madr`/`skill`), `--force`, `--limit` |
+| `check_version` / `check-version` | Compare running version to npm latest | `--json` |
+| `install_skills` / `install-skills` | Install `ws-memo` into a consumer repo | `--product-root`, `--skill`, `--force`, `--json` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
 | `doctor` | Diagnose health & fix repo pollution | `--fix`, `--rebuild`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |
@@ -452,6 +461,24 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `import-vault` | Restore portable archive into vault | `<file>`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
 | `serve` | Run stdio MCP server for agent hosts | `--sse`, `--port`, `--status-port`, `--no-status`, `--auth-token` *(stdio stream)* |
+
+### Operator Q&A
+
+**How do I check if I am on the latest spec-memo?**
+
+```bash
+memo check-version --json
+```
+
+Compare `current` to `latest`. When the registry is unreachable, `updateAvailable` is `"unknown"` and `latest` is `null`.
+
+**How do I install the `ws-memo` skill into a consumer project?**
+
+```bash
+memo install-skills --product-root /path/to/consumer
+```
+
+Use `--force` only when overwriting a diverged destination. MCP hosts can call `install_skills` with the same arguments.
 
 ---
 

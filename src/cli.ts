@@ -83,14 +83,16 @@ Usage:
   memo serve
 
 Core Memory Commands:
-  bootstrap     Bind cwd's git remote; compile a session brief
-  search        Filtered retrieval across memory records
-  get           Read one record by id or kind+slug
-  upsert        Write or update a memory record (trap, decision, spec, etc.)
-  append        Append a changelog or audit run event
-  forget        Supersede or archive a memory record
-  gc            Apply TTL, compact shipped plans, compact logs, rebuild FTS
-  promote       Copy one record into the product repository
+  bootstrap       Bind cwd's git remote; compile a session brief
+  search          Filtered retrieval across memory records
+  get             Read one record by id or kind+slug
+  upsert          Write or update a memory record (trap, decision, spec, etc.)
+  append          Append a changelog or audit run event
+  forget          Supersede or archive a memory record
+  gc              Apply TTL, compact shipped plans, compact logs, rebuild FTS
+  promote         Copy one record into the product repository
+  check_version   Compare running version to npm latest (alias: check-version)
+  install_skills  Install ws-memo skill into a consumer repo (alias: install-skills)
 
 Utility Commands:
   doctor        Diagnose vault integrity and check product tree pollution
@@ -250,8 +252,20 @@ Options:
   printGeneralHelp();
 }
 
+/** Map CLI kebab aliases to MCP tool names. */
+const CLI_TOOL_ALIASES: Record<string, ToolName> = {
+  'check-version': 'check_version',
+  'install-skills': 'install_skills'
+};
+
+function resolveCliCommand(command: string | undefined): string | undefined {
+  if (!command) return command;
+  return CLI_TOOL_ALIASES[command] || command;
+}
+
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   const parsed = parseCliArgs(argv);
+  parsed.command = resolveCliCommand(parsed.command);
 
   if (!parsed.command || (parsed.options.help && !parsed.command)) {
     printGeneralHelp();
@@ -920,6 +934,30 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       }
     }
 
+    // Normalization for install_skills / install-skills
+    if (parsed.command === 'install_skills') {
+      if (payload['product-root'] && !payload.productRoot) {
+        payload.productRoot = String(payload['product-root']);
+        delete payload['product-root'];
+      }
+      if (payload['skills-root'] && !payload.skillsRoot) {
+        payload.skillsRoot = String(payload['skills-root']);
+        delete payload['skills-root'];
+      }
+      if (payload.skill && !payload.skills) {
+        payload.skills = [String(payload.skill)];
+        delete payload.skill;
+      } else if (typeof payload.skills === 'string') {
+        payload.skills = (payload.skills as string).split(',').map((s) => s.trim());
+      }
+      if (parsed.positionals.length > 0 && !payload.productRoot) {
+        payload.productRoot = parsed.positionals[0];
+      }
+      if (payload.force === true || payload.force === 'true') {
+        payload.force = true;
+      }
+    }
+
     const response = await executeTool(parsed.command, payload);
 
     if (parsed.isJson) {
@@ -1012,6 +1050,20 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         const p = response.data as import('./types.js').PromoteResult;
         const fmtStr = p.format ? ` (format: ${p.format})` : '';
         console.log(`[PROMOTE] Record ${p.id} (${p.kind})${fmtStr} exported to ${p.destination} (${p.bytesWritten} bytes)`);
+      } else if (parsed.command === 'check_version' && response.data) {
+        const v = response.data as import('./types.js').CheckVersionResult;
+        console.log(`spec-memo — Version\n`);
+        console.log(`  Current:          ${v.current}`);
+        console.log(`  Latest:           ${v.latest ?? '(unavailable)'}`);
+        console.log(`  Update available: ${String(v.updateAvailable)}`);
+        console.log(`  Source:           ${v.source}`);
+      } else if (parsed.command === 'install_skills' && response.data) {
+        const i = response.data as import('./types.js').InstallSkillsResult;
+        console.log(`spec-memo — Installed skills into ${i.productRoot}\n`);
+        for (const row of i.installed) {
+          const note = row.identical ? ' (already identical)' : ` (${row.bytesWritten} bytes)`;
+          console.log(`  - ${row.skill} → ${row.destination}${note}`);
+        }
       } else {
         console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));
       }

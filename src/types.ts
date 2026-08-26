@@ -78,7 +78,9 @@ export const TOOL_NAMES = [
   'append',
   'forget',
   'gc',
-  'promote'
+  'promote',
+  'check_version',
+  'install_skills'
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -270,6 +272,45 @@ export interface PromoteResult {
   targetPath: string;
   bytesWritten: number;
   format?: 'raw' | 'adr' | 'madr' | 'skill';
+}
+
+export interface CheckVersionOptions {
+  /** Test hook: override npm latest lookup. Return null to simulate offline. */
+  fetchLatest?: () => Promise<string | null>;
+  timeoutMs?: number;
+}
+
+export interface CheckVersionResult {
+  current: string;
+  latest: string | null;
+  updateAvailable: boolean | 'unknown';
+  source: 'npm' | 'offline';
+}
+
+export interface InstallSkillsOptions {
+  /** Product repository root (preferred). */
+  productRoot?: string;
+  /** Fallback when productRoot omitted — resolved via project identity. */
+  cwd?: string;
+  vaultRoot?: string;
+  /** Skill ids to install (default `["ws-memo"]`). */
+  skills?: string[];
+  /** Relative skills directory under product root (default `.agents/skills`). */
+  skillsRoot?: string;
+  force?: boolean;
+  /** Test hook: override packaged skill source root. */
+  packageRoot?: string;
+}
+
+export interface InstallSkillsResult {
+  productRoot: string;
+  skillsRoot: string;
+  installed: Array<{
+    skill: string;
+    destination: string;
+    identical: boolean;
+    bytesWritten: number;
+  }>;
 }
 
 export interface ExportVaultOptions {
