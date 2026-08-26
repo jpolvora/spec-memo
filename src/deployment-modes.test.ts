@@ -24,6 +24,7 @@ import { upsertRecord } from './store.js';
 import { exportChangeset } from './sync.js';
 import { resolveProjectIdentity } from './identity.js';
 import { executeTool } from './tools.js';
+import { readErrorLogs } from './error-logger.js';
 
 test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-modes-test-'));
@@ -1295,5 +1296,46 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       closeIndex(daemonVault);
       closeIndex(clientVault);
     }
+  });
+
+  await t.test('AC22: writes detailed error report to error.logs on remote proxy and hybrid sync failures', async () => {
+    const remoteVault = trackVault(path.join(tempDir, 'remote-err-vault'));
+    const pid = 'err-log-proj';
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(remoteVault, 'projects', pid)
+      },
+      remoteVault
+    );
+
+    // 1. Call remote tool when remote URL is not configured
+    const unconfRes = await callRemoteTool('search', { query: 'test' }, { vaultRoot: remoteVault });
+    assert.strictEqual(unconfRes.isError, true);
+
+    // 2. Call remote tool on unreachable port
+    const unreachRes = await callRemoteTool(
+      'search',
+      { query: 'test' },
+      { vaultRoot: remoteVault, remoteUrl: 'http://127.0.0.1:59999' }
+    );
+    assert.strictEqual(unreachRes.isError, true);
+
+    // 3. Hybrid pull failure on unreachable origin
+    await assert.rejects(
+      () => pullHybridProject(remoteVault, pid, 'http://127.0.0.1:59999', 'tok'),
+      /fetch failed|ECONNREFUSED/i
+    );
+
+    // Verify error.logs contains detailed reports
+    const errorLogs = readErrorLogs(remoteVault);
+    assert.ok(errorLogs.includes('[remote-proxy]'));
+    assert.ok(errorLogs.includes('Remote URL is not configured'));
+    assert.ok(errorLogs.includes('Remote daemon communication failed'));
+    assert.ok(errorLogs.includes('[hybrid-sync]'));
   });
 });

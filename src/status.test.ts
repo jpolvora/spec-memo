@@ -12,6 +12,7 @@ import { executeTool } from "./tools.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { exportVault } from "./backup.js";
 import { upsertRecord } from "./store.js";
+import { readErrorLogs } from "./error-logger.js";
 
 function countTrapFiles(vaultRoot: string, projectId: string): number {
   const dir = path.join(vaultRoot, "projects", projectId, "traps");
@@ -480,6 +481,57 @@ test("MCP status monitor", async (t) => {
     } finally {
       authBus.close();
       await authServer.close();
+    }
+  });
+
+  await t.test("writes detailed error report to error.logs on status server failures", async () => {
+    const errorServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "status-test-secret",
+      activityBus: bus
+    });
+
+    try {
+      const url = errorServer.url;
+
+      // 1. Unauthorized access to /api/vaults
+      const unauthRes = await fetch(`${url}/api/vaults`);
+      assert.strictEqual(unauthRes.status, 401);
+
+      // 2. Export unknown project
+      const exportRes = await fetch(`${url}/api/vaults/export`, {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer status-test-secret",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ projectId: "non-existent-proj" })
+      });
+      assert.strictEqual(exportRes.status, 400);
+
+      // 3. Import with missing boundary
+      const importRes = await fetch(`${url}/api/vaults/import`, {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer status-test-secret",
+          "Content-Type": "multipart/form-data"
+        },
+        body: "invalid"
+      });
+      assert.strictEqual(importRes.status, 400);
+
+      // Verify error.logs contents
+      const logs = readErrorLogs(vaultRoot);
+      assert.ok(logs.includes("[status-server]"));
+      assert.ok(logs.includes("Unauthorized request"));
+      assert.ok(logs.includes("Unknown projectId: non-existent-proj"));
+      assert.ok(logs.includes("Content-Type must be multipart/form-data with boundary"));
+      // Redaction check: secret token should not be leaked in cleartext in the logs
+      assert.ok(!logs.includes("Bearer status-test-secret"));
+    } finally {
+      await errorServer.close();
     }
   });
 });

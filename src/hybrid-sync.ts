@@ -2,6 +2,7 @@ import { exportChangeset, applyChangeset, Changeset, SyncResult } from './sync.j
 import { ensureVaultStructure, getVaultProjects, getVaultRoot, withVaultLockSync } from './vault.js';
 import { readHybridState, writeHybridState } from './hybrid-state.js';
 import { isTokenConfigured, getResolvedAuthToken, normalizeRemoteUrl } from './setup.js';
+import { logErrorReport } from './error-logger.js';
 
 export interface HybridSyncOptions {
   vaultRoot?: string;
@@ -118,6 +119,13 @@ export async function pullHybridProject(
     return applyResult;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    logErrorReport({
+      subsystem: 'hybrid-sync',
+      mode: 'hybrid',
+      projectId,
+      error: err,
+      context: { phase: 'pull', remoteOrigin }
+    }, { vaultRoot });
     if (projectId) {
       writeHybridState(vaultRoot, {
         dirty: true,
@@ -261,6 +269,13 @@ export async function pushHybridProject(
     return pushResult;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    logErrorReport({
+      subsystem: 'hybrid-sync',
+      mode: 'hybrid',
+      projectId,
+      error: err,
+      context: { phase: 'push', remoteOrigin }
+    }, { vaultRoot });
     if (projectId) {
       writeHybridState(vaultRoot, {
         dirty: true,

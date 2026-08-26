@@ -5,6 +5,7 @@ import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activit
 import { getPackageVersion } from "./version.js";
 import { exportVault, importVault } from "./backup.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
+import { logErrorReport } from "./error-logger.js";
 
 export interface McpStatusSummary {
   host: string;
@@ -19,6 +20,7 @@ export interface StatusServerOptions {
   vaultRoot?: string;
   authToken?: string;
   activityBus: ActivityBus;
+  errorLogPath?: string;
   getMcp?: () => McpStatusSummary;
 }
 
@@ -805,7 +807,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       document.getElementById("activity-log").innerHTML = "";
     });
 
-    loadVaults().then(() => {
+loadVaults().then(() => {
       reconnectStream(true);
       refreshStatus();
       setInterval(refreshStatus, 5000);
@@ -822,13 +824,23 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
   const authToken =
     options.authToken ||
     process.env.SPEC_MEMO_AUTH_TOKEN ||
-    process.env.SPEC_MEMO_STATUS_TOKEN;
+    process.env.SPEC_MEMO_STATUS_TOKEN ||
+    process.env.SPEC_MEMO_SSE_TOKEN;
   const bus = options.activityBus;
+  const errorLogPath = options.errorLogPath;
 
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !authToken) {
-    throw new Error(
-      "Refusing to bind status monitor to a non-loopback host without authentication token (--auth-token or SPEC_MEMO_AUTH_TOKEN / SPEC_MEMO_STATUS_TOKEN)."
+    const err = new Error(
+      "Refusing to bind status monitor to a non-loopback host without authentication token (--auth-token or SPEC_MEMO_AUTH_TOKEN / SPEC_MEMO_STATUS_TOKEN / SPEC_MEMO_SSE_TOKEN)."
     );
+    logErrorReport({
+      subsystem: "status-server",
+      port,
+      host,
+      error: err,
+      level: "FATAL"
+    }, { vaultRoot, logPath: errorLogPath });
+    throw err;
   }
 
   const packageVersion = getPackageVersion();
@@ -849,6 +861,18 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
       if (pathname.startsWith("/api/")) {
         if (!isAuthorized(req, url, authToken)) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: req.method,
+            endpoint: pathname,
+            error: "Unauthorized request: missing or invalid authorization token",
+            context: {
+              headers: req.headers,
+              query: Object.fromEntries(url.searchParams.entries())
+            }
+          }, { vaultRoot, logPath: errorLogPath });
           writeJson(res, 401, { error: "Unauthorized" });
           return;
         }
@@ -899,6 +923,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             try {
               parsed = JSON.parse(rawBody.toString("utf8"));
             } catch {
+              logErrorReport({
+                subsystem: "status-server",
+                port,
+                host,
+                method: "POST",
+                endpoint: "/api/vaults/export",
+                error: "Invalid JSON body"
+              }, { vaultRoot, logPath: errorLogPath });
               writeJson(res, 400, { error: "Invalid JSON body" });
               return;
             }
@@ -906,12 +938,29 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
           targetProjectId = parsed.projectId || "";
           if (!targetProjectId || typeof targetProjectId !== "string") {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/export",
+              error: `Unknown projectId (missing or not a string)`
+            }, { vaultRoot, logPath: errorLogPath });
             writeJson(res, 400, { error: "Unknown projectId" });
             return;
           }
 
           const projects = getVaultProjectList(vaultRoot);
           if (!projects.some((p) => p.id === targetProjectId)) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/export",
+              error: `Unknown projectId: ${targetProjectId}`,
+              projectId: targetProjectId
+            }, { vaultRoot, logPath: errorLogPath });
             writeJson(res, 400, { error: "Unknown projectId" });
             return;
           }
@@ -950,6 +999,15 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           res.end(zipBuffer);
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/export",
+            error: err,
+            projectId: targetProjectId || undefined
+          }, { vaultRoot, logPath: errorLogPath });
           bus.capture({
             type: "system",
             kind: "write",
@@ -970,6 +1028,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const contentType = req.headers["content-type"] || "";
         const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
         if (!boundaryMatch) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/import",
+            error: "Content-Type must be multipart/form-data with boundary."
+          }, { vaultRoot, logPath: errorLogPath });
           writeJson(res, 400, { ok: false, error: "Content-Type must be multipart/form-data with boundary." });
           return;
         }
@@ -982,6 +1048,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
           const archiveFile = parsed.files["archive"];
           if (!archiveFile || !archiveFile.data || archiveFile.data.length === 0) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/import",
+              error: "Missing archive file"
+            }, { vaultRoot, logPath: errorLogPath });
             writeJson(res, 400, { ok: false, error: "Missing archive file" });
             return;
           }
@@ -994,6 +1068,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             archiveBuf[2] !== 0x03 ||
             archiveBuf[3] !== 0x04
           ) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/import",
+              error: "Invalid archive format: expected ZIP file"
+            }, { vaultRoot, logPath: errorLogPath });
             writeJson(res, 400, { ok: false, error: "Invalid archive format: expected ZIP file" });
             return;
           }
@@ -1003,6 +1085,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             jsonPayload = unpackVaultZip(archiveBuf);
           } catch (e: unknown) {
             const unpackMsg = e instanceof Error ? e.message : String(e);
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/import",
+              error: unpackMsg
+            }, { vaultRoot, logPath: errorLogPath });
             writeJson(res, 400, { ok: false, error: unpackMsg });
             return;
           }
@@ -1036,6 +1126,15 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         } catch (err: unknown) {
           const statusCode = (err as any)?.statusCode === 413 ? 413 : 400;
           const msg = err instanceof Error ? err.message : String(err);
+
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/import",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
 
           bus.capture({
             type: "system",
@@ -1081,7 +1180,15 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             if (!eventMatchesProjectFilter(event, projectFilter)) return;
             try {
               res.write(`event: activity\ndata: ${JSON.stringify(event)}\n\n`);
-            } catch {
+            } catch (streamErr: unknown) {
+              logErrorReport({
+                subsystem: "status-server",
+                port,
+                host,
+                endpoint: "/api/events/stream",
+                error: streamErr,
+                context: { phase: "sse_client_write" }
+              }, { vaultRoot, logPath: errorLogPath });
               unsubscribe();
             }
           },
@@ -1094,10 +1201,29 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         return;
       }
 
+      logErrorReport({
+        subsystem: "status-server",
+        port,
+        host,
+        method: req.method,
+        endpoint: pathname,
+        error: `Route not found: ${req.method} ${pathname}`,
+        level: "WARN"
+      }, { vaultRoot, logPath: errorLogPath });
       writeJson(res, 404, { error: "Not found" });
     });
 
-    server.on("error", reject);
+    server.on("error", (err) => {
+      logErrorReport({
+        subsystem: "status-server",
+        port,
+        host,
+        error: err,
+        level: "FATAL",
+        context: { phase: "server_listen_error" }
+      }, { vaultRoot, logPath: errorLogPath });
+      reject(err);
+    });
 
     server.listen(port, host, () => {
       const actualPort = (server.address() as { port: number }).port;

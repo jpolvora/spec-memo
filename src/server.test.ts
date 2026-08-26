@@ -10,6 +10,7 @@ import { ensureProjectVault } from "./vault.js";
 import { closeIndex } from "./indexer.js";
 import { startSseServer } from "./server.js";
 import { TOOL_NAMES } from "./types.js";
+import { readErrorLogs } from "./error-logger.js";
 
 test("HTTP / SSE MCP Server Transport", async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-server-test-"));
@@ -309,5 +310,51 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     });
     await close(probe);
     await close(blocker);
+  });
+
+  await t.test("should log detailed error reports to error.logs on failure cases", async () => {
+    const errorLogServer = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "test-auth-secret",
+      enableStatus: false
+    });
+
+    try {
+      const serverUrl = errorLogServer.url;
+
+      // 1. Trigger unauthorized 401
+      const unauthRes = await fetch(`${serverUrl}/health`);
+      assert.strictEqual(unauthRes.status, 401);
+
+      // 2. Trigger invalid sessionId on /message
+      const msgRes = await fetch(`${serverUrl}/message?sessionId=non-existent-id`, {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer test-auth-secret",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ jsonrpc: "2.0" })
+      });
+      assert.strictEqual(msgRes.status, 400);
+
+      // 3. Trigger 404
+      const notFoundRes = await fetch(`${serverUrl}/non-existent-route`, {
+        headers: { "Authorization": "Bearer test-auth-secret" }
+      });
+      assert.strictEqual(notFoundRes.status, 404);
+
+      // Verify error.logs contains detailed reports
+      const logContent = readErrorLogs(vaultRoot);
+      assert.ok(logContent.includes("[sse-server]"));
+      assert.ok(logContent.includes("Unauthorized request"));
+      assert.ok(logContent.includes("Valid sessionId required"));
+      assert.ok(logContent.includes("Route not found"));
+      // Redaction check: secret token should not be leaked in cleartext in the logs
+      assert.ok(!logContent.includes("Bearer test-auth-secret"));
+    } finally {
+      await errorLogServer.close();
+    }
   });
 });
