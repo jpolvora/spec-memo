@@ -2,8 +2,70 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { TOOL_DEFINITIONS, executeTool } from './tools.js';
+import { ActivityBus } from './activity.js';
+import { resolveProjectIdentity } from './identity.js';
+import { getVaultRoot } from './vault.js';
+import { ToolName, ToolResponse } from './types.js';
 
-export function createMcpServer(opts: { defaultVaultRoot?: string } = {}): Server {
+const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get']);
+const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote']);
+
+export function resolveToolProjectId(
+  name: ToolName,
+  args: Record<string, unknown>,
+  vaultRoot?: string
+): string | undefined {
+  if (typeof args.projectId === 'string' && args.projectId) {
+    return args.projectId;
+  }
+  if (name === 'search' && args.crossProject === true) {
+    return undefined;
+  }
+  if (name === 'gc' && !args.projectId && !args.cwd) {
+    return undefined;
+  }
+  const cwd = typeof args.cwd === 'string' && args.cwd ? args.cwd : process.cwd();
+  try {
+    return resolveProjectIdentity(cwd, { vaultRoot: vaultRoot || getVaultRoot() }).projectId;
+  } catch {
+    return undefined;
+  }
+}
+
+export function buildToolSummary(name: ToolName, args: Record<string, unknown>, response: ToolResponse): string {
+  if (response.isError) {
+    return `${name} failed: ${response.error || 'error'}`;
+  }
+  switch (name) {
+    case 'search': {
+      const hits = Array.isArray(response.data) ? response.data.length : 0;
+      const q = args.query ? String(args.query) : '';
+      const p = args.path ? ` path=${String(args.path)}` : '';
+      return `search ${q}${p} (${hits} hits)`.trim();
+    }
+    case 'get':
+      return `get ${args.id || `${args.kind || 'record'}:${args.slug || '?'}`}`;
+    case 'upsert':
+      return `upsert ${args.kind || 'record'}${args.slug ? ` slug=${String(args.slug)}` : ''}`;
+    case 'append':
+      return `append event${args.kind ? ` kind=${String(args.kind)}` : ''}`;
+    case 'forget':
+      return `forget ${args.id || 'record'}`;
+    case 'gc':
+      return `gc${args.projectId ? ` project=${String(args.projectId)}` : ''}`;
+    case 'promote':
+      return `promote ${args.id || 'ranked'}${args.destination ? ` to ${String(args.destination)}` : ''}`;
+    case 'bootstrap':
+      return `bootstrap${args.slug ? ` slug=${String(args.slug)}` : ''}${args.path ? ` path=${String(args.path)}` : ''}`;
+    default:
+      return name;
+  }
+}
+
+export function createMcpServer(opts: {
+  defaultVaultRoot?: string;
+  activityBus?: ActivityBus;
+} = {}): Server {
   const server = new Server(
     {
       name: 'spec-memo',
@@ -28,11 +90,28 @@ export function createMcpServer(opts: { defaultVaultRoot?: string } = {}): Serve
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    const toolName = name as ToolName;
     const resolvedArgs = {
       ...(args ?? {}),
-      vaultRoot: (args as any)?.vaultRoot ?? opts.defaultVaultRoot
+      vaultRoot: (args as Record<string, unknown>)?.vaultRoot ?? opts.defaultVaultRoot
     };
+    const started = Date.now();
     const response = await executeTool(name, resolvedArgs);
+    const durationMs = Date.now() - started;
+
+    if (opts.activityBus && TOOL_DEFINITIONS[toolName]) {
+      const argRecord = resolvedArgs as Record<string, unknown>;
+      const kind = READ_TOOLS.has(toolName) ? 'read' : WRITE_TOOLS.has(toolName) ? 'write' : 'meta';
+      opts.activityBus.capture({
+        type: 'tool',
+        kind,
+        ok: !response.isError,
+        durationMs,
+        summary: buildToolSummary(toolName, argRecord, response),
+        tool: toolName,
+        projectId: resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot)
+      });
+    }
 
     if (response.isError) {
       return {

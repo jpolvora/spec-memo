@@ -119,7 +119,15 @@ node --test dist/canvas.test.js
 
 # HTTP / SSE Server Transport
 node --test dist/server.test.js
+
+# MCP status monitor (activity bus + :3001 companion)
+node --test dist/activity.test.js
+node --test dist/status.test.js
 ```
+
+### HTTP / SSE transport & status monitor
+
+`memo serve --sse` starts the MCP SSE listener (default `http://127.0.0.1:3000`) and, unless `--no-status` is set, a read-only **status monitor** companion at `http://127.0.0.1:3001/` with vault list, health cards, and a live activity log (tool + HTTP events via SSE `/api/events/stream`). Override the companion port with `--status-port`. Canvas graph UI remains separate on port `4100` (`memo canvas`).
 
 ---
 

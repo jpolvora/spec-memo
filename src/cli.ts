@@ -116,7 +116,11 @@ Options:
   --sse           Run as HTTP / Server-Sent Events (SSE) server
   --port          Port to listen on (default 3000 for SSE)
   --host          Host address to bind (default 127.0.0.1)
+  --status-port   Status monitor companion port (default 3001; requires --sse)
+  --no-status     Do not start the status monitor companion
+  --auth-token    Bearer token for SSE/status when binding beyond loopback
   --vaultRoot     Override vault root directory
+  --json          Output server URL metadata as JSON
   -h, --help      Show this help message`);
     return;
   }
@@ -265,15 +269,45 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const authToken =
         (parsed.options['auth-token'] as string | undefined) ||
         (parsed.options.authToken as string | undefined);
+      const noStatus =
+        parsed.options['no-status'] === true ||
+        parsed.options['no-status'] === 'true' ||
+        parsed.options.noStatus === true;
+      const statusPort = parsed.options['status-port']
+        ? parseInt(String(parsed.options['status-port']), 10)
+        : parsed.options.statusPort
+          ? parseInt(String(parsed.options.statusPort), 10)
+          : 3001;
 
-      const instance = await startSseServer({ port, host, vaultRoot, authToken });
+      const instance = await startSseServer({
+        port,
+        host,
+        vaultRoot,
+        authToken,
+        enableStatus: !noStatus,
+        statusPort
+      });
       if (parsed.isJson) {
-        printJson({ status: 'running', service: 'mcp-sse', url: instance.url, port: instance.port, host: instance.host });
+        const payload: Record<string, unknown> = {
+          status: 'running',
+          service: 'mcp-sse',
+          url: instance.url,
+          port: instance.port,
+          host: instance.host
+        };
+        if (instance.statusUrl) {
+          payload.statusUrl = instance.statusUrl;
+          payload.statusPort = instance.statusPort;
+        }
+        printJson(payload);
       } else {
         console.log(`spec-memo — MCP SSE Server running at: ${instance.url}`);
         console.log(`  SSE endpoint:     ${instance.url}/sse`);
         console.log(`  Message endpoint: ${instance.url}/message`);
         console.log(`  Health check:     ${instance.url}/health`);
+        if (instance.statusUrl) {
+          console.log(`  Status monitor:   ${instance.statusUrl}`);
+        }
       }
 
       const shutdown = async (signal: NodeJS.Signals) => {

@@ -80,14 +80,14 @@ Add to your extension's MCP configuration settings:
 }
 ```
 
-*(Optional HTTP / SSE Transport: Run `memo serve --sse` or configure SSE client connecting to `http://127.0.0.1:3000/sse`. A companion **status monitor** page on port `3001` is in active development — see [`.agents/specs/mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md).)*
+*(Optional HTTP / SSE Transport: Run `memo serve --sse` — MCP SSE on `http://127.0.0.1:3000/sse` plus a companion **status monitor** at `http://127.0.0.1:3001/` with live vault-filtered activity log. Disable the monitor with `--no-status`.)*
 
 ### Default ports
 
 | Service | Default port | CLI |
 |---------|--------------|-----|
 | MCP SSE transport | `3000` | `memo serve --sse` |
-| Status monitor (Phase 6, in progress) | `3001` | co-starts with `--sse` (`--no-status` to disable) |
+| Status monitor | `3001` | co-starts with `memo serve --sse` (`--no-status` to disable; `--status-port` to override) |
 | Canvas graph viewer | `4100` | `memo canvas` |
 
 ---
@@ -290,7 +290,7 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `export-vault` | Export encrypted portable archive | `--password`, `--output`, `--project` |
 | `import-vault` | Restore portable archive into vault | `<file>`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
-| `serve` | Run stdio MCP server for agent hosts | *(stdio stream)* |
+| `serve` | Run stdio MCP server for agent hosts | `--sse`, `--port`, `--status-port`, `--no-status`, `--auth-token` *(stdio stream)* |
 
 ---
 
