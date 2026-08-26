@@ -48,11 +48,22 @@ export function writeHybridState(
     }
 
     const current = readHybridState(vaultRoot);
+    let mergedCursors = current.cursors || {};
+    if (updates.cursors !== undefined) {
+      mergedCursors = { ...mergedCursors };
+      for (const [pId, newCursor] of Object.entries(updates.cursors)) {
+        const existing = mergedCursors[pId];
+        if (!existing || newCursor >= existing) {
+          mergedCursors[pId] = newCursor;
+        }
+      }
+    }
+
     const merged: HybridState = {
       dirty: updates.dirty !== undefined ? updates.dirty : current.dirty,
       lastSyncAt: updates.lastSyncAt !== undefined ? updates.lastSyncAt : current.lastSyncAt,
       lastError: updates.lastError !== undefined ? updates.lastError : current.lastError,
-      cursors: updates.cursors !== undefined ? { ...current.cursors, ...updates.cursors } : current.cursors
+      cursors: mergedCursors
     };
 
     fs.writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf8');

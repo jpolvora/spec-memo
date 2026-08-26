@@ -839,4 +839,122 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
 
     closeIndex(cliVault);
   });
+
+  await t.test('Phase 2: successful hybrid pull does not clear dirty flag or push failures from prior push errors', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'pull-dirty-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'pull-dirty-client-vault'));
+    const authToken = 'pull-dirty-token';
+    const pid = 'pull-dirty-proj';
+
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(daemonVault, 'projects', pid)
+      },
+      daemonVault
+    );
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(clientVault, 'projects', pid)
+      },
+      clientVault
+    );
+
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    const clientCfgPath = path.join(clientVault, 'config.json');
+    const clientCfg = JSON.parse(fs.readFileSync(clientCfgPath, 'utf8'));
+    clientCfg.mode = 'hybrid';
+    clientCfg.remote = { url: daemonServer.url };
+    fs.writeFileSync(clientCfgPath, JSON.stringify(clientCfg, null, 2), 'utf8');
+
+    // Simulate prior push failure on client
+    writeHybridState(clientVault, {
+      dirty: true,
+      lastError: 'Remote sync push failed with HTTP 500: Internal Server Error'
+    });
+
+    try {
+      // Pull succeeds from daemon
+      const pullRes = await pullHybridProject(clientVault, pid, daemonServer.url, authToken);
+      assert.strictEqual(pullRes.applied, 0);
+
+      // State must retain dirty: true and lastError from prior push failure
+      const stateAfterPull = readHybridState(clientVault);
+      assert.strictEqual(stateAfterPull.dirty, true, 'Pull success must not clear push dirty flag');
+      assert.strictEqual(
+        stateAfterPull.lastError,
+        'Remote sync push failed with HTTP 500: Internal Server Error',
+        'Pull success must not clear prior push error text'
+      );
+      assert.ok(stateAfterPull.lastSyncAt, 'lastSyncAt should be updated on pull');
+
+      // Now successful push clears dirty and error
+      await pushHybridProject(clientVault, pid, daemonServer.url, authToken);
+      const stateAfterPush = readHybridState(clientVault);
+      assert.strictEqual(stateAfterPush.dirty, false, 'Push success must clear dirty flag');
+      assert.strictEqual(stateAfterPush.lastError, null, 'Push success must clear lastError');
+    } finally {
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
+
+  await t.test('Phase 2: writeHybridState preserves cursor monotonicity and merges project deltas safely', () => {
+    const monoVault = trackVault(path.join(tempDir, 'mono-cursor-vault'));
+    ensureVaultStructure(monoVault);
+
+    // Initial cursors
+    writeHybridState(monoVault, {
+      cursors: {
+        'proj-a': '2026-08-26T12:00:00.000Z',
+        'proj-b': '2026-08-26T12:00:00.000Z'
+      }
+    });
+
+    // Update only proj-a with a newer timestamp
+    writeHybridState(monoVault, {
+      cursors: {
+        'proj-a': '2026-08-26T13:00:00.000Z'
+      }
+    });
+
+    let state = readHybridState(monoVault);
+    assert.ok(state.cursors);
+    assert.strictEqual(state.cursors['proj-a'], '2026-08-26T13:00:00.000Z');
+    assert.strictEqual(state.cursors['proj-b'], '2026-08-26T12:00:00.000Z', 'proj-b cursor must be preserved');
+
+    // Attempt to regress proj-a with an older timestamp (e.g. from an overlapping delayed pull)
+    writeHybridState(monoVault, {
+      cursors: {
+        'proj-a': '2026-08-26T11:00:00.000Z'
+      }
+    });
+
+    state = readHybridState(monoVault);
+    assert.ok(state.cursors);
+    assert.strictEqual(
+      state.cursors['proj-a'],
+      '2026-08-26T13:00:00.000Z',
+      'proj-a cursor must not regress to an older timestamp'
+    );
+
+    closeIndex(monoVault);
+  });
 });

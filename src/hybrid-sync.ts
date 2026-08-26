@@ -73,15 +73,25 @@ export async function pullHybridProject(
 
     if (!dryRun) {
       const now = new Date().toISOString();
-      const updatedCursors = { ...(state.cursors || {}) };
+      const cursorVal = changeset.generatedAt || now;
+      let cursorsUpdate: Record<string, string> | undefined;
       if (projectId) {
-        updatedCursors[projectId] = changeset.generatedAt || now;
+        cursorsUpdate = { [projectId]: cursorVal };
+      } else {
+        const projects = new Set<string>();
+        for (const r of changeset.records) {
+          if (r.project) projects.add(r.project);
+        }
+        if (projects.size > 0) {
+          cursorsUpdate = {};
+          for (const p of projects) {
+            cursorsUpdate[p] = cursorVal;
+          }
+        }
       }
       writeHybridState(vaultRoot, {
-        dirty: false,
         lastSyncAt: now,
-        lastError: null,
-        cursors: updatedCursors
+        cursors: cursorsUpdate
       });
     }
 
@@ -142,15 +152,27 @@ export async function pushHybridProject(
 
     if (!dryRun) {
       const now = new Date().toISOString();
-      const updatedCursors = { ...(state.cursors || {}) };
+      const cursorVal = changeset.generatedAt || now;
+      let cursorsUpdate: Record<string, string> | undefined;
       if (projectId) {
-        updatedCursors[projectId] = changeset.generatedAt || now;
+        cursorsUpdate = { [projectId]: cursorVal };
+      } else {
+        const projects = new Set<string>();
+        for (const r of changeset.records) {
+          if (r.project) projects.add(r.project);
+        }
+        if (projects.size > 0) {
+          cursorsUpdate = {};
+          for (const p of projects) {
+            cursorsUpdate[p] = cursorVal;
+          }
+        }
       }
       writeHybridState(vaultRoot, {
         dirty: false,
         lastSyncAt: now,
         lastError: null,
-        cursors: updatedCursors
+        cursors: cursorsUpdate
       });
     }
 
