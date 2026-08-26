@@ -2,7 +2,9 @@
 
 **Audience: agents.** Humans: [`README.md`](README.md).
 
-This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), git boundaries, and task tracking.
+This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, and task tracking.
+
+**Humans / operators** (install, autoboot systemd/Task Scheduler, favorite status URL): [`README.md`](README.md).
 
 **Language:** `en-us` only for product docs, schemas, CLI help, MCP descriptions, tests, and commit messages.
 
@@ -132,6 +134,65 @@ node --test dist/status.test.js
 ### HTTP / SSE transport & status monitor
 
 `memo serve --sse` starts the MCP SSE listener (default `http://127.0.0.1:3000`) and, unless `--no-status` is set, a read-only **status monitor** companion at `http://127.0.0.1:3001/` with vault list, health cards, and a live activity log (tool + HTTP events via SSE `/api/events/stream`). Override the companion port with `--status-port`. Canvas graph UI remains separate on port `4100` (`memo canvas`).
+
+Human-facing ops (autoboot systemd / Windows Task Scheduler, remote MCP URL): [`README.md`](README.md) § Run, serve, status monitor & autoboot.
+
+---
+
+## 🖥️ Agent workflows: run · serve · diagnose · status · autoboot
+
+Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI (`memo` or `node dist/cli.js`). Full map: [`ws-memo`](.agents/skills/ws-memo/SKILL.md).
+
+### Run (session & vault ops)
+
+| Intent | Do |
+|--------|-----|
+| Session start | MCP/`memo` `bootstrap` with `cwd` = product root; apply traps before coding |
+| Recall | `search` → `get` |
+| Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git) |
+| Audit event | `append` |
+| Housekeep | `gc` (`dryRun` first when unsure); `forget` (purge only with explicit user confirm) |
+
+### Serve (MCP transport)
+
+| Mode | Command | Notes |
+|------|---------|--------|
+| Stdio | `memo serve` | Default for Cursor/Claude Desktop host spawn |
+| SSE | `memo serve --sse` | Prints SSE URL + status URL; `--json` emits `url` / `statusUrl` |
+| Flags | `--host` `--port` `--status-port` `--no-status` `--auth-token` `--vaultRoot` | Non-loopback without token **must fail** (`SPEC_MEMO_SSE_TOKEN` / `SPEC_MEMO_AUTH_TOKEN` / `--auth-token`) |
+
+On status companion bind failure: close SSE listener + activity bus before rejecting (trap `sse-status-bind-rollback`). On SSE transport disconnect: `await mcpServer.close()` (trap `sse-mcp-server-close`).
+
+### Diagnose
+
+```bash
+memo doctor              # vault structure, FTS, in-repo pollution
+memo doctor --json
+memo doctor --rebuild    # rebuild FTS from markdown
+memo doctor --fix       # delete leftover in-tree residue (plans/MEMORY/.state…)
+memo rank [--json]       # CLI-only trap recurrence
+```
+
+### Check SSE status monitor
+
+1. Ensure `memo serve --sse` is running (companion on unless `--no-status`).
+2. Operator UI: `http://127.0.0.1:3001/` (optional `?project=<projectId>`).
+3. Machine checks:
+   - `GET /health` on MCP port (`3000`)
+   - `GET /api/status`, `/api/vaults`, `/api/events` on status port (`3001`)
+   - Live: `GET /api/events/stream` (SSE)
+4. With a token: `Authorization: Bearer <token>` (EventSource may use `?token=`).
+5. Status surface is read-only — never treat it as a write path.
+
+### Autoboot service (document / verify; do not invent tokens)
+
+When the user asks to install a boot service for the SSE daemon:
+
+1. Point them at [`README.md`](README.md) § Autoboot (systemd unit or Windows Task Scheduler / NSSM).
+2. Require durable `SPEC_MEMO_ROOT` and a bearer token for non-loopback binds.
+3. After install, verify with `systemctl status` / Task Scheduler history and `curl` `/health` + open `:3001/`.
+4. Shared lab: pass stable `projectId` or server-side `cwd` — do not assume laptop path identity on the daemon host.
+5. Never commit tokens, unit files with secrets, or vault contents into product git.
 
 ---
 

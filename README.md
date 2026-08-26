@@ -80,16 +80,6 @@ Add to your extension's MCP configuration settings:
 }
 ```
 
-*(Optional HTTP / SSE Transport: Run `memo serve --sse` — MCP SSE on `http://127.0.0.1:3000/sse` plus a companion **status monitor** at `http://127.0.0.1:3001/` with live vault-filtered activity log. Disable the monitor with `--no-status`.)*
-
-### Default ports
-
-| Service | Default port | CLI |
-|---------|--------------|-----|
-| MCP SSE transport | `3000` | `memo serve --sse` |
-| Status monitor | `3001` | co-starts with `memo serve --sse` (`--no-status` to disable; `--status-port` to override) |
-| Canvas graph viewer | `4100` | `memo canvas` |
-
 ### Agent skill (`ws-memo`)
 
 Day-to-day vault ops (all 8 MCP tools + CLI extras) are documented as a project skill:
@@ -97,6 +87,169 @@ Day-to-day vault ops (all 8 MCP tools + CLI extras) are documented as a project 
 - [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)
 
 Copy or symlink that folder into a consumer `{skillsRoot}/ws-memo/` (or load it from this clone). **Setup** of `specMemo.enabled` in workflow-skills consumers remains [`ws-spec-memo`](https://github.com/jpolvora/workflow-skills) — do not duplicate that bridge here.
+
+---
+
+## 🖥️ Run, serve, status monitor & autoboot
+
+**Audience:** operators and humans. Agents: see [`AGENTS.md`](AGENTS.md).
+
+### Default ports
+
+| Service | Default URL | Start |
+|---------|-------------|--------|
+| MCP SSE transport | `http://127.0.0.1:3000` (`/sse`, `/message`, `/health`) | `memo serve --sse` |
+| Status monitor | `http://127.0.0.1:3001/` | co-starts with `--sse` (disable: `--no-status`; override: `--status-port`) |
+| Canvas graph viewer | `http://127.0.0.1:4100` | `memo canvas` |
+
+### How to run (local CLI)
+
+```bash
+# After global install or npm link
+memo bootstrap
+memo search "database lock" --kind trap
+memo doctor
+```
+
+From a source checkout:
+
+```bash
+npm install
+npm run build
+node dist/cli.js bootstrap
+# or: npm link  →  memo …
+```
+
+Vault root defaults to `~/.spec-memo/` (`$SPEC_MEMO_ROOT` to override).
+
+### How to serve (MCP)
+
+| Mode | Command | When to use |
+|------|---------|-------------|
+| **Stdio** (default) | `memo serve` | Cursor / Claude Desktop / Gemini host spawns the process (see MCP configs above) |
+| **HTTP / SSE** | `memo serve --sse` | Shared lab daemon, remote MCP URL, or bookmarkable status page |
+
+```bash
+# Loopback SSE + status monitor
+memo serve --sse
+# → MCP SSE:     http://127.0.0.1:3000/sse
+# → Health:      http://127.0.0.1:3000/health
+# → Status UI:   http://127.0.0.1:3001/
+
+memo serve --sse --port 3000 --status-port 3001
+memo serve --sse --no-status          # MCP only
+memo serve --sse --json               # machine metadata (includes statusUrl)
+```
+
+**Flags:** `--host` (default `127.0.0.1`), `--port`, `--status-port`, `--no-status`, `--auth-token`, `--vaultRoot`.
+
+**Auth:** binding beyond loopback **refuses to start** without `--auth-token`, `SPEC_MEMO_SSE_TOKEN`, or `SPEC_MEMO_AUTH_TOKEN`. The product has no TLS and no per-user ACL — keep LAN/Tailscale + bearer token; put a reverse proxy in front if it leaves the overlay.
+
+```bash
+export SPEC_MEMO_ROOT=/var/lib/spec-memo
+export SPEC_MEMO_SSE_TOKEN="$(openssl rand -hex 32)"   # or PowerShell: [guid]::NewGuid().ToString('N')…
+memo serve --sse --host 0.0.0.0 --port 3000
+```
+
+Point Cursor at a remote SSE server (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "spec-memo": {
+      "url": "http://memo.lab:3000/sse",
+      "headers": {
+        "Authorization": "Bearer replace-me"
+      }
+    }
+  }
+}
+```
+
+### How to check the SSE status monitor
+
+1. Start `memo serve --sse` (status companion on by default).
+2. Open **http://127.0.0.1:3001/** in a browser (favorite that URL).
+3. Confirm health cards (MCP host/port, vault count, uptime) and the **live activity log** (tool + HTTP events).
+4. Filter by vault/project via the page control or `?project=<projectId>`.
+
+Quick machine checks:
+
+```bash
+curl -s http://127.0.0.1:3000/health
+curl -s http://127.0.0.1:3001/api/status
+curl -s http://127.0.0.1:3001/api/vaults
+# Live stream (SSE): GET http://127.0.0.1:3001/api/events/stream
+```
+
+When a token is set, send `Authorization: Bearer <token>` (streams also accept `?token=`). Status routes are **read-only** — they never mutate the vault. Canvas (`:4100`) remains a separate graph UI.
+
+### How to diagnose
+
+```bash
+memo doctor              # vault + FTS + in-repo pollution scan
+memo doctor --json
+memo doctor --rebuild    # rebuild SQLite FTS5 from markdown
+memo doctor --fix       # delete leftover in-tree workflow residue
+```
+
+Also useful: `memo rank` (trap recurrence), `memo gc --dry-run`, and the status page live log while the SSE daemon is up.
+
+### Autoboot: run `memo serve --sse` as a service
+
+Use this so the MCP SSE daemon (and status monitor) start on boot. Prefer a durable vault directory (not a login-user `~/.spec-memo` unless intentional).
+
+#### Linux — systemd
+
+```bash
+sudo mkdir -p /var/lib/spec-memo
+# Install Node 22 + clone/build to /opt/spec-memo (or npm i -g spec-memo and point ExecStart at `memo`)
+```
+
+`/etc/systemd/system/spec-memo.service`:
+
+```ini
+[Unit]
+Description=spec-memo MCP SSE
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/spec-memo
+Environment=SPEC_MEMO_ROOT=/var/lib/spec-memo
+Environment=SPEC_MEMO_SSE_TOKEN=replace-me
+ExecStart=/usr/bin/node /opt/spec-memo/dist/cli.js serve --sse --host 0.0.0.0 --port 3000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now spec-memo.service
+sudo systemctl status spec-memo.service
+curl -s -H "Authorization: Bearer replace-me" http://127.0.0.1:3000/health
+# Status UI: http://<host>:3001/  (also requires the bearer when a token is set)
+```
+
+#### Windows — Task Scheduler (autoboot at logon)
+
+1. Install Node 22 and `npm install -g spec-memo` (or build this repo and use the full path to `node` + `dist\cli.js`).
+2. Create a vault dir, e.g. `C:\spec-memo-vault`.
+3. **Task Scheduler → Create Task**:
+   - Trigger: **At log on** (or **At startup** with a service account).
+   - Action: Start a program  
+     - Program: `node` (full path if needed)  
+     - Arguments: `"C:\Users\<you>\AppData\Roaming\npm\node_modules\spec-memo\dist\cli.js" serve --sse --host 127.0.0.1 --port 3000`  
+       (or `memo.cmd serve --sse …` if `memo` is on PATH)
+   - Start in: vault-friendly working directory.
+4. Add environment variables on the task (or a wrapper `.cmd`): `SPEC_MEMO_ROOT=C:\spec-memo-vault`, and `SPEC_MEMO_SSE_TOKEN=…` if binding off loopback.
+5. Optional: [NSSM](https://nssm.cc/) / WinSW to wrap the same command as a Windows Service with restart-on-failure.
+
+Verify: open `http://127.0.0.1:3001/` and `curl http://127.0.0.1:3000/health`.
+
+**Shared-lab note:** project identity comes from the git remote of the tool `cwd` / `projectId`. Laptop paths do not exist on the server — pass a stable `projectId` (e.g. `github.com-jpolvora-spec-memo`) or a server-side clone path as `cwd`. One bearer token = shared vault (no per-user ACL).
 
 ---
 
@@ -221,7 +374,7 @@ All memory is stored in `$SPEC_MEMO_ROOT` (defaults to `~/.spec-memo/`):
 
 ### 1. Health Diagnostics & Repository Cleaning (`doctor`)
 
-Inspect vault integrity, SQLite FTS index status, and detect leftover in-repo workflow pollution:
+Inspect vault integrity, SQLite FTS index status, and detect leftover in-repo workflow pollution. (Also see [Run, serve, status monitor & autoboot](#️-run-serve-status-monitor--autoboot) for live SSE status checks.)
 
 ```bash
 # Check vault health and scan product repository for residue
