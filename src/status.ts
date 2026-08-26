@@ -3,6 +3,9 @@ import { getVaultRoot } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
 import { getPackageVersion } from "./version.js";
+import { exportVault, importVault } from "./backup.js";
+import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
+import { logErrorReport } from "./error-logger.js";
 
 export interface McpStatusSummary {
   host: string;
@@ -17,6 +20,7 @@ export interface StatusServerOptions {
   vaultRoot?: string;
   authToken?: string;
   activityBus: ActivityBus;
+  errorLogPath?: string;
   getMcp?: () => McpStatusSummary;
 }
 
@@ -63,6 +67,31 @@ function filterEventsForSnapshot(events: ActivityEvent[], projectId?: string, af
   return events.filter(
     (e) => e.seq > afterSeq && eventMatchesProjectFilter(e, projectId)
   );
+}
+
+function readBodyBuffer(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+
+    req.on("data", (chunk: Buffer) => {
+      totalBytes += chunk.length;
+      if (totalBytes > maxBytes) {
+        req.destroy();
+        const err = new Error(`Payload exceeds maximum size of ${maxBytes} bytes`);
+        (err as any).statusCode = 413;
+        reject(err);
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      resolve(Buffer.concat(chunks));
+    });
+
+    req.on("error", reject);
+  });
 }
 
 export function generateStatusHtml(version = getPackageVersion()): string {
@@ -118,7 +147,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     .badge.live { border-color: var(--ok); color: var(--ok); }
     .badge.reconnecting { border-color: #d29922; color: #d29922; }
     .badge.offline { border-color: var(--err); color: var(--err); }
-    main { display: grid; grid-template-columns: 280px 1fr; flex: 1; min-height: 0; }
+    main { display: grid; grid-template-columns: 280px 1fr; flex: 1; min-height: 0; position: relative; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
     aside {
       border-right: 1px solid var(--border);
@@ -137,7 +166,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
     .stat label { display: block; font-size: 0.7rem; color: var(--muted); margin-bottom: 4px; }
     .stat value { font-size: 0.95rem; color: var(--bright); word-break: break-all; }
-    select, button {
+    select, button, input[type="password"], input[type="text"] {
       width: 100%;
       background: var(--bg);
       color: var(--text);
@@ -146,8 +175,20 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       padding: 8px 10px;
       font-size: 0.85rem;
     }
-    button { cursor: pointer; margin-top: 6px; }
-    button:hover { border-color: var(--accent); color: var(--bright); }
+    input[type="password"], input[type="text"] {
+      margin-top: 6px;
+      outline: none;
+    }
+    input[type="password"]:focus, input[type="text"]:focus {
+      border-color: var(--accent);
+    }
+    button { cursor: pointer; margin-top: 6px; transition: border-color 0.15s, color 0.15s, opacity 0.15s; }
+    button:hover:not(:disabled) { border-color: var(--accent); color: var(--bright); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #238636; border-color: rgba(240,246,252,0.1); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #2ea043; border-color: rgba(240,246,252,0.1); color: #fff; }
+    .btn-secondary { background: var(--card); }
+    .helper-text { font-size: 0.75rem; color: var(--muted); margin-top: 6px; }
     .vault-list { list-style: none; max-height: 220px; overflow-y: auto; }
     .vault-list li {
       padding: 8px 10px;
@@ -167,6 +208,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       flex-direction: column;
       min-height: 0;
       padding: 16px;
+      position: relative;
     }
     .log-toolbar {
       display: flex;
@@ -203,6 +245,78 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     .kind-tag, .ok-tag { font-weight: 600; text-transform: uppercase; font-size: 0.68rem; }
     .log-summary { color: var(--bright); word-break: break-word; }
     .log-meta { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
+    
+    /* Alerts & Banners */
+    .banner-container {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      left: 16px;
+      z-index: 100;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+    }
+    .banner {
+      pointer-events: auto;
+      max-width: 640px;
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      animation: fadeIn 0.2s ease;
+    }
+    .banner.error { background: #3c1214; border-color: var(--err); color: #ffb4b0; }
+    .banner.success { background: #0c2d18; border-color: var(--ok); color: #7ee787; }
+    .banner.info { background: #13233a; border-color: var(--accent); color: #a5d6ff; }
+    .banner button.close-banner {
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+      margin: 0;
+      padding: 0 4px;
+      width: auto;
+      line-height: 1;
+    }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(13, 17, 23, 0.75);
+      backdrop-filter: blur(2px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-width: 440px;
+      width: 100%;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      animation: fadeIn 0.15s ease;
+    }
+    .modal-card h3 { font-size: 1.05rem; color: var(--bright); margin-bottom: 10px; }
+    .modal-card p { font-size: 0.85rem; color: var(--text); line-height: 1.4; margin-bottom: 12px; }
+    .modal-card label { display: block; font-size: 0.78rem; color: var(--muted); margin-top: 10px; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+    .modal-actions button { width: auto; margin-top: 0; padding: 8px 14px; }
   </style>
 </head>
 <body>
@@ -214,6 +328,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     </div>
   </header>
   <main>
+    <div class="banner-container" id="banner-container"></div>
     <aside>
       <div class="panel">
         <h2>Server</h2>
@@ -232,6 +347,18 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         <div class="filter-context" id="filter-context"></div>
       </div>
       <div class="panel">
+        <h2>Vault backup</h2>
+        <button type="button" id="btn-export" disabled>Export vault</button>
+        <div class="helper-text" id="export-helper">Select a vault above to export</div>
+
+        <div class="import-section" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);">
+          <input type="file" id="input-import-file" accept=".zip,application/zip" style="display: none;">
+          <button type="button" id="btn-choose-file" class="btn-secondary">Choose backup zip…</button>
+          <div id="import-filename" class="helper-text" style="display: none; word-break: break-all;"></div>
+          <button type="button" id="btn-run-import" class="btn-primary" style="display: none;" disabled>Run import</button>
+        </div>
+      </div>
+      <div class="panel">
         <h2>Vault projects</h2>
         <ul class="vault-list" id="vault-list"></ul>
       </div>
@@ -244,6 +371,37 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div id="activity-log"></div>
     </section>
   </main>
+
+  <!-- Export Password Modal -->
+  <div id="modal-export" class="modal-overlay">
+    <div class="modal-card">
+      <h3 id="modal-export-title">Export Vault</h3>
+      <p id="modal-export-desc">Download a backup .zip archive containing all structured memories for this project.</p>
+      <label for="export-password">Optional encryption password:</label>
+      <input type="password" id="export-password" placeholder="Leave empty for unencrypted" autocomplete="new-password">
+      <div class="helper-text">If set, records are encrypted with AES-256-GCM before packaging.</div>
+      <div class="modal-actions">
+        <button type="button" id="btn-export-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-export-confirm" class="btn-primary">Download Backup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Confirmation Modal -->
+  <div id="modal-import" class="modal-overlay">
+    <div class="modal-card">
+      <h3>Confirm Vault Import</h3>
+      <p id="modal-import-summary">Target vault root: local vault.</p>
+      <p style="color: #ffb4b0; font-size: 0.8rem;">Import will merge records from the archive into the local vault and overwrite existing records with the same paths. Continue?</p>
+      <label for="import-password">Password (if archive is encrypted):</label>
+      <input type="password" id="import-password" placeholder="Password (if encrypted)" autocomplete="current-password">
+      <div class="modal-actions">
+        <button type="button" id="btn-import-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-import-confirm" class="btn-primary">Confirm & Restore</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const STORAGE_KEY = "spec-memo-status-project";
     const urlParams = new URLSearchParams(window.location.search);
@@ -254,6 +412,25 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     let eventSource = null;
     let pauseScroll = false;
     let reconnectTimer = null;
+    let selectedImportFile = null;
+
+    function showBanner(message, type = "info", timeoutMs = 6000) {
+      const container = document.getElementById("banner-container");
+      const banner = document.createElement("div");
+      banner.className = "banner " + type;
+      banner.innerHTML = '<span>' + escapeHtml(message) + '</span>' +
+        '<button type="button" class="close-banner">&times;</button>';
+      
+      const closeBtn = banner.querySelector(".close-banner");
+      let timer = null;
+      function remove() {
+        if (timer) clearTimeout(timer);
+        if (banner.parentNode) banner.parentNode.removeChild(banner);
+      }
+      closeBtn.addEventListener("click", remove);
+      if (timeoutMs > 0) timer = setTimeout(remove, timeoutMs);
+      container.appendChild(banner);
+    }
 
     function apiHeaders() {
       const h = {};
@@ -336,11 +513,18 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     function updateFilterContext() {
       const el = document.getElementById("filter-context");
+      const exportBtn = document.getElementById("btn-export");
+      const exportHelper = document.getElementById("export-helper");
       if (!selectedProject) {
         el.textContent = "";
+        exportBtn.disabled = true;
+        exportHelper.textContent = "Select a vault above to export";
         return;
       }
-      el.textContent = "Showing: " + displayNameForProject(selectedProject);
+      const dName = displayNameForProject(selectedProject);
+      el.textContent = "Showing: " + dName;
+      exportBtn.disabled = false;
+      exportHelper.textContent = "Exporting: " + dName;
     }
 
     function renderVaultList() {
@@ -451,6 +635,167 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     }
 
+    // Export flow
+    const modalExport = document.getElementById("modal-export");
+    const btnExport = document.getElementById("btn-export");
+    const btnExportCancel = document.getElementById("btn-export-cancel");
+    const btnExportConfirm = document.getElementById("btn-export-confirm");
+    const exportPasswordInput = document.getElementById("export-password");
+
+    btnExport.addEventListener("click", () => {
+      if (!selectedProject) return;
+      document.getElementById("modal-export-title").textContent = "Export Vault: " + displayNameForProject(selectedProject);
+      exportPasswordInput.value = "";
+      modalExport.classList.add("open");
+      exportPasswordInput.focus();
+    });
+
+    btnExportCancel.addEventListener("click", () => {
+      modalExport.classList.remove("open");
+    });
+
+    btnExportConfirm.addEventListener("click", async () => {
+      if (!selectedProject) return;
+      btnExportConfirm.disabled = true;
+      btnExportConfirm.textContent = "Exporting…";
+      const password = exportPasswordInput.value;
+      modalExport.classList.remove("open");
+
+      try {
+        let exportUrl = "/api/vaults/export";
+        if (authToken) exportUrl += "?token=" + encodeURIComponent(authToken);
+        const res = await fetch(exportUrl, {
+          method: "POST",
+          headers: {
+            ...apiHeaders(),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ projectId: selectedProject, password: password || undefined })
+        });
+
+        if (!res.ok) {
+          let errText = "Export failed (" + res.status + ")";
+          try {
+            const errJson = await res.json();
+            if (errJson.error) errText = errJson.error;
+          } catch (_) {}
+          showBanner(errText, "error");
+          return;
+        }
+
+        const blob = await res.blob();
+        const contentDisp = res.headers.get("content-disposition") || "";
+        let filename = "spec-memo-vault-" + selectedProject + ".zip";
+        const fnMatch = contentDisp.match(/filename="?([^";]+)"?/i);
+        if (fnMatch && fnMatch[1]) filename = fnMatch[1].trim();
+
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+        showBanner("Export successful: downloaded " + filename, "success");
+      } catch (err) {
+        showBanner("Export failed: " + (err.message || String(err)), "error");
+      } finally {
+        btnExportConfirm.disabled = false;
+        btnExportConfirm.textContent = "Download Backup";
+      }
+    });
+
+    // Import flow
+    const fileInput = document.getElementById("input-import-file");
+    const btnChooseFile = document.getElementById("btn-choose-file");
+    const filenameDisplay = document.getElementById("import-filename");
+    const btnRunImport = document.getElementById("btn-run-import");
+    const modalImport = document.getElementById("modal-import");
+    const btnImportCancel = document.getElementById("btn-import-cancel");
+    const btnImportConfirm = document.getElementById("btn-import-confirm");
+    const importPasswordInput = document.getElementById("import-password");
+
+    btnChooseFile.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files[0]) {
+        selectedImportFile = fileInput.files[0];
+        filenameDisplay.textContent = "Selected: " + selectedImportFile.name;
+        filenameDisplay.style.display = "block";
+        btnRunImport.style.display = "block";
+        btnRunImport.disabled = false;
+      } else {
+        selectedImportFile = null;
+        filenameDisplay.style.display = "none";
+        btnRunImport.style.display = "none";
+        btnRunImport.disabled = true;
+      }
+    });
+
+    btnRunImport.addEventListener("click", () => {
+      if (!selectedImportFile) return;
+      document.getElementById("modal-import-summary").textContent =
+        "Target vault root: local vault (" + vaults.length + " projects)";
+      importPasswordInput.value = "";
+      modalImport.classList.add("open");
+      importPasswordInput.focus();
+    });
+
+    btnImportCancel.addEventListener("click", () => {
+      modalImport.classList.remove("open");
+    });
+
+    btnImportConfirm.addEventListener("click", async () => {
+      if (!selectedImportFile) return;
+      btnImportConfirm.disabled = true;
+      btnImportConfirm.textContent = "Importing…";
+      btnRunImport.disabled = true;
+      btnRunImport.textContent = "Importing…";
+      modalImport.classList.remove("open");
+
+      try {
+        const formData = new FormData();
+        formData.append("archive", selectedImportFile);
+        const pass = importPasswordInput.value;
+        if (pass) formData.append("password", pass);
+
+        let importUrl = "/api/vaults/import";
+        if (authToken) importUrl += "?token=" + encodeURIComponent(authToken);
+
+        const res = await fetch(importUrl, {
+          method: "POST",
+          headers: apiHeaders(),
+          body: formData
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          const errText = data.error || ("Import failed (" + res.status + ")");
+          showBanner(errText, "error");
+          return;
+        }
+
+        showBanner(
+          "Import successful: restored " + data.restoredRecordsCount + " records across " + data.restoredProjectsCount + " project(s)",
+          "success"
+        );
+        fileInput.value = "";
+        selectedImportFile = null;
+        filenameDisplay.style.display = "none";
+        btnRunImport.style.display = "none";
+        await loadVaults();
+        await refreshStatus();
+      } catch (err) {
+        showBanner("Import failed: " + (err.message || String(err)), "error");
+      } finally {
+        btnImportConfirm.disabled = false;
+        btnImportConfirm.textContent = "Confirm & Restore";
+        btnRunImport.disabled = false;
+        btnRunImport.textContent = "Run import";
+      }
+    });
+
     document.getElementById("vault-filter").addEventListener("change", (e) => {
       setProjectFilter(e.target.value);
     });
@@ -462,7 +807,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       document.getElementById("activity-log").innerHTML = "";
     });
 
-    loadVaults().then(() => {
+loadVaults().then(() => {
       reconnectStream(true);
       refreshStatus();
       setInterval(refreshStatus, 5000);
@@ -479,20 +824,30 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
   const authToken =
     options.authToken ||
     process.env.SPEC_MEMO_AUTH_TOKEN ||
-    process.env.SPEC_MEMO_STATUS_TOKEN;
+    process.env.SPEC_MEMO_STATUS_TOKEN ||
+    process.env.SPEC_MEMO_SSE_TOKEN;
   const bus = options.activityBus;
+  const errorLogPath = options.errorLogPath;
 
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !authToken) {
-    throw new Error(
-      "Refusing to bind status monitor to a non-loopback host without authentication token (--auth-token or SPEC_MEMO_AUTH_TOKEN / SPEC_MEMO_STATUS_TOKEN)."
+    const err = new Error(
+      "Refusing to bind status monitor to a non-loopback host without authentication token (--auth-token or SPEC_MEMO_AUTH_TOKEN / SPEC_MEMO_STATUS_TOKEN / SPEC_MEMO_SSE_TOKEN)."
     );
+    logErrorReport({
+      subsystem: "status-server",
+      port,
+      host,
+      error: err,
+      level: "FATAL"
+    }, { vaultRoot, logPath: errorLogPath });
+    throw err;
   }
 
   const packageVersion = getPackageVersion();
   const html = generateStatusHtml(packageVersion);
 
   return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
       const url = new URL(req.url || "/", `http://${host}:${port}`);
       const pathname = url.pathname;
 
@@ -506,6 +861,18 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
       if (pathname.startsWith("/api/")) {
         if (!isAuthorized(req, url, authToken)) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: req.method,
+            endpoint: pathname,
+            error: "Unauthorized request: missing or invalid authorization token",
+            context: {
+              headers: req.headers,
+              query: Object.fromEntries(url.searchParams.entries())
+            }
+          }, { vaultRoot, logPath: errorLogPath });
           writeJson(res, 401, { error: "Unauthorized" });
           return;
         }
@@ -546,6 +913,242 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         return;
       }
 
+      if (req.method === "POST" && pathname === "/api/vaults/export") {
+        const startTime = Date.now();
+        let targetProjectId = "";
+        try {
+          const rawBody = await readBodyBuffer(req, 1024 * 1024);
+          let parsed: { projectId?: string; password?: string } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              logErrorReport({
+                subsystem: "status-server",
+                port,
+                host,
+                method: "POST",
+                endpoint: "/api/vaults/export",
+                error: "Invalid JSON body"
+              }, { vaultRoot, logPath: errorLogPath });
+              writeJson(res, 400, { error: "Invalid JSON body" });
+              return;
+            }
+          }
+
+          targetProjectId = parsed.projectId || "";
+          if (!targetProjectId || typeof targetProjectId !== "string") {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/export",
+              error: `Unknown projectId (missing or not a string)`
+            }, { vaultRoot, logPath: errorLogPath });
+            writeJson(res, 400, { error: "Unknown projectId" });
+            return;
+          }
+
+          const projects = getVaultProjectList(vaultRoot);
+          if (!projects.some((p) => p.id === targetProjectId)) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/export",
+              error: `Unknown projectId: ${targetProjectId}`,
+              projectId: targetProjectId
+            }, { vaultRoot, logPath: errorLogPath });
+            writeJson(res, 400, { error: "Unknown projectId" });
+            return;
+          }
+
+          const exportResult = await exportVault({
+            vaultRoot,
+            projectId: targetProjectId,
+            password: parsed.password || undefined
+          });
+
+          if (!exportResult.payload) {
+            throw new Error("Export yielded empty payload");
+          }
+
+          const zipBuffer = packVaultZip(exportResult.payload);
+          const now = new Date();
+          const pad = (n: number) => String(n).padStart(2, "0");
+          const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+          const filename = `spec-memo-vault-${targetProjectId}-${timestamp}.zip`;
+
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `export vault ${targetProjectId} (${exportResult.recordsCount} records)`,
+            projectId: targetProjectId
+          });
+
+          setCorsHeaders(res);
+          res.writeHead(200, {
+            "Content-Type": "application/zip",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+            "Content-Length": zipBuffer.length
+          });
+          res.end(zipBuffer);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/export",
+            error: err,
+            projectId: targetProjectId || undefined
+          }, { vaultRoot, logPath: errorLogPath });
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: false,
+            durationMs: Date.now() - startTime,
+            summary: `export vault ${targetProjectId || "unknown"} failed: ${msg}`,
+            projectId: targetProjectId || undefined
+          });
+          writeJson(res, 500, { error: msg });
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/import") {
+        const startTime = Date.now();
+        const maxImportBytes = 64 * 1024 * 1024; // 64 MiB
+
+        const contentType = req.headers["content-type"] || "";
+        const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+        if (!boundaryMatch) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/import",
+            error: "Content-Type must be multipart/form-data with boundary."
+          }, { vaultRoot, logPath: errorLogPath });
+          writeJson(res, 400, { ok: false, error: "Content-Type must be multipart/form-data with boundary." });
+          return;
+        }
+
+        const boundary = (boundaryMatch[1] || boundaryMatch[2]).trim();
+
+        try {
+          const rawBody = await readBodyBuffer(req, maxImportBytes);
+          const parsed = parseMultipartFormData(rawBody, boundary);
+
+          const archiveFile = parsed.files["archive"];
+          if (!archiveFile || !archiveFile.data || archiveFile.data.length === 0) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/import",
+              error: "Missing archive file"
+            }, { vaultRoot, logPath: errorLogPath });
+            writeJson(res, 400, { ok: false, error: "Missing archive file" });
+            return;
+          }
+
+          const archiveBuf = archiveFile.data;
+          if (
+            archiveBuf.length < 4 ||
+            archiveBuf[0] !== 0x50 ||
+            archiveBuf[1] !== 0x4b ||
+            archiveBuf[2] !== 0x03 ||
+            archiveBuf[3] !== 0x04
+          ) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/import",
+              error: "Invalid archive format: expected ZIP file"
+            }, { vaultRoot, logPath: errorLogPath });
+            writeJson(res, 400, { ok: false, error: "Invalid archive format: expected ZIP file" });
+            return;
+          }
+
+          let jsonPayload: string;
+          try {
+            jsonPayload = unpackVaultZip(archiveBuf);
+          } catch (e: unknown) {
+            const unpackMsg = e instanceof Error ? e.message : String(e);
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: "POST",
+              endpoint: "/api/vaults/import",
+              error: unpackMsg
+            }, { vaultRoot, logPath: errorLogPath });
+            writeJson(res, 400, { ok: false, error: unpackMsg });
+            return;
+          }
+
+          const password = parsed.fields["password"] || undefined;
+          const importResult = await importVault({
+            vaultRoot,
+            payload: jsonPayload,
+            password,
+            overwrite: true
+          });
+
+          const isSingle = importResult.restoredProjects.length === 1;
+          const targetProj = isSingle ? importResult.restoredProjects[0] : undefined;
+
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `import vault (${importResult.restoredRecordsCount} records, ${importResult.restoredProjectsCount} projects)`,
+            projectId: targetProj
+          });
+
+          writeJson(res, 200, {
+            ok: true,
+            restoredProjectsCount: importResult.restoredProjectsCount,
+            restoredRecordsCount: importResult.restoredRecordsCount,
+            restoredProjects: importResult.restoredProjects
+          });
+        } catch (err: unknown) {
+          const statusCode = (err as any)?.statusCode === 413 ? 413 : 400;
+          const msg = err instanceof Error ? err.message : String(err);
+
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/import",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: false,
+            durationMs: Date.now() - startTime,
+            summary: `import vault failed: ${msg}`
+          });
+
+          writeJson(res, statusCode, { ok: false, error: msg });
+        }
+        return;
+      }
+
       if (req.method === "GET" && pathname === "/api/events") {
         const projectFilter = url.searchParams.get("project") || undefined;
         const events = bus.list(projectFilter ? { projectId: projectFilter } : undefined);
@@ -577,7 +1180,15 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             if (!eventMatchesProjectFilter(event, projectFilter)) return;
             try {
               res.write(`event: activity\ndata: ${JSON.stringify(event)}\n\n`);
-            } catch {
+            } catch (streamErr: unknown) {
+              logErrorReport({
+                subsystem: "status-server",
+                port,
+                host,
+                endpoint: "/api/events/stream",
+                error: streamErr,
+                context: { phase: "sse_client_write" }
+              }, { vaultRoot, logPath: errorLogPath });
               unsubscribe();
             }
           },
@@ -590,10 +1201,29 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         return;
       }
 
+      logErrorReport({
+        subsystem: "status-server",
+        port,
+        host,
+        method: req.method,
+        endpoint: pathname,
+        error: `Route not found: ${req.method} ${pathname}`,
+        level: "WARN"
+      }, { vaultRoot, logPath: errorLogPath });
       writeJson(res, 404, { error: "Not found" });
     });
 
-    server.on("error", reject);
+    server.on("error", (err) => {
+      logErrorReport({
+        subsystem: "status-server",
+        port,
+        host,
+        error: err,
+        level: "FATAL",
+        context: { phase: "server_listen_error" }
+      }, { vaultRoot, logPath: errorLogPath });
+      reject(err);
+    });
 
     server.listen(port, host, () => {
       const actualPort = (server.address() as { port: number }).port;
@@ -605,7 +1235,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         url: serverUrl,
         close: () =>
           new Promise<void>((res) => {
-            if (typeof (server as any).closeAllConnections === 'function') {
+            if (typeof (server as any).closeAllConnections === "function") {
               (server as any).closeAllConnections();
             }
             server.close(() => res());

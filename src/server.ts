@@ -6,6 +6,7 @@ import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, createActivityBus } from "./activity.js";
 import { startStatusServer, StatusServerInstance } from "./status.js";
 import { exportChangeset, applyChangeset } from "./sync.js";
+import { logErrorReport } from "./error-logger.js";
 
 function readJsonBody(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -43,6 +44,7 @@ export interface SseServerOptions {
   statusAuthToken?: string;
   enableStatus?: boolean;
   activityBus?: ActivityBus;
+  errorLogPath?: string;
 }
 
 export interface SseServerInstance {
@@ -101,9 +103,18 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
   const authToken = options.authToken || process.env.SPEC_MEMO_AUTH_TOKEN || process.env.SPEC_MEMO_SSE_TOKEN;
   const enableStatus = options.enableStatus !== false;
   const bus = options.activityBus ?? createActivityBus({ capacity: 200 });
+  const errorLogPath = options.errorLogPath;
 
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !authToken) {
-    throw new Error("Refusing to bind SSE MCP server to a non-loopback host without authentication token (--auth-token or SPEC_MEMO_SSE_TOKEN).");
+    const err = new Error("Refusing to bind SSE MCP server to a non-loopback host without authentication token (--auth-token or SPEC_MEMO_SSE_TOKEN).");
+    logErrorReport({
+      subsystem: "sse-server",
+      port,
+      host,
+      error: err,
+      level: "FATAL"
+    }, { vaultRoot, logPath: errorLogPath });
+    throw err;
   }
 
   const transports = new Map<string, SSEServerTransport>();
@@ -135,6 +146,18 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       });
 
       if (!isAuthorized(req, url, authToken)) {
+        logErrorReport({
+          subsystem: "sse-server",
+          port,
+          host,
+          method,
+          endpoint: pathname,
+          error: "Unauthorized request: missing or invalid authorization token",
+          context: {
+            headers: req.headers,
+            query: Object.fromEntries(url.searchParams.entries())
+          }
+        }, { vaultRoot, logPath: errorLogPath });
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Unauthorized" }));
         return;
@@ -168,6 +191,15 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           res.end(JSON.stringify(changeset));
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
+          logErrorReport({
+            subsystem: "sse-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/sync/pull",
+            error: err,
+            context: { headers: req.headers }
+          }, { vaultRoot, logPath: errorLogPath });
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: msg }));
         }
@@ -185,6 +217,15 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           res.end(JSON.stringify(result));
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
+          logErrorReport({
+            subsystem: "sse-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/sync/push",
+            error: err,
+            context: { headers: req.headers }
+          }, { vaultRoot, logPath: errorLogPath });
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: msg }));
         }
@@ -215,6 +256,15 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           res.end(JSON.stringify({ applied: appliedResult, changeset: pulledChangeset }));
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
+          logErrorReport({
+            subsystem: "sse-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/sync",
+            error: err,
+            context: { headers: req.headers }
+          }, { vaultRoot, logPath: errorLogPath });
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: msg }));
         }
@@ -222,48 +272,116 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       }
 
       if (method === "GET" && (pathname === "/sse" || pathname === "/")) {
-        const tokenInQuery = url.searchParams.get("token") || url.searchParams.get("authToken");
-        const messageEndpoint = tokenInQuery
-          ? `/message?token=${encodeURIComponent(tokenInQuery)}`
-          : "/message";
-        const transport = new SSEServerTransport(messageEndpoint, res);
-        const mcpServer = createMcpServer({ defaultVaultRoot: vaultRoot, activityBus: bus });
-        let cleaned = false;
-        const cleanup = () => {
-          if (cleaned) return;
-          cleaned = true;
-          transports.delete(transport.sessionId);
-          void mcpServer.close().catch(() => {
-            // ignore cleanup error
-          });
-        };
+        try {
+          const tokenInQuery = url.searchParams.get("token") || url.searchParams.get("authToken");
+          const messageEndpoint = tokenInQuery
+            ? `/message?token=${encodeURIComponent(tokenInQuery)}`
+            : "/message";
+          const transport = new SSEServerTransport(messageEndpoint, res);
+          const mcpServer = createMcpServer({ defaultVaultRoot: vaultRoot, activityBus: bus, errorLogPath });
+          let cleaned = false;
+          const cleanup = () => {
+            if (cleaned) return;
+            cleaned = true;
+            transports.delete(transport.sessionId);
+            void mcpServer.close().catch((closeErr) => {
+              logErrorReport({
+                subsystem: "sse-server",
+                port,
+                host,
+                endpoint: "/sse",
+                error: closeErr,
+                context: { phase: "mcpServer_close_cleanup", sessionId: transport.sessionId }
+              }, { vaultRoot, logPath: errorLogPath });
+            });
+          };
 
-        transports.set(transport.sessionId, transport);
-        transport.onclose = cleanup;
-        res.on("close", cleanup);
+          transports.set(transport.sessionId, transport);
+          transport.onclose = cleanup;
+          res.on("close", cleanup);
 
-        await mcpServer.connect(transport);
-        return;
+          await mcpServer.connect(transport);
+          return;
+        } catch (sseErr: unknown) {
+          logErrorReport({
+            subsystem: "sse-server",
+            port,
+            host,
+            endpoint: pathname,
+            method: "GET",
+            error: sseErr,
+            context: { headers: req.headers }
+          }, { vaultRoot, logPath: errorLogPath });
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "SSE connection failed" }));
+          }
+          return;
+        }
       }
 
       if (method === "POST" && pathname === "/message") {
         const sessionId = url.searchParams.get("sessionId");
         if (!sessionId || !transports.has(sessionId)) {
+          logErrorReport({
+            subsystem: "sse-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/message",
+            error: `Valid sessionId required (received: ${sessionId || "none"})`,
+            context: { sessionId, activeSessions: Array.from(transports.keys()) }
+          }, { vaultRoot, logPath: errorLogPath });
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Valid sessionId required" }));
           return;
         }
 
         const transport = transports.get(sessionId)!;
-        await transport.handlePostMessage(req, res);
+        try {
+          await transport.handlePostMessage(req, res);
+        } catch (postErr: unknown) {
+          logErrorReport({
+            subsystem: "sse-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/message",
+            error: postErr,
+            context: { sessionId }
+          }, { vaultRoot, logPath: errorLogPath });
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Failed to handle post message" }));
+          }
+        }
         return;
       }
 
+      logErrorReport({
+        subsystem: "sse-server",
+        port,
+        host,
+        method,
+        endpoint: pathname,
+        error: `Route not found: ${method} ${pathname}`,
+        level: "WARN"
+      }, { vaultRoot, logPath: errorLogPath });
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Not found" }));
     });
 
-    server.on("error", reject);
+    server.on("error", (err) => {
+      logErrorReport({
+        subsystem: "sse-server",
+        port,
+        host,
+        error: err,
+        level: "FATAL",
+        context: { phase: "server_listen_error" }
+      }, { vaultRoot, logPath: errorLogPath });
+      reject(err);
+    });
 
     server.listen(port, host, async () => {
       const actualPort = (server.address() as { port: number }).port;
@@ -273,15 +391,16 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       let statusPort: number | undefined;
 
       if (enableStatus) {
+        const statusHost = options.statusHost || host;
+        const statusAuth = options.statusAuthToken || authToken;
         try {
-          const statusHost = options.statusHost || host;
-          const statusAuth = options.statusAuthToken || authToken;
           statusInstance = await startStatusServer({
             port: options.statusPort ?? 3001,
             host: statusHost,
             vaultRoot,
             authToken: statusAuth,
             activityBus: bus,
+            errorLogPath,
             getMcp: () => ({
               host,
               port: actualPort,
@@ -299,6 +418,14 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             summary: `Status monitor listening at ${statusInstance.url}`
           });
         } catch (err) {
+          logErrorReport({
+            subsystem: "status-server",
+            port: options.statusPort ?? 3001,
+            host: statusHost,
+            error: err,
+            level: "FATAL",
+            context: { phase: "status_server_start_rollback" }
+          }, { vaultRoot, logPath: errorLogPath });
           bus.close();
           for (const transport of transports.values()) {
             try {

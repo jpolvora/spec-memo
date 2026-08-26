@@ -9,6 +9,10 @@ import { getPackageVersion } from "./version.js";
 import { ensureProjectVault } from "./vault.js";
 import { closeIndex } from "./indexer.js";
 import { executeTool } from "./tools.js";
+import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
+import { exportVault } from "./backup.js";
+import { upsertRecord } from "./store.js";
+import { readErrorLogs } from "./error-logger.js";
 
 function countTrapFiles(vaultRoot: string, projectId: string): number {
   const dir = path.join(vaultRoot, "projects", projectId, "traps");
@@ -78,13 +82,18 @@ test("MCP status monitor", async (t) => {
 
   const bus = createActivityBus({ capacity: 200 });
 
-  await t.test("generateStatusHtml is self-contained with spec-memo title", () => {
+  await t.test("generateStatusHtml is self-contained with spec-memo title and backup UI", () => {
     const version = getPackageVersion();
     const html = generateStatusHtml(version);
     assert.ok(html.includes("spec-memo"));
     assert.ok(html.includes("<title>spec-memo"));
     assert.ok(html.includes("(status monitor v" + version + ")"));
     assert.ok(html.includes('id="stat-version"'));
+    assert.ok(html.includes('id="btn-export"'));
+    assert.ok(html.includes('id="btn-choose-file"'));
+    assert.ok(html.includes('id="btn-run-import"'));
+    assert.ok(html.includes('id="modal-export"'));
+    assert.ok(html.includes('id="modal-import"'));
     assert.ok(!html.includes("cdn.jsdelivr"));
   });
 
@@ -134,7 +143,7 @@ test("MCP status monitor", async (t) => {
     assert.ok(vaults.some((v) => v.id === projectId));
   });
 
-  await t.test("status routes do not mutate vault records", async () => {
+  await t.test("status read-only routes do not mutate vault records", async () => {
     const before = countTrapFiles(vaultRoot, projectId);
     await fetch(`${baseUrl}/api/status`);
     await fetch(`${baseUrl}/api/vaults`);
@@ -255,6 +264,322 @@ test("MCP status monitor", async (t) => {
       authBus.close();
       await authServer.close();
     }
+  });
+
+  // --- Export and Import HTTP API Tests ---
+
+  await t.test("POST /api/vaults/export validates projectId", async () => {
+    const resUnknown = await fetch(`${baseUrl}/api/vaults/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: "non-existent-proj" })
+    });
+    assert.strictEqual(resUnknown.status, 400);
+    const bodyUnknown = await resUnknown.json() as { error: string };
+    assert.strictEqual(bodyUnknown.error, "Unknown projectId");
+
+    const resEmpty = await fetch(`${baseUrl}/api/vaults/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    assert.strictEqual(resEmpty.status, 400);
+  });
+
+  await t.test("POST /api/vaults/export returns valid zip archive with vault-backup.json", async () => {
+    // Add a record to export
+    await upsertRecord({
+      vaultRoot,
+      projectId,
+      kind: "trap",
+      slug: "export-test-trap",
+      frontmatter: {
+        id: "trap-export-test-trap",
+        title: "Export Test Trap",
+        severity: "medium"
+      },
+      body: "# Export Test\nMust be exported cleanly."
+    });
+
+    const res = await fetch(`${baseUrl}/api/vaults/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId })
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.headers.get("content-type"), "application/zip");
+    const contentDisp = res.headers.get("content-disposition") || "";
+    assert.ok(contentDisp.includes(`spec-memo-vault-${projectId}-`));
+    assert.ok(contentDisp.endsWith(".zip\""));
+
+    const zipBuffer = Buffer.from(await res.arrayBuffer());
+    assert.ok(zipBuffer.length > 0);
+
+    const jsonStr = unpackVaultZip(zipBuffer);
+    const parsed = JSON.parse(jsonStr) as { format: string; projects: Array<{ projectId: string; records: Array<{ relativePath: string }> }> };
+    assert.strictEqual(parsed.format, "spec-memo-vault-v1");
+    assert.strictEqual(parsed.projects[0].projectId, projectId);
+    assert.ok(parsed.projects[0].records.some((r) => r.relativePath.includes("export-test-trap.md")));
+
+    // Verify activity event captured
+    const events = bus.list({ projectId });
+    assert.ok(events.some((e) => e.type === "system" && e.kind === "write" && e.summary.includes("export vault")));
+  });
+
+  await t.test("POST /api/vaults/export with password creates encrypted archive", async () => {
+    const res = await fetch(`${baseUrl}/api/vaults/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, password: "test-export-pass" })
+    });
+
+    assert.strictEqual(res.status, 200);
+    const zipBuffer = Buffer.from(await res.arrayBuffer());
+    const jsonStr = unpackVaultZip(zipBuffer);
+    const parsed = JSON.parse(jsonStr) as { format: string; cipher: string };
+    assert.strictEqual(parsed.format, "spec-memo-encrypted-vault-v1");
+    assert.strictEqual(parsed.cipher, "aes-256-gcm");
+  });
+
+  await t.test("POST /api/vaults/import handles errors and restores records", async () => {
+    // 1. Non-multipart
+    const resNoMultipart = await fetch(`${baseUrl}/api/vaults/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ foo: "bar" })
+    });
+    assert.strictEqual(resNoMultipart.status, 400);
+
+    // Helper to build multipart buffer
+    function makeMultipart(boundary: string, parts: Array<{ name: string; filename?: string; contentType?: string; data: Buffer | string }>): Buffer {
+      const chunks: Buffer[] = [];
+      for (const p of parts) {
+        chunks.push(Buffer.from(`--${boundary}\r\n`));
+        if (p.filename !== undefined) {
+          chunks.push(Buffer.from(`Content-Disposition: form-data; name="${p.name}"; filename="${p.filename}"\r\n`));
+          chunks.push(Buffer.from(`Content-Type: ${p.contentType || "application/octet-stream"}\r\n\r\n`));
+        } else {
+          chunks.push(Buffer.from(`Content-Disposition: form-data; name="${p.name}"\r\n\r\n`));
+        }
+        chunks.push(Buffer.isBuffer(p.data) ? p.data : Buffer.from(p.data, "utf8"));
+        chunks.push(Buffer.from("\r\n"));
+      }
+      chunks.push(Buffer.from(`--${boundary}--\r\n`));
+      return Buffer.concat(chunks);
+    }
+
+    const boundary = "---------------------------testboundary123";
+
+    // 2. Missing archive file
+    const bodyMissingFile = makeMultipart(boundary, [{ name: "password", data: "somepass" }]);
+    const resMissing = await fetch(`${baseUrl}/api/vaults/import`, {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: bodyMissingFile
+    });
+    assert.strictEqual(resMissing.status, 400);
+
+    // 3. Non-zip file
+    const bodyNonZip = makeMultipart(boundary, [{ name: "archive", filename: "test.txt", data: "not a zip file" }]);
+    const resNonZip = await fetch(`${baseUrl}/api/vaults/import`, {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: bodyNonZip
+    });
+    assert.strictEqual(resNonZip.status, 400);
+
+    // 4. Valid ZIP export and re-import into a new project
+    const importedProjId = "restored-proj-1";
+    const exportData = await exportVault({ vaultRoot, projectId });
+    // Modify project id in payload to test restore under restored-proj-1
+    const rawArchive = JSON.parse(exportData.payload!) as { projects: Array<{ projectId: string }> };
+    rawArchive.projects[0].projectId = importedProjId;
+    const testZip = packVaultZip(JSON.stringify(rawArchive));
+
+    const bodyValid = makeMultipart(boundary, [{ name: "archive", filename: "backup.zip", data: testZip }]);
+    const resValid = await fetch(`${baseUrl}/api/vaults/import`, {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: bodyValid
+    });
+
+    assert.strictEqual(resValid.status, 200);
+    const validJson = await resValid.json() as { ok: boolean; restoredProjectsCount: number; restoredProjects: string[] };
+    assert.strictEqual(validJson.ok, true);
+    assert.strictEqual(validJson.restoredProjectsCount, 1);
+    assert.ok(validJson.restoredProjects.includes(importedProjId));
+
+    // Verify restored project exists in vault project list
+    const vaultsAfter = await (await fetch(`${baseUrl}/api/vaults`)).json() as Array<{ id: string }>;
+    assert.ok(vaultsAfter.some((v) => v.id === importedProjId));
+
+    // 5. Encrypted archive import with password
+    const encExport = await exportVault({ vaultRoot, projectId, password: "secret-import-pass" });
+    const encZip = packVaultZip(encExport.payload!);
+
+    // Import without password fails
+    const bodyEncNoPass = makeMultipart(boundary, [{ name: "archive", filename: "enc.zip", data: encZip }]);
+    const resEncNoPass = await fetch(`${baseUrl}/api/vaults/import`, {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: bodyEncNoPass
+    });
+    assert.strictEqual(resEncNoPass.status, 400);
+
+    // Import with password succeeds
+    const bodyEncPass = makeMultipart(boundary, [
+      { name: "archive", filename: "enc.zip", data: encZip },
+      { name: "password", data: "secret-import-pass" }
+    ]);
+    const resEncPass = await fetch(`${baseUrl}/api/vaults/import`, {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: bodyEncPass
+    });
+    assert.strictEqual(resEncPass.status, 200);
+  });
+
+  await t.test("POST /api/vaults/export and import enforce auth token", async () => {
+    const authBus = createActivityBus();
+    const authServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "backup-secret",
+      activityBus: authBus
+    });
+    try {
+      // Export unauthorized
+      const resExpUnauth = await fetch(`${authServer.url}/api/vaults/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId })
+      });
+      assert.strictEqual(resExpUnauth.status, 401);
+
+      // Export authorized
+      const resExpAuth = await fetch(`${authServer.url}/api/vaults/export`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer backup-secret"
+        },
+        body: JSON.stringify({ projectId })
+      });
+      assert.strictEqual(resExpAuth.status, 200);
+
+      // Import unauthorized
+      const boundary = "---bound123";
+      const body = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="foo"\r\n\r\nbar\r\n--${boundary}--\r\n`);
+      const resImpUnauth = await fetch(`${authServer.url}/api/vaults/import`, {
+        method: "POST",
+        headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+        body
+      });
+      assert.strictEqual(resImpUnauth.status, 401);
+    } finally {
+      authBus.close();
+      await authServer.close();
+    }
+  });
+
+  await t.test("writes detailed error report to error.logs on status server failures", async () => {
+    const errorServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "status-test-secret",
+      activityBus: bus
+    });
+
+    try {
+      const url = errorServer.url;
+
+      // 1. Unauthorized access to /api/vaults
+      const unauthRes = await fetch(`${url}/api/vaults`);
+      assert.strictEqual(unauthRes.status, 401);
+
+      // 2. Export unknown project
+      const exportRes = await fetch(`${url}/api/vaults/export`, {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer status-test-secret",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ projectId: "non-existent-proj" })
+      });
+      assert.strictEqual(exportRes.status, 400);
+
+      // 3. Import with missing boundary
+      const importRes = await fetch(`${url}/api/vaults/import`, {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer status-test-secret",
+          "Content-Type": "multipart/form-data"
+        },
+        body: "invalid"
+      });
+      assert.strictEqual(importRes.status, 400);
+
+      // Verify error.logs contents
+      const logs = readErrorLogs(vaultRoot);
+      assert.ok(logs.includes("[status-server]"));
+      assert.ok(logs.includes("Unauthorized request"));
+      assert.ok(logs.includes("Unknown projectId: non-existent-proj"));
+      assert.ok(logs.includes("Content-Type must be multipart/form-data with boundary"));
+      // Redaction check: secret token should not be leaked in cleartext in the logs
+      assert.ok(!logs.includes("Bearer status-test-secret"));
+    } finally {
+      await errorServer.close();
+    }
+  });
+});
+
+test("ZIP Pack and Unpack Helpers", async (t) => {
+  await t.test("round-trips JSON string payload", () => {
+    const original = JSON.stringify({ test: "spec-memo", count: 42, nested: { ok: true } }, null, 2);
+    const zip = packVaultZip(original);
+    assert.ok(zip.length > 30);
+    const unpacked = unpackVaultZip(zip);
+    assert.strictEqual(unpacked, original);
+  });
+
+  await t.test("unpacks single .json entry fallback", () => {
+    const original = JSON.stringify({ fallback: true });
+    const zip = packVaultZip(original, "custom-backup-name.json");
+    const unpacked = unpackVaultZip(zip);
+    assert.strictEqual(unpacked, original);
+  });
+
+  await t.test("throws on invalid buffer, non-zip, or corrupted zip", () => {
+    assert.throws(() => unpackVaultZip(Buffer.alloc(10)), /Buffer too short/);
+    assert.throws(() => unpackVaultZip(Buffer.from("not a zip at all 1234567890")), /expected ZIP file/);
+
+    const emptyZip = Buffer.from([
+      0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00
+    ]);
+    assert.throws(() => unpackVaultZip(emptyZip), /expected ZIP file|Archive is empty/);
+  });
+
+  await t.test("parseMultipartFormData correctly parses fields and binary files", () => {
+    const boundary = "test_boundary_xyz";
+    const binaryData = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01, 0x02, 0x03]);
+    const multipart = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="password"\r\n\r\nmy-pass\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="archive"; filename="archive.zip"\r\nContent-Type: application/zip\r\n\r\n`),
+      binaryData,
+      Buffer.from(`\r\n--${boundary}--\r\n`)
+    ]);
+
+    const parsed = parseMultipartFormData(multipart, boundary);
+    assert.strictEqual(parsed.fields.password, "my-pass");
+    assert.ok(parsed.files.archive);
+    assert.strictEqual(parsed.files.archive.filename, "archive.zip");
+    assert.strictEqual(parsed.files.archive.contentType, "application/zip");
+    assert.deepStrictEqual(parsed.files.archive.data, binaryData);
   });
 });
 

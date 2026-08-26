@@ -8,11 +8,13 @@ import { ToolName, ToolResponse } from './types.js';
 import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { getResolvedAuthToken, normalizeRemoteUrl } from './setup.js';
 import { sanitizeToolOutput } from './safety.js';
+import { logErrorReport } from './error-logger.js';
 
 export interface RemoteProxyOptions {
   vaultRoot?: string;
   remoteUrl?: string;
   authToken?: string;
+  errorLogPath?: string;
 }
 
 /**
@@ -28,7 +30,13 @@ export async function createRemoteClient(options: RemoteProxyOptions = {}): Prom
   const rawUrl = options.remoteUrl || config.remote?.url;
 
   if (!rawUrl) {
-    throw new Error("Remote URL is not configured. Run 'memo setup --url <origin>' to configure.");
+    const err = new Error("Remote URL is not configured. Run 'memo setup --url <origin>' to configure.");
+    logErrorReport({
+      subsystem: 'remote-proxy',
+      mode: 'remote',
+      error: err
+    }, { vaultRoot, logPath: options.errorLogPath });
+    throw err;
   }
 
   const origin = normalizeRemoteUrl(rawUrl);
@@ -53,7 +61,7 @@ export async function createRemoteClient(options: RemoteProxyOptions = {}): Prom
   const client = new Client(
     {
       name: 'spec-memo-remote-proxy',
-      version: '0.4.0'
+      version: '0.4.1'
     },
     {
       capabilities: {}
@@ -63,6 +71,12 @@ export async function createRemoteClient(options: RemoteProxyOptions = {}): Prom
   try {
     await client.connect(transport);
   } catch (err) {
+    logErrorReport({
+      subsystem: 'remote-proxy',
+      mode: 'remote',
+      error: err,
+      context: { remoteUrl: origin }
+    }, { vaultRoot, logPath: options.errorLogPath });
     try {
       await transport.close();
     } catch {
@@ -112,8 +126,23 @@ export async function callRemoteTool(
       }
       try {
         const parsed = JSON.parse(errText);
-        return parsed.isError ? parsed : { isError: true, error: errText, code: 'REMOTE_TOOL_ERROR' };
+        const errResp = parsed.isError ? parsed : { isError: true, error: errText, code: 'REMOTE_TOOL_ERROR' };
+        logErrorReport({
+          subsystem: 'remote-proxy',
+          mode: 'remote',
+          tool: name,
+          error: errResp.error || errText,
+          context: { tool: name, args }
+        }, { vaultRoot: options.vaultRoot, logPath: options.errorLogPath });
+        return errResp;
       } catch {
+        logErrorReport({
+          subsystem: 'remote-proxy',
+          mode: 'remote',
+          tool: name,
+          error: errText,
+          context: { tool: name, args }
+        }, { vaultRoot: options.vaultRoot, logPath: options.errorLogPath });
         return { isError: true, error: errText, code: 'REMOTE_TOOL_ERROR' };
       }
     }
@@ -131,6 +160,13 @@ export async function callRemoteTool(
     return { isError: false, data: sanitizeToolOutput(result) };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    logErrorReport({
+      subsystem: 'remote-proxy',
+      mode: 'remote',
+      tool: name,
+      error: `Remote daemon communication failed: ${msg}`,
+      context: { tool: name, args }
+    }, { vaultRoot: options.vaultRoot, logPath: options.errorLogPath });
     return {
       isError: true,
       error: `Remote daemon communication failed: ${msg}`,
@@ -151,7 +187,7 @@ export function createRemoteMcpProxyServer(options: RemoteProxyOptions = {}): Se
   const server = new Server(
     {
       name: 'spec-memo-remote-proxy',
-      version: '0.4.0'
+      version: '0.4.1'
     },
     {
       capabilities: {

@@ -3,7 +3,6 @@ import * as path from 'node:path';
 
 export const BLOCKED_WORKFLOW_PATTERNS = [
   /^\.agents\/plans\//i,
-  /^\.agents\/specs\/.*\.spec\.md$/i,
   /(^|\/)MEMORY\.md$/i,
   /(^|\/)memory\/.*\.md$/i
 ];
@@ -48,7 +47,7 @@ BLOCKED=0
 
 for file in $STAGED_FILES; do
   case "$file" in
-    .agents/plans/*|.agents/specs/*.spec.md|*/MEMORY.md|MEMORY.md|*/memory/*.md)
+    .agents/plans/*|*/MEMORY.md|MEMORY.md|*/memory/*.md)
       case "$file" in
         README.md|PRODUCT.PRD|FEATURES.md|PLAN.md|AGENTS.md|GEMINI.md|.agents/specs/index.PRD)
           ;;

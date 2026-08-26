@@ -7,6 +7,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { ToolName, ToolResponse } from './types.js';
 import { startRemoteMcpProxyServer } from './mcp-proxy.js';
+import { logErrorReport } from './error-logger.js';
 
 const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get', 'check_version']);
 const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote', 'install_skills']);
@@ -70,11 +71,12 @@ export function buildToolSummary(name: ToolName, args: Record<string, unknown>, 
 export function createMcpServer(opts: {
   defaultVaultRoot?: string;
   activityBus?: ActivityBus;
+  errorLogPath?: string;
 } = {}): Server {
   const server = new Server(
     {
       name: 'spec-memo',
-      version: '0.4.0'
+      version: '0.4.1'
     },
     {
       capabilities: {
@@ -100,50 +102,75 @@ export function createMcpServer(opts: {
       ...(args ?? {}),
       vaultRoot: (args as Record<string, unknown>)?.vaultRoot ?? opts.defaultVaultRoot
     };
+    const argRecord = resolvedArgs as Record<string, unknown>;
     const started = Date.now();
-    const response = await executeTool(name, resolvedArgs);
-    const durationMs = Date.now() - started;
 
-    if (opts.activityBus && TOOL_DEFINITIONS[toolName]) {
-      const argRecord = resolvedArgs as Record<string, unknown>;
-      const kind = READ_TOOLS.has(toolName) ? 'read' : WRITE_TOOLS.has(toolName) ? 'write' : 'meta';
-      opts.activityBus.capture({
-        type: 'tool',
-        kind,
-        ok: !response.isError,
-        durationMs,
-        summary: buildToolSummary(toolName, argRecord, response),
-        tool: toolName,
-        projectId: resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot)
-      });
-    }
+    try {
+      const response = await executeTool(name, resolvedArgs);
+      const durationMs = Date.now() - started;
 
-    if (response.isError) {
+      if (opts.activityBus && TOOL_DEFINITIONS[toolName]) {
+        const kind = READ_TOOLS.has(toolName) ? 'read' : WRITE_TOOLS.has(toolName) ? 'write' : 'meta';
+        opts.activityBus.capture({
+          type: 'tool',
+          kind,
+          ok: !response.isError,
+          durationMs,
+          summary: buildToolSummary(toolName, argRecord, response),
+          tool: toolName,
+          projectId: resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot)
+        });
+      }
+
+      if (response.isError) {
+        logErrorReport({
+          subsystem: 'mcp-tool',
+          tool: toolName,
+          projectId: resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot),
+          error: response.error || 'Tool execution error',
+          context: {
+            code: response.code,
+            details: response.details,
+            args: argRecord
+          }
+        }, { vaultRoot: opts.defaultVaultRoot, logPath: opts.errorLogPath });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response, null, 2)
+            }
+          ],
+          isError: true
+        };
+      }
+
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(response, null, 2)
+            text: typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2)
           }
-        ],
-        isError: true
+        ]
       };
+    } catch (unhandledErr: unknown) {
+      logErrorReport({
+        subsystem: 'mcp-tool',
+        tool: toolName,
+        projectId: resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot),
+        error: unhandledErr,
+        level: 'ERROR',
+        context: { args: argRecord }
+      }, { vaultRoot: opts.defaultVaultRoot, logPath: opts.errorLogPath });
+      throw unhandledErr;
     }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2)
-        }
-      ]
-    };
   });
 
   return server;
 }
 
-export async function startMcpServer(options: { vaultRoot?: string } = {}): Promise<void> {
+export async function startMcpServer(options: { vaultRoot?: string; errorLogPath?: string } = {}): Promise<void> {
   const vaultRoot = getVaultRoot(options.vaultRoot);
   const config = ensureVaultStructure(vaultRoot);
 
@@ -152,7 +179,7 @@ export async function startMcpServer(options: { vaultRoot?: string } = {}): Prom
     return;
   }
 
-  const server = createMcpServer({ defaultVaultRoot: vaultRoot });
+  const server = createMcpServer({ defaultVaultRoot: vaultRoot, errorLogPath: options.errorLogPath });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
