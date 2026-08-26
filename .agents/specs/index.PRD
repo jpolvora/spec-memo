@@ -98,6 +98,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 ### Phase 6: Recurrence learning
 
 - [x] [`trap-recurrence`](trap-recurrence.spec.md): Trap recurrence ranking and owner-skill export
+- [ ] MCP status monitor page with live activity log (`spec: mcp-status-monitor.spec.md`)
+
 
 
 ## 8. Next specs
@@ -129,6 +131,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 22 | [`multi-machine-sync`](multi-machine-sync.spec.md) | `[x] done` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
 | 23 | [`mcp-sse-transport`](mcp-sse-transport.spec.md) | `[x] done` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
 | 24 | [`trap-recurrence`](trap-recurrence.spec.md) | `[x] done` | Phase 6 | Trap recurrence ranking and owner-skill export |
+
+| 25 | `mcp-status-monitor` | `[ ]` todo | Phase 6: Recurrence learning | MCP status monitor page with live activity log |
 
 ## 9. Inbox (unscheduled ideas)
 
