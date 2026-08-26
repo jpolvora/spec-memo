@@ -15,6 +15,7 @@ import { syncVaults } from './sync.js';
 import { startSseServer } from './server.js';
 import { searchIndex } from './indexer.js';
 import { backfillTrapRecurrence } from './store.js';
+import { aliasLayer } from './recurrence.js';
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -263,6 +264,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
 
   if (parsed.command === 'serve') {
     if (parsed.options.sse) {
+      try {
       const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : 3000;
       const host = (parsed.options.host as string) || '127.0.0.1';
       const vaultRoot = parsed.options.vaultRoot as string | undefined;
@@ -321,6 +323,15 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
       return new Promise(() => {});
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (parsed.isJson) {
+          printJson({ isError: true, error: msg, code: 'SSE_ERROR' });
+        } else {
+          console.error(`SSE server failed: ${msg}`);
+        }
+        return 1;
+      }
     }
 
     await startMcpServer();
@@ -422,7 +433,8 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     try {
       const vaultRoot = parsed.options.vaultRoot as string | undefined;
       const cwd = (parsed.options.cwd as string) || process.cwd();
-      const layer = parsed.options.layer ? String(parsed.options.layer) : undefined;
+      const layerRaw = parsed.options.layer ? String(parsed.options.layer) : undefined;
+      const layer = layerRaw ? aliasLayer(layerRaw) ?? layerRaw : undefined;
       const limitRaw = parsed.options.limit;
       const limit = typeof limitRaw === 'string' ? parseInt(limitRaw, 10) : 10;
       const doBackfill = parsed.options.backfill === true || parsed.options.backfill === 'true';

@@ -168,7 +168,8 @@ export function rankActiveTraps(
     (record) => record.frontmatter.kind === 'trap' && record.frontmatter.status === 'active'
   );
   if (options.layer) {
-    traps = traps.filter((record) => record.frontmatter.layer === options.layer);
+    const normalized = aliasLayer(options.layer) ?? options.layer;
+    traps = traps.filter((record) => record.frontmatter.layer === normalized);
   }
   traps.sort(compareTrapRank);
   const limit = options.limit && options.limit > 0 ? options.limit : 10;

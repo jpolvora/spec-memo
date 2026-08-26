@@ -3,6 +3,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import http from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { ensureProjectVault } from "./vault.js";
@@ -211,5 +212,39 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     } finally {
       await noStatus.close();
     }
+  });
+
+  await t.test("should close MCP listener when status companion fails to bind", async () => {
+    const reserve = (server: http.Server) =>
+      new Promise<number>((resolve) => {
+        server.listen(0, "127.0.0.1", () => resolve((server.address() as { port: number }).port));
+      });
+    const close = (server: http.Server) => new Promise<void>((resolve) => server.close(() => resolve()));
+
+    const mcpHolder = http.createServer();
+    const mcpPort = await reserve(mcpHolder);
+    await close(mcpHolder);
+
+    const blocker = http.createServer();
+    const busyPort = await reserve(blocker);
+
+    await assert.rejects(
+      () =>
+        startSseServer({
+          vaultRoot,
+          port: mcpPort,
+          host: "127.0.0.1",
+          statusPort: busyPort,
+          enableStatus: true
+        })
+    );
+
+    const probe = http.createServer();
+    await new Promise<void>((resolve, reject) => {
+      probe.once("error", reject);
+      probe.listen(mcpPort, "127.0.0.1", () => resolve());
+    });
+    await close(probe);
+    await close(blocker);
   });
 });

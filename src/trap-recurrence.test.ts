@@ -12,6 +12,7 @@ import { runCli } from './cli.js';
 import { TOOL_NAMES } from './types.js';
 import { ensureVaultStructure, initVaultGit } from './vault.js';
 import { execFileSync } from 'node:child_process';
+import { rankActiveTraps } from './recurrence.js';
 
 const TRAP_BODY = `### Repeat trap
 - **Layer**: Application
@@ -547,5 +548,50 @@ describe('Trap recurrence ranking', () => {
     const log = execFileSync('git', ['log', '--oneline'], { cwd: tempVault, encoding: 'utf8' });
     assert.match(log, /backfill trap recurrence/);
     assert.equal(fs.existsSync(path.join(tempVault, '.memo.lock')), false);
+  });
+
+  it('rank --layer frontend matches traps stored as web', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'web-layer-trap',
+      frontmatter: { id: 'trap-web-layer', title: 'Web layer trap', pathPatterns: ['src/**'] },
+      body: `### Repeat trap
+- **Layer**: Frontend
+- **Module**: UI
+- **DO NOT**: Skip the snapshot.
+- **INSTEAD DO**: Keep the snapshot in the same UoW.
+`
+    });
+
+    const record = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'trap-web-layer' });
+    assert.equal(record?.frontmatter.layer, 'web');
+    const ranked = rankActiveTraps([record!], { layer: 'frontend' });
+    assert.equal(ranked.length, 1);
+
+    let captured = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      captured += args.join(' ') + '\n';
+    };
+    try {
+      const code = await runCli([
+        'rank',
+        '--layer',
+        'frontend',
+        '--cwd',
+        tempProject,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(code, 0);
+      const parsed = JSON.parse(captured.trim());
+      assert.ok(Array.isArray(parsed));
+      assert.ok(parsed.some((h: { id: string }) => h.id === 'trap-web-layer'));
+    } finally {
+      console.log = origLog;
+    }
   });
 });

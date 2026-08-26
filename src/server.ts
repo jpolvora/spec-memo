@@ -107,16 +107,19 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       if (req.method === "GET" && pathname === "/sse") {
         const transport = new SSEServerTransport("/message", res);
         const mcpServer = createMcpServer({ defaultVaultRoot: vaultRoot, activityBus: bus });
-
-        transports.set(transport.sessionId, transport);
-
-        transport.onclose = () => {
+        let cleaned = false;
+        const cleanup = () => {
+          if (cleaned) return;
+          cleaned = true;
           transports.delete(transport.sessionId);
+          void mcpServer.close().catch(() => {
+            // ignore cleanup error
+          });
         };
 
-        res.on("close", () => {
-          transports.delete(transport.sessionId);
-        });
+        transports.set(transport.sessionId, transport);
+        transport.onclose = cleanup;
+        res.on("close", cleanup);
 
         await mcpServer.connect(transport);
         return;
@@ -175,6 +178,18 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             summary: `Status monitor listening at ${statusInstance.url}`
           });
         } catch (err) {
+          bus.close();
+          for (const transport of transports.values()) {
+            try {
+              transport.close();
+            } catch {
+              // ignore cleanup error
+            }
+          }
+          transports.clear();
+          await new Promise<void>((res) => {
+            server.close(() => res());
+          });
           reject(err);
           return;
         }
