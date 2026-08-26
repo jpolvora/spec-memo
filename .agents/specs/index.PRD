@@ -104,6 +104,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 ### Phase 7: Deployment modes
 
 - [x] [`deployment-modes`](deployment-modes.spec.md): Local, hybrid, and remote deployment modes with portable MCP wiring
+- [ ] Status monitor vault export and import UI (`spec: status-vault-backup-ui.spec.md`)
+
 
 
 
@@ -141,6 +143,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 25 | [`mcp-status-monitor`](mcp-status-monitor.spec.md) | `[x] done` | Phase 6 | MCP status monitor page with live activity log |
 | 26 | `mcp-version-and-skill-install` | `[x]` done | Phase 6: Recurrence learning | MCP tools: check_version and install_skills (+ docs surface) |
 | 27 | [`deployment-modes`](deployment-modes.spec.md) | `[x] done` | Phase 7 | Local, hybrid, and remote deployment modes with portable MCP wiring |
+
+| 28 | `status-vault-backup-ui` | `[ ]` todo | Phase 7: Deployment modes | Status monitor vault export and import UI |
 
 ## 9. Inbox (unscheduled ideas)
 
