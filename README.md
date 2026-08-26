@@ -12,11 +12,11 @@ Product git repositories should contain product code: source, tests, and shipped
 
 ### 1. Installation
 
-Install `spec-memo` globally via npm or run directly with `npx`:
+Install `spec-memo` globally from GitHub or run directly with `npx`:
 
 ```bash
 # Global install (gives you the `memo` CLI)
-npm install -g spec-memo
+npm install -g github:jpolvora/spec-memo
 
 # Or build from source
 git clone https://github.com/jpolvora/spec-memo.git
@@ -37,7 +37,7 @@ Add to `claude_desktop_config.json` (`%APPDATA%\Claude\claude_desktop_config.jso
   "mcpServers": {
     "spec-memo": {
       "command": "npx",
-      "args": ["-y", "spec-memo", "serve"]
+      "args": ["-y", "github:jpolvora/spec-memo", "serve"]
     }
   }
 }
@@ -244,7 +244,7 @@ curl -s -H "Authorization: Bearer replace-me" http://127.0.0.1:3000/health
 
 #### Windows — Task Scheduler (autoboot at logon)
 
-1. Install Node 22 and `npm install -g spec-memo` (or build this repo and use the full path to `node` + `dist\cli.js`).
+1. Install Node 22 and `npm install -g github:jpolvora/spec-memo` (or build this repo and use the full path to `node` + `dist\cli.js`).
 2. Create a vault dir, e.g. `C:\spec-memo-vault`.
 3. **Task Scheduler → Create Task**:
    - Trigger: **At log on** (or **At startup** with a service account).

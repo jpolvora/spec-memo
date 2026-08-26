@@ -25,8 +25,8 @@ Full tool/CLI map → [`references/SURFACE.md`](references/SURFACE.md). Record k
 ## Transport (prefer MCP)
 
 1. If the host exposes a spec-memo MCP namespace (`spec-memo`, `user-spec-memo`, or `specMemo.mcpServerName`), call those tools. Discover schema before invoke.
-2. Else run `{cli}` (default `memo`; or `npx -y spec-memo`) for the same 10 commands plus CLI-only extras in SURFACE.md.
-3. If neither is available: print install (`npm install -g spec-memo`) and MCP-TEMPLATE.json. STOP unless the user only asked for docs.
+2. Else run `{cli}` (default `memo`; or `npx -y github:jpolvora/spec-memo`) for the same 10 commands plus CLI-only extras in SURFACE.md.
+3. If neither is available: print install (`npm install -g github:jpolvora/spec-memo`) and MCP-TEMPLATE.json. STOP unless the user only asked for docs.
    - Done when: a live MCP namespace or `{cli}` is chosen, or STOP with install text.
 
 ## Router

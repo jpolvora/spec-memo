@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-26 14:45] Agent: Cursor Grok 4.6
+- **Prompt**: Make npx spec-memo docs/references point to GitHub instead of the npm default server
+- **Done**: Added package.json homepage/repository/bugs; switched docs, README, MCP-TEMPLATE, and ws-memo skill npx/install snippets to `github:jpolvora/spec-memo`; added prepare build so git npx compiles dist
+- **Result**: `npm test` exit 0. `npm docs`/`npx` now resolve to GitHub rather than registry.npmjs.org
+
 ### [2026-08-26 12:35] Agent: Cursor Composer
 - **Prompt**: Update ws-memo skill for 10-tool surface; update README/AGENTS; bump version; ship next version
 - **Done**: Bumped package/MCP/vault/skill to 0.3.1; aligned ws-memo Rules + SURFACE (rank universe, empty skill promote guard); README/FEATURES/AGENTS + tracking Done logs
