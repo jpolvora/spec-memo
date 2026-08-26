@@ -12,13 +12,13 @@ import matter from 'gray-matter';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
-const PROJECT_ID = 'dev.azure.com-7focus-marchanteerp-_git-marchanteerp';
 const SSE_URL = process.env.SPEC_MEMO_SSE_URL || 'http://192.168.0.3:3000/sse';
 const TOKEN =
   process.env.SPEC_MEMO_AUTH_TOKEN ||
   '49c696b064f8ae17f7edf098bf09996ed8ece837c7090cd693cc69b20948cfa8';
 const ARCHIVE =
   process.argv[2] || path.join(process.env.USERPROFILE || process.env.HOME, 'spec-memo-marchanteerp-export.json');
+const PROJECT_ID = process.argv[3] || process.env.SPEC_MEMO_PROJECT_ID || null;
 
 const DIR_TO_KIND = {
   traps: 'trap',
@@ -41,8 +41,11 @@ async function main() {
   if (archive.format !== 'spec-memo-vault-v1') {
     throw new Error(`Unexpected archive format: ${archive.format}`);
   }
-  const project = archive.projects.find((p) => p.projectId === PROJECT_ID) || archive.projects[0];
+  const project =
+    (PROJECT_ID && archive.projects.find((p) => p.projectId === PROJECT_ID)) ||
+    archive.projects[0];
   if (!project) throw new Error('No project in archive');
+  const projectId = project.projectId;
 
   const transport = new SSEClientTransport(new URL(SSE_URL), {
     requestInit: {
@@ -92,7 +95,7 @@ async function main() {
         arguments: {
           kind,
           slug: String(slug),
-          projectId: PROJECT_ID,
+          projectId,
           frontmatter,
           body: parsed.content || record.content,
         },
@@ -119,7 +122,7 @@ async function main() {
   const search = await client.callTool({
     name: 'search',
     arguments: {
-      projectId: PROJECT_ID,
+      projectId,
       query: '*',
       includeScratch: true,
       limit: 5,
@@ -131,7 +134,7 @@ async function main() {
   console.log(
     JSON.stringify(
       {
-        projectId: PROJECT_ID,
+        projectId,
         sseUrl: SSE_URL,
         archivePath: ARCHIVE,
         archiveRecords: project.records.length,
