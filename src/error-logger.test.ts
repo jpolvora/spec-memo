@@ -105,6 +105,37 @@ describe('Error Logger Subsystem', () => {
     assert(formatted.includes('[REDACTED:'));
   });
 
+  it('sanitizes short bearer tokens, headers, and query parameters from context', () => {
+    const report: ErrorReport = {
+      subsystem: 'sse-server',
+      port: 3000,
+      error: 'Unauthorized access',
+      context: {
+        headers: {
+          authorization: 'Bearer short-123',
+          cookie: 'session_id=abcdef123',
+          'x-api-key': 'shortkey'
+        },
+        query: {
+          token: 'short-query-token',
+          authToken: 'another-token',
+          project: 'test-proj'
+        },
+        password: 'cleartext-password'
+      }
+    };
+
+    const formatted = formatErrorReport(report);
+
+    assert(!formatted.includes('short-123'));
+    assert(!formatted.includes('abcdef123'));
+    assert(!formatted.includes('shortkey'));
+    assert(!formatted.includes('short-query-token'));
+    assert(!formatted.includes('another-token'));
+    assert(!formatted.includes('cleartext-password'));
+    assert(formatted.includes('"project": "test-proj"'));
+  });
+
   it('appends multiple error reports to error.logs without overwriting', () => {
     logErrorReport(
       {

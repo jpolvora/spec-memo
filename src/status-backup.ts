@@ -198,6 +198,12 @@ export function unpackVaultZip(zipBuffer: Buffer): string {
     throw new Error('Invalid zip archive: Compressed data out of bounds.');
   }
 
+  const MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024; // 32 MiB entry decompression budget
+
+  if (targetEntry.uncompressedSize > MAX_UNCOMPRESSED_BYTES) {
+    throw new Error('Zip entry exceeds maximum uncompressed size.');
+  }
+
   const rawCompressed = zipBuffer.subarray(dataStart, dataEnd);
   let uncompressed: Buffer;
 
@@ -207,7 +213,9 @@ export function unpackVaultZip(zipBuffer: Buffer): string {
   } else if (targetEntry.method === 8) {
     // Deflate
     try {
-      uncompressed = zlib.inflateRawSync(rawCompressed);
+      uncompressed = zlib.inflateRawSync(rawCompressed, {
+        maxOutputLength: MAX_UNCOMPRESSED_BYTES
+      });
     } catch {
       throw new Error('Failed to decompress zip entry.');
     }

@@ -54,6 +54,49 @@ export function resolveErrorLogPath(vaultRoot?: string, customPath?: string): st
   return path.join(root, 'error.logs');
 }
 
+export const SENSITIVE_CONTEXT_KEYS = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'x-auth-token',
+  'token',
+  'authtoken',
+  'password',
+  'secret'
+]);
+
+/**
+ * Sanitizes context metadata by explicitly scrubbing known credential keys in
+ * headers, query, params, body, or args objects regardless of secret length,
+ * then applying regex-based redaction across all remaining payload fields.
+ */
+export function sanitizeLogContext(value: unknown): unknown {
+  const redacted = redactSecretsInPayload(value);
+  if (!redacted || typeof redacted !== 'object' || Array.isArray(redacted)) return redacted;
+  const out: Record<string, unknown> = { ...(redacted as Record<string, unknown>) };
+
+  for (const nestedKey of ['headers', 'query', 'params', 'body', 'args'] as const) {
+    const nested = out[nestedKey];
+    if (!nested || typeof nested !== 'object' || Array.isArray(nested)) continue;
+    const cleaned: Record<string, unknown> = { ...(nested as Record<string, unknown>) };
+    for (const [k] of Object.entries(cleaned)) {
+      if (SENSITIVE_CONTEXT_KEYS.has(k.toLowerCase())) {
+        cleaned[k] = '[REDACTED]';
+      }
+    }
+    out[nestedKey] = cleaned;
+  }
+
+  for (const [k] of Object.entries(out)) {
+    if (SENSITIVE_CONTEXT_KEYS.has(k.toLowerCase())) {
+      out[k] = '[REDACTED]';
+    }
+  }
+
+  return out;
+}
+
 /**
  * Formats a structured ErrorReport into a detailed, human-readable, machine-parseable log block.
  */
@@ -126,7 +169,7 @@ export function formatErrorReport(report: ErrorReport): string {
   }
 
   if (report.context && Object.keys(report.context).length > 0) {
-    const cleanContext = redactSecretsInPayload(report.context);
+    const cleanContext = sanitizeLogContext(report.context);
     lines.push('Context Details:');
     const contextJson = JSON.stringify(cleanContext, null, 2);
     lines.push(
