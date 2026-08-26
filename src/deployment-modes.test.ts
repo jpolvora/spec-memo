@@ -957,4 +957,185 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
 
     closeIndex(monoVault);
   });
+
+  await t.test('Phase 2: multi-project push dirty state is tracked per project and not cleared by other projects', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'multi-dirty-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'multi-dirty-client-vault'));
+    const authToken = 'multi-dirty-token';
+    const pidA = 'proj-a';
+    const pidB = 'proj-b';
+
+    for (const pid of [pidA, pidB]) {
+      ensureProjectVault(
+        {
+          projectId: pid,
+          normalizedRemote: null,
+          rootPath: tempDir,
+          isGit: false,
+          isFallback: true,
+          vaultProjectPath: path.join(daemonVault, 'projects', pid)
+        },
+        daemonVault
+      );
+      ensureProjectVault(
+        {
+          projectId: pid,
+          normalizedRemote: null,
+          rootPath: tempDir,
+          isGit: false,
+          isFallback: true,
+          vaultProjectPath: path.join(clientVault, 'projects', pid)
+        },
+        clientVault
+      );
+    }
+
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    const clientCfgPath = path.join(clientVault, 'config.json');
+    const clientCfg = JSON.parse(fs.readFileSync(clientCfgPath, 'utf8'));
+    clientCfg.mode = 'hybrid';
+    clientCfg.remote = { url: daemonServer.url };
+    fs.writeFileSync(clientCfgPath, JSON.stringify(clientCfg, null, 2), 'utf8');
+
+    // Simulate push failure for project B
+    writeHybridState(clientVault, {
+      dirty: true,
+      dirtyProjects: { [pidB]: true },
+      lastError: 'Failed to push project B'
+    });
+
+    try {
+      // Upsert record in project A and push project A successfully
+      await upsertRecord({
+        vaultRoot: clientVault,
+        projectId: pidA,
+        kind: 'trap',
+        slug: 'trap-a',
+        body: 'Trap A body',
+        frontmatter: { title: 'Trap A' }
+      });
+
+      await pushHybridProject(clientVault, pidA, daemonServer.url, authToken);
+
+      // State must remain dirty because project B still has a failure!
+      const stateAfterA = readHybridState(clientVault);
+      assert.strictEqual(stateAfterA.dirty, true, 'Vault must remain dirty while project B is dirty');
+      assert.strictEqual(stateAfterA.dirtyProjects?.[pidB], true, 'Project B must still be marked dirty');
+      assert.strictEqual(stateAfterA.dirtyProjects?.[pidA], false, 'Project A must be clean');
+      assert.strictEqual(stateAfterA.lastError, 'Failed to push project B');
+
+      // Now push project B successfully
+      await upsertRecord({
+        vaultRoot: clientVault,
+        projectId: pidB,
+        kind: 'trap',
+        slug: 'trap-b',
+        body: 'Trap B body',
+        frontmatter: { title: 'Trap B' }
+      });
+
+      await pushHybridProject(clientVault, pidB, daemonServer.url, authToken);
+
+      const stateAfterB = readHybridState(clientVault);
+      assert.strictEqual(stateAfterB.dirty, false, 'Vault is clean once all projects push successfully');
+      assert.strictEqual(stateAfterB.lastError, null);
+    } finally {
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
+
+  await t.test('Phase 2: syncHybrid pushes older offline records even after empty pull', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'offline-sync-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'offline-sync-client-vault'));
+    const authToken = 'offline-sync-token';
+    const pid = 'offline-proj';
+
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(daemonVault, 'projects', pid)
+      },
+      daemonVault
+    );
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(clientVault, 'projects', pid)
+      },
+      clientVault
+    );
+
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    const clientCfgPath = path.join(clientVault, 'config.json');
+    const clientCfg = JSON.parse(fs.readFileSync(clientCfgPath, 'utf8'));
+    clientCfg.mode = 'hybrid';
+    clientCfg.remote = { url: daemonServer.url };
+    fs.writeFileSync(clientCfgPath, JSON.stringify(clientCfg, null, 2), 'utf8');
+
+    // Create a record locally with an older timestamp (e.g. offline work)
+    const oldTimestamp = '2026-08-26T10:00:00.000Z';
+    await upsertRecord({
+      vaultRoot: clientVault,
+      projectId: pid,
+      kind: 'trap',
+      slug: 'offline-trap',
+      body: 'Created while offline',
+      frontmatter: { title: 'Offline Trap', updated: oldTimestamp, created: oldTimestamp }
+    });
+
+    // Mark dirty because offline push failed
+    writeHybridState(clientVault, {
+      dirty: true,
+      dirtyProjects: { [pid]: true },
+      lastError: 'Offline'
+    });
+
+    try {
+      // syncHybrid performs pull (returns 0 applied records) then push
+      const report = await syncHybrid({
+        vaultRoot: clientVault,
+        projectId: pid,
+        remoteUrl: daemonServer.url,
+        authToken
+      });
+
+      assert.strictEqual(report.pulled.applied, 0);
+      assert.strictEqual(report.pushed.applied, 1, 'Older offline record must be exported and pushed');
+
+      // Verify record exists on daemon
+      const daemonTrap = path.join(daemonVault, 'projects', pid, 'traps', 'offline-trap.md');
+      assert.ok(fs.existsSync(daemonTrap));
+
+      const stateAfter = readHybridState(clientVault);
+      assert.strictEqual(stateAfter.dirty, false);
+    } finally {
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
 });

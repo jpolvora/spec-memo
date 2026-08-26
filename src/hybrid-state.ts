@@ -7,7 +7,8 @@ export const DEFAULT_HYBRID_STATE: HybridState = {
   dirty: false,
   lastSyncAt: null,
   lastError: null,
-  cursors: {}
+  cursors: {},
+  dirtyProjects: {}
 };
 
 export function getHybridStatePath(vaultRootInput?: string): string {
@@ -27,7 +28,8 @@ export function readHybridState(vaultRootInput?: string): HybridState {
       dirty: Boolean(parsed.dirty),
       lastSyncAt: typeof parsed.lastSyncAt === 'string' ? parsed.lastSyncAt : null,
       lastError: typeof parsed.lastError === 'string' ? parsed.lastError : null,
-      cursors: typeof parsed.cursors === 'object' && parsed.cursors !== null ? parsed.cursors : {}
+      cursors: typeof parsed.cursors === 'object' && parsed.cursors !== null ? parsed.cursors : {},
+      dirtyProjects: typeof parsed.dirtyProjects === 'object' && parsed.dirtyProjects !== null ? parsed.dirtyProjects : {}
     };
   } catch {
     return { ...DEFAULT_HYBRID_STATE };
@@ -59,11 +61,28 @@ export function writeHybridState(
       }
     }
 
+    let mergedDirtyProjects = current.dirtyProjects || {};
+    if (updates.dirtyProjects !== undefined) {
+      mergedDirtyProjects = { ...mergedDirtyProjects, ...updates.dirtyProjects };
+    }
+
+    let effectiveDirty = current.dirty;
+    if (updates.dirty !== undefined) {
+      effectiveDirty = updates.dirty;
+    } else if (updates.dirtyProjects !== undefined) {
+      effectiveDirty = Object.values(mergedDirtyProjects).some(Boolean);
+    }
+
+    if (updates.dirty === false) {
+      mergedDirtyProjects = {};
+    }
+
     const merged: HybridState = {
-      dirty: updates.dirty !== undefined ? updates.dirty : current.dirty,
+      dirty: effectiveDirty,
       lastSyncAt: updates.lastSyncAt !== undefined ? updates.lastSyncAt : current.lastSyncAt,
-      lastError: updates.lastError !== undefined ? updates.lastError : current.lastError,
-      cursors: mergedCursors
+      lastError: updates.lastError !== undefined ? updates.lastError : (effectiveDirty ? current.lastError : null),
+      cursors: mergedCursors,
+      dirtyProjects: mergedDirtyProjects
     };
 
     fs.writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf8');

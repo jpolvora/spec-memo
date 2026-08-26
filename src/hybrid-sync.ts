@@ -73,19 +73,21 @@ export async function pullHybridProject(
 
     if (!dryRun) {
       const now = new Date().toISOString();
-      const cursorVal = changeset.generatedAt || now;
       let cursorsUpdate: Record<string, string> | undefined;
-      if (projectId) {
-        cursorsUpdate = { [projectId]: cursorVal };
-      } else {
-        const projects = new Set<string>();
-        for (const r of changeset.records) {
-          if (r.project) projects.add(r.project);
-        }
-        if (projects.size > 0) {
-          cursorsUpdate = {};
-          for (const p of projects) {
-            cursorsUpdate[p] = cursorVal;
+      if (applyResult.applied > 0) {
+        const cursorVal = changeset.generatedAt || now;
+        if (projectId) {
+          cursorsUpdate = { [projectId]: cursorVal };
+        } else {
+          const projects = new Set<string>();
+          for (const r of changeset.records) {
+            if (r.project) projects.add(r.project);
+          }
+          if (projects.size > 0) {
+            cursorsUpdate = {};
+            for (const p of projects) {
+              cursorsUpdate[p] = cursorVal;
+            }
           }
         }
       }
@@ -98,10 +100,18 @@ export async function pullHybridProject(
     return applyResult;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    writeHybridState(vaultRoot, {
-      dirty: true,
-      lastError: msg
-    });
+    if (projectId) {
+      writeHybridState(vaultRoot, {
+        dirty: true,
+        dirtyProjects: { [projectId]: true },
+        lastError: msg
+      });
+    } else {
+      writeHybridState(vaultRoot, {
+        dirty: true,
+        lastError: msg
+      });
+    }
     throw err;
   } finally {
     clearTimeout(timer);
@@ -117,7 +127,8 @@ export async function pushHybridProject(
   remoteUrlInput?: string,
   authToken?: string,
   dryRun: boolean = false,
-  force: boolean = false
+  force: boolean = false,
+  sinceOverride?: string
 ): Promise<SyncResult> {
   const vaultRoot = getVaultRoot(vaultRootInput);
   const config = ensureVaultStructure(vaultRoot);
@@ -129,7 +140,18 @@ export async function pushHybridProject(
   const remoteOrigin = normalizeRemoteUrl(rawUrl);
 
   const state = readHybridState(vaultRoot);
-  const since = projectId && state.cursors ? state.cursors[projectId] : undefined;
+  const isProjectDirty = Boolean(
+    state.dirty && (!projectId || state.dirtyProjects?.[projectId] !== false)
+  );
+  const since =
+    sinceOverride !== undefined
+      ? sinceOverride
+      : isProjectDirty
+        ? undefined
+        : projectId && state.cursors
+          ? state.cursors[projectId]
+          : undefined;
+
   const changeset = withVaultLockSync(vaultRoot, () =>
     exportChangeset(vaultRoot, { projectId, since })
   );
@@ -168,21 +190,46 @@ export async function pushHybridProject(
           }
         }
       }
-      writeHybridState(vaultRoot, {
-        dirty: false,
-        lastSyncAt: now,
-        lastError: null,
-        cursors: cursorsUpdate
-      });
+
+      if (projectId) {
+        const current = readHybridState(vaultRoot);
+        const updatedDirtyProjects = { ...(current.dirtyProjects || {}), [projectId]: false };
+        const remainingDirty = Object.entries(updatedDirtyProjects).some(
+          ([k, v]) => k !== projectId && Boolean(v)
+        );
+        writeHybridState(vaultRoot, {
+          dirty: remainingDirty,
+          dirtyProjects: updatedDirtyProjects,
+          lastSyncAt: now,
+          lastError: remainingDirty ? current.lastError : null,
+          cursors: cursorsUpdate
+        });
+      } else {
+        writeHybridState(vaultRoot, {
+          dirty: false,
+          dirtyProjects: {},
+          lastSyncAt: now,
+          lastError: null,
+          cursors: cursorsUpdate
+        });
+      }
     }
 
     return pushResult;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    writeHybridState(vaultRoot, {
-      dirty: true,
-      lastError: msg
-    });
+    if (projectId) {
+      writeHybridState(vaultRoot, {
+        dirty: true,
+        dirtyProjects: { [projectId]: true },
+        lastError: msg
+      });
+    } else {
+      writeHybridState(vaultRoot, {
+        dirty: true,
+        lastError: msg
+      });
+    }
     throw err;
   } finally {
     clearTimeout(timer);
@@ -205,6 +252,16 @@ export async function syncHybrid(
   const isAll = options.all === true;
   const targetProjectId = isAll ? undefined : options.projectId;
 
+  const stateBefore = readHybridState(vaultRoot);
+  const isTargetDirty = Boolean(
+    stateBefore.dirty && (!targetProjectId || stateBefore.dirtyProjects?.[targetProjectId] !== false)
+  );
+  const sinceForPush = isTargetDirty
+    ? undefined
+    : targetProjectId && stateBefore.cursors
+      ? stateBefore.cursors[targetProjectId]
+      : undefined;
+
   const pullResult = await pullHybridProject(
     vaultRoot,
     targetProjectId,
@@ -219,7 +276,8 @@ export async function syncHybrid(
     options.remoteUrl,
     options.authToken,
     options.dryRun,
-    options.force
+    options.force,
+    sinceForPush
   );
 
   return {

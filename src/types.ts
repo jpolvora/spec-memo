@@ -380,6 +380,7 @@ export interface HybridState {
   lastSyncAt: string | null;
   lastError: string | null;
   cursors?: Record<string, string>;
+  dirtyProjects?: Record<string, boolean>;
 }
 
 export interface SetupOptions {
