@@ -1,11 +1,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { PromoteOptions, PromoteResult, MemoRecord } from './types.js';
-import { getRecord } from './store.js';
+import { getRecord, listProjectRecords } from './store.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot } from './vault.js';
 import { serializeRecord } from './schema.js';
 import { isPathInside } from './safety.js';
+import { formatAsSkill, rankActiveTraps } from './recurrence.js';
 
 /**
  * Format a decision record into standard Nygard / ADR format.
@@ -111,18 +112,38 @@ export async function promoteRecord(options: PromoteOptions): Promise<PromoteRes
     throw new Error('Destination path is required to promote a record into the product repository.');
   }
 
-  const record = await getRecord({
-    cwd: options.cwd,
-    projectId,
-    vaultRoot,
-    id: options.id,
-    kind: options.kind,
-    slug: options.slug
-  });
+  const skillExport = options.format === 'skill';
+  const lookupSingle = Boolean(options.id || options.slug);
+  let record: MemoRecord | null = null;
+  let skillRecords: MemoRecord[] = [];
 
-  if (!record) {
-    const lookup = options.id || `${options.kind || ''}/${options.slug || ''}`;
-    throw new Error(`Record not found for promotion: ${lookup}`);
+  if (skillExport && !lookupSingle) {
+    skillRecords = rankActiveTraps(listProjectRecords(vaultRoot, projectId), {
+      layer: options.layer,
+      limit: options.limit
+    });
+    if (skillRecords.length === 0) {
+      throw new Error(
+        'No active traps to compile for skill export. Record traps in the vault or pass an explicit id.'
+      );
+    }
+  } else {
+    record = await getRecord({
+      cwd: options.cwd,
+      projectId,
+      vaultRoot,
+      id: options.id,
+      kind: options.kind,
+      slug: options.slug
+    });
+
+    if (!record) {
+      const lookup = options.id || `${options.kind || ''}/${options.slug || ''}`;
+      throw new Error(`Record not found for promotion: ${lookup}`);
+    }
+    if (skillExport) {
+      skillRecords = [record];
+    }
   }
 
   // Resolve target path
@@ -137,10 +158,16 @@ export async function promoteRecord(options: PromoteOptions): Promise<PromoteRes
     destClean.endsWith('\\') ||
     (fs.existsSync(resolvedTarget) && fs.statSync(resolvedTarget).isDirectory())
   ) {
-    const slug = record.frontmatter.slug || record.frontmatter.id || 'decision';
-    const isAdr = options.format === 'adr' || options.format === 'madr' || record.frontmatter.kind === 'decision';
+    const slugSource = record || skillRecords[0];
+    const slug = slugSource
+      ? String(slugSource.frontmatter.slug || slugSource.frontmatter.id || 'decision')
+      : 'SKILL';
+    const isAdr =
+      options.format === 'adr' ||
+      options.format === 'madr' ||
+      record?.frontmatter.kind === 'decision';
     const prefix = isAdr ? '0001-' : '';
-    const filename = `${prefix}${slug}.md`;
+    const filename = skillExport ? 'SKILL.md' : `${prefix}${slug}.md`;
     resolvedTarget = path.join(resolvedTarget, filename);
   }
 
@@ -173,27 +200,32 @@ export async function promoteRecord(options: PromoteOptions): Promise<PromoteRes
 
   // Format content based on format option or record kind
   let fileContent: string;
-  const requestedFormat = options.format || (record.frontmatter.kind === 'decision' ? 'adr' : 'raw');
+  const requestedFormat = options.format || (record?.frontmatter.kind === 'decision' ? 'adr' : 'raw');
 
-  if (requestedFormat === 'adr' && record.frontmatter.kind === 'decision') {
+  if (requestedFormat === 'skill') {
+    fileContent = formatAsSkill(skillRecords);
+  } else if (requestedFormat === 'adr' && record && record.frontmatter.kind === 'decision') {
     fileContent = formatAsAdr(record);
-  } else if (requestedFormat === 'madr' && record.frontmatter.kind === 'decision') {
+  } else if (requestedFormat === 'madr' && record && record.frontmatter.kind === 'decision') {
     fileContent = formatAsMadr(record);
-  } else {
+  } else if (record) {
     fileContent = serializeRecord({
       frontmatter: record.frontmatter,
       body: record.body
     });
+  } else {
+    throw new Error('Record not found for promotion.');
   }
 
   fs.writeFileSync(resolvedTarget, fileContent, 'utf8');
   const bytesWritten = Buffer.byteLength(fileContent, 'utf8');
 
   const relativeDest = path.relative(identity.rootPath, resolvedTarget).replace(/\\/g, '/');
+  const primary = record || skillRecords[0];
 
   return {
-    id: record.frontmatter.id,
-    kind: record.frontmatter.kind,
+    id: primary ? primary.frontmatter.id : 'skill-export',
+    kind: primary ? primary.frontmatter.kind : 'trap',
     destination: relativeDest,
     targetPath: resolvedTarget,
     bytesWritten,

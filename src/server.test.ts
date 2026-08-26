@@ -3,6 +3,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import http from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { ensureProjectVault } from "./vault.js";
@@ -29,7 +30,7 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     vaultProjectPath: path.join(vaultRoot, "projects", projectId)
   }, vaultRoot);
 
-  const serverInstance = await startSseServer({ vaultRoot, port: 0, host: "127.0.0.1" });
+  const serverInstance = await startSseServer({ vaultRoot, port: 0, host: "127.0.0.1", enableStatus: false });
   const baseUrl = serverInstance.url;
 
   t.after(async () => {
@@ -119,7 +120,8 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
       vaultRoot,
       port: 0,
       host: "127.0.0.1",
-      authToken: "secret-token-123"
+      authToken: "secret-token-123",
+      enableStatus: false
     });
 
     try {
@@ -135,5 +137,143 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     } finally {
       await authServer.close();
     }
+  });
+
+  await t.test("should co-start status monitor on default companion port", async () => {
+    const combined = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      statusPort: 0,
+      enableStatus: true
+    });
+
+    try {
+      assert.ok(combined.statusUrl);
+      assert.ok(combined.activityBus);
+
+      const statusRes = await fetch(`${combined.statusUrl}/api/status`);
+      assert.strictEqual(statusRes.status, 200);
+      const statusJson = await statusRes.json() as { service: string; mcp: { available: boolean } };
+      assert.strictEqual(statusJson.service, "spec-memo-status-monitor");
+      assert.strictEqual(statusJson.mcp.available, true);
+
+      const htmlRes = await fetch(`${combined.statusUrl}/`);
+      assert.strictEqual(htmlRes.status, 200);
+
+      const healthBefore = combined.activityBus.list().filter((e) => e.path === "/health").length;
+      await fetch(`${combined.url}/health`);
+      await new Promise((r) => setTimeout(r, 50));
+      const healthAfter = combined.activityBus.list().filter((e) => e.path === "/health").length;
+      assert.ok(healthAfter > healthBefore);
+    } finally {
+      await combined.close();
+    }
+  });
+
+  await t.test("should capture tool events over SSE MCP transport", async () => {
+    const combined = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      statusPort: 0
+    });
+
+    try {
+      const sseUrl = new URL(`${combined.url}/sse`);
+      const transport = new SSEClientTransport(sseUrl);
+      const client = new Client({ name: "test-status-client", version: "1.0.0" });
+      await client.connect(transport);
+
+      const before = combined.activityBus.list().filter((e) => e.type === "tool").length;
+      await client.callTool({
+        name: "search",
+        arguments: { query: "connections" }
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      const after = combined.activityBus.list().filter((e) => e.type === "tool").length;
+      assert.ok(after > before);
+
+      await client.close();
+    } finally {
+      await combined.close();
+    }
+  });
+
+  await t.test("should capture failed tool invocations with ok:false", async () => {
+    const combined = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      statusPort: 0
+    });
+
+    try {
+      const sseUrl = new URL(`${combined.url}/sse`);
+      const transport = new SSEClientTransport(sseUrl);
+      const client = new Client({ name: "test-fail-client", version: "1.0.0" });
+      await client.connect(transport);
+
+      await client.callTool({
+        name: "search",
+        arguments: { sort: "popularity" }
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      const failed = combined.activityBus.list().filter((e) => e.type === "tool" && e.ok === false);
+      assert.ok(failed.length >= 1);
+      assert.match(failed[failed.length - 1].summary, /search failed/i);
+
+      await client.close();
+    } finally {
+      await combined.close();
+    }
+  });
+
+  await t.test("should skip status monitor when enableStatus is false", async () => {
+    const noStatus = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      enableStatus: false
+    });
+    try {
+      assert.strictEqual(noStatus.statusUrl, undefined);
+    } finally {
+      await noStatus.close();
+    }
+  });
+
+  await t.test("should close MCP listener when status companion fails to bind", async () => {
+    const reserve = (server: http.Server) =>
+      new Promise<number>((resolve) => {
+        server.listen(0, "127.0.0.1", () => resolve((server.address() as { port: number }).port));
+      });
+    const close = (server: http.Server) => new Promise<void>((resolve) => server.close(() => resolve()));
+
+    const mcpHolder = http.createServer();
+    const mcpPort = await reserve(mcpHolder);
+    await close(mcpHolder);
+
+    const blocker = http.createServer();
+    const busyPort = await reserve(blocker);
+
+    await assert.rejects(
+      () =>
+        startSseServer({
+          vaultRoot,
+          port: mcpPort,
+          host: "127.0.0.1",
+          statusPort: busyPort,
+          enableStatus: true
+        })
+    );
+
+    const probe = http.createServer();
+    await new Promise<void>((resolve, reject) => {
+      probe.once("error", reject);
+      probe.listen(mcpPort, "127.0.0.1", () => resolve());
+    });
+    await close(probe);
+    await close(blocker);
   });
 });

@@ -13,6 +13,10 @@ import { sanitizeToolOutput } from './safety.js';
 import { startCanvasServer } from './canvas.js';
 import { syncVaults } from './sync.js';
 import { startSseServer } from './server.js';
+import { backfillTrapRecurrence, listProjectRecords } from './store.js';
+import { aliasLayer, rankActiveTraps, occurrenceOf, lastSeenOf, applyTrapClassification } from './recurrence.js';
+import { getVaultRoot } from './vault.js';
+import { resolveProjectIdentity } from './identity.js';
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -90,6 +94,7 @@ Core Memory Commands:
 
 Utility Commands:
   doctor        Diagnose vault integrity and check product tree pollution
+  rank          List traps by recurrence (occurrences)
   import        Import legacy .agents tree into external vault
   export-vault  Export vault records into portable archive (optional AES-256-GCM)
   import-vault  Import vault archive into local vault
@@ -113,7 +118,11 @@ Options:
   --sse           Run as HTTP / Server-Sent Events (SSE) server
   --port          Port to listen on (default 3000 for SSE)
   --host          Host address to bind (default 127.0.0.1)
+  --status-port   Status monitor companion port (default 3001; requires --sse)
+  --no-status     Do not start the status monitor companion
+  --auth-token    Bearer token for SSE/status when binding beyond loopback
   --vaultRoot     Override vault root directory
+  --json          Output server URL metadata as JSON
   -h, --help      Show this help message`);
     return;
   }
@@ -169,6 +178,22 @@ Restores a vault archive into the local vault with automatic index rebuilding.
 
 Options:
   --password      Decryption password (required if archive is encrypted)
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'rank') {
+    console.log(`Usage: memo rank [options]
+
+List active traps ordered by occurrences, then lastSeen, then severity.
+
+Options:
+  --layer         Filter by closed layer enum
+  --limit         Maximum traps to list (default 10)
+  --backfill      Write layer, module, occurrences, lastSeen onto existing traps
+  --cwd           Product repository working directory
   --vaultRoot     Override vault root directory
   --json          Output result as JSON
   -h, --help      Show this help message`);
@@ -240,21 +265,52 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
 
   if (parsed.command === 'serve') {
     if (parsed.options.sse) {
+      try {
       const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : 3000;
       const host = (parsed.options.host as string) || '127.0.0.1';
       const vaultRoot = parsed.options.vaultRoot as string | undefined;
       const authToken =
         (parsed.options['auth-token'] as string | undefined) ||
         (parsed.options.authToken as string | undefined);
+      const noStatus =
+        parsed.options['no-status'] === true ||
+        parsed.options['no-status'] === 'true' ||
+        parsed.options.noStatus === true;
+      const statusPort = parsed.options['status-port']
+        ? parseInt(String(parsed.options['status-port']), 10)
+        : parsed.options.statusPort
+          ? parseInt(String(parsed.options.statusPort), 10)
+          : 3001;
 
-      const instance = await startSseServer({ port, host, vaultRoot, authToken });
+      const instance = await startSseServer({
+        port,
+        host,
+        vaultRoot,
+        authToken,
+        enableStatus: !noStatus,
+        statusPort
+      });
       if (parsed.isJson) {
-        printJson({ status: 'running', service: 'mcp-sse', url: instance.url, port: instance.port, host: instance.host });
+        const payload: Record<string, unknown> = {
+          status: 'running',
+          service: 'mcp-sse',
+          url: instance.url,
+          port: instance.port,
+          host: instance.host
+        };
+        if (instance.statusUrl) {
+          payload.statusUrl = instance.statusUrl;
+          payload.statusPort = instance.statusPort;
+        }
+        printJson(payload);
       } else {
         console.log(`spec-memo — MCP SSE Server running at: ${instance.url}`);
         console.log(`  SSE endpoint:     ${instance.url}/sse`);
         console.log(`  Message endpoint: ${instance.url}/message`);
         console.log(`  Health check:     ${instance.url}/health`);
+        if (instance.statusUrl) {
+          console.log(`  Status monitor:   ${instance.statusUrl}`);
+        }
       }
 
       const shutdown = async (signal: NodeJS.Signals) => {
@@ -268,6 +324,15 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
       return new Promise(() => {});
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (parsed.isJson) {
+          printJson({ isError: true, error: msg, code: 'SSE_ERROR' });
+        } else {
+          console.error(`SSE server failed: ${msg}`);
+        }
+        return 1;
+      }
     }
 
     await startMcpServer();
@@ -359,6 +424,69 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         printJson({ isError: true, error: msg, code: 'SYNC_VAULT_ERROR' });
       } else {
         console.error(`Sync vault failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo rank command (CLI-only; not an MCP tool)
+  if (parsed.command === 'rank') {
+    try {
+      const vaultRoot = parsed.options.vaultRoot as string | undefined;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const layerRaw = parsed.options.layer ? String(parsed.options.layer) : undefined;
+      const layer = layerRaw ? aliasLayer(layerRaw) ?? layerRaw : undefined;
+      const limitRaw = parsed.options.limit;
+      const limit = typeof limitRaw === 'string' ? parseInt(limitRaw, 10) : 10;
+      const doBackfill = parsed.options.backfill === true || parsed.options.backfill === 'true';
+
+      if (doBackfill) {
+        backfillTrapRecurrence({ cwd, vaultRoot });
+      }
+
+      const root = vaultRoot || getVaultRoot();
+      const identity = resolveProjectIdentity(cwd, { vaultRoot: root });
+      const ranked = rankActiveTraps(listProjectRecords(root, identity.projectId), {
+        layer,
+        limit: Number.isFinite(limit) && limit > 0 ? limit : 10
+      });
+      const hits = ranked.map((record) => {
+        const classified = applyTrapClassification(record.frontmatter, record.body);
+        return {
+          id: record.frontmatter.id,
+          projectId: record.frontmatter.project,
+          kind: record.frontmatter.kind,
+          status: record.frontmatter.status,
+          title: record.frontmatter.title,
+          filepath: record.path || '',
+          occurrences: occurrenceOf(record.frontmatter),
+          lastSeen: lastSeenOf(record.frontmatter),
+          layer: record.frontmatter.layer || classified.layer,
+          severity: record.frontmatter.severity
+        };
+      });
+
+      if (parsed.isJson) {
+        printJson(hits);
+      } else {
+        console.log(`spec-memo — Recurring traps (${hits.length})\n`);
+        if (hits.length === 0) {
+          console.log('No active traps.');
+        } else {
+          for (const hit of hits) {
+            const occ = hit.occurrences || 1;
+            const layerLabel = hit.layer || 'other';
+            console.log(`[${occ}x] [${layerLabel}] ${hit.title || hit.id}`);
+          }
+        }
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'RANK_ERROR' });
+      } else {
+        console.error(`Rank failed: ${msg}`);
       }
       return 1;
     }
@@ -665,6 +793,9 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       if (typeof payload.limit === 'string') {
         payload.limit = parseInt(payload.limit, 10);
       }
+      if (payload.sort) {
+        payload.sort = String(payload.sort);
+      }
     }
 
     // Normalization for get command
@@ -783,6 +914,9 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       }
       if (payload.format) {
         payload.format = String(payload.format);
+      }
+      if (typeof payload.limit === 'string') {
+        payload.limit = parseInt(payload.limit, 10);
       }
     }
 

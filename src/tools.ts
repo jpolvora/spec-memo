@@ -78,6 +78,11 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         projectId: { type: 'string', description: 'Specific project ID to search' },
         crossProject: { type: 'boolean', description: 'Search across all bound projects' },
         limit: { type: 'number', description: 'Maximum number of results to return' },
+        sort: {
+          type: 'string',
+          enum: ['relevance', 'occurrences', 'updated'],
+          description: 'Result order: relevance (default), occurrences, or updated'
+        },
         cwd: { type: 'string', description: 'Product repository working directory' },
       }
     },
@@ -92,7 +97,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       crossProject: z.boolean().optional(),
       limit: z.number().optional(),
       cwd: z.string().optional(),
-      vaultRoot: z.string().optional()
+      vaultRoot: z.string().optional(),
+      sort: z.enum(['relevance', 'occurrences', 'updated']).optional()
     })
   },
   get: {
@@ -219,10 +225,11 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         destination: { type: 'string', description: 'Product-relative destination path (e.g. docs/adr/001.md)' },
         format: {
           type: 'string',
-          enum: ['raw', 'adr', 'madr'],
-          description: 'Output format: raw markdown, Nygard ADR, or MADR template'
+          enum: ['raw', 'adr', 'madr', 'skill'],
+          description: 'Output format: raw markdown, Nygard ADR, MADR, or compiled skill'
         },
         force: { type: 'boolean', description: 'Overwrite destination if it already exists' },
+        limit: { type: 'number', description: 'When format is skill and id is omitted, number of ranked traps to compile' },
         cwd: { type: 'string', description: 'Product repository working directory' },
       },
       required: ['destination']
@@ -232,8 +239,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       kind: z.string().optional(),
       slug: z.string().optional(),
       destination: z.string(),
-      format: z.enum(['raw', 'adr', 'madr']).optional(),
+      format: z.enum(['raw', 'adr', 'madr', 'skill']).optional(),
       force: z.boolean().optional(),
+      limit: z.number().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional()
     })

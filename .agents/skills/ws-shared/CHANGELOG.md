@@ -1,5 +1,25 @@
 # Changelog
 
+### [2026-08-26 00:50] Agent: Cursor Grok 4.6
+- **Prompt**: Create ws-memo skill covering full spec-memo MCP/CLI; open workflow-skills issue to improve ws-spec-memo handoff
+- **Done**: Added `.agents/skills/ws-memo/` (SKILL.md + SURFACE/RECORDS/MCP-TEMPLATE + evals); pointers in AGENTS.md, FEATURES.md, README.md; opened jpolvora/workflow-skills#243
+- **Result**: Runtime skill lives in spec-memo; consumer setup stays in workflow-skills ws-spec-memo
+
+### [2026-08-26 00:41] Agent: Cursor Grok 4.6
+- **Prompt**: Increment version, update docs/specs, commit develop, ship PR to master, wait CI/code-review and fix
+- **Done**: Bumped package/MCP/vault version to 0.2.0; tracking docs; removed hardcoded auth token from vault-push script
+- **Result**: `npm test` exit 0 (178 pass / 0 fail). Preparing PR develop → master
+
+### [2026-08-26 00:00] Agent: Cursor Grok 4.6
+- **Prompt**: Implement trap-recurrence ranking (layer/module, occurrence counter, memo rank, promote format:skill)
+- **Done**: Schema + upsert bump-in-place, search.sort=occurrences, CLI `memo rank --backfill`, promote `format:skill`, TRAPS.md headings; 15 new tests
+- **Result**: `npm test` exit 0 (154 pass / 0 fail). Tracked as Phase 6 done in index.PRD / PRODUCT.PRD / FEATURES.md / PLAN.md
+
+### [2026-08-25 23:40] Agent: Cursor Grok 4.6
+- **Prompt**: `/ws-write-spec` trap recurrence ranking (2-level categories, occurrence counter, list, export to owner skill) plus simplify the idea
+- **Done**: Wrote `.agents/specs/trap-recurrence.spec.md` (25 ACs) and `trap-recurrence.context.md`; tracked row 24 on `index.PRD` as Phase 6
+- **Result**: validate_spec.cjs --mode=authoring PASS. Spec of record only; no `{plansDir}` artifacts.
+
 ### [2026-08-25 08:10] Agent: Antigravity
 - **Prompt**: Align project plans, update index.PRD, and create all corresponding *.spec.md files with derived implementation statuses
 - **Done**: Created all missing canonical specifications across all phases (dogfood-remap, vault-and-identity, record-schema-and-indexes, relocatable-hub, memory-adapter-mcp, write-block-hook, trap-dedup, spec-drift, vault-git, cross-project-search, cli-doctor, viewer); synchronized index.PRD, PRODUCT.PRD, and FEATURES.md; verified schema validation across all 18 specs.

@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { MemoRecord, ProjectMetadata } from './types.js';
 import { getProjectMetadata, getVaultRoot } from './vault.js';
 import { parseRecord } from './schema.js';
+import { applyTrapClassification, occurrenceOf } from './recurrence.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 4,
@@ -85,7 +86,10 @@ export function generateTrapsView(metadata: ProjectMetadata | null, traps: MemoR
 
       md += `### [${sev}] ${name} ([${trap.frontmatter.id}](${relPath}))\n\n`;
       md += `- **Path Patterns:** \`${patterns}\` | **Wikilink:** \`[[${trap.frontmatter.id}]]\`\n`;
-      md += `- **Severity:** \`${trap.frontmatter.severity || 'medium'}\` | **Source:** \`${trap.frontmatter.source}\` | **Updated:** \`${trap.frontmatter.updated}\`\n`;
+      const classified = applyTrapClassification(trap.frontmatter, trap.body);
+      const layer = classified.layer || 'other';
+      const occurrences = occurrenceOf(trap.frontmatter);
+      md += `- **Severity:** \`${trap.frontmatter.severity || 'medium'}\` | **Layer:** \`${layer}\` | **Occurrences:** \`${occurrences}\` | **Source:** \`${trap.frontmatter.source}\` | **Updated:** \`${trap.frontmatter.updated}\`\n`;
       if (trap.frontmatter.supersedes) {
         md += `- **Supersedes:** \`[[${trap.frontmatter.supersedes}]]\`\n`;
       }

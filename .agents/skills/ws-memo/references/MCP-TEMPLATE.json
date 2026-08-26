@@ -1,0 +1,13 @@
+{
+  "_comment": "Register stdio MCP. For HTTP/SSE use memo serve --sse and point the host at http://127.0.0.1:3000/sse. Status UI is http://127.0.0.1:3001/ (not an MCP transport).",
+  "mcpServers": {
+    "spec-memo": {
+      "command": "memo",
+      "args": ["serve"]
+    },
+    "spec-memo-npx": {
+      "command": "npx",
+      "args": ["-y", "spec-memo", "serve"]
+    }
+  }
+}

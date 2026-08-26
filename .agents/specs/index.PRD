@@ -95,6 +95,13 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`multi-machine-sync`](multi-machine-sync.spec.md): Multi-Machine Vault Synchronization and Delta Engine
 - [x] [`mcp-sse-transport`](mcp-sse-transport.spec.md): HTTP and Server-Sent Events (SSE) MCP Transport
 
+### Phase 6: Recurrence learning
+
+- [x] [`trap-recurrence`](trap-recurrence.spec.md): Trap recurrence ranking and owner-skill export
+- [x] [`mcp-status-monitor`](mcp-status-monitor.spec.md): MCP status monitor page with live activity log
+
+
+
 ## 8. Next specs
 
 | # | Spec | Status | Target Phase | Summary |
@@ -123,6 +130,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 21 | [`canvas-viewer`](canvas-viewer.spec.md) | `[x] done` | Phase 5 | Interactive Canvas UI and Visual Graph Viewer |
 | 22 | [`multi-machine-sync`](multi-machine-sync.spec.md) | `[x] done` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
 | 23 | [`mcp-sse-transport`](mcp-sse-transport.spec.md) | `[x] done` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
+| 24 | [`trap-recurrence`](trap-recurrence.spec.md) | `[x] done` | Phase 6 | Trap recurrence ranking and owner-skill export |
+
+| 25 | [`mcp-status-monitor`](mcp-status-monitor.spec.md) | `[x] done` | Phase 6 | MCP status monitor page with live activity log |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -158,6 +168,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-22-canvas-viewer | Interactive Canvas UI and Visual Graph Viewer | Slice 22 delivery |
 | 2026-08-25 | slice-23-multi-machine-sync | Multi-Machine Vault Synchronization and Delta Engine | Slice 23 delivery |
 | 2026-08-25 | slice-24-mcp-sse-transport | HTTP and Server-Sent Events (SSE) MCP Transport | Slice 24 delivery |
+| 2026-08-26 | trap-recurrence | Trap recurrence ranking and owner-skill export | Slice 25 delivery |
+| 2026-08-26 | mcp-status-monitor | MCP status monitor with live activity log | npm test 178 pass |
+| 2026-08-26 | release-0.2.0 | Package, MCP server, and vault config version bumped to 0.2.0 | 0.2.0 |
 
 ## Archive
 
@@ -170,7 +183,8 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 
 - [x] All completed features logged in Done log.
 - [x] Linked `*.spec.md` files exist for all Next specs.
-- [x] All 21 canonical specifications validated against schema.
+- [x] All 26 canonical specifications validated against schema.
+- [x] Phase 6 complete — all scheduled specs delivered.
 
 ## 12. Related docs
 

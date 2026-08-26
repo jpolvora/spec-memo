@@ -2,9 +2,16 @@ import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordStatus, SearchHit, SearchOptions } from './types.js';
-import { getVaultRoot, withVaultLock } from './vault.js';
+import { getVaultRoot, withVaultLock, getVaultProjects } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { parseRecord } from './schema.js';
+import {
+  compareSearchHits,
+  enrichHitFromFile,
+  occurrenceOf,
+  lastSeenOf,
+  applyTrapClassification
+} from './recurrence.js';
 
 const dbPool = new Map<string, Database.Database>();
 
@@ -223,18 +230,120 @@ export function calculateVectorSimilarity(text1: string, text2: string): number 
   return dotProduct / (Math.sqrt(mag1) * Math.sqrt(mag2));
 }
 
+function listProjectMarkdownRecords(vaultRoot: string, projectId: string): MemoRecord[] {
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+  if (!fs.existsSync(projectDir)) return [];
+  const results: MemoRecord[] = [];
+  for (const entry of fs.readdirSync(projectDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const subDir = path.join(projectDir, entry.name);
+    for (const file of fs.readdirSync(subDir)) {
+      if (!file.endsWith('.md') || file.includes('.conflict.')) continue;
+      const filePath = path.join(subDir, file);
+      try {
+        results.push(parseRecord(fs.readFileSync(filePath, 'utf8'), filePath));
+      } catch {
+        // skip unreadable / invalid
+      }
+    }
+  }
+  return results;
+}
+
+/**
+ * Full-set occurrences ranking (aligned with `memo rank` / promote skill export).
+ * Avoids FTS/updated-DESC pre-caps that drop stale high-occurrence traps.
+ */
+function searchIndexByOccurrences(
+  options: SearchOptions,
+  vaultRoot: string,
+  targetProjectId?: string
+): SearchHit[] {
+  const projectIds = options.crossProject
+    ? getVaultProjects(vaultRoot).map((p) => p.id)
+    : targetProjectId
+      ? [targetProjectId]
+      : [];
+
+  const limit = options.limit && options.limit > 0 ? options.limit : 50;
+  const statusFilter = options.status;
+  const kinds = options.kinds;
+  const query = (options.query || '').trim().toLowerCase();
+  const hits: SearchHit[] = [];
+
+  for (const projectId of projectIds) {
+    for (const record of listProjectMarkdownRecords(vaultRoot, projectId)) {
+      const fm = record.frontmatter;
+      if (kinds && kinds.length > 0 && !kinds.includes(fm.kind)) continue;
+      if (!kinds && options.crossProject && ['scratch', 'state', 'review'].includes(fm.kind)) {
+        continue;
+      }
+      if (!kinds && !options.crossProject && !options.includeScratch && fm.kind === 'scratch') {
+        continue;
+      }
+      if (statusFilter && fm.status !== statusFilter) continue;
+      if (options.tags && options.tags.length > 0) {
+        const tags = Array.isArray(fm.tags) ? fm.tags.map(String) : [];
+        if (!options.tags.every((t) => tags.includes(t))) continue;
+      }
+      const patterns = Array.isArray(fm.pathPatterns) ? fm.pathPatterns.map(String) : [];
+      if (options.path && !matchesAnyPattern(options.path, patterns)) continue;
+      if (query) {
+        const haystack =
+          `${fm.title || ''} ${fm.id || ''} ${(fm.tags || []).join(' ')} ${record.body}`.toLowerCase();
+        if (!haystack.includes(query)) continue;
+      }
+
+      const classified = applyTrapClassification(fm, record.body);
+      hits.push({
+        id: String(fm.id),
+        projectId: String(fm.project || projectId),
+        kind: fm.kind,
+        status: fm.status,
+        title: typeof fm.title === 'string' ? fm.title : undefined,
+        tags: Array.isArray(fm.tags) ? fm.tags.map(String) : undefined,
+        pathPatterns: patterns.length > 0 ? patterns : undefined,
+        filepath: record.path || '',
+        updated: typeof fm.updated === 'string' ? fm.updated : undefined,
+        occurrences: occurrenceOf(fm),
+        lastSeen: lastSeenOf(fm) || undefined,
+        layer: (fm.layer || classified.layer) as SearchHit['layer'],
+        severity: fm.severity
+      });
+    }
+  }
+
+  hits.sort(compareSearchHits);
+  return hits.slice(0, limit);
+}
+
 /**
  * Search memory records via SQLite FTS5 index.
  */
 export function searchIndex(options: SearchOptions): SearchHit[] {
   const vaultRoot = options.vaultRoot || getVaultRoot();
-  const db = openIndex(vaultRoot);
 
   let targetProjectId = options.projectId;
   if (!targetProjectId && !options.crossProject) {
     const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
     targetProjectId = identity.projectId;
   }
+
+  // Occurrences ranking must evaluate the full active set (same semantics as `memo rank`),
+  // not an updated-DESC / FTS-relevance pre-cap. Skip FTS for this sort path.
+  if ((options.sort || 'relevance') === 'occurrences') {
+    return searchIndexByOccurrences(
+      {
+        ...options,
+        kinds: options.kinds && options.kinds.length > 0 ? options.kinds : (['trap'] as RecordKind[]),
+        status: options.status ?? 'active'
+      },
+      vaultRoot,
+      targetProjectId
+    );
+  }
+
+  const db = openIndex(vaultRoot);
 
   let embeddingsConfig: { enabled: boolean; minSimilarity?: number } | undefined = undefined;
   const configPath = path.join(vaultRoot, 'config.json');
@@ -286,6 +395,12 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
 
   const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const limit = options.limit && options.limit > 0 ? options.limit : 50;
+  const sort = options.sort || 'relevance';
+  // Occurrences sort needs a wider candidate pool than the final limit, but must stay
+  // bounded so enrichHitFromFile does not sync-parse the entire vault.
+  const candidateCap =
+    sort === 'occurrences' ? Math.min(Math.max(limit * 20, 200), 2000) : limit * 2;
+  const limitSql = `LIMIT ${candidateCap}`;
 
   let querySql: string;
   if (hasFtsQuery && ftsQuery) {
@@ -306,9 +421,10 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       FROM records_fts
       ${whereSql}
       ORDER BY rank
-      LIMIT ${limit * 2}
+      ${limitSql}
     `;
   } else {
+    const orderSql = sort === 'updated' ? 'ORDER BY updated DESC' : 'ORDER BY updated DESC';
     querySql = `
       SELECT
         id,
@@ -325,8 +441,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         0 AS rank
       FROM records_fts
       ${whereSql}
-      ORDER BY updated DESC
-      LIMIT ${limit * 2}
+      ${orderSql}
+      ${limitSql}
     `;
   }
 
@@ -360,7 +476,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         FROM records_fts
         ${fallbackWhere}
         ORDER BY updated DESC
-        LIMIT ${limit * 2}
+        LIMIT ${candidateCap}
       `;
       rows = db.prepare(fallbackSql).all(...fallbackParams) as SqlRow[];
     } catch {
@@ -414,9 +530,25 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       updated: row.updated || undefined
     });
 
-    if (results.length >= limit) {
+    if (sort !== 'occurrences' && results.length >= limit) {
       break;
     }
+  }
+
+  if (sort === 'occurrences') {
+    for (const hit of results) {
+      const extra = enrichHitFromFile(hit.filepath);
+      hit.occurrences = extra.occurrences;
+      hit.lastSeen = extra.lastSeen;
+      hit.layer = extra.layer as SearchHit['layer'];
+      hit.severity = extra.severity;
+    }
+    results.sort(compareSearchHits);
+    return results.slice(0, limit);
+  }
+
+  if (sort === 'updated') {
+    results.sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
   }
 
   return results;

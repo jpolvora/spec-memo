@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **not shipped**. Status marks: `[ ]` planned · `[~]` in design · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.2.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -28,7 +28,7 @@ Package version: **not shipped**. Status marks: `[ ]` planned · `[~]` in design
 - [x] **Typed Markdown records.** One file per record, YAML frontmatter per [`PRODUCT.PRD`](PRODUCT.PRD) § Frontmatter. Body is Markdown.
 - [x] **Kinds.** `trap`, `decision`, `spec`, `plan`, `state`, `log`, `scratch`, `review` with the retention table in the PRD.
 - [x] **Compiled views.** Regenerated, never hand-edited: `INDEX.md`, `TRAPS.md`, `DECISIONS.md`. Rebuild from sources (no merge of compiled files).
-- [x] **Trap shape.** Layer, module, severity, pathPatterns, scenario, DO NOT, INSTEAD DO — compatible with today’s workflow-skills memory entries so import is mechanical.
+- [x] **Trap shape.** Layer, module, severity, pathPatterns, scenario, DO NOT, INSTEAD DO, plus frontmatter `occurrences` / `lastSeen` — compatible with today’s workflow-skills memory entries so import is mechanical.
 - [x] **Decision shape.** Title, status (`proposed` / `accepted` / `superseded`), rationale, alternatives considered (optional).
 - [x] **Spec of record.** Single spec per slug in the vault. No `step-00` duplicate. Optional `linkedPaths` + `verifiedAtSha`.
 
@@ -36,7 +36,7 @@ Package version: **not shipped**. Status marks: `[ ]` planned · `[~]` in design
 
 ## 3. Index
 
-- [x] **SQLite FTS5.** Query by text, kind, status, slug, pathPatterns, severity, tags, project.
+- [x] **SQLite FTS5.** Query by text, kind, status, slug, pathPatterns, severity, tags, project. `search.sort` can order by `relevance`, `occurrences`, or `updated`.
 - [x] **Disposable DB.** Delete `memo.sqlite` and rebuild from the vault. The DB is never the source of truth.
 - [x] **Default search filter.** Exclude `scratch`, `state`, `log`, `review` unless the caller sets `kinds`.
 
@@ -73,6 +73,7 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
 - [x] **Same module as MCP.** `memo <command>` maps 1:1 to tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`.
 - [x] **`memo doctor`.** Vault exists, FTS rebuilds, project binds, reports in-repo pollution under a given product root (does not delete).
+- [x] **`memo rank`.** CLI-only list of active traps by `occurrences` (optional `--layer`, `--backfill`). Not a ninth MCP tool.
 - [x] **`memo import <productRoot>`.** See § Import.
 - [x] **`memo export-vault` / `memo import-vault`.** Backup and restore vault archives with optional AES-256-GCM encryption.
 - [x] **Help and errors on stderr; machine-readable JSON on stdout** when `--json` is passed.
@@ -85,10 +86,10 @@ Do not add a ninth tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 - [x] **TTL.** `scratch` 7 days; `review` 14 days after `relatedSlug` PR merged or 14 days from `updated` if unknown. `gc` applies this.
 - [x] **Plan compact.** `status=shipped` plans reduce to a short result record; detail files become `scratch` then expire.
 - [x] **Log compact.** Monthly roll-up files; events remain searchable via FTS.
-- [x] **ADR promotion templates.** Format decisions into standard Nygard ADR or MADR Markdown on promotion.
+- [x] **ADR promotion templates.** Format decisions into standard Nygard ADR or MADR Markdown on promotion. `format: skill` compiles ranked traps into one owner `SKILL.md`.
 - [x] **Redaction.** `upsert` / `append` reject bodies that look like secrets (PEM headers, `api_key=` assignments, known env-file patterns). Caller must omit the secret; spec-memo does not store a redacted copy of the secret value.
 - [x] **Refuse product-tree write.** If `cwd` or `productRoot` is a git work tree, API/CLI refuse to write record files *under that tree*. Vault writes stay under `$SPEC_MEMO_ROOT`.
-- [x] **Trap dedup (Phase 3).** Same `pathPatterns` + similar DO NOT → supersede instead of a third entry.
+- [x] **Trap dedup (Phase 3).** Same `pathPatterns` + similar DO NOT → bump `occurrences` on the surviving trap (explicit `supersedes` still creates a new file).
 
 ---
 
@@ -111,6 +112,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] Relocatable consumer hub data (`MEMORY`, `memory/*`, changelog) off `{sharedDir}`-fixed layout.
 - [x] `read-memory` / `update-memory` call spec-memo MCP (or CLI) instead of `Read`/`Write` in the product tree.
 - [x] Skill or git hook blocks new files under product `{plansDir}` / `{specsDir}` / hub memory once the project is bound.
+- [x] **`ws-memo` runtime skill** (this repo, [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)): routes all 8 MCP tools plus CLI extras. Consumer enable/setup remains workflow-skills `ws-spec-memo`.
 
 ---
 
@@ -122,7 +124,14 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 
 ---
 
-## 10. Explicitly not features (v1)
+## 10. Recurrence learning & ops visibility (Phase 6)
+
+- [x] **Trap recurrence ranking.** `memo rank` lists active traps by `occurrences`; optional `--layer`, `--backfill`; `memo promote --format skill` exports owner skill from ranked traps.
+- [x] **MCP status monitor.** Companion HTTP page (default `:3001`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream).
+
+---
+
+## 11. Explicitly not features (v1)
 
 | Idea | Why not |
 |------|---------|
@@ -133,7 +142,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 
 ---
 
-## 11. Shipped in this repository today
+## 12. Shipped in this repository today
 
 | Capability | Status |
 |------------|--------|
@@ -142,7 +151,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Implementation plan | `[x]` [`PLAN.md`](PLAN.md) |
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
-| Runtime (Phase 1 MVP + Phase 2 Harness Adapters + Phase 3 Curator Hardening + Phase 4 Viewers + Phase 5 Ecosystem delivered) | `[x]` |
+| Runtime (Phases 1–6 complete) | `[x]` |
 
 
 

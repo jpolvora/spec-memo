@@ -34,8 +34,21 @@ export interface RecordFrontmatter {
   severity?: 'low' | 'medium' | 'high' | 'critical';
   linkedPaths?: string[];
   verifiedAtSha?: string;
+  layer?: string;
+  module?: string;
+  occurrences?: number;
+  lastSeen?: string;
   [key: string]: unknown;
 }
+
+export type TrapLayer =
+  | 'application'
+  | 'domain'
+  | 'web'
+  | 'infrastructure'
+  | 'tests'
+  | 'devops'
+  | 'other';
 
 export interface MemoRecord {
   frontmatter: RecordFrontmatter;
@@ -124,7 +137,10 @@ export interface SearchOptions {
   includeScratch?: boolean;
   crossProject?: boolean;
   limit?: number;
+  sort?: SearchSort;
 }
+
+export type SearchSort = 'relevance' | 'occurrences' | 'updated';
 
 export interface SearchHit {
   id: string;
@@ -138,6 +154,10 @@ export interface SearchHit {
   snippet?: string;
   rank?: number;
   updated?: string;
+  occurrences?: number;
+  lastSeen?: string;
+  layer?: TrapLayer;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
 }
 
 export interface AppendOptions {
@@ -238,7 +258,9 @@ export interface PromoteOptions {
   slug?: string;
   destination: string;
   force?: boolean;
-  format?: 'raw' | 'adr' | 'madr';
+  format?: 'raw' | 'adr' | 'madr' | 'skill';
+  limit?: number;
+  layer?: TrapLayer;
 }
 
 export interface PromoteResult {
@@ -247,7 +269,7 @@ export interface PromoteResult {
   destination: string;
   targetPath: string;
   bytesWritten: number;
-  format?: 'raw' | 'adr' | 'madr';
+  format?: 'raw' | 'adr' | 'madr' | 'skill';
 }
 
 export interface ExportVaultOptions {

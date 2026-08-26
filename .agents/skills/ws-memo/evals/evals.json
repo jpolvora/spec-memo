@@ -1,0 +1,50 @@
+{
+  "skill_name": "ws-memo",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Session start in a spec-memo bound repo; load traps before coding",
+      "expected_output": "Calls MCP bootstrap (or memo bootstrap) and applies returned DO NOT / INSTEAD DO",
+      "assertions": [
+        "Does not Grep MEMORY.md as the primary path when MCP/CLI is available",
+        "Does not invent a ninth MCP tool"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Record a new anti-regression trap about SQLite file locks",
+      "expected_output": "upsert kind trap with DO NOT / INSTEAD DO body",
+      "assertions": [
+        "Does not write .agents/skills/ws-shared/memory/*.md when using this skill as the vault path",
+        "Does not write .agents/plans/ for the trap"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "List the most recurrent traps then export as a skill",
+      "expected_output": "search sort=occurrences or memo rank; then promote format=skill with destination",
+      "assertions": [
+        "Uses promote default-deny (destination required)",
+        "Does not add a rank MCP tool"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Watch MCP server status live on another port",
+      "expected_output": "memo serve --sse; status companion :3001 unless --no-status",
+      "assertions": [
+        "Does not put the status HTML on canvas :4100",
+        "Does not bind non-loopback without auth token"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Enable spec-memo in a workflow-skills consumer for the first time",
+      "expected_output": "Hands off to ws-spec-memo setup; this skill is for runtime after MCP is registered",
+      "assertions": [
+        "Does not write specMemo.* in config.json (that is ws-spec-memo)",
+        "Does not claim to replace ws-spec-memo"
+      ]
+    }
+  ]
+}

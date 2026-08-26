@@ -48,11 +48,15 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 | Deliver feature Spec→PR (standard FSM) | `ws-spec-to-pr` | Not for batch; not for format-only edits |
 | Deliver feature Spec→PR (fast lite) | `ws-spec-to-pr-lite` | Not for complex multi-phase work |
 
+### Vault / spec-memo runtime
+
+When the task means using the spec-memo **vault** (bootstrap, search, upsert, doctor, canvas, SSE status), load **only** [`ws-memo`](.agents/skills/ws-memo/SKILL.md). Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
+
 ---
 
 ## 🚀 Session Start Protocol
 
-1. **Invoke Bootstrap**: Call the `bootstrap` MCP tool or run `memo bootstrap` to retrieve active anti-regression traps, open architecture decisions, the active spec/plan slice, and code drift warnings.
+1. **Invoke Bootstrap**: Load [`ws-memo`](.agents/skills/ws-memo/SKILL.md). Call the `bootstrap` MCP tool or run `memo bootstrap` to retrieve active anti-regression traps, open architecture decisions, the active spec/plan slice, and code drift warnings.
 2. **Review Product Docs**: Check [`PRODUCT.PRD`](PRODUCT.PRD), [`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), and [`.agents/specs/index.PRD`](.agents/specs/index.PRD) for active phase constraints and slice definitions.
 3. **Respect Git Boundaries**: Never create in-repo `.agents/plans/`, `MEMORY.md`, `.state.md`, or session log dumps in the product repository.
 
@@ -73,7 +77,7 @@ npm run watch
 
 ### 2. Run the Full Test Suite
 ```bash
-# Runs full pretest build and all 21 test suites (122+ tests)
+# Runs full pretest build and all 25 test suites (178 tests)
 npm test
 ```
 
@@ -119,7 +123,15 @@ node --test dist/canvas.test.js
 
 # HTTP / SSE Server Transport
 node --test dist/server.test.js
+
+# MCP status monitor (activity bus + :3001 companion)
+node --test dist/activity.test.js
+node --test dist/status.test.js
 ```
+
+### HTTP / SSE transport & status monitor
+
+`memo serve --sse` starts the MCP SSE listener (default `http://127.0.0.1:3000`) and, unless `--no-status` is set, a read-only **status monitor** companion at `http://127.0.0.1:3001/` with vault list, health cards, and a live activity log (tool + HTTP events via SSE `/api/events/stream`). Override the companion port with `--status-port`. Canvas graph UI remains separate on port `4100` (`memo canvas`).
 
 ---
 
@@ -134,8 +146,8 @@ node --test dist/server.test.js
 
 ### 2. `search`
 - **Purpose**: Filtered full-text search across vault records via SQLite FTS5.
-- **Parameters**: `query` (string), `kinds` (string[]), `status` (string), `tags` (string[]), `path` (string), `includeScratch` (boolean), `crossProject` (boolean), `limit` (number).
-- **CLI Example**: `memo search "database lock" --kind trap --path src/db/client.ts`
+- **Parameters**: `query` (string), `kinds` (string[]), `status` (string), `tags` (string[]), `path` (string), `includeScratch` (boolean), `crossProject` (boolean), `limit` (number), `sort` (`relevance` \| `occurrences` \| `updated`).
+- **CLI Example**: `memo search "database lock" --kind trap --path src/db/client.ts --sort occurrences`
 
 ### 3. `get`
 - **Purpose**: Retrieve a single record by ID or kind+slug.
@@ -145,7 +157,7 @@ node --test dist/server.test.js
 ### 4. `upsert`
 - **Purpose**: Write or update a memory record (trap, decision, spec, plan, state, log, scratch, review).
 - **Parameters**: `kind` (required), `body` (required), `slug` (optional), `frontmatter` (optional object).
-- **Frontmatter Fields**: `id`, `title`, `severity` (low/medium/high/critical), `pathPatterns` (string[]), `tags` (string[]), `supersedes` (string), `linkedPaths` (string[]), `verifiedAtSha` (string).
+- **Frontmatter Fields**: `id`, `title`, `severity` (low/medium/high/critical), `pathPatterns` (string[]), `tags` (string[]), `layer`, `module`, `occurrences`, `lastSeen`, `supersedes` (string), `linkedPaths` (string[]), `verifiedAtSha` (string).
 - **CLI Example**:
   ```bash
   memo upsert --kind trap --title "Close SQLite DB before unlink on Windows" --severity critical --path-patterns "src/**/*.ts" --body "Windows holds file lock on open SQLite handles. Call closeIndex() before deleting test directories."
@@ -168,8 +180,8 @@ node --test dist/server.test.js
 
 ### 8. `promote`
 - **Purpose**: Copy a record into the product repository as documentation (default-deny without destination).
-- **Parameters**: `id` (string), `destination` (required string), `format` (optional `adr` or `raw`), `force` (boolean).
-- **CLI Example**: `memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite.md --format adr`
+- **Parameters**: `id` (string, optional when `format=skill`), `destination` (required string), `format` (optional `raw` \| `adr` \| `madr` \| `skill`), `limit` (number), `force` (boolean).
+- **CLI Example**: `memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md`
 
 ---
 
@@ -202,6 +214,17 @@ memo doctor --fix
    - `telemetry.jsonl`
    - Agent audit logs (`*.log.md`, `.agents/*.log`)
 
+## Recurring traps (`memo rank`)
+
+CLI-only (not a ninth MCP tool). Lists active traps by `occurrences`.
+
+```bash
+memo rank --json
+memo rank --layer web --limit 10
+memo rank --backfill
+memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md
+```
+
 ---
 
 ## 🛑 Git Boundary & Anti-Pollution Rules (Mandatory)
@@ -230,7 +253,7 @@ Always work in strict synchronization with [`.agents/specs/index.PRD`](.agents/s
 
 ### Phase 2: Surgical Implementation & Verification
 1. Apply minimal, surgical diffs following Karpathy guidelines.
-2. Run `npm test` and verify that all 122+ tests pass with zero regressions.
+2. Run `npm test` and verify that all 178 tests pass with zero regressions.
 
 ### Phase 3: Post-Execution Tracking Updates (Canonical Order)
 Once tests pass, update tracking documents in this exact order:

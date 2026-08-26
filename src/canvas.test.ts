@@ -6,7 +6,8 @@ import os from "node:os";
 import { ensureProjectVault } from "./vault.js";
 import { upsertRecord } from "./store.js";
 import { rebuildIndex, closeIndex } from "./indexer.js";
-import { generateProjectGraph, startCanvasServer } from "./canvas.js";
+import { generateProjectGraph, startCanvasServer, isMonitorActivityLogRecord } from "./canvas.js";
+import { appendEvent } from "./store.js";
 
 test("Canvas Engine & Graph Visualization", async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-canvas-test-"));
@@ -71,6 +72,34 @@ test("Canvas Engine & Graph Visualization", async (t) => {
 
   await rebuildIndex(vaultRoot);
 
+  await appendEvent({
+    vaultRoot,
+    projectId,
+    event: "MCP tool upsert completed",
+    details: { title: "Audit append for status monitor" }
+  });
+
+  await t.test("should exclude activity log records from graph by default", () => {
+    const graphDefault = generateProjectGraph(vaultRoot, projectId);
+    assert.ok(graphDefault.nodes.every((n) => n.kind !== "log"), "Log records must be hidden by default");
+    assert.ok(graphDefault.nodes.length >= 4);
+
+    const graphWithLogs = generateProjectGraph(vaultRoot, projectId, { includeLogs: true });
+    assert.ok(graphWithLogs.nodes.some((n) => n.kind === "log"), "includeLogs should surface log records");
+    assert.ok(graphWithLogs.nodes.length > graphDefault.nodes.length);
+  });
+
+  await t.test("isMonitorActivityLogRecord identifies log kind and monitor tags", async () => {
+    const trapRec = { frontmatter: { kind: "trap" as const, tags: ["sqlite"] }, body: "" };
+    assert.strictEqual(isMonitorActivityLogRecord(trapRec as any), false);
+
+    const logRec = { frontmatter: { kind: "log" as const }, body: "" };
+    assert.strictEqual(isMonitorActivityLogRecord(logRec as any), true);
+
+    const taggedRec = { frontmatter: { kind: "spec" as const, tags: ["monitor"] }, body: "" };
+    assert.strictEqual(isMonitorActivityLogRecord(taggedRec as any), true);
+  });
+
   await t.test("should generate graph with nodes and relational edges", () => {
     const graph = generateProjectGraph(vaultRoot, projectId);
     assert.strictEqual(graph.projectId, projectId);
@@ -116,6 +145,12 @@ test("Canvas Engine & Graph Visualization", async (t) => {
       assert.strictEqual(graphRes.status, 200);
       const graph = await graphRes.json() as any;
       assert.ok(graph.nodes.length >= 4);
+      assert.ok(graph.nodes.every((n: { kind: string }) => n.kind !== "log"));
+
+      const graphWithLogsRes = await fetch(`${baseUrl}/api/project/${projectId}/graph?includeLogs=1`);
+      assert.strictEqual(graphWithLogsRes.status, 200);
+      const graphWithLogs = await graphWithLogsRes.json() as any;
+      assert.ok(graphWithLogs.nodes.some((n: { kind: string }) => n.kind === "log"));
 
       // 4. Check API record detail (with path stripping/sanitization)
       const recordRes = await fetch(`${baseUrl}/api/record/${projectId}/spec/${spec1.id}`);

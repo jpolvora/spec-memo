@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.**
+**Local working memory for coding agents outside the product repository.** Version **0.2.0**.
 
 Product git repositories should contain product code: source, tests, and shipped documentation. Agent working state—anti-regression traps, architecture decisions, feature specifications, implementation plans, execution state, and changelogs—belongs in a curated vault **outside** the product repository, queried through an MCP server and matching CLI.
 
@@ -80,7 +80,23 @@ Add to your extension's MCP configuration settings:
 }
 ```
 
-*(Optional HTTP / SSE Transport: Run `node dist/server.js` or configure SSE client connecting to `http://127.0.0.1:3000/sse`)*
+*(Optional HTTP / SSE Transport: Run `memo serve --sse` — MCP SSE on `http://127.0.0.1:3000/sse` plus a companion **status monitor** at `http://127.0.0.1:3001/` with live vault-filtered activity log. Disable the monitor with `--no-status`.)*
+
+### Default ports
+
+| Service | Default port | CLI |
+|---------|--------------|-----|
+| MCP SSE transport | `3000` | `memo serve --sse` |
+| Status monitor | `3001` | co-starts with `memo serve --sse` (`--no-status` to disable; `--status-port` to override) |
+| Canvas graph viewer | `4100` | `memo canvas` |
+
+### Agent skill (`ws-memo`)
+
+Day-to-day vault ops (all 8 MCP tools + CLI extras) are documented as a project skill:
+
+- [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)
+
+Copy or symlink that folder into a consumer `{skillsRoot}/ws-memo/` (or load it from this clone). **Setup** of `specMemo.enabled` in workflow-skills consumers remains [`ws-spec-memo`](https://github.com/jpolvora/workflow-skills) — do not duplicate that bridge here.
 
 ---
 
@@ -140,7 +156,7 @@ Add to your extension's MCP configuration settings:
      ```
    - Append an audit or task event:
      ```bash
-     memo append --event "Refactored vault locking mechanism and passed all 122 tests"
+     memo append --event "Refactored vault locking mechanism and passed all 178 tests"
      ```
 
 3. **Query Memory (`search` & `get`)**:
@@ -269,19 +285,20 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | Command / Tool | Role | Key Options |
 |---|---|---|
 | `bootstrap` | Compile token-budgeted session brief | `--maxBytes`, `--query`, `--path`, `--slug` |
-| `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all` (cross-project) |
+| `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` |
 | `get` | Fetch single record by ID or kind+slug | `--id`, `--kind`, `--slug` |
 | `upsert` | Create or update typed memory record | `--kind`, `--title`, `--severity`, `--path-patterns`, `--body` |
 | `append` | Append chronological event log | `--event`, `--kind` |
 | `forget` | Archive or permanently delete record | `--id`, `--purge` |
 | `gc` | Apply TTL retention and compact plans | `--dry-run`, `--project` |
-| `promote` | Safe export of record to product repo | `--id`, `--to`, `--format`, `--force` |
+| `promote` | Safe export of record to product repo | `--id`, `--to`, `--format` (`raw`/`adr`/`madr`/`skill`), `--force`, `--limit` |
+| `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
 | `doctor` | Diagnose health & fix repo pollution | `--fix`, `--rebuild`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |
 | `export-vault` | Export encrypted portable archive | `--password`, `--output`, `--project` |
 | `import-vault` | Restore portable archive into vault | `<file>`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
-| `serve` | Run stdio MCP server for agent hosts | *(stdio stream)* |
+| `serve` | Run stdio MCP server for agent hosts | `--sse`, `--port`, `--status-port`, `--no-status`, `--auth-token` *(stdio stream)* |
 
 ---
 

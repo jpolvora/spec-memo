@@ -33,6 +33,30 @@ export interface ProjectGraph {
   edges: GraphEdge[];
 }
 
+/** Tags marking vault logs intended for the MCP status monitor (not canvas topology). */
+export const CANVAS_MONITOR_LOG_TAGS = ["activity", "monitor", "mcp-activity"] as const;
+
+export interface CanvasGraphOptions {
+  /** When true, include append/audit log records in the graph (default: hidden). */
+  includeLogs?: boolean;
+}
+
+/** True when a record is an operational log meant for the status monitor, not canvas topology. */
+export function isMonitorActivityLogRecord(record: MemoRecord): boolean {
+  if (record.frontmatter.kind === "log") {
+    return true;
+  }
+  const tags = (record.frontmatter.tags || []).map((t) => String(t).toLowerCase());
+  return CANVAS_MONITOR_LOG_TAGS.some((tag) => tags.includes(tag));
+}
+
+export function shouldIncludeInCanvasGraph(record: MemoRecord, options: CanvasGraphOptions = {}): boolean {
+  if (options.includeLogs) {
+    return true;
+  }
+  return !isMonitorActivityLogRecord(record);
+}
+
 export function listProjectRecordsInternal(vaultRoot: string, projectId: string): MemoRecord[] {
   const projectsDir = path.resolve(vaultRoot, "projects");
   const projPath = path.resolve(projectsDir, projectId);
@@ -80,13 +104,19 @@ export function getVaultProjectList(vaultRoot: string): Array<{ id: string; disp
   return list;
 }
 
-export function generateProjectGraph(vaultRoot: string, projectId: string): ProjectGraph {
+export function generateProjectGraph(
+  vaultRoot: string,
+  projectId: string,
+  options: CanvasGraphOptions = {}
+): ProjectGraph {
   const projectsDir = path.resolve(vaultRoot, "projects");
   const projPath = path.resolve(projectsDir, projectId);
   if (!isPathInside(projPath, projectsDir)) {
     return { projectId, nodes: [], edges: [] };
   }
-  const records = listProjectRecordsInternal(vaultRoot, projectId);
+  const records = listProjectRecordsInternal(vaultRoot, projectId).filter((rec) =>
+    shouldIncludeInCanvasGraph(rec, options)
+  );
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const idMap = new Set<string>();
@@ -122,7 +152,7 @@ export function generateProjectGraph(vaultRoot: string, projectId: string): Proj
 
   for (const rec of records) {
     const srcId = String(rec.frontmatter.id);
-    if (rec.frontmatter.supersedes) {
+    if (rec.frontmatter.supersedes && idMap.has(String(rec.frontmatter.supersedes))) {
       edges.push({
         source: srcId,
         target: String(rec.frontmatter.supersedes),
@@ -272,6 +302,10 @@ export function generateCanvasHtml(): string {
       <label style="font-size: 0.8rem; color: #8b949e; margin-bottom: 4px; display: block;">Search Vault</label>
       <input type="text" id="search-input" placeholder="Filter nodes...">
     </div>
+    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer;">
+      <input type="checkbox" id="include-logs-toggle">
+      Show activity logs (status monitor)
+    </label>
     <div class="legend">
       <div class="legend-item"><span class="dot dot-trap"></span> Trap</div>
       <div class="legend-item"><span class="dot dot-decision"></span> Decision</div>
@@ -301,6 +335,7 @@ export function generateCanvasHtml(): string {
   <script>
     let currentProject = "";
     let graphData = { nodes: [], edges: [] };
+    let includeLogs = false;
     let pan = { x: 50, y: 50 };
     let zoom = 1;
     let isDragging = false;
@@ -326,6 +361,10 @@ export function generateCanvasHtml(): string {
     };
 
     async function init() {
+      const storedLogs = sessionStorage.getItem("canvas_include_logs");
+      includeLogs = storedLogs === "1";
+      document.getElementById("include-logs-toggle").checked = includeLogs;
+
       const res = await fetch("/api/projects", { headers: apiHeaders });
       const projects = await res.json();
       const select = document.getElementById("project-select");
@@ -342,6 +381,11 @@ export function generateCanvasHtml(): string {
       });
 
       document.getElementById("search-input").addEventListener("input", filterNodes);
+      document.getElementById("include-logs-toggle").addEventListener("change", (e) => {
+        includeLogs = e.target.checked;
+        sessionStorage.setItem("canvas_include_logs", includeLogs ? "1" : "0");
+        loadGraph(currentProject);
+      });
       document.getElementById("close-drawer").addEventListener("click", () => {
         document.getElementById("detail-drawer").classList.remove("open");
       });
@@ -350,7 +394,8 @@ export function generateCanvasHtml(): string {
     }
 
     async function loadGraph(projectId) {
-      const res = await fetch(\`/api/project/\${projectId}/graph\`, { headers: apiHeaders });
+      const qs = includeLogs ? "?includeLogs=1" : "";
+      const res = await fetch(\`/api/project/\${projectId}/graph\${qs}\`, { headers: apiHeaders });
       graphData = await res.json();
       document.getElementById("stats").textContent = \`\${graphData.nodes.length} nodes · \${graphData.edges.length} connections\`;
       renderGraph();
@@ -542,7 +587,9 @@ export function startCanvasServer(options: CanvasServerOptions = {}): Promise<Ca
       const graphMatch = pathname.match(/^\/api\/project\/([^\/]+)\/graph$/);
       if (graphMatch) {
         const projId = decodeURIComponent(graphMatch[1]);
-        const graph = generateProjectGraph(vaultRoot, projId);
+        const includeLogs =
+          url.searchParams.get("includeLogs") === "1" || url.searchParams.get("includeLogs") === "true";
+        const graph = generateProjectGraph(vaultRoot, projId, { includeLogs });
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(graph));
         return;
