@@ -69,6 +69,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - “Better gitignore + cleanup skill” as the product.
 - Cursor Memories / unbounded `AGENTS.md` as the store.
 - Public docs repo as the place for state, telemetry, and traps.
+- Live CRDT collaboration mode for team vaults (WILL NOT IMPLEMENT — out of scope; keep batch `memo sync-vault` / vault-git).
 
 ## 7. Architecture
 
@@ -228,7 +229,6 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 ## 10. Inbox (unscheduled)
 
 - Mobile companion web dashboard.
-- Live CRDT collaboration mode for team vaults.
 
 ## 11. Done log
 

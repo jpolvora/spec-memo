@@ -85,7 +85,7 @@ Greenfield tools (not restoring a prior behavior). Skip `git log -L` restoration
   - Package version `0.2.0` in `package.json` / `src/mcp.ts` / vault config — no registry compare tool.
 - Related commits: `28b44a7` (introduce ws-memo skill), `0d36f15` (bump 0.2.0), `30f22f3` (8 MCP tools skeleton).
 - GitHub issue/PR search for “version check” / “install skill” on `jpolvora/spec-memo`: no exact open duplicate found at authoring time.
-- Historical specs (`trap-recurrence`, `mcp-status-monitor`, `live-crdt-collaboration`) intentionally avoided a ninth MCP tool; this slice **amends** that constraint via PRODUCT.PRD.
+- Historical specs (`trap-recurrence`, `mcp-status-monitor`) intentionally avoided a ninth MCP tool; this slice **amends** that constraint via PRODUCT.PRD.
 
 ### Design Intent
 
@@ -96,7 +96,7 @@ Intentional prior constraint: keep MCP surface at 8 tools unless PRODUCT.PRD §6
 - `install_skills` writes **into the consumer product tree by design** (like `promote`). It must not write vault records under the product tree; only the skill directory tree under `{skillsRoot}`.
 - Consumer **setup** (`specMemo.enabled`, hybrid MEMORY) remains workflow-skills `ws-spec-memo`; this tool only installs the **runtime** `ws-memo` skill package.
 - Future packaged skills may be added to the default/allow-list without a new MCP tool; out of scope to invent additional skill ids in v1 beyond `ws-memo`.
-- Live CRDT / status-monitor specs that say “not a ninth MCP tool” for **their** features remain valid for those features; implementers should not rewrite those historical non-goals except where global “exactly 8” docs must change.
+- Status-monitor (and similar) specs that say “not a ninth MCP tool” for **their** features remain valid for those features; implementers should not rewrite those historical non-goals except where global “exactly 8” docs must change.
 
 ## Out of Scope
 

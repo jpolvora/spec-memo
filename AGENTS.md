@@ -2,7 +2,7 @@
 
 **Audience: agents.** Humans: [`README.md`](README.md).
 
-This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, and task tracking.
+This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, task tracking, and **ship next version** (`ws-ship-pr`).
 
 **Humans / operators** (install, autoboot systemd/Task Scheduler, favorite status URL): [`README.md`](README.md).
 
@@ -49,7 +49,7 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 | Spec text drifted from implemented code | `ws-sync-spec` | Does not update `index.PRD` checkboxes |
 | Deliver feature Spec→PR (standard FSM) | `ws-spec-to-pr` | Not for batch; not for format-only edits |
 | Deliver feature Spec→PR (fast lite) | `ws-spec-to-pr-lite` | Not for complex multi-phase work |
-| Ship next product version (bump + PR) | § [Ship next version](#-ship-next-version-ws-ship-pr) + `ws-ship-pr` | Not a feature-slice orch; does not invent scope |
+| Ship next product version (bump + PR) | § Ship next version (`ws-ship-pr`) below + load `ws-ship-pr` | Not a feature-slice orch; does not invent scope |
 
 ### Vault / spec-memo runtime
 

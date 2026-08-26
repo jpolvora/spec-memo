@@ -141,7 +141,6 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 ## 9. Inbox (unscheduled ideas)
 
 - Mobile companion web dashboard.
-- Live CRDT collaboration mode for team vaults.
 
 ## 10. Done log
 
@@ -183,6 +182,7 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 
 | Slug | Outcome | Last state | PR / Commit | Summary |
 |------|---------|------------|-------------|---------|
+| live-crdt-collaboration | wont-implement | cancelled (Step 2) | — | Inbox idea rejected: WILL NOT IMPLEMENT / out of scope (live CRDT team vaults). Draft spec + workflow discarded. |
 
 ## 11. Maintenance checklist
 
