@@ -306,6 +306,25 @@ export class TelemetryRecorder {
   }
 
   /**
+   * Updates runtime configuration for the recorder if config changed on disk.
+   */
+  public applyConfig(cfg: Partial<TelemetryOptions>): void {
+    if (cfg.maxFileSizeMb != null) {
+      this.maxFileSizeBytes = Math.max(1, cfg.maxFileSizeMb) * 1024 * 1024;
+    }
+    if (cfg.maxQueueSize != null) {
+      this.maxQueueSize = Math.max(1, cfg.maxQueueSize);
+    }
+    if (cfg.flushIntervalMs != null && cfg.flushIntervalMs !== this.flushIntervalMs) {
+      this.flushIntervalMs = Math.max(100, cfg.flushIntervalMs);
+      if (this.flushTimer) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
+    }
+  }
+
+  /**
    * Closes the recorder, clearing any active timer and draining pending records.
    */
   public async close(): Promise<void> {
@@ -327,9 +346,9 @@ function recorderKey(vaultRoot?: string): string {
 
 export function getTelemetryRecorder(vaultRoot?: string, options?: Partial<TelemetryOptions>): TelemetryRecorder {
   const root = recorderKey(vaultRoot);
+  const fileCfg = loadTelemetryConfig(root);
   let recorder = recorders.get(root);
   if (!recorder) {
-    const fileCfg = loadTelemetryConfig(root);
     recorder = new TelemetryRecorder({
       vaultRoot: root,
       maxFileSizeMb: options?.maxFileSizeMb ?? fileCfg.maxFileSizeMb,
@@ -338,6 +357,13 @@ export function getTelemetryRecorder(vaultRoot?: string, options?: Partial<Telem
       ...options
     });
     recorders.set(root, recorder);
+  } else {
+    recorder.applyConfig({
+      maxFileSizeMb: options?.maxFileSizeMb ?? fileCfg.maxFileSizeMb,
+      flushIntervalMs: options?.flushIntervalMs ?? fileCfg.flushIntervalMs,
+      maxQueueSize: options?.maxQueueSize ?? fileCfg.maxQueueSize,
+      ...options
+    });
   }
   return recorder;
 }

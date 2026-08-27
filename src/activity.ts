@@ -86,6 +86,19 @@ export function eventMatchesProjectFilter(event: ActivityEvent, projectId?: stri
   return !event.projectId || event.projectId === projectId;
 }
 
+const MAX_CLIENT_REGISTRY = 100;
+
+function trimClients(clients: Map<string, VaultClientInfo>): void {
+  if (clients.size <= MAX_CLIENT_REGISTRY) return;
+  const entries = Array.from(clients.entries()).sort(
+    (a, b) => new Date(a[1].lastSeenAt).getTime() - new Date(b[1].lastSeenAt).getTime()
+  );
+  const toRemove = clients.size - MAX_CLIENT_REGISTRY;
+  for (let i = 0; i < toRemove; i++) {
+    clients.delete(entries[i][0]);
+  }
+}
+
 export function createActivityBus(options: { capacity?: number } = {}): ActivityBus {
   const capacity = options.capacity ?? 200;
   const buffer: ActivityEvent[] = [];
@@ -174,6 +187,7 @@ export function createActivityBus(options: { capacity?: number } = {}): Activity
         requestCount: (existing?.requestCount || 0) + 1
       };
       clients.set(id, updated);
+      trimClients(clients);
       return updated;
     },
     updateClientActivity(id: string, update: { operation?: string; projectId?: string; clientName?: string }): void {
@@ -192,6 +206,7 @@ export function createActivityBus(options: { capacity?: number } = {}): Activity
       if (existing) {
         existing.active = false;
         existing.lastSeenAt = new Date().toISOString();
+        trimClients(clients);
       }
     },
     listClients(): VaultClientInfo[] {
