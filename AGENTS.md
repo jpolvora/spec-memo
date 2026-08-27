@@ -2,7 +2,7 @@
 
 **Audience: agents.** Humans: [`README.md`](README.md).
 
-This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, task tracking, and **ship next version** (`ws-ship-pr`).
+This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, task tracking, and **ship via `ws-ship-pr`** (version bump required before every PR).
 
 **Humans / operators** (install, autoboot systemd/Task Scheduler, favorite status URL): [`README.md`](README.md).
 
@@ -49,7 +49,7 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 | Spec text drifted from implemented code | `ws-sync-spec` | Does not update `index.PRD` checkboxes |
 | Deliver feature Spec→PR (standard FSM) | `ws-spec-to-pr` | Not for batch; not for format-only edits |
 | Deliver feature Spec→PR (fast lite) | `ws-spec-to-pr-lite` | Not for complex multi-phase work |
-| Ship next product version (bump + PR) | § Ship next version (`ws-ship-pr`) below + load `ws-ship-pr` | Not a feature-slice orch; does not invent scope |
+| Ship / PR (`ws-ship-pr`, including “ship next version”) | § Ship via `ws-ship-pr` below + load `ws-ship-pr` | Not a feature-slice orch; does not invent scope; **always bump version before create-pr** |
 
 ### Vault / spec-memo runtime
 
@@ -366,17 +366,17 @@ Once tests pass, update tracking documents in this exact order:
 
 ---
 
-## 🚀 Ship next version (`ws-ship-pr`)
+## 🚀 Ship via `ws-ship-pr`
 
-When the user says **ship next version** (or equivalent: bump + ship / release next version via `ws-ship-pr`), follow this checklist **in order**. Do not skip steps or merge early.
+**Every** `/ws-ship-pr` invocation (including “ship next version”, “bump + ship”, or any standalone ship) must complete this checklist **in order before create-pr**. Do not skip steps or merge early.
 
 | Step | Do | Done when |
 |---|---|---|
 | 1. Verify | Run tests and verifications (`npm test`; add `npm run build` / targeted suites if the slice touched them). Fix failures before any version bump. | Full suite green |
-| 2. Bump | Bump the product version in `package.json` (semver patch/minor/major per shipped scope). Keep lockfile / embedded version strings consistent if the repo mirrors them. | `package.json` `version` matches the release intent |
+| 2. Bump | **Required before PR.** Bump the product version in `package.json` (semver patch/minor/major per shipped scope). Keep lockfile / embedded version strings consistent if the repo mirrors them. | `package.json` `version` matches the release intent |
 | 3. README | Update [`README.md`](README.md) with the latest features just implemented (version badge/line, Command & Tool Reference, operator-facing deltas). Align with [`FEATURES.md`](FEATURES.md) — do not claim unfinished work. | README reflects this version’s shipped surface |
 | 4. Commit + push | Commit ship-scope changes (version, README, tracking docs, code). Push `shipHead` (`config.project.workingBranch`, default `develop`). Product specs of record may need `SKIP_MEMO_HOOK=1` in this repo. | Branch pushed; no uncommitted ship-scope files |
-| 5. `ws-ship-pr` | Load and run [`ws-ship-pr`](https://github.com/jpolvora/workflow-skills/tree/develop/.agents/skills/ws-ship-pr): prepare board → create PR to `config.project.baseBranch`. | PR URL captured |
+| 5. `ws-ship-pr` | Load and run [`ws-ship-pr`](https://github.com/jpolvora/workflow-skills/tree/develop/.agents/skills/ws-ship-pr): prepare board → create PR to `config.project.baseBranch`. Steps 1–4 must already be ✅ — **never create a PR without a version bump on the branch.** | PR URL captured |
 | 6. `ws-goal-fix-pr` | After PR exists, run [`ws-goal-fix-pr`](https://github.com/jpolvora/workflow-skills/tree/develop/.agents/skills/ws-goal-fix-pr): wait for CI / agentic review, converge threads, merge only when checks green and `activeThreads == 0` (unless user said `no-merge`). | PR merged or explicitly left open per user |
 
-**Rules:** announce each checklist row as you complete it; never bump version on a red test run; never push secrets; never delete `shipHead` after merge.
+**Rules:** announce each checklist row as you complete it; never bump version on a red test run; never create a PR without completing steps 1–4 (version bump is mandatory for every ship); never push secrets; never delete `shipHead` after merge.
