@@ -44,6 +44,7 @@
         <li><a href="#catalog" class="nav-link">Tool Reference</a></li>
         <li><a href="#architecture" class="nav-link">Architecture</a></li>
         <li><a href="#status" class="nav-link">Status Monitor</a></li>
+        <li><a href="#faq" class="nav-link">FAQ &amp; Setup</a></li>
         <li><a href="#contribute" class="nav-link">Contribute</a></li>
       </ul>
 
@@ -852,6 +853,91 @@ memo doctor --fix</code></pre>
     </div>
   </section>
 
+  <!-- FAQ & Platform Setup Guide -->
+  <section id="faq" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">FAQ &amp; Setup Guide</span>
+        <h2 class="section-title">Frequently Asked Questions &amp; CLI Configuration</h2>
+        <p class="section-subtitle">
+          How to configure the <code>memo</code> CLI on PATH across Windows, Linux, and macOS, handle rebuilds, and troubleshoot agent execution.
+        </p>
+      </div>
+
+      <div class="faq-grid">
+        <!-- Card 1: Adding memo to PATH -->
+        <div class="faq-card">
+          <div class="faq-card-header">
+            <div class="faq-icon-badge">⚡</div>
+            <h3 class="faq-card-title">How do I add <code>memo</code> to PATH on Windows &amp; Linux?</h3>
+          </div>
+          <div class="faq-card-body">
+            <p><code>spec-memo</code> declares its binary in <code>package.json</code> (<code>"bin": { "memo": "./dist/cli.js" }</code>) with a Node shebang.</p>
+            <p><strong>Option 1: Global link (Recommended for Dev)</strong></p>
+            <div class="faq-code-box">
+              cd /path/to/spec-memo<br>
+              npm install &amp;&amp; npm run build<br>
+              npm link
+            </div>
+            <p>On Windows, this links <code>memo</code>, <code>memo.cmd</code>, and <code>memo.ps1</code> in <code>%AppData%\Roaming\npm</code> (already on PATH). On Linux/macOS, it links into <code>/usr/local/bin</code> or your nvm global prefix.</p>
+            <p><strong>Option 2: Global Install from Local Path</strong></p>
+            <div class="faq-code-box">npm install -g "/path/to/spec-memo"</div>
+            <p><strong>Option 3: Manual Shims (Standalone Wrapper)</strong></p>
+            <ul>
+              <li><strong>Linux/macOS:</strong> In <code>~/.local/bin/memo</code>:<br><code>exec node "/path/to/spec-memo/dist/cli.js" "$@"</code></li>
+              <li><strong>Windows:</strong> In a PATH folder (e.g. <code>C:\bin\memo.cmd</code>):<br><code>node "C:\path\to\spec-memo\dist\cli.js" %*</code></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Card 2: Rebuild Persistence -->
+        <div class="faq-card">
+          <div class="faq-card-header">
+            <div class="faq-icon-badge">🔄</div>
+            <h3 class="faq-card-title">Do I need to re-link after rebuilding code?</h3>
+          </div>
+          <div class="faq-card-body">
+            <p><strong>No.</strong> The <code>npm link</code> and shims point directly to <code>dist/cli.js</code>.</p>
+            <p>Whenever you make changes and run <code>npm run build</code> (or run in watch mode via <code>npm run watch</code>), TypeScript compiles output directly to <code>dist/cli.js</code>. The global <code>memo</code> command immediately uses the updated code without requiring you to run <code>npm link</code> again.</p>
+          </div>
+        </div>
+
+        <!-- Card 3: IDE MCP vs Terminal CLI -->
+        <div class="faq-card">
+          <div class="faq-card-header">
+            <div class="faq-icon-badge">🔌</div>
+            <h3 class="faq-card-title">What is the difference between IDE MCP and Terminal CLI?</h3>
+          </div>
+          <div class="faq-card-body">
+            <p><strong>IDE MCP Configuration:</strong> AI editors (Cursor, VS Code, Claude Desktop, Antigravity) use MCP stdio (<code>memo serve</code> or <code>node /path/to/dist/cli.js serve</code>) to call the 10 MCP tools natively inside prompt context.</p>
+            <p><strong>Terminal CLI (on PATH):</strong> Adding <code>memo</code> to PATH enables developers and terminal subagents to run quick commands like <code>memo bootstrap</code>, <code>memo doctor --fix</code>, <code>memo rank</code>, and <code>memo search</code> directly from any shell.</p>
+          </div>
+        </div>
+
+        <!-- Card 4: Troubleshooting -->
+        <div class="faq-card">
+          <div class="faq-card-header">
+            <div class="faq-icon-badge">🛠️</div>
+            <h3 class="faq-card-title">Troubleshooting <code>memo: command not found</code></h3>
+          </div>
+          <div class="faq-card-body">
+            <p>If running <code>memo --help</code> returns <em>command not found</em>:</p>
+            <ol>
+              <li><strong>Open a new shell session:</strong> Environment variables and PATH updates only take effect in new terminal windows.</li>
+              <li><strong>Check npm global bin in PATH:</strong>
+                <ul>
+                  <li><strong>Windows:</strong> Check that <code>%AppData%\Roaming\npm</code> (or <code>npm config get prefix</code>) is in your User or System Environment Variables under <code>PATH</code>.</li>
+                  <li><strong>Linux/macOS:</strong> Add <code>export PATH="$PATH:$(npm config get prefix)/bin:~/.local/bin"</code> to your <code>~/.bashrc</code> or <code>~/.zshrc</code>.</li>
+                </ul>
+              </li>
+              <li><strong>Verify direct execution:</strong> Test <code>node /path/to/spec-memo/dist/cli.js --help</code> to confirm the build succeeded.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Contribute Section -->
   <section id="contribute" class="section contribute-section">
     <div class="container">
@@ -902,6 +988,7 @@ memo doctor --fix</code></pre>
         <li><a href="#catalog">Tool Reference</a></li>
         <li><a href="#architecture">Architecture</a></li>
         <li><a href="#status">Status Monitor</a></li>
+        <li><a href="#faq">FAQ &amp; Setup</a></li>
         <li><a href="#contribute">Contribute</a></li>
         <li><a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">GitHub</a></li>
       </ul>

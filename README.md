@@ -10,21 +10,83 @@ Product git repositories should contain product code: source, tests, and shipped
 
 ## ⚡ Simplified Quick Start
 
-### 1. Installation
+### 1. Installation & CLI Setup
 
-Install `spec-memo` globally from GitHub or run directly with `npx`:
+`spec-memo` includes both the Model Context Protocol (MCP) server for AI coding environments and the `memo` CLI for interactive terminal usage and agent execution.
+
+#### Quick Install
 
 ```bash
-# Global install (gives you the `memo` CLI)
+# Global install via npm from GitHub (adds `memo` to your npm global bin)
 npm install -g github:jpolvora/spec-memo
 
-# Or build from source
+# Or build from source clone
 git clone https://github.com/jpolvora/spec-memo.git
 cd spec-memo
 npm install
 npm run build
 npm link
 ```
+
+---
+
+#### Making `memo` Available Globally on PATH (Windows, Linux, macOS)
+
+The `package.json` declares `"bin": { "memo": "./dist/cli.js" }` and `dist/cli.js` includes the `#!/usr/bin/env node` shebang. Choose the method that best matches your workflow:
+
+##### Option 1: Global Link from Clone (`npm link` — Recommended for Local Development)
+When actively developing `spec-memo` or working from a local clone:
+```bash
+cd /path/to/spec-memo
+npm install
+npm run build
+npm link
+```
+* **How it works:** npm creates a global symlink/shim (`memo` on Unix; `memo`, `memo.cmd`, `memo.ps1` on Windows) in your global npm prefix directory (e.g., `%AppData%\Roaming\npm` on Windows, `/usr/local/bin` or `~/.nvm/versions/node/<ver>/bin` on Linux/macOS).
+* **Live Rebuild Invariant:** The link points directly to `dist/cli.js`. Whenever you compile changes with `npm run build`, your global `memo` command reflects the latest code immediately without needing to re-link or re-install.
+
+##### Option 2: Global Install from Local Path
+```bash
+# Point npm install directly to your local clone directory
+npm install -g "/path/to/spec-memo"
+```
+* Installs a packaged copy to your npm global directory. Re-run this command after major rebuilds to refresh the global binary.
+
+##### Option 3: Manual Executable Shim (Without `npm link`)
+If you prefer not using npm global link or want a standalone wrapper script:
+
+* **Linux / macOS:** Create `~/.local/bin/memo` (or `/usr/local/bin/memo`):
+  ```bash
+  #!/usr/bin/env bash
+  exec node "/path/to/spec-memo/dist/cli.js" "$@"
+  ```
+  Make it executable: `chmod +x ~/.local/bin/memo`
+
+* **Windows (Command Prompt / PowerShell):** Create `memo.cmd` in a folder that is in your system or user `PATH` (e.g. `C:\bin\memo.cmd` or `%USERPROFILE%\bin\memo.cmd`):
+  ```cmd
+  @echo off
+  node "C:\path\to\spec-memo\dist\cli.js" %*
+  ```
+  *(Optionally create `memo.ps1` for PowerShell: `& node "C:\path\to\spec-memo\dist\cli.js" @args`)*
+
+---
+
+#### PATH Verification & Troubleshooting
+
+1. **Verify Binary Resolution:**
+   ```bash
+   # Open a new shell/terminal session and run:
+   memo --help
+   memo check-version
+   ```
+2. **If `memo: command not found` persists:**
+   * **Restart terminal:** Fresh environment variables (like PATH changes) require a new shell or terminal window.
+   * **Check global npm PATH on Windows:** Ensure `%AppData%\Roaming\npm` (or your custom `npm config get prefix`) is in your User or System `PATH` variable.
+   * **Check global npm PATH on Linux/macOS:** Ensure `~/.local/bin` or `$(npm config get prefix)/bin` is in your shell profile (`~/.bashrc`, `~/.zshrc`).
+3. **IDE MCP vs Terminal CLI:**
+   * Your AI editor (Cursor, VS Code, Claude Desktop, Antigravity) configures stdio MCP via `memo setup --write-mcp` or `node /path/to/dist/cli.js serve`.
+   * Putting `memo` on your system `PATH` ensures that interactive terminal commands and AI agents executing shell scripts can call `memo bootstrap`, `memo doctor --fix`, `memo search`, etc. anywhere on your machine.
+
 
 ### 2. Deployment Modes & Agent Host Setup
 
@@ -601,7 +663,13 @@ memo install-skills --product-root /path/to/consumer
 
 Use `--force` only when overwriting a diverged destination. MCP hosts can call `install_skills` with the same arguments.
 
+**How do I make the `memo` command available on my PATH (Windows / Linux / macOS)?**
+
+Run `npm link` inside your `spec-memo` clone directory. This links the package bin (`"memo": "./dist/cli.js"`) to your npm global directory (e.g. `%AppData%\Roaming\npm` on Windows or `/usr/local/bin` on Linux). After running `npm run build`, `memo` is immediately accessible in any new terminal session without re-linking. See [Making `memo` Available Globally on PATH](#making-memo-available-globally-on-path-windows-linux-macos) for manual shim alternatives and PATH troubleshooting.
+
 ---
+
+
 
 ## 📄 License
 
