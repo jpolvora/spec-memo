@@ -294,14 +294,20 @@ export class TelemetryRecorder {
   }
 }
 
-let activeRecorder: TelemetryRecorder | null = null;
+const recorders = new Map<string, TelemetryRecorder>();
+
+function recorderKey(vaultRoot?: string): string {
+  return getVaultRoot(vaultRoot);
+}
 
 export function getTelemetryRecorder(vaultRoot?: string, options?: Partial<TelemetryOptions>): TelemetryRecorder {
-  const root = getVaultRoot(vaultRoot);
-  if (!activeRecorder) {
-    activeRecorder = new TelemetryRecorder({ vaultRoot: root, ...options });
+  const root = recorderKey(vaultRoot);
+  let recorder = recorders.get(root);
+  if (!recorder) {
+    recorder = new TelemetryRecorder({ vaultRoot: root, ...options });
+    recorders.set(root, recorder);
   }
-  return activeRecorder;
+  return recorder;
 }
 
 export function recordTelemetry(input: TelemetryEventInput): void {
@@ -314,27 +320,57 @@ export function recordTelemetry(input: TelemetryEventInput): void {
 }
 
 export async function flushTelemetry(vaultRoot?: string): Promise<void> {
-  const recorder = getTelemetryRecorder(vaultRoot);
-  await recorder.flush();
+  if (vaultRoot !== undefined) {
+    const recorder = recorders.get(recorderKey(vaultRoot));
+    if (recorder) {
+      await recorder.flush();
+    }
+    return;
+  }
+  await Promise.all([...recorders.values()].map((r) => r.flush()));
 }
 
 export function flushTelemetrySync(vaultRoot?: string): void {
-  const recorder = getTelemetryRecorder(vaultRoot);
-  recorder.flushSync();
-}
-
-export async function closeTelemetry(): Promise<void> {
-  if (activeRecorder) {
-    await activeRecorder.close();
-    activeRecorder = null;
+  if (vaultRoot !== undefined) {
+    const recorder = recorders.get(recorderKey(vaultRoot));
+    if (recorder) {
+      recorder.flushSync();
+    }
+    return;
+  }
+  for (const recorder of recorders.values()) {
+    recorder.flushSync();
   }
 }
 
-export function resetTelemetryRecorderForTest(): void {
-  if (activeRecorder) {
-    activeRecorder.flushSync();
-    activeRecorder = null;
+export async function closeTelemetry(vaultRoot?: string): Promise<void> {
+  if (vaultRoot !== undefined) {
+    const key = recorderKey(vaultRoot);
+    const recorder = recorders.get(key);
+    if (recorder) {
+      await recorder.close();
+      recorders.delete(key);
+    }
+    return;
   }
+  await Promise.all([...recorders.values()].map((r) => r.close()));
+  recorders.clear();
+}
+
+export function resetTelemetryRecorderForTest(vaultRoot?: string): void {
+  if (vaultRoot !== undefined) {
+    const key = recorderKey(vaultRoot);
+    const recorder = recorders.get(key);
+    if (recorder) {
+      recorder.flushSync();
+      recorders.delete(key);
+    }
+    return;
+  }
+  for (const recorder of recorders.values()) {
+    recorder.flushSync();
+  }
+  recorders.clear();
 }
 
 /**

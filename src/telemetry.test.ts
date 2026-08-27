@@ -394,4 +394,38 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
     assert.equal(events.length, 1);
     assert.equal(events[0].operation, 'flush-test');
   });
+
+  it('should isolate telemetry records per vaultRoot in multi-vault processes', async () => {
+    const secondVault = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-telemetry-vault2-'));
+    try {
+      recordTelemetry({
+        category: 'mcp_tool',
+        operation: 'vault-1-op',
+        durationMs: 10,
+        success: true,
+        vaultRoot: tempVault
+      });
+
+      recordTelemetry({
+        category: 'mcp_tool',
+        operation: 'vault-2-op',
+        durationMs: 20,
+        success: true,
+        vaultRoot: secondVault
+      });
+
+      await closeTelemetry();
+
+      const events1 = readTelemetryEvents(tempVault);
+      const events2 = readTelemetryEvents(secondVault);
+
+      assert.equal(events1.length, 1);
+      assert.equal(events1[0].operation, 'vault-1-op');
+
+      assert.equal(events2.length, 1);
+      assert.equal(events2[0].operation, 'vault-2-op');
+    } finally {
+      fs.rmSync(secondVault, { recursive: true, force: true });
+    }
+  });
 });
