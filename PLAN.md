@@ -30,7 +30,7 @@ Revise this table in `PRODUCT.PRD` § Constraints if the stack changes. Do not a
 | Obsidian | Compatible filenames; not a dependency | Phase 4 viewer |
 | Multi-project | One vault, many `projectId`s; search defaults to current remote | Phase 3 `crossProject` |
 | Hook host | Phase 1: refuse via API when `productRoot` is known. Phase 2: skill + pre-commit in the **consumer** | Phase 2 |
-| Bootstrap budget | 8 KB UTF-8 | After dogfood |
+| Bootstrap budget | Default 8 KB UTF-8; `config.json` `bootstrap.maxBytes` and per-call `maxBytes` | After dogfood |
 
 ---
 
@@ -207,6 +207,8 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-26 | status-vault-backup-ui | Status monitor vault export & import UI (.zip pack/unpack, POST /api/vaults/export & import, activity bus capture, auth); npm test 236 pass |
 | 2026-08-26 | release-0.4.1 | Status monitor vault export and import UI, SSE error logger, ws-memo skill docs update; bump version to 0.4.1 |
 | 2026-08-26 | release-0.4.2 | Fix test suite error log leakage and auth token env isolation, classify 401 unauthorized requests as WARN, format descriptive hybrid sync timeout errors; npm test 247 pass; bump version to 0.4.2 |
+| 2026-08-26 | bootstrap-maxbytes-config | Wire vault config.bootstrap.maxBytes as default bootstrap budget (8192); per-call maxBytes overrides; npm test 250 pass |
+| 2026-08-26 | release-0.4.3 | Configurable bootstrap byte budget via ~/.spec-memo/config.json; bump package/MCP/vault to 0.4.3; npm test 250 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

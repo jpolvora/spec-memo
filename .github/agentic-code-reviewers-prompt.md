@@ -17,7 +17,7 @@ Focus review on this repository’s real stack: MCP stdio server + CLI (`memo`),
 ## 3. Storage, schemas, & token budget
 
 * **Typed Markdown records:** All records stored under `$SPEC_MEMO_ROOT` must follow typed YAML frontmatter schemas (`kind`: trap, decision, spec, plan, state, review, scratch).
-* **Token-budgeted brief:** `bootstrap` must return a token-capped brief (default 8 KB UTF-8 limit). Fail closed (truncate with notice) rather than returning uncapped vault content.
+* **Token-budgeted brief:** `bootstrap` must return a token-capped brief (default 8 KB UTF-8; `config.json` `bootstrap.maxBytes` and per-call `maxBytes` may change the cap). Fail closed (truncate with notice) rather than returning uncapped vault content.
 * **Secret redaction:** Ensure secret/PII redaction filter runs before records are saved or output in `bootstrap`/`search`.
 * **Language:** Product docs, schemas, CLI help, MCP descriptions, tests, and commit messages must stay strictly **en-us**.
 

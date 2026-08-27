@@ -50,7 +50,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - **Markdown is source of truth.** SQLite FTS is rebuilt from files (same lesson as compiling `memory/*.md` → `MEMORY.md` on conflict).
 - **Project identity = git remote** (normalized). Fallback: canonicalized absolute path of the repo root when remotes are missing. No committed pointer file in the consumer product.
 - **Zero required files in the consumer product tree.**
-- **Bootstrap is budgeted.** Start at **8 KB** UTF-8 for the returned brief. Fail closed (truncate with a notice) rather than return the whole vault.
+- **Bootstrap is budgeted.** Default **8 KB** UTF-8 for the returned brief (`config.json` `bootstrap.maxBytes`; per-call `maxBytes` overrides). Fail closed (truncate with a notice) rather than return the whole vault.
 - **Language:** en-us for product surfaces.
 - **Refuse in-repo workflow writes** when a product root is known: do not `upsert` a record *and* write the same payload under the product `.agents/plans`, `.agents/specs`, or `**/MEMORY.md`. Phase 1 proves refuse-on-API; Phase 2 adds harness/hook enforcement.
 
@@ -202,7 +202,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 2 | `record-schema-and-indexes` | `[x]` | Phase 1 | Frontmatter, kinds, compiled md |
 | 3 | `fts-index` | `[x]` | Phase 1 | Rebuild from files; never SoT |
 | 4 | `remaining-kinds-and-events` | `[x]` | Phase 1 | Full matrix kinds, append, forget |
-| 5 | `bootstrap-brief` | `[x]` | Phase 1 | 8 KB cap, include/exclude rules |
+| 5 | `bootstrap-brief` | `[x]` | Phase 1 | Default 8 KB cap (config + per-call override), include/exclude rules |
 | 6 | `curator-gc-and-safety` | `[x]` | Phase 1 | TTL, compact, redaction, write guard |
 | 7 | `import-and-doctor` | `[x]` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
 | 8 | `relocatable-hub` | `[x]` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
@@ -274,6 +274,8 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-26 | status-vault-backup-ui | Status monitor vault export and import UI | npm test 236 pass |
 | 2026-08-26 | release-0.4.1 | Status monitor vault export and import UI, SSE error logger, ws-memo skill docs update | 0.4.1 |
 | 2026-08-26 | release-0.4.2 | Fix test suite error log leakage and auth token env isolation, classify 401 unauthorized requests as WARN, format descriptive hybrid sync timeout errors | 0.4.2 |
+| 2026-08-26 | bootstrap-maxbytes-config | Vault config.bootstrap.maxBytes as default bootstrap budget; per-call maxBytes overrides | npm test 250 pass |
+| 2026-08-26 | release-0.4.3 | Configurable bootstrap byte budget via ~/.spec-memo/config.json; bump package/MCP/vault to 0.4.3 | 0.4.3 |
 
 ## 12. Related docs
 

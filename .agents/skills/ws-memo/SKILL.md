@@ -213,7 +213,7 @@ Match intent, then execute the matching step. Load `references/SURFACE.md` only 
 
 ### session
 
-1. Call MCP `bootstrap` (or `memo bootstrap`) with `cwd` = product root. Add `query`, `path`, `slug` when known. Cap is 8 KB (`maxBytes` default 8192). In hybrid mode, bootstrap pulls remote deltas first (fail open).
+1. Call MCP `bootstrap` (or `memo bootstrap`) with `cwd` = product root. Add `query`, `path`, `slug` when known. Default cap is 8 KB (`config.json` `bootstrap.maxBytes`, default 8192; per-call `maxBytes` overrides). In hybrid mode, bootstrap pulls remote deltas first (fail open).
 2. Apply returned traps (DO NOT / INSTEAD DO) before planning or coding.
    - Done when: a brief is in context (or truncated notice recorded).
 

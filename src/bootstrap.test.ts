@@ -51,6 +51,7 @@ describe('Bootstrap Brief Engine', () => {
     assert.equal(brief.decisions[0].frontmatter.id, 'adr-001');
     assert.equal(brief.truncated, false);
     assert.ok(brief.byteLength > 0);
+    assert.equal(brief.budgetBytes, 8192);
     assert.ok(brief.byteLength <= 8192);
 
     // AC6: Ensure ZERO files created in product tree
@@ -369,6 +370,73 @@ describe('Bootstrap Brief Engine', () => {
     assert.ok(calculatePayloadSize(brief) <= budgetBytes);
     assert.equal(brief.lastSeenRoot, undefined);
     assert.equal(brief.gitRemote, undefined);
+  });
+
+  it('should use vault config.bootstrap.maxBytes when per-call maxBytes is omitted', async () => {
+    for (let i = 1; i <= 40; i++) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: `trap-config-budget-${i}`,
+        allowDuplicate: true,
+        frontmatter: {
+          id: `trap-config-budget-${String(i).padStart(2, '0')}`,
+          title: `Config budget trap #${i} with detailed description`,
+          severity: i <= 10 ? 'high' : 'medium'
+        },
+        body: `## Details for trap #${i}\nExtensive context description for anti-regression rule #${i} to take up payload bytes.`
+      });
+    }
+
+    const configPath = path.join(tempVault, 'config.json');
+    const existing = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    existing.bootstrap = { ...existing.bootstrap, maxBytes: 16000 };
+    fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), 'utf8');
+
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault
+    });
+
+    assert.equal(brief.budgetBytes, 16000);
+    assert.ok(brief.byteLength <= 16000);
+    assert.ok(brief.byteLength > 8192);
+  });
+
+  it('should let per-call maxBytes override vault config.bootstrap.maxBytes', async () => {
+    for (let i = 1; i <= 30; i++) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: `trap-call-override-${i}`,
+        allowDuplicate: true,
+        frontmatter: {
+          id: `trap-call-override-${String(i).padStart(2, '0')}`,
+          title: `Call override trap #${i} with detailed description`,
+          severity: i <= 5 ? 'critical' : 'high'
+        },
+        body: `## Details for trap #${i}\nExtensive context description for anti-regression rule #${i} to take up payload bytes.`
+      });
+    }
+
+    const configPath = path.join(tempVault, 'config.json');
+    const existing = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    existing.bootstrap = { ...existing.bootstrap, maxBytes: 16000 };
+    fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), 'utf8');
+
+    const budgetBytes = 3000;
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      maxBytes: budgetBytes
+    });
+
+    assert.equal(brief.budgetBytes, budgetBytes);
+    assert.equal(brief.truncated, true);
+    assert.ok(brief.byteLength <= budgetBytes);
+    assert.ok(calculatePayloadSize(brief) <= budgetBytes);
   });
 });
 

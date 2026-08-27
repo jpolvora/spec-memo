@@ -1,11 +1,11 @@
-# spec-memo v0.4.2
+# spec-memo v0.4.3
 > Local working memory for coding agents outside the product repository.
 
 ## Summary
 spec-memo gives AI coding agents a curated working memory outside the product git repository (at ~/.spec-memo/ or $SPEC_MEMO_ROOT). Repositories are mapped to projects via normalized git remote origin.
 
 ## Core Capabilities
-- Sub-8KB bootstrap brief: Delivers ranked anti-regression traps, open decisions, and SHA drift alerts.
+- Default 8 KB bootstrap brief (raise via ~/.spec-memo/config.json bootstrap.maxBytes): Delivers ranked anti-regression traps, open decisions, and SHA drift alerts.
 - SQLite FTS5 Disposable Index: Fast local search with Porter stemming.
 - 10 MCP Tools: bootstrap, search, get, upsert, append, forget, gc, promote, check_version, install_skills.
 - Server Transports: Stdio for local agent hosts, HTTP/SSE on port 3000, and status monitor UI on port 3001.
