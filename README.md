@@ -188,27 +188,79 @@ memo serve --sse --json               # machine metadata (includes statusUrl)
 
 **Flags:** `--host` (default `127.0.0.1`), `--port`, `--status-port`, `--no-status`, `--auth-token`, `--vaultRoot`.
 
-**Auth:** binding beyond loopback **refuses to start** without `--auth-token`, `SPEC_MEMO_SSE_TOKEN`, or `SPEC_MEMO_AUTH_TOKEN`. The product has no TLS and no per-user ACL — keep LAN/Tailscale + bearer token; put a reverse proxy in front if it leaves the overlay.
+### Managing Authentication Tokens & Remote Access
 
+`spec-memo` secures non-loopback HTTP/SSE daemon traffic and status monitor access using a single shared Bearer token.
+
+#### 1. Security Principles
+* **Zero Secrets on Disk:** Tokens are never stored in vault `config.json`, product files, or Git repositories. They are resolved at runtime from environment variables or command-line flags.
+* **Non-Loopback Safety:** Binding beyond loopback (`127.0.0.1`, `localhost`, `::1`) **strictly refuses to start** without a token.
+* **Supported Environment Variables:** `SPEC_MEMO_AUTH_TOKEN` (recommended) or `SPEC_MEMO_SSE_TOKEN` (alias).
+
+#### 2. Generate a Secure Token
 ```bash
-export SPEC_MEMO_ROOT=/var/lib/spec-memo
-export SPEC_MEMO_SSE_TOKEN="$(openssl rand -hex 32)"   # or PowerShell: [guid]::NewGuid().ToString('N')…
-memo serve --sse --host 0.0.0.0 --port 3000
+# Linux / macOS
+openssl rand -hex 32
+
+# Windows (PowerShell)
+[guid]::NewGuid().ToString('N')
 ```
 
-Point Cursor at a remote SSE server (`~/.cursor/mcp.json`):
+#### 3. Daemon / Server Configuration (Host Machine)
+
+```bash
+# Via Environment Variable (recommended)
+export SPEC_MEMO_ROOT=/var/lib/spec-memo
+export SPEC_MEMO_AUTH_TOKEN="your_generated_token_here"
+memo serve --sse --host 0.0.0.0 --port 3000
+
+# Or via CLI flag
+memo serve --sse --host 0.0.0.0 --port 3000 --auth-token "your_generated_token_here"
+```
+
+For systemd autoboot, configure `Environment=SPEC_MEMO_AUTH_TOKEN=your_generated_token_here` in `/etc/systemd/system/spec-memo.service` (see [systemd setup](#linux--systemd)).
+
+#### 4. Client / Developer Machine Configuration
+
+##### Option A: Stdio Proxy via `memo setup` (Hybrid / Remote Mode)
+Export the token in your shell environment (`~/.bashrc`, `~/.zshrc`, or Windows Environment Variables):
+```bash
+export SPEC_MEMO_AUTH_TOKEN="your_generated_token_here"
+memo setup --mode hybrid --url http://daemon.internal:3000 --host cursor --write-mcp
+```
+
+##### Option B: Direct SSE MCP Connection
+If connecting your IDE (Cursor, VS Code, Claude Desktop, Antigravity) directly to the remote SSE endpoint, provide the `Authorization` header in your MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "spec-memo": {
-      "url": "http://memo.lab:3000/sse",
+      "url": "http://daemon.internal:3000/sse",
       "headers": {
-        "Authorization": "Bearer replace-me"
+        "Authorization": "Bearer your_generated_token_here"
       }
     }
   }
 }
+```
+
+#### 5. Status Monitor & API Health Checks
+
+* **Status Monitor Web UI (Port 3001):** Open `http://daemon.internal:3001/?token=your_generated_token_here`
+* **Health & API Verification:**
+  ```bash
+  # Check MCP daemon health (port 3000)
+  curl -s -H "Authorization: Bearer your_generated_token_here" http://daemon.internal:3000/health
+
+  # Check status monitor API (port 3001)
+  curl -s -H "Authorization: Bearer your_generated_token_here" http://daemon.internal:3001/api/status
+  ```
+
+#### 6. Diagnose Token Setup
+Run `memo doctor` on the client or server to verify whether the deployment mode detects an active token in the environment:
+```bash
+memo doctor
 ```
 
 ### How to check the SSE status monitor
@@ -284,7 +336,8 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/spec-memo
 Environment=SPEC_MEMO_ROOT=/var/lib/spec-memo
-Environment=SPEC_MEMO_SSE_TOKEN=replace-me
+# Auth token (SPEC_MEMO_AUTH_TOKEN or SPEC_MEMO_SSE_TOKEN)
+Environment=SPEC_MEMO_AUTH_TOKEN=replace-me
 ExecStart=/usr/bin/node /opt/spec-memo/dist/cli.js serve --sse --host 0.0.0.0 --port 3000
 Restart=on-failure
 
