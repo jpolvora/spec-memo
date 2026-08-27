@@ -351,6 +351,12 @@ sudo systemctl enable --now spec-memo.service
 sudo systemctl status spec-memo.service
 curl -s -H "Authorization: Bearer replace-me" http://127.0.0.1:3000/health
 # Status UI: http://<host>:3001/  (also requires the bearer when a token is set)
+
+# Inspect configured environment variables on service:
+systemctl show spec-memo.service --property=Environment
+
+# Or inspect live environment variables of the running process:
+sudo cat /proc/$(pgrep -f "spec-memo" | head -n 1)/environ | tr '\0' '\n' | grep SPEC_MEMO
 ```
 
 #### Windows — Task Scheduler (autoboot at logon)
