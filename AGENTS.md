@@ -162,6 +162,22 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 - **`hybrid`:** Local vault is authoritative cache; auto-pulls deltas during `bootstrap` and debounces pushes on mutations. Manual sync via `memo sync`. Fails open when daemon is down.
 - **`remote`:** Local agent hosts run stdio proxy `memo serve` forwarding the 10 tools to remote daemon. Zero local records. Fails closed when daemon is down.
 
+### CLI Binary & PATH Resolution Contract
+
+Agents executing shell commands or diagnosing environment issues must follow this contract:
+
+1. **Invocation Hierarchy:**
+   - **Primary:** `memo <command>` when `memo` is on the environment's `PATH`.
+   - **Deterministic Fallback:** `node dist/cli.js <command>` (or absolute `node /path/to/spec-memo/dist/cli.js <command>`) when `memo` is not in `PATH` or during local workspace scripts.
+2. **Binary Packaging & Shims:**
+   - `package.json` declares `"bin": { "memo": "./dist/cli.js" }` and `dist/cli.js` has `#!/usr/bin/env node`.
+   - Running `npm link` creates platform wrappers (`memo` on Linux/macOS; `memo`, `memo.cmd`, `memo.ps1` on Windows) in the global npm prefix (e.g. `%AppData%\Roaming\npm` or `$(npm config get prefix)/bin`).
+3. **Rebuild Invariant:**
+   - Global symlinks point directly to `dist/cli.js`. Running `npm run build` compiles TypeScript in place without invalidating the link. Agents do not need to re-link after builds.
+4. **Agent Handling of `command not found`:**
+   - If `memo: command not found` occurs in a subagent or tool execution, immediately fall back to `node dist/cli.js` within the repository, or check if the global npm bin path (`%AppData%\Roaming\npm` / `~/.local/bin`) needs to be added to `PATH`.
+
+
 ### Serve (MCP transport)
 
 | Mode | Command | Notes |

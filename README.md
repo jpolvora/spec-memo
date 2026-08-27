@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.4.1**.
+**Local working memory for coding agents outside the product repository.** Version **0.4.2**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -10,21 +10,83 @@ Product git repositories should contain product code: source, tests, and shipped
 
 ## ⚡ Simplified Quick Start
 
-### 1. Installation
+### 1. Installation & CLI Setup
 
-Install `spec-memo` globally from GitHub or run directly with `npx`:
+`spec-memo` includes both the Model Context Protocol (MCP) server for AI coding environments and the `memo` CLI for interactive terminal usage and agent execution.
+
+#### Quick Install
 
 ```bash
-# Global install (gives you the `memo` CLI)
+# Global install via npm from GitHub (adds `memo` to your npm global bin)
 npm install -g github:jpolvora/spec-memo
 
-# Or build from source
+# Or build from source clone
 git clone https://github.com/jpolvora/spec-memo.git
 cd spec-memo
 npm install
 npm run build
 npm link
 ```
+
+---
+
+#### Making `memo` Available Globally on PATH (Windows, Linux, macOS)
+
+The `package.json` declares `"bin": { "memo": "./dist/cli.js" }` and `dist/cli.js` includes the `#!/usr/bin/env node` shebang. Choose the method that best matches your workflow:
+
+##### Option 1: Global Link from Clone (`npm link` — Recommended for Local Development)
+When actively developing `spec-memo` or working from a local clone:
+```bash
+cd /path/to/spec-memo
+npm install
+npm run build
+npm link
+```
+* **How it works:** npm creates a global symlink/shim (`memo` on Unix; `memo`, `memo.cmd`, `memo.ps1` on Windows) in your global npm prefix directory (e.g., `%AppData%\Roaming\npm` on Windows, `/usr/local/bin` or `~/.nvm/versions/node/<ver>/bin` on Linux/macOS).
+* **Live Rebuild Invariant:** The link points directly to `dist/cli.js`. Whenever you compile changes with `npm run build`, your global `memo` command reflects the latest code immediately without needing to re-link or re-install.
+
+##### Option 2: Global Install from Local Path
+```bash
+# Point npm install directly to your local clone directory
+npm install -g "/path/to/spec-memo"
+```
+* Installs a packaged copy to your npm global directory. Re-run this command after major rebuilds to refresh the global binary.
+
+##### Option 3: Manual Executable Shim (Without `npm link`)
+If you prefer not using npm global link or want a standalone wrapper script:
+
+* **Linux / macOS:** Create `~/.local/bin/memo` (or `/usr/local/bin/memo`):
+  ```bash
+  #!/usr/bin/env bash
+  exec node "/path/to/spec-memo/dist/cli.js" "$@"
+  ```
+  Make it executable: `chmod +x ~/.local/bin/memo`
+
+* **Windows (Command Prompt / PowerShell):** Create `memo.cmd` in a folder that is in your system or user `PATH` (e.g. `C:\bin\memo.cmd` or `%USERPROFILE%\bin\memo.cmd`):
+  ```cmd
+  @echo off
+  node "C:\path\to\spec-memo\dist\cli.js" %*
+  ```
+  *(Optionally create `memo.ps1` for PowerShell: `& node "C:\path\to\spec-memo\dist\cli.js" @args`)*
+
+---
+
+#### PATH Verification & Troubleshooting
+
+1. **Verify Binary Resolution:**
+   ```bash
+   # Open a new shell/terminal session and run:
+   memo --help
+   memo check-version
+   ```
+2. **If `memo: command not found` persists:**
+   * **Restart terminal:** Fresh environment variables (like PATH changes) require a new shell or terminal window.
+   * **Check global npm PATH on Windows:** Ensure `%AppData%\Roaming\npm` (or your custom `npm config get prefix`) is in your User or System `PATH` variable.
+   * **Check global npm PATH on Linux/macOS:** Ensure `~/.local/bin` or `$(npm config get prefix)/bin` is in your shell profile (`~/.bashrc`, `~/.zshrc`).
+3. **IDE MCP vs Terminal CLI:**
+   * Your AI editor (Cursor, VS Code, Claude Desktop, Antigravity) configures stdio MCP via `memo setup --write-mcp` or `node /path/to/dist/cli.js serve`.
+   * Putting `memo` on your system `PATH` ensures that interactive terminal commands and AI agents executing shell scripts can call `memo bootstrap`, `memo doctor --fix`, `memo search`, etc. anywhere on your machine.
+
 
 ### 2. Deployment Modes & Agent Host Setup
 
@@ -188,27 +250,79 @@ memo serve --sse --json               # machine metadata (includes statusUrl)
 
 **Flags:** `--host` (default `127.0.0.1`), `--port`, `--status-port`, `--no-status`, `--auth-token`, `--vaultRoot`.
 
-**Auth:** binding beyond loopback **refuses to start** without `--auth-token`, `SPEC_MEMO_SSE_TOKEN`, or `SPEC_MEMO_AUTH_TOKEN`. The product has no TLS and no per-user ACL — keep LAN/Tailscale + bearer token; put a reverse proxy in front if it leaves the overlay.
+### Managing Authentication Tokens & Remote Access
 
+`spec-memo` secures non-loopback HTTP/SSE daemon traffic and status monitor access using a single shared Bearer token.
+
+#### 1. Security Principles
+* **Zero Secrets on Disk:** Tokens are never stored in vault `config.json`, product files, or Git repositories. They are resolved at runtime from environment variables or command-line flags.
+* **Non-Loopback Safety:** Binding beyond loopback (`127.0.0.1`, `localhost`, `::1`) **strictly refuses to start** without a token.
+* **Supported Environment Variables:** `SPEC_MEMO_AUTH_TOKEN` (recommended) or `SPEC_MEMO_SSE_TOKEN` (alias).
+
+#### 2. Generate a Secure Token
 ```bash
-export SPEC_MEMO_ROOT=/var/lib/spec-memo
-export SPEC_MEMO_SSE_TOKEN="$(openssl rand -hex 32)"   # or PowerShell: [guid]::NewGuid().ToString('N')…
-memo serve --sse --host 0.0.0.0 --port 3000
+# Linux / macOS
+openssl rand -hex 32
+
+# Windows (PowerShell)
+[guid]::NewGuid().ToString('N')
 ```
 
-Point Cursor at a remote SSE server (`~/.cursor/mcp.json`):
+#### 3. Daemon / Server Configuration (Host Machine)
+
+```bash
+# Via Environment Variable (recommended)
+export SPEC_MEMO_ROOT=/var/lib/spec-memo
+export SPEC_MEMO_AUTH_TOKEN="your_generated_token_here"
+memo serve --sse --host 0.0.0.0 --port 3000
+
+# Or via CLI flag
+memo serve --sse --host 0.0.0.0 --port 3000 --auth-token "your_generated_token_here"
+```
+
+For systemd autoboot, configure `Environment=SPEC_MEMO_AUTH_TOKEN=your_generated_token_here` in `/etc/systemd/system/spec-memo.service` (see [systemd setup](#linux--systemd)).
+
+#### 4. Client / Developer Machine Configuration
+
+##### Option A: Stdio Proxy via `memo setup` (Hybrid / Remote Mode)
+Export the token in your shell environment (`~/.bashrc`, `~/.zshrc`, or Windows Environment Variables):
+```bash
+export SPEC_MEMO_AUTH_TOKEN="your_generated_token_here"
+memo setup --mode hybrid --url http://daemon.internal:3000 --host cursor --write-mcp
+```
+
+##### Option B: Direct SSE MCP Connection
+If connecting your IDE (Cursor, VS Code, Claude Desktop, Antigravity) directly to the remote SSE endpoint, provide the `Authorization` header in your MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "spec-memo": {
-      "url": "http://memo.lab:3000/sse",
+      "url": "http://daemon.internal:3000/sse",
       "headers": {
-        "Authorization": "Bearer replace-me"
+        "Authorization": "Bearer your_generated_token_here"
       }
     }
   }
 }
+```
+
+#### 5. Status Monitor & API Health Checks
+
+* **Status Monitor Web UI (Port 3001):** Open `http://daemon.internal:3001/?token=your_generated_token_here`
+* **Health & API Verification:**
+  ```bash
+  # Check MCP daemon health (port 3000)
+  curl -s -H "Authorization: Bearer your_generated_token_here" http://daemon.internal:3000/health
+
+  # Check status monitor API (port 3001)
+  curl -s -H "Authorization: Bearer your_generated_token_here" http://daemon.internal:3001/api/status
+  ```
+
+#### 6. Diagnose Token Setup
+Run `memo doctor` on the client or server to verify whether the deployment mode detects an active token in the environment:
+```bash
+memo doctor
 ```
 
 ### How to check the SSE status monitor
@@ -284,7 +398,8 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/spec-memo
 Environment=SPEC_MEMO_ROOT=/var/lib/spec-memo
-Environment=SPEC_MEMO_SSE_TOKEN=replace-me
+# Auth token (SPEC_MEMO_AUTH_TOKEN or SPEC_MEMO_SSE_TOKEN)
+Environment=SPEC_MEMO_AUTH_TOKEN=replace-me
 ExecStart=/usr/bin/node /opt/spec-memo/dist/cli.js serve --sse --host 0.0.0.0 --port 3000
 Restart=on-failure
 
@@ -298,6 +413,12 @@ sudo systemctl enable --now spec-memo.service
 sudo systemctl status spec-memo.service
 curl -s -H "Authorization: Bearer replace-me" http://127.0.0.1:3000/health
 # Status UI: http://<host>:3001/  (also requires the bearer when a token is set)
+
+# Inspect configured environment variables on service:
+systemctl show spec-memo.service --property=Environment
+
+# Or inspect live environment variables of the running process:
+sudo cat /proc/$(pgrep -f "spec-memo" | head -n 1)/environ | tr '\0' '\n' | grep SPEC_MEMO
 ```
 
 #### Windows — Task Scheduler (autoboot at logon)
@@ -542,7 +663,13 @@ memo install-skills --product-root /path/to/consumer
 
 Use `--force` only when overwriting a diverged destination. MCP hosts can call `install_skills` with the same arguments.
 
+**How do I make the `memo` command available on my PATH (Windows / Linux / macOS)?**
+
+Run `npm link` inside your `spec-memo` clone directory. This links the package bin (`"memo": "./dist/cli.js"`) to your npm global directory (e.g. `%AppData%\Roaming\npm` on Windows or `/usr/local/bin` on Linux). After running `npm run build`, `memo` is immediately accessible in any new terminal session without re-linking. See [Making `memo` Available Globally on PATH](#making-memo-available-globally-on-path-windows-linux-macos) for manual shim alternatives and PATH troubleshooting.
+
 ---
+
+
 
 ## 📄 License
 

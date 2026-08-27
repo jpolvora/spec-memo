@@ -105,6 +105,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 - [x] [`deployment-modes`](deployment-modes.spec.md): Local, hybrid, and remote deployment modes with portable MCP wiring
 - [x] [`status-vault-backup-ui`](status-vault-backup-ui.spec.md): Status monitor vault export and import UI
+- [ ] Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) (`spec: virtual-file-system-over-mcp.spec.md`)
+
 
 ## 8. Next specs
 
@@ -139,6 +141,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 26 | `mcp-version-and-skill-install` | `[x]` done | Phase 6: Recurrence learning | MCP tools: check_version and install_skills (+ docs surface) |
 | 27 | [`deployment-modes`](deployment-modes.spec.md) | `[x] done` | Phase 7 | Local, hybrid, and remote deployment modes with portable MCP wiring |
 | 28 | [`status-vault-backup-ui`](status-vault-backup-ui.spec.md) | `[x] done` | Phase 7 | Status monitor vault export and import UI |
+
+| 29 | `virtual-file-system-over-mcp` | `[ ]` todo | Phase 7: Deployment modes | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
 
 ## 9. Inbox (unscheduled ideas)
 

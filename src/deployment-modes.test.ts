@@ -683,7 +683,7 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       clientCfgPath,
       JSON.stringify(
         {
-          version: '0.4.1',
+          version: '0.4.2',
           defaultRemote: 'origin',
           mode: 'remote',
           remote: { url: daemonServer.url },
@@ -913,6 +913,71 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
     } finally {
       await daemonServer.close();
       closeIndex(daemonVault);
+      closeIndex(clientVault);
+    }
+  });
+
+  await t.test('Phase 2: hybrid push cursor uses changeset.generatedAt not wall clock', async () => {
+    const clientVault = trackVault(path.join(tempDir, 'cursor-genat-vault'));
+    ensureVaultStructure(clientVault);
+    const pid = 'cursor-genat-proj';
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(clientVault, 'projects', pid)
+      },
+      clientVault
+    );
+
+    await upsertRecord({
+      vaultRoot: clientVault,
+      projectId: pid,
+      kind: 'trap',
+      slug: 'cursor-genat-trap',
+      body: 'Trap for cursor snapshot semantics',
+      frontmatter: { title: 'Cursor GenAt Trap', severity: 'medium' }
+    });
+
+    let pushedGeneratedAt = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        changeset?: { generatedAt?: string };
+      };
+      pushedGeneratedAt = body.changeset?.generatedAt ?? '';
+      await new Promise((r) => setTimeout(r, 25));
+      return new Response(JSON.stringify({ applied: 1, skipped: 0, conflicts: 0 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }) as typeof fetch;
+
+    try {
+      const wallBeforePush = new Date().toISOString();
+      await pushHybridProject(clientVault, pid, 'http://127.0.0.1:9', 'cursor-genat-token');
+      const wallAfterPush = new Date().toISOString();
+      const state = readHybridState(clientVault);
+      assert.ok(pushedGeneratedAt, 'mock fetch must capture changeset.generatedAt');
+      assert.strictEqual(
+        state.cursors?.[pid],
+        pushedGeneratedAt,
+        'push cursor must equal export snapshot generatedAt, not push-completion wall clock'
+      );
+      assert.ok(
+        pushedGeneratedAt <= wallAfterPush,
+        'generatedAt should not be after push completion'
+      );
+      // Wall clock after the artificial delay must be strictly after the snapshot when clocks move.
+      assert.ok(
+        wallBeforePush <= wallAfterPush,
+        'wall clock should be monotonic across the delayed push'
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
       closeIndex(clientVault);
     }
   });

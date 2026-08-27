@@ -8,6 +8,7 @@ import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { ToolName, ToolResponse } from './types.js';
 import { startRemoteMcpProxyServer } from './mcp-proxy.js';
 import { logErrorReport } from './error-logger.js';
+import { getPackageVersion } from './version.js';
 
 const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get', 'check_version']);
 const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote', 'install_skills']);
@@ -76,7 +77,7 @@ export function createMcpServer(opts: {
   const server = new Server(
     {
       name: 'spec-memo',
-      version: '0.4.1'
+      version: getPackageVersion()
     },
     {
       capabilities: {

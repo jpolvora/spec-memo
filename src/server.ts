@@ -153,6 +153,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           method,
           endpoint: pathname,
           error: "Unauthorized request: missing or invalid authorization token",
+          level: "WARN",
           context: {
             headers: req.headers,
             query: Object.fromEntries(url.searchParams.entries())

@@ -206,6 +206,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-26 | hybrid-sync-review-fixes | Honor daemon dryRun, cwd-scoped hybrid push, debounce single-flight, hybrid-state vault lock; npm test 219 pass |
 | 2026-08-26 | status-vault-backup-ui | Status monitor vault export & import UI (.zip pack/unpack, POST /api/vaults/export & import, activity bus capture, auth); npm test 236 pass |
 | 2026-08-26 | release-0.4.1 | Status monitor vault export and import UI, SSE error logger, ws-memo skill docs update; bump version to 0.4.1 |
+| 2026-08-26 | release-0.4.2 | Fix test suite error log leakage and auth token env isolation, classify 401 unauthorized requests as WARN, format descriptive hybrid sync timeout errors; npm test 247 pass; bump version to 0.4.2 |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 
