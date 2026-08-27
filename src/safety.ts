@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { getVaultRoot } from './vault.js';
 
 /**
  * Common regex signatures for sensitive credentials and keys.
@@ -214,12 +215,31 @@ export function isPathInside(targetPath: string, rootPath: string): boolean {
 /**
  * Assert that target file write is outside consumer product repository.
  */
-export function assertNotInProductRoot(targetPath: string, productRoot: string | null, _isGit = true): void {
+export function assertNotInProductRoot(
+  targetPath: string,
+  productRoot: string | null,
+  _isGit = true,
+  vaultRoot?: string
+): void {
   if (!productRoot) {
     return;
   }
 
-  if (isPathInside(targetPath, productRoot)) {
+  const resolvedVault = path.resolve(vaultRoot || getVaultRoot());
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedProduct = path.resolve(productRoot);
+
+  // If productRoot is the vaultRoot or inside vaultRoot, it is the vault itself, not a consumer product repo
+  if (resolvedProduct === resolvedVault || isPathInside(resolvedProduct, resolvedVault)) {
+    return;
+  }
+
+  // If targetPath is inside the vault, it is in valid memory storage
+  if (isPathInside(resolvedTarget, resolvedVault)) {
+    return;
+  }
+
+  if (isPathInside(resolvedTarget, resolvedProduct)) {
     throw new Error(
       `Safety violation: Attempted to write memory record inside consumer product repository (${targetPath}). Workflow artifacts must be stored outside the product repository in the spec-memo vault.`
     );

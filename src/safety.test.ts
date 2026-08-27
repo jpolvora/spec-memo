@@ -127,7 +127,16 @@ You should provide your token via environment variables rather than hardcoding i
 
     it('should allow write when target path is in vault outside product repository', () => {
       const outsidePath = path.join(vaultRoot, 'projects', 'test', 'traps', 't1.md');
-      assert.doesNotThrow(() => assertNotInProductRoot(outsidePath, productRepo, true));
+      assert.doesNotThrow(() => assertNotInProductRoot(outsidePath, productRepo, true, vaultRoot));
+    });
+
+    it('should allow write when productRoot is the vaultRoot or inside vaultRoot', () => {
+      const vaultPath = path.join(vaultRoot, 'projects', 'test', 'traps', 't1.md');
+      // When productRoot is vaultRoot
+      assert.doesNotThrow(() => assertNotInProductRoot(vaultPath, vaultRoot, false, vaultRoot));
+      // When productRoot is inside vaultRoot
+      const vaultSubdir = path.join(vaultRoot, 'projects', 'test');
+      assert.doesNotThrow(() => assertNotInProductRoot(vaultPath, vaultSubdir, false, vaultRoot));
     });
   });
 

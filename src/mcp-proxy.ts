@@ -209,28 +209,55 @@ export function createRemoteMcpProxyServer(options: RemoteProxyOptions = {}): Se
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const response = await callRemoteTool(name, (args as Record<string, unknown>) || {}, options);
+    try {
+      const response = await callRemoteTool(name, (args as Record<string, unknown>) || {}, options);
 
-    if (response.isError) {
+      if (response.isError) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response, null, 2)
+            }
+          ],
+          isError: true
+        };
+      }
+
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(response, null, 2)
+            text: typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2)
+          }
+        ]
+      };
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logErrorReport({
+        subsystem: 'remote-proxy',
+        mode: 'remote',
+        tool: name,
+        error: err,
+        level: 'ERROR',
+        context: { args }
+      }, { vaultRoot: options.vaultRoot, logPath: options.errorLogPath });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              isError: true,
+              error: `Remote proxy error: ${errMsg}`,
+              code: 'PROXY_INTERNAL_ERROR',
+              details: { tool: name }
+            }, null, 2)
           }
         ],
         isError: true
       };
     }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2)
-        }
-      ]
-    };
   });
 
   return server;

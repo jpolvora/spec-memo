@@ -108,6 +108,11 @@ export async function promoteRecord(options: PromoteOptions): Promise<PromoteRes
   const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
   const projectId = options.projectId || identity.projectId;
 
+  const resolvedVault = path.resolve(vaultRoot);
+  if (path.resolve(identity.rootPath) === resolvedVault || isPathInside(path.resolve(identity.rootPath), resolvedVault)) {
+    throw new Error('promote requires a consumer product cwd/projectId; vault paths are not valid product roots.');
+  }
+
   if (!options.destination || typeof options.destination !== 'string' || options.destination.trim().length === 0) {
     throw new Error('Destination path is required to promote a record into the product repository.');
   }

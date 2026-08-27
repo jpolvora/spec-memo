@@ -104,4 +104,25 @@ describe('Git Remote and Project Identity', () => {
       'must not nest a foreign client path under process.cwd()'
     );
   });
+
+  it('should ignore vaultRoot git repository and not treat vault as product repository', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-test-vaultgit-'));
+    const tempVault = path.join(tempDir, 'vault');
+    fs.mkdirSync(path.join(tempVault, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(tempVault, 'projects', 'p1'), { recursive: true });
+
+    try {
+      // findGitRoot from within vaultRoot should return null
+      assert.equal(findGitRoot(tempVault, tempVault), null);
+      assert.equal(findGitRoot(path.join(tempVault, 'projects', 'p1'), tempVault), null);
+
+      // resolveProjectIdentity from within vaultRoot should reuse the project partition
+      const identity = resolveProjectIdentity(path.join(tempVault, 'projects', 'p1'), { vaultRoot: tempVault });
+      assert.equal(identity.isGit, false);
+      assert.equal(identity.isFallback, true);
+      assert.equal(identity.projectId, 'p1');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

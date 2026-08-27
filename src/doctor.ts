@@ -7,6 +7,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { openIndex, rebuildIndex } from './indexer.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { readHybridState } from './hybrid-state.js';
+import { isPathInside } from './safety.js';
 
 export const DEFAULT_HEALTH_TIMEOUT_MS = 10000;
 
@@ -77,10 +78,17 @@ function findFilesRecursive(dir: string, maxDepth = 6, currentDepth = 0): string
 
 /**
  * Scan a product repository for in-tree workflow pollution.
+ * If rootPath is within the vault root, returns empty (the vault is where records belong).
  */
-export function scanForRepoPollution(rootPath: string): DoctorPollutionItem[] {
+export function scanForRepoPollution(rootPath: string, vaultRoot?: string): DoctorPollutionItem[] {
   const pollution: DoctorPollutionItem[] = [];
   if (!fs.existsSync(rootPath)) {
+    return pollution;
+  }
+
+  const resolvedVault = path.resolve(vaultRoot || getVaultRoot());
+  const resolvedRoot = path.resolve(rootPath);
+  if (resolvedRoot === resolvedVault || isPathInside(resolvedRoot, resolvedVault)) {
     return pollution;
   }
 
@@ -223,7 +231,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
   }
 
   // Check product tree pollution
-  let pollutionItems = scanForRepoPollution(identity.rootPath);
+  let pollutionItems = scanForRepoPollution(identity.rootPath, vaultRoot);
   let fixedCount = 0;
 
   // Optional fix execution (AC3)
@@ -239,7 +247,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       }
     }
     // Rescan after fix
-    pollutionItems = scanForRepoPollution(identity.rootPath);
+    pollutionItems = scanForRepoPollution(identity.rootPath, vaultRoot);
   }
 
   if (pollutionItems.length > 0) {

@@ -207,9 +207,10 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-26 | status-vault-backup-ui | Status monitor vault export & import UI (.zip pack/unpack, POST /api/vaults/export & import, activity bus capture, auth); npm test 236 pass |
 | 2026-08-26 | release-0.4.1 | Status monitor vault export and import UI, SSE error logger, ws-memo skill docs update; bump version to 0.4.1 |
 | 2026-08-26 | release-0.4.2 | Fix test suite error log leakage and auth token env isolation, classify 401 unauthorized requests as WARN, format descriptive hybrid sync timeout errors; npm test 247 pass; bump version to 0.4.2 |
-| 2026-08-26 | bootstrap-maxbytes-config | Wire vault config.bootstrap.maxBytes as default bootstrap budget (8192); per-call maxBytes overrides; npm test 250 pass |
-| 2026-08-26 | release-0.4.3 | Configurable bootstrap byte budget via ~/.spec-memo/config.json; bump package/MCP/vault to 0.4.3; npm test 250 pass |
 | 2026-08-27 | operational-telemetry | Operational telemetry & rolling JSONL usage logging with enableTelemetry config switch; npm test 264 pass |
+| 2026-08-27 | status-client-tracking | Status monitor vault clients panel (proxy & direct remote), rich HTTP/MCP command logs, dynamic telemetry config reload, client registry size cap; npm test 268 pass |
+| 2026-08-27 | release-0.4.5 | Operational telemetry & status monitor client tracking; bump package/MCP/vault to 0.4.5; PR #15 merged |
+| 2026-08-27 | release-0.4.6 | MCP tool pre-validation, error crash protection & logging, ws-memo skill refresh, single source of truth versioning in package.json; npm test 280 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

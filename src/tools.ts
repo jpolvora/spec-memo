@@ -14,6 +14,7 @@ import {
   RecordStatus,
   SearchOptions
 } from './types.js';
+import { RecordKindSchema, RecordStatusSchema } from './schema.js';
 import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
 import { searchIndex } from './indexer.js';
 import { compileBootstrapBrief } from './bootstrap.js';
@@ -26,6 +27,7 @@ import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot } from './vault.js';
 import { recordTelemetry } from './telemetry.js';
+import { logErrorReport } from './error-logger.js';
 
 function resolveHybridPushProjectId(opts: {
   cwd?: string;
@@ -54,16 +56,16 @@ export interface ToolDefinition {
 export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   bootstrap: {
     name: 'bootstrap',
-    description: "Bind cwd's git remote; compile a session brief (traps, open decisions, live spec/plan, drift flags).",
+    description: "Bind cwd's git remote; compile a token-budgeted session brief (traps, open decisions, live spec/plan, drift flags).",
     inputSchema: {
       type: 'object',
       properties: {
         cwd: { type: 'string', description: 'Product repository working directory (defaults to current dir)' },
-        query: { type: 'string', description: 'Optional context query or task intent to filter traps/decisions' },
-        slug: { type: 'string', description: 'Active feature spec/plan slug' },
+        query: { type: 'string', description: 'Optional context query or task intent to filter relevant traps/decisions' },
+        slug: { type: 'string', description: 'Active feature spec/plan slug identifier' },
         path: { type: 'string', description: 'Focus file path to prioritize matching traps' },
         maxBytes: { type: 'number', description: 'Maximum UTF-8 payload byte budget (defaults to vault config.bootstrap.maxBytes, 8192)' },
-        projectId: { type: 'string', description: 'Specific project ID' }
+        projectId: { type: 'string', description: 'Specific project ID override' }
       }
     },
     zodSchema: z.object({
@@ -71,24 +73,31 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       query: z.string().optional(),
       slug: z.string().optional(),
       path: z.string().optional(),
-      maxBytes: z.number().optional(),
+      maxBytes: z.number().int().positive().optional(),
       vaultRoot: z.string().optional(),
       projectId: z.string().optional()
     })
   },
   search: {
     name: 'search',
-    description: 'Filtered retrieval across memory records (excludes scratch, logs, review by default).',
+    description: 'Filtered full-text retrieval across memory records via SQLite FTS5 (excludes scratch, logs, review by default).',
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Search term or FTS query' },
         kinds: {
           type: 'array',
-          items: { type: 'string' },
-          description: 'Filter by record kinds (e.g. trap, decision, spec)'
+          items: {
+            type: 'string',
+            enum: ['trap', 'decision', 'spec', 'plan', 'state', 'log', 'scratch', 'review']
+          },
+          description: 'Filter by record kinds (trap, decision, spec, plan, state, log, scratch, review)'
         },
-        status: { type: 'string', description: 'Filter by status (active, shipped, superseded, archived)' },
+        status: {
+          type: 'string',
+          enum: ['active', 'paused', 'shipped', 'superseded', 'archived'],
+          description: 'Filter by status (active, paused, shipped, superseded, archived)'
+        },
         tags: {
           type: 'array',
           items: { type: 'string' },
@@ -97,26 +106,26 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         path: { type: 'string', description: 'Match records whose pathPatterns cover this file path' },
         includeScratch: { type: 'boolean', description: 'Include scratch records (omitted by default)' },
         projectId: { type: 'string', description: 'Specific project ID to search' },
-        crossProject: { type: 'boolean', description: 'Search across all bound projects' },
+        crossProject: { type: 'boolean', description: 'Search across all bound projects in vault' },
         limit: { type: 'number', description: 'Maximum number of results to return' },
         sort: {
           type: 'string',
           enum: ['relevance', 'occurrences', 'updated'],
           description: 'Result order: relevance (default), occurrences, or updated'
         },
-        cwd: { type: 'string', description: 'Product repository working directory' },
+        cwd: { type: 'string', description: 'Product repository working directory' }
       }
     },
     zodSchema: z.object({
       query: z.string().optional(),
-      kinds: z.array(z.string()).optional(),
-      status: z.string().optional(),
+      kinds: z.array(RecordKindSchema).optional(),
+      status: RecordStatusSchema.optional(),
       tags: z.array(z.string()).optional(),
       path: z.string().optional(),
       includeScratch: z.boolean().optional(),
       projectId: z.string().optional(),
       crossProject: z.boolean().optional(),
-      limit: z.number().optional(),
+      limit: z.number().int().positive().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
       sort: z.enum(['relevance', 'occurrences', 'updated']).optional()
@@ -124,20 +133,24 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   },
   get: {
     name: 'get',
-    description: 'Read one record by id or kind+slug.',
+    description: 'Read one record by unique id OR by kind+slug.',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Record unique ID' },
-        kind: { type: 'string', description: 'Record kind' },
-        slug: { type: 'string', description: 'Record slug (if kind is specified)' },
+        id: { type: 'string', description: 'Record unique ID (e.g. trap-sqlite-wal-lock). Provide id OR kind+slug.' },
+        kind: {
+          type: 'string',
+          enum: ['trap', 'decision', 'spec', 'plan', 'state', 'log', 'scratch', 'review'],
+          description: 'Record kind (when lookup by kind+slug)'
+        },
+        slug: { type: 'string', description: 'Record slug identifier (when lookup by kind+slug)' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        projectId: { type: 'string', description: 'Specific project ID' }
+        projectId: { type: 'string', description: 'Specific project ID override' }
       }
     },
     zodSchema: z.object({
       id: z.string().optional(),
-      kind: z.string().optional(),
+      kind: RecordKindSchema.optional(),
       slug: z.string().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
@@ -150,20 +163,29 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     inputSchema: {
       type: 'object',
       properties: {
-        kind: { type: 'string', description: 'Record kind (trap, decision, spec, plan, state, log, scratch, review)' },
-        slug: { type: 'string', description: 'Record slug identifier' },
-        frontmatter: { type: 'object', description: 'Record frontmatter metadata' },
-        body: { type: 'string', description: 'Record Markdown content' },
+        kind: {
+          type: 'string',
+          enum: ['trap', 'decision', 'spec', 'plan', 'state', 'log', 'scratch', 'review'],
+          description: 'Record kind (trap, decision, spec, plan, state, log, scratch, review)'
+        },
+        slug: { type: 'string', description: 'Record slug identifier (auto-derived from title/body if omitted)' },
+        frontmatter: {
+          type: 'object',
+          description: 'Record frontmatter metadata (title, severity: low|medium|high|critical, layer: application|domain|web|infrastructure|tests|devops|other, module, pathPatterns: string[], tags: string[], occurrences: number, supersedes: string, linkedPaths: string[], verifiedAtSha: string)'
+        },
+        body: { type: 'string', description: 'Record Markdown content. For traps, use DO NOT / INSTEAD DO format.' },
+        path: { type: 'string', description: 'Associated focus file path (maps to pathPatterns/linkedPaths)' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        projectId: { type: 'string', description: 'Specific project ID' }
+        projectId: { type: 'string', description: 'Specific project ID override' }
       },
       required: ['kind', 'body']
     },
     zodSchema: z.object({
-      kind: z.string(),
+      kind: RecordKindSchema,
       slug: z.string().optional(),
       frontmatter: z.record(z.unknown()).optional(),
-      body: z.string(),
+      body: z.string().min(1, 'Record body must not be empty'),
+      path: z.string().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
       projectId: z.string().optional()
@@ -171,21 +193,25 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   },
   append: {
     name: 'append',
-    description: 'Append a changelog or audit run event (write-only).',
+    description: 'Append a changelog or audit run event (write-only append log).',
     inputSchema: {
       type: 'object',
       properties: {
-        event: { type: 'string', description: 'Event description or log text' },
-        kind: { type: 'string', description: 'Log kind (defaults to log)' },
+        event: { type: 'string', description: 'Event description or log text (write-only)' },
+        kind: {
+          type: 'string',
+          enum: ['trap', 'decision', 'spec', 'plan', 'state', 'log', 'scratch', 'review'],
+          description: 'Log record kind (defaults to "log")'
+        },
         details: { type: 'object', description: 'Additional structured event details' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        projectId: { type: 'string', description: 'Specific project ID' }
+        projectId: { type: 'string', description: 'Specific project ID override' }
       },
       required: ['event']
     },
     zodSchema: z.object({
-      event: z.string(),
-      kind: z.string().optional(),
+      event: z.string().min(1, 'Event description must not be empty'),
+      kind: RecordKindSchema.optional(),
       details: z.record(z.unknown()).optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
@@ -194,21 +220,25 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   },
   forget: {
     name: 'forget',
-    description: 'Supersede or archive a memory record.',
+    description: 'Supersede or archive a memory record (soft-archive by default; purge only with explicit confirmation).',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Record ID to archive' },
-        kind: { type: 'string', description: 'Record kind' },
-        slug: { type: 'string', description: 'Record slug' },
-        purge: { type: 'boolean', description: 'Set true to permanently delete file (defaults to false for archive)' },
+        id: { type: 'string', description: 'Record ID to archive or purge. Provide id OR kind+slug.' },
+        kind: {
+          type: 'string',
+          enum: ['trap', 'decision', 'spec', 'plan', 'state', 'log', 'scratch', 'review'],
+          description: 'Record kind (when lookup by kind+slug)'
+        },
+        slug: { type: 'string', description: 'Record slug (when lookup by kind+slug)' },
+        purge: { type: 'boolean', description: 'Set true to permanently delete file (defaults to false for soft archive)' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        projectId: { type: 'string', description: 'Specific project ID' }
+        projectId: { type: 'string', description: 'Specific project ID override' }
       }
     },
     zodSchema: z.object({
       id: z.string().optional(),
-      kind: z.string().optional(),
+      kind: RecordKindSchema.optional(),
       slug: z.string().optional(),
       purge: z.boolean().optional(),
       cwd: z.string().optional(),
@@ -218,13 +248,13 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   },
   gc: {
     name: 'gc',
-    description: 'Apply TTL, compact shipped plans, and rebuild FTS index.',
+    description: 'Apply TTL retention (7-day scratch, 14-day review), compact shipped plans, roll up monthly logs, and rebuild FTS index.',
     inputSchema: {
       type: 'object',
       properties: {
         cwd: { type: 'string', description: 'Product repository working directory' },
         projectId: { type: 'string', description: 'Specific project ID to clean' },
-        dryRun: { type: 'boolean', description: 'Check what would be cleaned without modifying files' }
+        dryRun: { type: 'boolean', description: 'Check what would be cleaned without modifying files (defaults to false)' }
       }
     },
     zodSchema: z.object({
@@ -236,33 +266,37 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   },
   promote: {
     name: 'promote',
-    description: 'Copy one record into the product repository (default deny without product-relative destination).',
+    description: 'Copy one record or top ranked traps into the product repository (default deny without product-relative destination).',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Record ID to promote' },
-        kind: { type: 'string', description: 'Record kind' },
-        slug: { type: 'string', description: 'Record slug' },
-        destination: { type: 'string', description: 'Product-relative destination path (e.g. docs/adr/001.md)' },
+        id: { type: 'string', description: 'Record ID to promote (omit when format=skill to promote top ranked traps)' },
+        kind: {
+          type: 'string',
+          enum: ['trap', 'decision', 'spec', 'plan', 'state', 'log', 'scratch', 'review'],
+          description: 'Record kind (when lookup by kind+slug)'
+        },
+        slug: { type: 'string', description: 'Record slug (when lookup by kind+slug)' },
+        destination: { type: 'string', description: 'Product-relative destination path (e.g. docs/adr/001.md or .agents/skills/ws-recurrence/SKILL.md)' },
         format: {
           type: 'string',
           enum: ['raw', 'adr', 'madr', 'skill'],
           description: 'Output format: raw markdown, Nygard ADR, MADR, or compiled skill'
         },
         force: { type: 'boolean', description: 'Overwrite destination if it already exists' },
-        limit: { type: 'number', description: 'When format is skill and id is omitted, number of ranked traps to compile' },
-        cwd: { type: 'string', description: 'Product repository working directory' },
+        limit: { type: 'number', description: 'When format is skill and id is omitted, number of top ranked traps to compile (default 10)' },
+        cwd: { type: 'string', description: 'Product repository working directory' }
       },
       required: ['destination']
     },
     zodSchema: z.object({
       id: z.string().optional(),
-      kind: z.string().optional(),
+      kind: RecordKindSchema.optional(),
       slug: z.string().optional(),
-      destination: z.string(),
+      destination: z.string().min(1, 'Destination path is required'),
       format: z.enum(['raw', 'adr', 'madr', 'skill']).optional(),
       force: z.boolean().optional(),
-      limit: z.number().optional(),
+      limit: z.number().int().positive().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional()
     })
@@ -270,7 +304,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   check_version: {
     name: 'check_version',
     description:
-      'Compare the running spec-memo package version to the latest npm release so agents can detect stale installs.',
+      'Compare the running spec-memo package version to the latest npm release so agents can detect stale installs (soft-fails offline).',
     inputSchema: {
       type: 'object',
       properties: {}
@@ -292,7 +326,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         skills: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Skill ids to install (default ["ws-memo"])'
+          description: 'Skill IDs to install (default ["ws-memo"])'
         },
         skillsRoot: {
           type: 'string',
@@ -368,6 +402,21 @@ export async function executeTool(name: string, args: unknown): Promise<ToolResp
     });
   }
 
+  if (response.isError) {
+    logErrorReport({
+      subsystem: 'mcp-tool',
+      tool: name,
+      projectId,
+      error: response.error || 'Tool execution error',
+      level: response.code === 'EXECUTE_TOOL_FAILED' ? 'ERROR' : 'WARN',
+      context: {
+        code: response.code,
+        details: response.details,
+        args: args && typeof args === 'object' ? args : { raw: args }
+      }
+    }, { vaultRoot });
+  }
+
   return response;
 }
 
@@ -408,19 +457,33 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
 
   if (name === 'upsert') {
     try {
-      const { kind, slug, frontmatter, body, cwd, vaultRoot, projectId } = parseResult.data as {
+      const { kind, slug, frontmatter, body, path: optPath, cwd, vaultRoot, projectId } = parseResult.data as {
         kind: RecordKind;
         slug?: string;
         frontmatter?: Record<string, unknown>;
         body: string;
+        path?: string;
         cwd?: string;
         vaultRoot?: string;
         projectId?: string;
       };
+      if (!body || !body.trim()) {
+        return fail('INVALID_ARGUMENTS', "Parameter 'body' must be a non-empty string for upsert");
+      }
+      const fm = { ...(frontmatter || {}) };
+      if (optPath && typeof optPath === 'string' && optPath.trim()) {
+        const trimmedPath = optPath.trim();
+        if (!fm.pathPatterns && (kind === 'trap' || !fm.linkedPaths)) {
+          fm.pathPatterns = [trimmedPath];
+        }
+        if (!fm.linkedPaths) {
+          fm.linkedPaths = [trimmedPath];
+        }
+      }
       const result = await upsertRecord({
         kind,
         slug,
-        frontmatter,
+        frontmatter: fm,
         body,
         cwd,
         vaultRoot,
@@ -443,6 +506,12 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         vaultRoot?: string;
         projectId?: string;
       };
+      if (!id && !(kind && slug)) {
+        return fail(
+          'INVALID_ARGUMENTS',
+          "Either 'id' or both 'kind' and 'slug' must be provided for get"
+        );
+      }
       const record = await getRecord({ id, kind, slug, cwd, vaultRoot, projectId });
       if (!record) {
         return fail('RECORD_NOT_FOUND', `Record not found: id=${id || 'n/a'}, kind=${kind || 'n/a'}, slug=${slug || 'n/a'}`);
@@ -456,6 +525,9 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
   if (name === 'append') {
     try {
       const appendOpts = parseResult.data as AppendOptions;
+      if (!appendOpts.event || !appendOpts.event.trim()) {
+        return fail('INVALID_ARGUMENTS', "Parameter 'event' must be a non-empty string for append");
+      }
       const result = await appendEvent(appendOpts);
       scheduleHybridPush(
         appendOpts.vaultRoot,
@@ -470,6 +542,12 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
   if (name === 'forget') {
     try {
       const forgetOpts = parseResult.data as ForgetOptions;
+      if (!forgetOpts.id && !(forgetOpts.kind && forgetOpts.slug)) {
+        return fail(
+          'INVALID_ARGUMENTS',
+          "Either 'id' or both 'kind' and 'slug' must be provided for forget"
+        );
+      }
       const result = await forgetRecord(forgetOpts);
       scheduleHybridPush(
         forgetOpts.vaultRoot,
@@ -504,6 +582,12 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
   if (name === 'promote') {
     try {
       const promoteOpts = parseResult.data as PromoteOptions;
+      if (!promoteOpts.destination || !promoteOpts.destination.trim()) {
+        return fail(
+          'INVALID_ARGUMENTS',
+          "Parameter 'destination' is required and must be a non-empty product-relative path"
+        );
+      }
       const result = await promoteRecord(promoteOpts);
       return ok(result);
     } catch (err: unknown) {
@@ -538,5 +622,6 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
     details: { tool: name, args: parseResult.data }
   };
 }
+
 
 

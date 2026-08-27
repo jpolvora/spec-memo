@@ -20,6 +20,7 @@ import { runSetup } from './setup.js';
 import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
 import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
+import { getPackageVersion } from './version.js';
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -47,6 +48,8 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
 
     if (arg === '--json') {
       result.isJson = true;
+    } else if (arg === '--version' || arg === '-v') {
+      result.options.version = true;
     } else if (arg === '--help' || arg === '-h') {
       if (result.command) {
         result.subcommandHelp = true;
@@ -335,6 +338,15 @@ async function runCliInner(
   vaultRootArg: string | undefined
 ): Promise<number> {
   parsed.command = command;
+
+  if (parsed.options.version && !parsed.command) {
+    if (parsed.isJson) {
+      printJson({ version: getPackageVersion() });
+    } else {
+      console.log(getPackageVersion());
+    }
+    return 0;
+  }
 
   if (!parsed.command || (parsed.options.help && !parsed.command)) {
     printGeneralHelp();

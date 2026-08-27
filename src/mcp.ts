@@ -113,47 +113,53 @@ export function createMcpServer(opts: {
     try {
       const response = await executeTool(name, resolvedArgs);
       const durationMs = Date.now() - started;
-      const projId = resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot);
-      const summary = buildToolSummary(toolName, argRecord, response);
+      let projId: string | undefined;
+      try {
+        projId = resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot);
+      } catch {
+        // Non-blocking project identity resolution error
+      }
+      let summary = name;
+      try {
+        summary = buildToolSummary(toolName, argRecord, response);
+      } catch {
+        // Non-blocking summary build error
+      }
 
       if (opts.activityBus && opts.clientId) {
-        opts.activityBus.updateClientActivity(opts.clientId, {
-          operation: `mcp:${toolName}`,
-          projectId: projId,
-          clientName: opts.clientName
-        });
+        try {
+          opts.activityBus.updateClientActivity(opts.clientId, {
+            operation: `mcp:${toolName}`,
+            projectId: projId,
+            clientName: opts.clientName
+          });
+        } catch {
+          // Non-blocking activity update error
+        }
       }
 
       if (opts.activityBus && TOOL_DEFINITIONS[toolName]) {
-        const kind = READ_TOOLS.has(toolName) ? 'read' : WRITE_TOOLS.has(toolName) ? 'write' : 'meta';
-        opts.activityBus.capture({
-          type: 'tool',
-          kind,
-          ok: !response.isError,
-          durationMs,
-          summary,
-          tool: toolName,
-          operation: `mcp:${toolName}`,
-          projectId: projId,
-          clientIp: opts.clientIp,
-          clientName: opts.clientName,
-          clientType: opts.clientType
-        });
+        try {
+          const kind = READ_TOOLS.has(toolName) ? 'read' : WRITE_TOOLS.has(toolName) ? 'write' : 'meta';
+          opts.activityBus.capture({
+            type: 'tool',
+            kind,
+            ok: !response.isError,
+            durationMs,
+            summary,
+            tool: toolName,
+            operation: `mcp:${toolName}`,
+            projectId: projId,
+            clientIp: opts.clientIp,
+            clientName: opts.clientName,
+            clientType: opts.clientType
+          });
+        } catch {
+          // Non-blocking activity capture error
+        }
       }
 
       if (response.isError) {
-        logErrorReport({
-          subsystem: 'mcp-tool',
-          tool: toolName,
-          projectId: resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot),
-          error: response.error || 'Tool execution error',
-          context: {
-            code: response.code,
-            details: response.details,
-            args: argRecord
-          }
-        }, { vaultRoot: opts.defaultVaultRoot, logPath: opts.errorLogPath });
-
         return {
           content: [
             {
@@ -174,15 +180,30 @@ export function createMcpServer(opts: {
         ]
       };
     } catch (unhandledErr: unknown) {
+      const errMsg = unhandledErr instanceof Error ? unhandledErr.message : String(unhandledErr);
       logErrorReport({
-        subsystem: 'mcp-tool',
+        subsystem: 'mcp-server',
         tool: toolName,
         projectId: resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot),
         error: unhandledErr,
         level: 'ERROR',
         context: { args: argRecord }
       }, { vaultRoot: opts.defaultVaultRoot, logPath: opts.errorLogPath });
-      throw unhandledErr;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              isError: true,
+              error: `Internal MCP tool error: ${errMsg}`,
+              code: 'INTERNAL_ERROR',
+              details: { tool: toolName, args: argRecord }
+            }, null, 2)
+          }
+        ],
+        isError: true
+      };
     }
   });
 
