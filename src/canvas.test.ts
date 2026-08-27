@@ -14,7 +14,36 @@ test("Canvas Engine & Graph Visualization", async (t) => {
   const vaultRoot = path.join(tempDir, "vault");
   const projectId = "test-canvas-proj";
 
+  const savedEnv = {
+    auth: process.env.SPEC_MEMO_AUTH_TOKEN,
+    canvas: process.env.SPEC_MEMO_CANVAS_TOKEN,
+    sse: process.env.SPEC_MEMO_SSE_TOKEN,
+    status: process.env.SPEC_MEMO_STATUS_TOKEN,
+    root: process.env.SPEC_MEMO_ROOT,
+    errorLog: process.env.SPEC_MEMO_ERROR_LOG
+  };
+
+  delete process.env.SPEC_MEMO_AUTH_TOKEN;
+  delete process.env.SPEC_MEMO_CANVAS_TOKEN;
+  delete process.env.SPEC_MEMO_SSE_TOKEN;
+  delete process.env.SPEC_MEMO_STATUS_TOKEN;
+  delete process.env.SPEC_MEMO_ROOT;
+  delete process.env.SPEC_MEMO_ERROR_LOG;
+
   t.after(() => {
+    if (savedEnv.auth !== undefined) process.env.SPEC_MEMO_AUTH_TOKEN = savedEnv.auth;
+    else delete process.env.SPEC_MEMO_AUTH_TOKEN;
+    if (savedEnv.canvas !== undefined) process.env.SPEC_MEMO_CANVAS_TOKEN = savedEnv.canvas;
+    else delete process.env.SPEC_MEMO_CANVAS_TOKEN;
+    if (savedEnv.sse !== undefined) process.env.SPEC_MEMO_SSE_TOKEN = savedEnv.sse;
+    else delete process.env.SPEC_MEMO_SSE_TOKEN;
+    if (savedEnv.status !== undefined) process.env.SPEC_MEMO_STATUS_TOKEN = savedEnv.status;
+    else delete process.env.SPEC_MEMO_STATUS_TOKEN;
+    if (savedEnv.root !== undefined) process.env.SPEC_MEMO_ROOT = savedEnv.root;
+    else delete process.env.SPEC_MEMO_ROOT;
+    if (savedEnv.errorLog !== undefined) process.env.SPEC_MEMO_ERROR_LOG = savedEnv.errorLog;
+    else delete process.env.SPEC_MEMO_ERROR_LOG;
+
     closeIndex(vaultRoot);
     fs.rmSync(tempDir, { recursive: true, force: true });
   });

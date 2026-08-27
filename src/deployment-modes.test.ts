@@ -683,7 +683,7 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       clientCfgPath,
       JSON.stringify(
         {
-          version: '0.4.1',
+          version: '0.4.2',
           defaultRemote: 'origin',
           mode: 'remote',
           remote: { url: daemonServer.url },

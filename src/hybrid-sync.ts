@@ -62,8 +62,9 @@ export async function pullHybridProject(
   const state = readHybridState(vaultRoot);
   const since = projectId && state.cursors ? state.cursors[projectId] : undefined;
 
+  const timeoutMs = getSyncTimeoutMs();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), getSyncTimeoutMs());
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${remoteOrigin}/api/sync/pull`, {
       method: 'POST',
@@ -73,7 +74,8 @@ export async function pullHybridProject(
     });
 
     if (!res.ok) {
-      throw new Error(`Remote sync pull failed with HTTP ${res.status}: ${res.statusText}`);
+      const errorText = await res.text().catch(() => '');
+      throw new Error(`Remote sync pull failed with HTTP ${res.status}: ${res.statusText || errorText || 'Unknown error'}`);
     }
 
     const changeset = (await res.json()) as Changeset;
@@ -118,12 +120,16 @@ export async function pullHybridProject(
 
     return applyResult;
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const isAbort = (err instanceof Error && err.name === 'AbortError') || controller.signal.aborted;
+    const msg = isAbort
+      ? `Hybrid sync pull timed out after ${timeoutMs}ms connecting to ${remoteOrigin}`
+      : (err instanceof Error ? err.message : String(err));
+    const effectiveErr = isAbort ? new Error(msg) : err;
     logErrorReport({
       subsystem: 'hybrid-sync',
       mode: 'hybrid',
       projectId,
-      error: err,
+      error: effectiveErr,
       context: { phase: 'pull', remoteOrigin }
     }, { vaultRoot });
     if (projectId) {
@@ -138,7 +144,7 @@ export async function pullHybridProject(
         lastError: msg
       });
     }
-    throw err;
+    throw effectiveErr;
   } finally {
     clearTimeout(timer);
   }
@@ -182,8 +188,9 @@ export async function pushHybridProject(
     exportChangeset(vaultRoot, { projectId, since })
   );
 
+  const timeoutMs = getSyncTimeoutMs();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), getSyncTimeoutMs());
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${remoteOrigin}/api/sync/push`, {
       method: 'POST',
@@ -193,26 +200,27 @@ export async function pushHybridProject(
     });
 
     if (!res.ok) {
-      throw new Error(`Remote sync push failed with HTTP ${res.status}: ${res.statusText}`);
+      const errorText = await res.text().catch(() => '');
+      throw new Error(`Remote sync push failed with HTTP ${res.status}: ${res.statusText || errorText || 'Unknown error'}`);
     }
 
     const pushResult = (await res.json()) as SyncResult;
 
     if (!dryRun) {
       const now = new Date().toISOString();
-      const cursorVal = changeset.generatedAt || now;
       let cursorsUpdate: Record<string, string> | undefined;
       if (pushResult.applied > 0) {
+        const cursorVal = now;
         if (projectId) {
           cursorsUpdate = { [projectId]: cursorVal };
         } else {
-          const projects = new Set<string>();
+          const projectIds = new Set<string>();
           for (const r of changeset.records) {
-            if (r.project) projects.add(r.project);
+            if (r.project) projectIds.add(r.project);
           }
-          if (projects.size > 0) {
+          if (projectIds.size > 0) {
             cursorsUpdate = {};
-            for (const p of projects) {
+            for (const p of projectIds) {
               cursorsUpdate[p] = cursorVal;
             }
           }
@@ -268,12 +276,16 @@ export async function pushHybridProject(
 
     return pushResult;
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const isAbort = (err instanceof Error && err.name === 'AbortError') || controller.signal.aborted;
+    const msg = isAbort
+      ? `Hybrid sync push timed out after ${timeoutMs}ms connecting to ${remoteOrigin}`
+      : (err instanceof Error ? err.message : String(err));
+    const effectiveErr = isAbort ? new Error(msg) : err;
     logErrorReport({
       subsystem: 'hybrid-sync',
       mode: 'hybrid',
       projectId,
-      error: err,
+      error: effectiveErr,
       context: { phase: 'push', remoteOrigin }
     }, { vaultRoot });
     if (projectId) {
@@ -288,7 +300,7 @@ export async function pushHybridProject(
         lastError: msg
       });
     }
-    throw err;
+    throw effectiveErr;
   } finally {
     clearTimeout(timer);
   }

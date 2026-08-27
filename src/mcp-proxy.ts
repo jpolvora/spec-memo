@@ -9,6 +9,7 @@ import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { getResolvedAuthToken, normalizeRemoteUrl } from './setup.js';
 import { sanitizeToolOutput } from './safety.js';
 import { logErrorReport } from './error-logger.js';
+import { getPackageVersion } from './version.js';
 
 export interface RemoteProxyOptions {
   vaultRoot?: string;
@@ -61,7 +62,7 @@ export async function createRemoteClient(options: RemoteProxyOptions = {}): Prom
   const client = new Client(
     {
       name: 'spec-memo-remote-proxy',
-      version: '0.4.1'
+      version: getPackageVersion()
     },
     {
       capabilities: {}
@@ -187,7 +188,7 @@ export function createRemoteMcpProxyServer(options: RemoteProxyOptions = {}): Se
   const server = new Server(
     {
       name: 'spec-memo-remote-proxy',
-      version: '0.4.1'
+      version: getPackageVersion()
     },
     {
       capabilities: {
