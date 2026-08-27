@@ -210,7 +210,9 @@ export async function pushHybridProject(
       const now = new Date().toISOString();
       let cursorsUpdate: Record<string, string> | undefined;
       if (pushResult.applied > 0) {
-        const cursorVal = now;
+        // Use export snapshot time — not push-completion wall clock — so records
+        // updated during an in-flight push remain visible to the next since-filter.
+        const cursorVal = changeset.generatedAt || now;
         if (projectId) {
           cursorsUpdate = { [projectId]: cursorVal };
         } else {
