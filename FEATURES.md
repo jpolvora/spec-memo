@@ -131,6 +131,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] **Trap recurrence ranking.** `memo rank` lists active traps by `occurrences`; optional `--layer`, `--backfill`; `memo promote --format skill` exports owner skill from ranked traps.
 - [x] **MCP status monitor.** Companion HTTP page (default `:3001`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream).
 - [x] **Status monitor vault backup UI.** Zero-friction export (.zip with `vault-backup.json`, optional AES-256-GCM) and restore (multipart .zip upload with confirmation and overwrite) from the `:3001` status page.
+- [x] **Status monitor client tracking & request visibility.** Real-time tracking of active and recent vault clients (proxy vs direct-remote badges, client IP, client name, bound vault, active status, request count) with rich display of all HTTP endpoints and MCP commands in the live activity log (`GET /api/clients`, `GET /api/status`).
 
 ---
 
