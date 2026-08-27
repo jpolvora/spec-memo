@@ -226,8 +226,8 @@ When the user asks to install a boot service for the SSE daemon:
 `spec-memo` exposes exactly **10** core tools through MCP stdio and matching CLI commands (`memo <command>`):
 
 ### 1. `bootstrap`
-- **Purpose**: Bind working directory to project identity; return token-budgeted brief (<8 KB).
-- **Parameters**: `cwd` (string), `query` (string), `slug` (string), `path` (string), `maxBytes` (number).
+- **Purpose**: Bind working directory to project identity; return token-budgeted brief (default 8 KB; overridable).
+- **Parameters**: `cwd` (string), `query` (string), `slug` (string), `path` (string), `maxBytes` (number; defaults to `~/.spec-memo/config.json` `bootstrap.maxBytes`, 8192).
 - **CLI Example**: `memo bootstrap --slug feature-auth --path src/auth.ts`
 
 ### 2. `search`

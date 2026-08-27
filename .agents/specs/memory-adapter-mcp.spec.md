@@ -16,7 +16,7 @@ Greenfield feature. Design Intent skipped: Phase 2 consumer MCP integration.
 
 ## Acceptance Criteria
 
-- AC1: Consumer memory routines call `bootstrap` at workflow session start to load path-relevant traps and decisions within the 8 KB budget.
+- AC1: Consumer memory routines call `bootstrap` at workflow session start to load path-relevant traps and decisions within the configured byte budget (default 8 KB).
 - AC2: Anti-regression trap recording invokes `upsert` with `kind: "trap"` via MCP/CLI instead of directly writing to `memory/*.md`.
 - AC3: Task completion changelog events invoke `append` with `kind: "log"` via MCP/CLI.
 - AC4: The consumer adapter gracefully falls back or reports actionable diagnostics if `spec-memo` MCP server is unreachable.

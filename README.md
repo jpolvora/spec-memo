@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.4.2**.
+**Local working memory for coding agents outside the product repository.** Version **0.4.3**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -467,7 +467,7 @@ Verify: open `http://127.0.0.1:3001/` and `curl http://127.0.0.1:3000/health`.
            ┌──────────────────────────┴──────────────────────────┐
            ▼                                                     ▼
     memo bootstrap                                        memo upsert / append
-  (Returns <8KB brief:                                  (Saves traps, decisions,
+  (Returns token-budgeted brief:                         (Saves traps, decisions,
    Traps, Decisions, Live Slug, Drift)                   specs, plans, logs to vault)
                                       │
                                       │ 3. Query on Demand
@@ -484,7 +484,7 @@ Verify: open `http://127.0.0.1:3001/` and `curl http://127.0.0.1:3000/health`.
    ```bash
    memo bootstrap
    ```
-   Returns a token-budgeted brief (<8 KB) containing top ranked anti-regression traps for relevant files, open architecture decisions, active spec/plan slice, and code drift alerts.
+   Returns a token-budgeted brief (default 8 KB; raise via `~/.spec-memo/config.json` `bootstrap.maxBytes` or `--maxBytes`) containing top ranked anti-regression traps for relevant files, open architecture decisions, active spec/plan slice, and code drift alerts.
 
 2. **During Work (`upsert` & `append`)**:
    - Record newly discovered bug traps or anti-regression lessons:
@@ -602,6 +602,9 @@ Enable automatic private git remote backup on the vault root (`~/.spec-memo/`):
 In `~/.spec-memo/config.json`:
 ```json
 {
+  "bootstrap": {
+    "maxBytes": 8192
+  },
   "vaultGit": {
     "enabled": true,
     "remoteUrl": "git@github.com:my-user/my-private-memory-vault.git",
@@ -609,7 +612,9 @@ In `~/.spec-memo/config.json`:
   }
 }
 ```
-`spec-memo` will automatically stage and commit vault record mutations and sync with your private repository.
+`bootstrap.maxBytes` is the default UTF-8 session brief budget (8192). Increase it to return a larger `memo bootstrap` payload; per-call `--maxBytes` / MCP `maxBytes` still overrides this value.
+
+`spec-memo` will automatically stage and commit vault record mutations and sync with your private repository when `vaultGit.enabled` is true.
 
 ### 5. Promoting Records to Product Documentation (`promote`)
 
@@ -626,7 +631,7 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | Command / Tool | Role | Key Options |
 |---|---|---|
 | `setup` | Configure deployment mode & agent host MCP wiring | `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json` |
-| `bootstrap` | Compile token-budgeted session brief | `--maxBytes`, `--query`, `--path`, `--slug` |
+| `bootstrap` | Compile token-budgeted session brief | `--maxBytes` (overrides `config.json` `bootstrap.maxBytes`, default 8192), `--query`, `--path`, `--slug` |
 | `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` |
 | `get` | Fetch single record by ID or kind+slug | `--id`, `--kind`, `--slug` |
 | `upsert` | Create or update typed memory record | `--kind`, `--title`, `--severity`, `--path-patterns`, `--body` |

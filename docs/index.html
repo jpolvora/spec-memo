@@ -34,7 +34,7 @@
           </svg>
         </div>
         <span>spec-memo</span>
-        <span class="version-badge brand-badge">v0.4.2</span>
+        <span class="version-badge brand-badge">v0.4.3</span>
       </a>
 
       <ul class="nav-links">
@@ -65,7 +65,7 @@
       <div class="hero-pill">
         <span class="hero-pill-dot"></span>
         <span>Local Working Memory for AI Coding Agents</span>
-        <span class="version-badge">v0.4.2</span>
+        <span class="version-badge">v0.4.3</span>
       </div>
 
       <h1 class="hero-title">
@@ -74,7 +74,7 @@
       </h1>
 
       <p class="hero-subtitle">
-        Fast, token-budgeted working memory (sub-8 KB brief) outside your repository.
+        Fast, token-budgeted working memory (default 8 KB brief, configurable) outside your repository.
         Prevents commit pollution, stops repeating bug traps across sessions, and keeps your product clones clean.
       </p>
 
@@ -162,7 +162,7 @@
             </li>
             <li class="compare-item">
               <span class="compare-bullet">✓</span>
-              <div><strong>Token-Budgeted Brief (&lt;8 KB):</strong> <code>bootstrap</code> delivers ranked anti-regression traps, active decisions, and code drift warnings instantly.</div>
+              <div><strong>Token-Budgeted Brief (default 8 KB):</strong> <code>bootstrap</code> delivers ranked anti-regression traps, active decisions, and code drift warnings. Raise the cap in <code>~/.spec-memo/config.json</code> (<code>bootstrap.maxBytes</code>) or per call via <code>maxBytes</code>.</div>
             </li>
             <li class="compare-item">
               <span class="compare-bullet">✓</span>
@@ -448,7 +448,7 @@ memo doctor --fix</code></pre>
 
       <div class="tools-grid" id="tools-grid">
         <!-- 1. bootstrap -->
-        <div class="tool-card" data-name="bootstrap" data-desc="compile token-budgeted brief <8kb traps decisions drift" data-category="mcp" data-tags="session mcp core brief">
+        <div class="tool-card" data-name="bootstrap" data-desc="compile token-budgeted brief default 8kb configurable traps decisions drift" data-category="mcp" data-tags="session mcp core brief">
           <div class="tool-card-top">
             <div class="tool-name-wrap">
               <span class="tool-name">bootstrap</span>
@@ -457,7 +457,7 @@ memo doctor --fix</code></pre>
             <span class="kind-badge plan">Session Start</span>
           </div>
           <p class="tool-desc">
-            Binds repository working directory to project identity; returns a token-budgeted brief (&lt;8 KB) with top-ranked traps, active decisions, live slug, and SHA drift warnings.
+            Binds repository working directory to project identity; returns a token-budgeted brief (default 8 KB; <code>config.json</code> <code>bootstrap.maxBytes</code> or <code>--maxBytes</code>) with top-ranked traps, active decisions, live slug, and SHA drift warnings.
           </p>
           <div class="tool-example-box">
             <code>memo bootstrap --slug feature-auth --path src/auth.ts</code>
@@ -994,7 +994,7 @@ memo doctor --fix</code></pre>
       </ul>
 
       <p class="footer-copy">
-        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.4.2</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
+        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.4.3</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
       </p>
     </div>
   </footer>

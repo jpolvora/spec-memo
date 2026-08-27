@@ -18,7 +18,7 @@ Bind cwd git remote; compile a session brief.
 | `query` | string | Intent filter for traps/decisions |
 | `slug` | string | Live spec/plan slice |
 | `path` | string | Prioritize traps whose pathPatterns match |
-| `maxBytes` | number | UTF-8 budget, default 8192 |
+| `maxBytes` | number | UTF-8 budget; defaults to vault `config.bootstrap.maxBytes` (8192) |
 | `projectId` | string | Override bound project |
 
 Returns: traps (medium+, path/keyword, cap 10), matching accepted decisions, live spec/plan for slug, drift flags, `truncated` notice.

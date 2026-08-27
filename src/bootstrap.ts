@@ -212,7 +212,14 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
   }
 
   // 4. Budget constraints and progressive truncation
-  const budgetBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 8192;
+  // Precedence: per-call maxBytes > vault config.bootstrap.maxBytes > 8192
+  const configuredBudget = config.bootstrap?.maxBytes;
+  const budgetBytes =
+    options.maxBytes && options.maxBytes > 0
+      ? options.maxBytes
+      : configuredBudget && configuredBudget > 0
+        ? configuredBudget
+        : 8192;
   const currentTraps = [...activeTraps];
   const currentDecisions = [...activeDecisions];
 

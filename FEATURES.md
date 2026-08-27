@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.4.2** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.4.3** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -67,7 +67,7 @@ Do not add an eleventh tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
 **Exclude:** log dumps, shipped plan folders, telemetry, other projects (unless `crossProject: true` — Phase 3).
 
-**Budget:** 8 KB UTF-8. Over budget → drop lowest-rank hits, set `truncated: true`.
+**Budget:** Default 8 KB UTF-8 (`~/.spec-memo/config.json` `bootstrap.maxBytes`, overridable per call via `maxBytes`). Over budget → drop lowest-rank hits, set `truncated: true`.
 
 ---
 

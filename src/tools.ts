@@ -61,7 +61,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         query: { type: 'string', description: 'Optional context query or task intent to filter traps/decisions' },
         slug: { type: 'string', description: 'Active feature spec/plan slug' },
         path: { type: 'string', description: 'Focus file path to prioritize matching traps' },
-        maxBytes: { type: 'number', description: 'Maximum UTF-8 payload byte budget (defaults to 8192)' },
+        maxBytes: { type: 'number', description: 'Maximum UTF-8 payload byte budget (defaults to vault config.bootstrap.maxBytes, 8192)' },
         projectId: { type: 'string', description: 'Specific project ID' }
       }
     },

@@ -19,7 +19,7 @@ export class MemoryAdapter {
   constructor(private vaultRoot: string = getVaultRoot()) {}
 
   /**
-   * AC1: Session bootstrap loading path-relevant traps within 8 KB budget
+   * AC1: Session bootstrap loading path-relevant traps within the configured byte budget
    */
   async readMemoryBootstrap(cwd: string, query?: string): Promise<BootstrapBrief> {
     const brief = await compileBootstrapBrief({
