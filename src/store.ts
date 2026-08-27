@@ -254,6 +254,19 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     source: options.source || options.frontmatter?.source || existingRecord?.frontmatter.source || 'agent'
   };
 
+  if (rawFrontmatter.path && typeof rawFrontmatter.path === 'string') {
+    const rawPath = String(rawFrontmatter.path).trim();
+    if (rawPath) {
+      if (!rawFrontmatter.pathPatterns) {
+        rawFrontmatter.pathPatterns = [rawPath];
+      }
+      if (!rawFrontmatter.linkedPaths) {
+        rawFrontmatter.linkedPaths = [rawPath];
+      }
+    }
+    delete (rawFrontmatter as Record<string, unknown>).path;
+  }
+
   if (options.kind === 'trap') {
     const classified = applyTrapClassification(rawFrontmatter, options.body);
     rawFrontmatter.layer = classified.layer;
@@ -290,7 +303,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
   }
 
   // Safety checks: protect product tree (secrets already scanned above)
-  assertNotInProductRoot(filePath, identity.rootPath, identity.isGit);
+  assertNotInProductRoot(filePath, identity.rootPath, identity.isGit, vaultRoot);
 
   // If this record supersedes an existing one, update the older record
   let superseded = false;
@@ -472,7 +485,7 @@ export async function appendEvent(options: AppendOptions): Promise<AppendResult>
   if (options.details) {
     assertNoSecrets(options.details, 'event log details');
   }
-  assertNotInProductRoot(filePath, identity.rootPath, identity.isGit);
+  assertNotInProductRoot(filePath, identity.rootPath, identity.isGit, vaultRoot);
 
   const fileContent = serializeRecord({
     frontmatter: validation.data,
@@ -525,7 +538,7 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
     throw new Error(`Record not found: ${lookup}`);
   }
 
-  assertNotInProductRoot(record.path, identity.rootPath, identity.isGit);
+  assertNotInProductRoot(record.path, identity.rootPath, identity.isGit, vaultRoot);
 
   const id = record.frontmatter.id;
   const kind = record.frontmatter.kind;

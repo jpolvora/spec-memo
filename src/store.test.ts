@@ -437,5 +437,63 @@ describe('Store Engine (upsert and get)', () => {
     assert.equal(trap.frontmatter.status, 'active');
     assert.equal(trap.frontmatter.supersedes, undefined);
   });
+
+  it('should succeed when cwd is inside vaultRoot or vault has .git folder', async () => {
+    // Initialize .git inside tempVault (simulating vaultGit)
+    fs.mkdirSync(path.join(tempVault, '.git'), { recursive: true });
+
+    // Upsert with cwd set to vaultRoot
+    const res = await upsertRecord({
+      cwd: tempVault,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'vault-cwd-trap',
+      frontmatter: {
+        id: 'vault-cwd-trap',
+        title: 'Vault CWD Trap'
+      },
+      body: 'Body from inside vault'
+    });
+
+    assert.ok(res);
+    assert.equal(res.id, 'vault-cwd-trap');
+    assert.ok(fs.existsSync(res.path));
+
+    // Get record with cwd in vault
+    const rec = await getRecord({
+      cwd: tempVault,
+      vaultRoot: tempVault,
+      id: 'vault-cwd-trap'
+    });
+    assert.ok(rec);
+    assert.equal(rec.frontmatter.title, 'Vault CWD Trap');
+  });
+
+  it('should normalize frontmatter.path into pathPatterns and linkedPaths', async () => {
+    const res = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'fm-path-trap',
+      frontmatter: {
+        id: 'fm-path-trap',
+        title: 'Frontmatter Path Trap',
+        path: 'src/modules/auth.ts'
+      } as Record<string, unknown>,
+      body: 'Trap body'
+    });
+
+    assert.ok(res);
+    const rec = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'fm-path-trap'
+    });
+
+    assert.ok(rec);
+    assert.deepEqual(rec.frontmatter.pathPatterns, ['src/modules/auth.ts']);
+    assert.deepEqual(rec.frontmatter.linkedPaths, ['src/modules/auth.ts']);
+    assert.equal(rec.frontmatter.path, undefined);
+  });
 });
 

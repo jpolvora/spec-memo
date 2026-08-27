@@ -174,5 +174,86 @@ describe('Tool Definitions and Execution', () => {
     assert.equal(hit.filepath, undefined);
     assert.equal(hit.path, undefined);
   });
+
+  it('should reject get without id or (kind + slug) with INVALID_ARGUMENTS', async () => {
+    const res = await executeTool('get', {});
+    assert.equal(res.isError, true);
+    if (res.isError) {
+      assert.equal(res.code, 'INVALID_ARGUMENTS');
+      assert.ok(res.error.includes('Either'));
+    }
+
+    const resKindOnly = await executeTool('get', { kind: 'trap' });
+    assert.equal(resKindOnly.isError, true);
+    if (resKindOnly.isError) {
+      assert.equal(resKindOnly.code, 'INVALID_ARGUMENTS');
+    }
+  });
+
+  it('should reject forget without id or (kind + slug) with INVALID_ARGUMENTS', async () => {
+    const res = await executeTool('forget', {});
+    assert.equal(res.isError, true);
+    if (res.isError) {
+      assert.equal(res.code, 'INVALID_ARGUMENTS');
+      assert.ok(res.error.includes('Either'));
+    }
+  });
+
+  it('should reject promote without destination with INVALID_ARGUMENTS', async () => {
+    const res = await executeTool('promote', { id: 'some-id' });
+    assert.equal(res.isError, true);
+    if (res.isError) {
+      assert.equal(res.code, 'INVALID_ARGUMENTS');
+    }
+  });
+
+  it('should reject invalid record kind in search, upsert, append, or get with INVALID_ARGUMENTS', async () => {
+    const upsertRes = await executeTool('upsert', {
+      kind: 'invalid_kind',
+      body: 'test'
+    });
+    assert.equal(upsertRes.isError, true);
+    if (upsertRes.isError) {
+      assert.equal(upsertRes.code, 'INVALID_ARGUMENTS');
+    }
+
+    const searchRes = await executeTool('search', {
+      kinds: ['not_a_kind' as any]
+    });
+    assert.equal(searchRes.isError, true);
+    if (searchRes.isError) {
+      assert.equal(searchRes.code, 'INVALID_ARGUMENTS');
+    }
+  });
+
+  it('should log failed tool executions to error.logs in vault', async () => {
+    await executeTool('get', {}); // causes INVALID_ARGUMENTS
+    const errorLogPath = path.join(tempVault, 'error.logs');
+    assert.ok(fs.existsSync(errorLogPath), 'error.logs should exist in vault');
+    const content = fs.readFileSync(errorLogPath, 'utf8');
+    assert.ok(content.includes('[mcp-tool]'), 'error log should mention [mcp-tool]');
+    assert.ok(content.includes('Tool:        get'), 'error log should mention Tool: get');
+  });
+
+  it('should support path argument in upsert tool and map to pathPatterns and linkedPaths', async () => {
+    const upsertRes = await executeTool('upsert', {
+      kind: 'trap',
+      slug: 'path-param-trap',
+      path: 'src/utils/security.ts',
+      frontmatter: {
+        id: 'trap-path-param',
+        title: 'Trap with Path Param'
+      },
+      body: 'Body content'
+    });
+
+    assert.equal(upsertRes.isError, undefined);
+
+    const getRes = await executeTool('get', { id: 'trap-path-param' });
+    assert.equal(getRes.isError, undefined);
+    const memo = getRes.data as { frontmatter: { pathPatterns?: string[]; linkedPaths?: string[] } };
+    assert.deepEqual(memo.frontmatter.pathPatterns, ['src/utils/security.ts']);
+    assert.deepEqual(memo.frontmatter.linkedPaths, ['src/utils/security.ts']);
+  });
 });
 

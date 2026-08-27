@@ -4,6 +4,7 @@ import * as crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { ProjectIdentity } from './types.js';
 import { getVaultRoot } from './vault.js';
+import { isPathInside } from './safety.js';
 
 /**
  * Normalize any Git remote URL into a canonical hostname/path identifier.
@@ -109,13 +110,21 @@ export function resolveUsableCwd(cwd: string = process.cwd()): string {
 
 /**
  * Find the closest enclosing Git repository root from a start path.
+ * Ignores the spec-memo vault root to avoid confusing vaultGit with a consumer product repo.
  */
-export function findGitRoot(startPath: string): string | null {
+export function findGitRoot(startPath: string, vaultRoot?: string): string | null {
   let current = path.resolve(startPath);
   if (!fs.existsSync(current)) {
     return null;
   }
+  const resolvedVault = path.resolve(vaultRoot || getVaultRoot());
+
   while (true) {
+    // Never treat vaultRoot or any directory inside vaultRoot as a product git repository
+    if (current === resolvedVault || isPathInside(current, resolvedVault)) {
+      return null;
+    }
+
     const gitDir = path.join(current, '.git');
     if (fs.existsSync(gitDir)) {
       return current;
@@ -184,7 +193,7 @@ export function resolveProjectIdentity(
 ): ProjectIdentity {
   const resolvedVaultRoot = options.vaultRoot || getVaultRoot();
   const usableCwd = resolveUsableCwd(cwd);
-  const gitRoot = findGitRoot(usableCwd);
+  const gitRoot = findGitRoot(usableCwd, resolvedVaultRoot);
   const remoteName = options.remoteName || 'origin';
 
   let normalizedRemote: string | null = null;

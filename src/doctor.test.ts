@@ -167,5 +167,24 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     assert.ok(!fs.existsSync(plantedFile));
     assert.equal(doc.pollution.detected, false);
   });
+
+  it('should not flag vault records or plans as pollution when run from within vaultRoot', async () => {
+    // Populate plans and records in vault
+    const vaultPlansDir = path.join(tempVaultRoot, 'projects', 'p1', 'plans');
+    fs.mkdirSync(vaultPlansDir, { recursive: true });
+    fs.writeFileSync(path.join(vaultPlansDir, 'plan-01.md'), '# Vault Plan\n', 'utf8');
+
+    // scanForRepoPollution targeting vaultRoot should return empty
+    const pollution = scanForRepoPollution(tempVaultRoot, tempVaultRoot);
+    assert.equal(pollution.length, 0);
+
+    // runDoctor with cwd = tempVaultRoot should not report pollution
+    const doc = await runDoctor({
+      cwd: tempVaultRoot,
+      vaultRoot: tempVaultRoot
+    });
+    assert.equal(doc.pollution.detected, false);
+    assert.equal(doc.pollution.items.length, 0);
+  });
 });
 

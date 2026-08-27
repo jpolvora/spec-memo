@@ -4,146 +4,231 @@
 
 Transport: MCP stdio (`memo serve`) or SSE (`memo serve --sse`). Tool names match CLI commands 1:1 for the ten core tools (CLI also accepts kebab aliases `check-version` / `install-skills`).
 
-## Ten MCP tools
+## Ten MCP Tools
 
 Further growth needs a PRODUCT.PRD §6 amendment. Do not invent tools outside this list.
 
-### `bootstrap`
+### 1. `bootstrap`
 
-Bind cwd git remote; compile a session brief.
+Bind cwd git remote; check code drift; compile a token-budgeted session brief.
 
-| Arg | Type | Notes |
-|-----|------|--------|
-| `cwd` | string | Product working directory (default current) |
-| `query` | string | Intent filter for traps/decisions |
-| `slug` | string | Live spec/plan slice |
-| `path` | string | Prioritize traps whose pathPatterns match |
-| `maxBytes` | number | UTF-8 byte budget for the entire brief payload |
-| `projectId` | string | Override bound project |
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `cwd` | string | Optional | Product working directory (defaults to current dir) |
+| `query` | string | Optional | Intent filter for traps/decisions |
+| `slug` | string | Optional | Active feature spec/plan slice identifier |
+| `path` | string | Optional | Prioritize traps whose `pathPatterns` match this file |
+| `maxBytes` | number | Optional | UTF-8 byte budget for the entire brief payload (positive integer) |
+| `projectId` | string | Optional | Override bound project |
 
-**Budget precedence** (first match wins): per-call `maxBytes` → vault `config.json` `bootstrap.maxBytes` (8192 default) → hard fallback 8192. Operators raise the vault default for all sessions on a machine; agents pass `maxBytes` per call to override without editing config.
+**Budget precedence** (first match wins): per-call `maxBytes` → vault `config.json` `bootstrap.maxBytes` (8192 default) → hard fallback 8192.
 
-Over budget → drop lowest-rank hits, set `truncated: true`. Retry with a higher `maxBytes` when critical context was dropped.
+Over budget → drop lowest-rank hits, set `truncated: true`. Retry with a higher `maxBytes` (e.g. 16384) when critical context was dropped.
 
 Returns: traps (medium+, path/keyword, cap 10), matching accepted decisions, live spec/plan for slug, drift flags, `truncated` notice.
 
 CLI:
-
 ```bash
 memo bootstrap --slug feature-auth --path src/auth.ts
 memo bootstrap --maxBytes 16384 --path src/auth.ts
 ```
 
-### `search`
+---
 
-FTS5 retrieval. Default excludes `scratch`, `state`, `log`, `review` unless `kinds` or `includeScratch`.
+### 2. `search`
 
-| Arg | Type | Notes |
-|-----|------|--------|
-| `query` | string | FTS query |
-| `kinds` | string[] | `trap` `decision` `spec` `plan` `state` `log` `scratch` `review` |
-| `status` | string | `active` `paused` `shipped` `superseded` `archived` |
-| `tags` | string[] | |
-| `path` | string | pathPatterns glob match |
-| `includeScratch` | boolean | |
-| `crossProject` | boolean | All bound projects |
-| `projectId` | string | |
-| `limit` | number | |
-| `sort` | enum | `relevance` (default) \| `occurrences` \| `updated` |
-| `cwd` | string | |
+Filtered SQLite FTS5 full-text retrieval. Default excludes `scratch`, `state`, `log`, `review` unless specified in `kinds` or `includeScratch: true`.
 
-CLI: `memo search "database lock" --kind trap --path src/db/client.ts --sort occurrences`
-
-### `get`
-
-One record by `id` **or** `kind`+`slug`.
-
-CLI: `memo get --id trap-sqlite-wal-lock`
-
-### `upsert`
-
-Write/update. Required: `kind`, `body`. Optional: `slug`, `frontmatter` object.
-
-Frontmatter commonly used: `id`, `title`, `severity` (`low`/`medium`/`high`/`critical`), `pathPatterns`, `tags`, `layer`, `module`, `occurrences`, `lastSeen`, `supersedes`, `linkedPaths`, `verifiedAtSha`, `status`, `source`.
-
-Schema failure → error, no write. Secret-shaped bodies are rejected (PEM, `api_key=`, env-file patterns). Omit secrets; spec-memo does not store a redacted copy.
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `query` | string | Optional | Search term or FTS query |
+| `kinds` | string[] | Optional | Array of: `trap`, `decision`, `spec`, `plan`, `state`, `log`, `scratch`, `review` |
+| `status` | string | Optional | Enum: `active`, `paused`, `shipped`, `superseded`, `archived` |
+| `tags` | string[] | Optional | Array of tags to filter |
+| `path` | string | Optional | `pathPatterns` glob match (e.g. `src/db/client.ts`) |
+| `includeScratch` | boolean | Optional | Include scratch records (defaults to `false`) |
+| `crossProject` | boolean | Optional | Search across all bound projects in vault |
+| `projectId` | string | Optional | Target specific project ID |
+| `limit` | number | Optional | Max results to return (positive integer) |
+| `sort` | string | Optional | Enum: `relevance` (default), `occurrences`, `updated` |
+| `cwd` | string | Optional | Product working directory |
 
 CLI:
+```bash
+memo search "database lock" --kind trap --path src/db/client.ts --sort occurrences
+```
 
+---
+
+### 3. `get`
+
+Read one record by unique `id` **or** `kind` + `slug`.
+
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | Conditional | Unique record ID (e.g. `trap-sqlite-wal-lock`). Required if `kind`+`slug` omitted. |
+| `kind` | string | Conditional | Record kind enum. Required if `slug` provided without `id`. |
+| `slug` | string | Conditional | Record slug identifier. Required if `kind` provided without `id`. |
+| `cwd` | string | Optional | Product working directory |
+| `projectId` | string | Optional | Specific project ID |
+
+*Pre-validation rule:* Either `id` OR (`kind` AND `slug`) must be provided, or `INVALID_ARGUMENTS` is returned.
+
+CLI:
+```bash
+memo get --id trap-sqlite-wal-lock
+memo get --kind trap --slug sqlite-wal-lock
+```
+
+---
+
+### 4. `upsert`
+
+Write or update a memory record (trap, decision, spec, plan, state, review, scratch).
+
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `kind` | string | **Required** | Enum: `trap`, `decision`, `spec`, `plan`, `state`, `log`, `scratch`, `review` |
+| `body` | string | **Required** | Non-empty Markdown content (use `DO NOT` / `INSTEAD DO` for traps) |
+| `slug` | string | Optional | Identifier slug (auto-derived if omitted) |
+| `frontmatter` | object | Optional | Metadata (see [`RECORDS.md`](RECORDS.md) for full schema) |
+| `cwd` | string | Optional | Product working directory |
+| `projectId` | string | Optional | Specific project ID |
+
+Frontmatter fields: `title`, `severity` (`low`/`medium`/`high`/`critical`), `layer` (`application`/`domain`/`web`/`infrastructure`/`tests`/`devops`/`other`), `module`, `pathPatterns` (string[]), `tags` (string[]), `occurrences` (integer >= 1), `supersedes` (string), `linkedPaths` (string[]), `verifiedAtSha` (string).
+
+Secret-shaped bodies are rejected with `SAFETY_VIOLATION` (PEM, `api_key=`, tokens).
+
+CLI:
 ```bash
 memo upsert --kind trap --title "Close SQLite DB before unlink on Windows" --severity critical --path-patterns "src/**/*.ts" --body "..."
 ```
 
-### `append`
+---
 
-Write-only event. Required: `event`. Optional: `kind` (default `log`), `details`.
+### 5. `append`
 
-CLI: `memo append --event "Successfully executed slice-17 tests"`
+Write-only event or log entry.
 
-### `forget`
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `event` | string | **Required** | Non-empty event description or log text |
+| `kind` | string | Optional | Log kind (defaults to `log`) |
+| `details` | object | Optional | Structured JSON event context |
+| `cwd` | string | Optional | Product working directory |
+| `projectId` | string | Optional | Specific project ID |
 
-Soft-archive by default. `purge: true` permanently deletes — only with explicit user confirm. Traps archive unless purge is confirmed.
+CLI:
+```bash
+memo append --event "Successfully executed slice-17 tests"
+```
 
-CLI: `memo forget --id scratch-temp-notes --purge`
+---
 
-### `gc`
+### 6. `forget`
 
-TTL (scratch 7d, review 14d), compact `status=shipped` plans, monthly log roll-up, rebuild FTS.
+Soft-archive by default (`status: "archived"`). Permanent deletion (`purge: true`) requires explicit user confirmation.
 
-| Arg | Type | Notes |
-|-----|------|--------|
-| `dryRun` | boolean | Report only |
-| `projectId` | string | Scope |
-| `cwd` | string | |
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | Conditional | Unique record ID. Required if `kind`+`slug` omitted. |
+| `kind` | string | Conditional | Record kind enum. Required if `slug` provided without `id`. |
+| `slug` | string | Conditional | Record slug identifier. Required if `kind` provided without `id`. |
+| `purge` | boolean | Optional | `true` for permanent delete; `false` for soft-archive (default `false`) |
+| `cwd` | string | Optional | Product working directory |
+| `projectId` | string | Optional | Specific project ID |
 
-CLI: `memo gc --dry-run`
+*Pre-validation rule:* Either `id` OR (`kind` AND `slug`) must be provided.
 
-### `promote`
+CLI:
+```bash
+memo forget --id scratch-temp-notes --purge
+```
 
-Copy into the **product** tree. **Default deny** without `destination` inside the product root (not under `.git/`).
+---
 
-| Arg | Type | Notes |
-|-----|------|--------|
-| `destination` | string | Required, product-relative |
-| `id` / `kind`+`slug` | | Record to copy; omit `id` when `format=skill` |
-| `format` | enum | `raw` \| `adr` \| `madr` \| `skill` |
-| `force` | boolean | Overwrite existing dest |
-| `limit` | number | Top N traps for `format=skill` (default 10) |
+### 7. `gc`
 
-CLI: `memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md`
+Apply TTL retention (7d scratch, 14d review), compact shipped plans, roll up monthly logs, and rebuild FTS5 index.
 
-When `format=skill` and `id` is omitted, ranking uses the same full-project universe as `memo rank`. If zero active traps rank, fail closed (do not write a header-only `SKILL.md`).
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `dryRun` | boolean | Optional | Set `true` to preview without modifying files (defaults to `false`) |
+| `projectId` | string | Optional | Specific project ID |
+| `cwd` | string | Optional | Product working directory |
 
-### `check_version`
+CLI:
+```bash
+memo gc --dry-run
+memo gc
+```
 
-Compare running package version to npm `latest`. Soft-fails offline (`updateAvailable: "unknown"`, `latest: null`).
+---
 
-| Arg | Type | Notes |
-|-----|------|--------|
-| _(none)_ | | No inputs |
+### 8. `promote`
+
+Copy a vault record or top ranked traps into the **product** tree. **Default deny** without a valid product-relative `destination`.
+
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `destination` | string | **Required** | Product-relative destination path (e.g. `docs/adr/001.md` or `.agents/skills/ws-recurrence/SKILL.md`) |
+| `id` | string | Optional | Record ID to promote. Omit when `format: "skill"` to export ranked traps. |
+| `kind` | string | Optional | Record kind (when using `kind`+`slug`) |
+| `slug` | string | Optional | Record slug (when using `kind`+`slug`) |
+| `format` | string | Optional | Enum: `raw`, `adr`, `madr`, `skill` |
+| `force` | boolean | Optional | Overwrite existing destination file |
+| `limit` | number | Optional | Top N traps when `format: "skill"` and `id` omitted (default 10) |
+| `cwd` | string | Optional | Product working directory |
+
+*Safety rule:* Destination must NOT be absolute, outside the product root, or under `.git/`.
+
+CLI:
+```bash
+memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md
+```
+
+---
+
+### 9. `check_version`
+
+Compare running package version to npm `latest`. Soft-fails offline (`updateAvailable: "unknown"`, `latest: null`, `source: "offline"`).
+
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| _(none)_ | | | No arguments |
 
 Returns: `current`, `latest`, `updateAvailable` (`true` \| `false` \| `"unknown"`), `source` (`npm` \| `offline`).
 
-CLI: `memo check-version --json`
+CLI:
+```bash
+memo check-version --json
+```
 
-### `install_skills`
+---
 
-Copy packaged runtime skill(s) into a consumer product tree. Default skill: `ws-memo`. Default-deny outside product root / vault root.
+### 10. `install_skills`
 
-| Arg | Type | Notes |
-|-----|------|--------|
-| `productRoot` | string | Preferred consumer root |
-| `cwd` | string | Resolve product root when `productRoot` omitted |
-| `skills` | string[] | Default `["ws-memo"]`; unknown ids fail closed |
-| `skillsRoot` | string | Default `.agents/skills` |
-| `force` | boolean | Overwrite when destination differs |
+Install packaged spec-memo runtime skill(s) (default `ws-memo`) into a consumer product tree.
 
-CLI: `memo install-skills --product-root <path> [--skill ws-memo] [--force] [--json]`
+| Arg | Type | Required | Notes |
+|---|---|---|---|
+| `productRoot` | string | Optional | Preferred consumer product repository root |
+| `cwd` | string | Optional | Working directory to resolve product root when omitted |
+| `skills` | string[] | Optional | Skill IDs to install (default `["ws-memo"]`) |
+| `skillsRoot` | string | Optional | Relative skills directory (default `.agents/skills`) |
+| `force` | boolean | Optional | Overwrite destination when it differs |
 
-## CLI-only (not MCP tools)
+CLI:
+```bash
+memo install-skills --product-root <path> [--skill ws-memo] [--force] [--json]
+```
+
+---
+
+## CLI-only Extras (Not MCP Tools)
 
 | Command | Job |
-|---------|-----|
+|---|---|
 | `memo setup` | Configure deployment mode (`local`, `hybrid`, `remote`) and host MCP snippets (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo serve` | Stdio MCP (default). In remote mode, proxies over stdio to remote daemon. `--sse` HTTP SSE on `--port` (default 3000). `--status-port` (default 3001). `--no-status`. `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
 | `memo canvas` | Graph UI default port 4100. `--project`, `--host`, `--json`. (Not available in remote mode). |
@@ -155,49 +240,25 @@ CLI: `memo install-skills --product-root <path> [--skill ws-memo] [--force] [--j
 | `memo sync-vault <target>` | Peer vault delta sync. `--two-way` `--dry-run`. (Not available in remote mode). |
 | `memo export-vault` / `memo import-vault` | Portable archive; optional AES-256-GCM. Prefer `SPEC_MEMO_VAULT_PASSWORD`. (Not available in remote mode). |
 
-Global: `--json` on stdout; help/errors on stderr. `--vaultRoot` / `$SPEC_MEMO_ROOT` (default `~/.spec-memo`).
+---
 
-### Deployment Modes
+## Deployment Modes
 
 - **`local` (default):** Everything stored and queried directly on the local machine under `~/.spec-memo/`. Zero network requirements.
 - **`hybrid`:** Local vault is authoritative; transparently pulls deltas on `bootstrap` and debounces pushes on mutating operations. Manual sync via `memo sync`. Fails open if remote daemon is unreachable.
 - **`remote`:** Local agent hosts connect to local `memo serve` stdio proxy, which forwards all 10 tools to a shared remote daemon. Local disk stores no memory records. Fails closed if remote daemon is unreachable.
 
-### Default ports
+### Default Ports
 
 | Service | Port | Start |
-|---------|------|--------|
+|---|---|---|
 | MCP SSE | 3000 | `memo serve --sse` |
 | Status monitor | 3001 | co-starts with `--sse` unless `--no-status` |
 | Canvas | 4100 | `memo canvas` |
 
-Status page: vault list, health, live activity (`GET /api/events/stream`). Read-only.
+---
 
-## Host registration
+## Error Logs & Protection
 
-All host agent environments (Cursor, VS Code, OpenCode, Antigravity, Claude Desktop) run `memo serve` locally over stdio. Generate or write config via:
-
-```bash
-memo setup --host cursor --print-mcp
-memo setup --host cursor --write-mcp
-```
-
-Example Cursor `~/.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "spec-memo": {
-      "command": "memo",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-## Explicit non-goals
-
-- Extra MCP tool to list vault files (use `search`).
-- Auto-rewrite specs on code change (drift is a flag).
-- Auto-promote into README.
-- Bundling the vault inside the product clone.
+Unexpected errors, invalid argument rejections, and server diagnostics are logged to `<vaultRoot>/error.logs` (or `SPEC_MEMO_ERROR_LOG`).
+MCP server connections are crash-proof: unhandled tool exceptions return `{ isError: true, error: ..., code: "..." }` and do not drop the MCP connection.

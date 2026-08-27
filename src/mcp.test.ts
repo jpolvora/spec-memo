@@ -178,6 +178,16 @@ describe('MCP Server Integration', () => {
     const gcData = JSON.parse(gcContent[0].text as string);
     assert.equal(gcData.dryRun, true);
 
+    // Test parameter pre-validation failure returns isError over MCP without crash
+    const invalidGetRes = await client.callTool({
+      name: 'get',
+      arguments: {}
+    });
+    assert.equal(invalidGetRes.isError, true);
+    const errContent = invalidGetRes.content as Array<{ type: string; text?: string }>;
+    const errData = JSON.parse(errContent[0].text as string);
+    assert.equal(errData.code, 'INVALID_ARGUMENTS');
+
     await client.close();
     await server.close();
   });

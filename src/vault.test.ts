@@ -16,6 +16,7 @@ import {
   RECORD_SUBDIRS
 } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
+import { getPackageVersion } from './version.js';
 
 describe('Vault Management & Project Binding', () => {
   let tempVaultRoot: string;
@@ -30,7 +31,7 @@ describe('Vault Management & Project Binding', () => {
 
   it('should initialize vault structure and default config.json without touching home dir', () => {
     const config = ensureVaultStructure(tempVaultRoot);
-    assert.equal(config.version, '0.4.5');
+    assert.equal(config.version, getPackageVersion());
     assert.equal(config.defaultRemote, 'origin');
     assert.equal(config.bootstrap.maxBytes, 8192);
 

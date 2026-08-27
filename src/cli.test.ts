@@ -55,6 +55,33 @@ describe('CLI Integration', () => {
     }
   });
 
+  it('should print package version with --version and -v', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      const code1 = await runCli(['--version']);
+      assert.equal(code1, 0);
+      assert.ok(capturedLogs.trim().match(/^\d+\.\d+\.\d+/));
+
+      capturedLogs = '';
+      const code2 = await runCli(['-v']);
+      assert.equal(code2, 0);
+      assert.ok(capturedLogs.trim().match(/^\d+\.\d+\.\d+/));
+
+      capturedLogs = '';
+      const code3 = await runCli(['--version', '--json']);
+      assert.equal(code3, 0);
+      const parsed = JSON.parse(capturedLogs.trim());
+      assert.ok(parsed.version && parsed.version.match(/^\d+\.\d+\.\d+/));
+    } finally {
+      console.log = origLog;
+    }
+  });
+
   it('should execute memo gc with text and json outputs', async () => {
     let capturedLogs = '';
     const origLog = console.log;

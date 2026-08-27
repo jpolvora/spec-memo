@@ -4,9 +4,12 @@ import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { ProjectIdentity, ProjectMetadata, VaultConfig } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
+import { getPackageVersion } from './version.js';
 
 export const DEFAULT_VAULT_CONFIG: VaultConfig = {
-  version: '0.4.5',
+  get version() {
+    return getPackageVersion();
+  },
   defaultRemote: 'origin',
   enableTelemetry: true,
   telemetry: {
