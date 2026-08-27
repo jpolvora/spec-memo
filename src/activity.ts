@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { redactAbsolutePathsInText, redactSecretsInPayload } from "./safety.js";
+import { ClientType, VaultClientInfo } from "./types.js";
 
 export type ActivityEventType = "http" | "tool" | "system";
 export type ActivityEventKind = "read" | "write" | "meta";
@@ -18,6 +19,10 @@ export interface ActivityEvent {
   path?: string;
   statusCode?: number;
   projectId?: string;
+  clientIp?: string;
+  clientName?: string;
+  clientType?: ClientType;
+  operation?: string;
 }
 
 export type ActivityCaptureInput = {
@@ -31,6 +36,10 @@ export type ActivityCaptureInput = {
   path?: string;
   statusCode?: number;
   projectId?: string;
+  clientIp?: string;
+  clientName?: string;
+  clientType?: ClientType;
+  operation?: string;
 };
 
 export interface ActivityFilter {
@@ -41,6 +50,10 @@ export interface ActivityBus {
   capture(input: ActivityCaptureInput): ActivityEvent | null;
   list(filter?: ActivityFilter): ActivityEvent[];
   subscribe(listener: (event: ActivityEvent) => void, filter?: ActivityFilter): () => void;
+  registerClient(info: Partial<VaultClientInfo> & { ip: string }): VaultClientInfo;
+  updateClientActivity(id: string, update: { operation?: string; projectId?: string; clientName?: string }): void;
+  disconnectClient(id: string): void;
+  listClients(): VaultClientInfo[];
   close(): void;
   readonly startedAt: number;
   readonly capacity: number;
@@ -58,7 +71,11 @@ function sanitizeEvent(input: ActivityCaptureInput): ActivityCaptureInput {
     tool: input.tool ? sanitizeString(input.tool) : undefined,
     method: input.method ? sanitizeString(input.method) : undefined,
     path: input.path ? sanitizeString(input.path) : undefined,
-    projectId: input.projectId ? sanitizeString(input.projectId) : undefined
+    projectId: input.projectId ? sanitizeString(input.projectId) : undefined,
+    clientIp: input.clientIp ? sanitizeString(input.clientIp) : undefined,
+    clientName: input.clientName ? sanitizeString(input.clientName) : undefined,
+    clientType: input.clientType,
+    operation: input.operation ? sanitizeString(input.operation) : undefined
   };
 }
 
@@ -72,6 +89,7 @@ export function eventMatchesProjectFilter(event: ActivityEvent, projectId?: stri
 export function createActivityBus(options: { capacity?: number } = {}): ActivityBus {
   const capacity = options.capacity ?? 200;
   const buffer: ActivityEvent[] = [];
+  const clients = new Map<string, VaultClientInfo>();
   const subscribers = new Set<{
     listener: (event: ActivityEvent) => void;
     filter?: ActivityFilter;
@@ -116,6 +134,10 @@ export function createActivityBus(options: { capacity?: number } = {}): Activity
       if (clean.path) event.path = clean.path;
       if (clean.statusCode != null) event.statusCode = clean.statusCode;
       if (clean.projectId) event.projectId = clean.projectId;
+      if (clean.clientIp) event.clientIp = clean.clientIp;
+      if (clean.clientName) event.clientName = clean.clientName;
+      if (clean.clientType) event.clientType = clean.clientType;
+      if (clean.operation) event.operation = clean.operation;
 
       buffer.push(event);
       if (buffer.length > capacity) {
@@ -134,9 +156,53 @@ export function createActivityBus(options: { capacity?: number } = {}): Activity
         subscribers.delete(entry);
       };
     },
+    registerClient(info: Partial<VaultClientInfo> & { ip: string }): VaultClientInfo {
+      const now = new Date().toISOString();
+      const id = info.id || `${info.ip}::${info.clientName || 'client'}`;
+      const existing = clients.get(id);
+      const updated: VaultClientInfo = {
+        id,
+        ip: info.ip,
+        clientName: info.clientName || existing?.clientName || 'MCP Client',
+        clientType: info.clientType || existing?.clientType || 'direct-remote',
+        userAgent: info.userAgent || existing?.userAgent,
+        projectId: info.projectId || existing?.projectId,
+        lastOperation: info.lastOperation || existing?.lastOperation,
+        connectedAt: existing?.connectedAt || now,
+        lastSeenAt: now,
+        active: info.active !== false,
+        requestCount: (existing?.requestCount || 0) + 1
+      };
+      clients.set(id, updated);
+      return updated;
+    },
+    updateClientActivity(id: string, update: { operation?: string; projectId?: string; clientName?: string }): void {
+      const existing = clients.get(id);
+      if (existing) {
+        if (update.operation) existing.lastOperation = update.operation;
+        if (update.projectId) existing.projectId = update.projectId;
+        if (update.clientName) existing.clientName = update.clientName;
+        existing.lastSeenAt = new Date().toISOString();
+        existing.requestCount = (existing.requestCount || 0) + 1;
+        existing.active = true;
+      }
+    },
+    disconnectClient(id: string): void {
+      const existing = clients.get(id);
+      if (existing) {
+        existing.active = false;
+        existing.lastSeenAt = new Date().toISOString();
+      }
+    },
+    listClients(): VaultClientInfo[] {
+      return Array.from(clients.values()).sort(
+        (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+      );
+    },
     close(): void {
       closed = true;
       subscribers.clear();
+      clients.clear();
     }
   };
 }

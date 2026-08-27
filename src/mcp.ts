@@ -5,7 +5,7 @@ import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 import { ActivityBus } from './activity.js';
 import { resolveProjectIdentity } from './identity.js';
 import { ensureVaultStructure, getVaultRoot } from './vault.js';
-import { ToolName, ToolResponse } from './types.js';
+import { ToolName, ToolResponse, ClientType } from './types.js';
 import { startRemoteMcpProxyServer } from './mcp-proxy.js';
 import { logErrorReport } from './error-logger.js';
 import { getPackageVersion } from './version.js';
@@ -73,6 +73,10 @@ export function createMcpServer(opts: {
   defaultVaultRoot?: string;
   activityBus?: ActivityBus;
   errorLogPath?: string;
+  clientIp?: string;
+  clientName?: string;
+  clientType?: ClientType;
+  clientId?: string;
 } = {}): Server {
   const server = new Server(
     {
@@ -109,6 +113,16 @@ export function createMcpServer(opts: {
     try {
       const response = await executeTool(name, resolvedArgs);
       const durationMs = Date.now() - started;
+      const projId = resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot);
+      const summary = buildToolSummary(toolName, argRecord, response);
+
+      if (opts.activityBus && opts.clientId) {
+        opts.activityBus.updateClientActivity(opts.clientId, {
+          operation: `mcp:${toolName}`,
+          projectId: projId,
+          clientName: opts.clientName
+        });
+      }
 
       if (opts.activityBus && TOOL_DEFINITIONS[toolName]) {
         const kind = READ_TOOLS.has(toolName) ? 'read' : WRITE_TOOLS.has(toolName) ? 'write' : 'meta';
@@ -117,9 +131,13 @@ export function createMcpServer(opts: {
           kind,
           ok: !response.isError,
           durationMs,
-          summary: buildToolSummary(toolName, argRecord, response),
+          summary,
           tool: toolName,
-          projectId: resolveToolProjectId(toolName, argRecord, opts.defaultVaultRoot)
+          operation: `mcp:${toolName}`,
+          projectId: projId,
+          clientIp: opts.clientIp,
+          clientName: opts.clientName,
+          clientType: opts.clientType
         });
       }
 

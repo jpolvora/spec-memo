@@ -8,7 +8,7 @@ import {
   TelemetryEventInput,
   VaultConfig
 } from './types.js';
-import { getVaultRoot } from './vault.js';
+import { getVaultRoot, withVaultLockSync } from './vault.js';
 import { sanitizeToolOutput } from './safety.js';
 
 export interface TelemetryOptions {
@@ -25,12 +25,20 @@ export const DEFAULT_TELEMETRY_CONFIG: Required<TelemetryConfig> = {
   maxQueueSize: 50
 };
 
-const enabledCache = new Map<string, boolean>();
+function configMtime(root: string): number {
+  try {
+    return fs.statSync(path.join(root, 'config.json')).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+const enabledCache = new Map<string, { enabled: boolean; mtime: number }>();
 
 /**
  * Checks whether telemetry is enabled for the vault.
  * Precedence: SPEC_MEMO_ENABLE_TELEMETRY env var > config.json enableTelemetry > true (default).
- * Caches config.json read per vaultRoot to eliminate repeated synchronous disk I/O on the hot path.
+ * Caches config.json read per vaultRoot with mtime-based invalidation to eliminate repeated synchronous disk I/O on the hot path while supporting hot config edits.
  */
 export function isTelemetryEnabled(vaultRoot?: string): boolean {
   if (process.env.SPEC_MEMO_ENABLE_TELEMETRY !== undefined) {
@@ -44,9 +52,10 @@ export function isTelemetryEnabled(vaultRoot?: string): boolean {
   }
 
   const root = getVaultRoot(vaultRoot);
+  const mtime = configMtime(root);
   const cached = enabledCache.get(root);
-  if (cached !== undefined) {
-    return cached;
+  if (cached && cached.mtime === mtime) {
+    return cached.enabled;
   }
 
   const configPath = path.join(root, 'config.json');
@@ -61,7 +70,7 @@ export function isTelemetryEnabled(vaultRoot?: string): boolean {
       // ignore parse errors and fallback to true
     }
   }
-  enabledCache.set(root, enabled);
+  enabledCache.set(root, { enabled, mtime });
   return enabled;
 }
 
@@ -276,22 +285,24 @@ export class TelemetryRecorder {
   private writeBatch(batch: TelemetryEvent[]): void {
     if (batch.length === 0) return;
 
-    // Group events by UTC date (YYYY-MM-DD)
-    const byDate = new Map<string, TelemetryEvent[]>();
-    for (const ev of batch) {
-      const d = (ev.timestamp && ev.timestamp.length >= 10) ? ev.timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
-      const list = byDate.get(d) || [];
-      list.push(ev);
-      byDate.set(d, list);
-    }
+    withVaultLockSync(this.vaultRoot, () => {
+      // Group events by UTC date (YYYY-MM-DD)
+      const byDate = new Map<string, TelemetryEvent[]>();
+      for (const ev of batch) {
+        const d = (ev.timestamp && ev.timestamp.length >= 10) ? ev.timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
+        const list = byDate.get(d) || [];
+        list.push(ev);
+        byDate.set(d, list);
+      }
 
-    for (const [dateStr, events] of byDate.entries()) {
-      const payloadLines = events.map((e) => JSON.stringify(e)).join('\n') + '\n';
-      const buf = Buffer.from(payloadLines, 'utf8');
-      const { filePath } = this.resolveCurrentPartFile(dateStr, buf.length);
-      fs.appendFileSync(filePath, buf);
-      this.currentFileBytes += buf.length;
-    }
+      for (const [dateStr, events] of byDate.entries()) {
+        const payloadLines = events.map((e) => JSON.stringify(e)).join('\n') + '\n';
+        const buf = Buffer.from(payloadLines, 'utf8');
+        const { filePath } = this.resolveCurrentPartFile(dateStr, buf.length);
+        fs.appendFileSync(filePath, buf);
+        this.currentFileBytes += buf.length;
+      }
+    });
   }
 
   /**

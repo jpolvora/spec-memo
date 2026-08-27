@@ -248,9 +248,11 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
   const started = performance.now();
   const vaultRoot = options.vaultRoot || getVaultRoot();
   let projectId: string | undefined;
+  let succeeded = false;
+  let errorCode: string | undefined;
 
   try {
-    return await withVaultLock(vaultRoot, async () => {
+    const result = await withVaultLock(vaultRoot, async () => {
       const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
       projectId = options.projectId || identity.projectId;
       const dryRun = Boolean(options.dryRun);
@@ -409,18 +411,10 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
       }
     };
     });
+    succeeded = true;
+    return result;
   } catch (err: unknown) {
-    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
-    recordTelemetry({
-      category: 'curator_gc',
-      operation: 'memo_gc',
-      durationMs,
-      success: false,
-      errorCode: err instanceof Error ? err.name : 'GC_FAILED',
-      projectId,
-      vaultRoot,
-      metadata: { dryRun: Boolean(options.dryRun) }
-    });
+    errorCode = err instanceof Error ? err.name : 'GC_FAILED';
     throw err;
   } finally {
     const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
@@ -428,7 +422,8 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
       category: 'curator_gc',
       operation: 'memo_gc',
       durationMs,
-      success: true,
+      success: succeeded,
+      errorCode,
       projectId,
       vaultRoot,
       metadata: { dryRun: Boolean(options.dryRun) }

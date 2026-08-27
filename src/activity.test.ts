@@ -144,4 +144,40 @@ test("Activity Event Bus", async (t) => {
     assert.strictEqual(eventMatchesProjectFilter({} as any, "a"), true);
     assert.strictEqual(eventMatchesProjectFilter({ projectId: "b" } as any, "a"), false);
   });
+
+  await t.test("tracks and updates vault clients", () => {
+    const bus = createActivityBus();
+    const client = bus.registerClient({
+      id: "client-1",
+      ip: "192.168.1.50",
+      clientName: "Cursor IDE",
+      clientType: "direct-remote",
+      projectId: "spec-memo",
+      lastOperation: "bootstrap"
+    });
+
+    assert.strictEqual(client.id, "client-1");
+    assert.strictEqual(client.ip, "192.168.1.50");
+    assert.strictEqual(client.clientName, "Cursor IDE");
+    assert.strictEqual(client.clientType, "direct-remote");
+    assert.strictEqual(client.active, true);
+    assert.strictEqual(client.requestCount, 1);
+
+    bus.updateClientActivity("client-1", {
+      operation: "mcp:upsert",
+      projectId: "spec-memo"
+    });
+
+    const list = bus.listClients();
+    assert.strictEqual(list.length, 1);
+    assert.strictEqual(list[0].lastOperation, "mcp:upsert");
+    assert.strictEqual(list[0].requestCount, 2);
+    assert.strictEqual(list[0].active, true);
+
+    bus.disconnectClient("client-1");
+    const afterDisconnect = bus.listClients();
+    assert.strictEqual(afterDisconnect[0].active, false);
+
+    bus.close();
+  });
 });

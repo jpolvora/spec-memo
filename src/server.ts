@@ -6,8 +6,9 @@ import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, createActivityBus } from "./activity.js";
 import { startStatusServer, StatusServerInstance } from "./status.js";
 import { exportChangeset, applyChangeset } from "./sync.js";
+import { ClientType } from "./types.js";
 import { logErrorReport } from "./error-logger.js";
-import { recordTelemetry } from "./telemetry.js";
+import { recordTelemetry, flushTelemetrySync, closeTelemetry } from "./telemetry.js";
 
 function readJsonBody(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -59,22 +60,105 @@ export interface SseServerInstance {
   close: () => Promise<void>;
 }
 
+export function getClientIp(req: http.IncomingMessage): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.socket.remoteAddress || "127.0.0.1";
+}
+
+export function parseClientInfo(
+  req: http.IncomingMessage,
+  pathname?: string
+): { clientName: string; clientType: ClientType } {
+  const customClient = (req.headers["x-spec-memo-client"] || req.headers["x-client-name"]) as string | undefined;
+  const modeHeader = req.headers["x-spec-memo-mode"] as string | undefined;
+  const rawUa = (req.headers["user-agent"] || "").trim();
+  const ua = rawUa.toLowerCase();
+
+  if (customClient) {
+    const isProxy = modeHeader === "remote" || customClient.includes("proxy");
+    return {
+      clientName: customClient,
+      clientType: isProxy ? "proxy" : modeHeader === "hybrid" ? "cli" : "direct-remote"
+    };
+  }
+
+  if (ua.includes("spec-memo-remote-proxy") || ua.includes("proxy")) {
+    return { clientName: "spec-memo-remote-proxy", clientType: "proxy" };
+  }
+  if (ua.includes("spec-memo-hybrid-sync") || ua.includes("hybrid-sync")) {
+    return { clientName: "spec-memo-hybrid-sync", clientType: "cli" };
+  }
+  if (ua.includes("cursor")) {
+    return { clientName: "Cursor IDE", clientType: "direct-remote" };
+  }
+  if (ua.includes("claude")) {
+    return { clientName: "Claude Desktop", clientType: "direct-remote" };
+  }
+  if (ua.includes("antigravity")) {
+    return { clientName: "Antigravity IDE", clientType: "direct-remote" };
+  }
+  if (ua.includes("vscode")) {
+    return { clientName: "VS Code", clientType: "direct-remote" };
+  }
+  if (ua.includes("mozilla") || ua.includes("chrome") || ua.includes("safari")) {
+    return { clientName: "Web Browser", clientType: "web" };
+  }
+  if (
+    ua.includes("curl") ||
+    ua.includes("postman") ||
+    ua.includes("insomnia") ||
+    ua.includes("node-fetch") ||
+    ua.includes("undici")
+  ) {
+    return { clientName: rawUa.split("/")[0] || "CLI/HTTP", clientType: "cli" };
+  }
+  return { clientName: rawUa ? rawUa.slice(0, 50) : "MCP Client", clientType: "direct-remote" };
+}
+
+export function resolveRequestOperation(method: string, pathname: string): string {
+  if (pathname === "/health") return "health_check";
+  if (pathname === "/sse" || pathname === "/") return "sse_connect";
+  if (pathname === "/message") return "mcp_message";
+  if (pathname === "/api/sync/pull") return "sync_pull";
+  if (pathname === "/api/sync/push") return "sync_push";
+  if (pathname === "/api/sync") return "sync_bidirectional";
+  if (pathname.startsWith("/api/vaults/export")) return "vault_export";
+  if (pathname.startsWith("/api/vaults/import")) return "vault_import";
+  if (pathname.startsWith("/api/")) return "status_api";
+  return `${method} ${pathname}`;
+}
+
 function captureHttpEvent(
   bus: ActivityBus,
   method: string,
   path: string,
   statusCode: number,
-  durationMs: number
+  durationMs: number,
+  clientIp?: string,
+  clientName?: string,
+  clientType?: ClientType,
+  operation?: string,
+  projectId?: string
 ): void {
+  const opLabel = operation || `${method} ${path}`;
+  const clientLabel = clientName ? ` [${clientName}]` : "";
   bus.capture({
     type: "http",
     kind: "meta",
     ok: statusCode < 400,
     durationMs,
-    summary: `${method} ${path} ${statusCode}`,
+    summary: `${method} ${path} ${statusCode}${clientLabel}`,
     method,
     path,
-    statusCode
+    statusCode,
+    clientIp,
+    clientName,
+    clientType,
+    operation: opLabel,
+    projectId
   });
 }
 
@@ -127,6 +211,12 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       const url = new URL(req.url || "/", `http://${host}:${port}`);
       const pathname = url.pathname;
       const method = req.method || "GET";
+      const clientIp = getClientIp(req);
+      const { clientName, clientType } = parseClientInfo(req, pathname);
+      const defaultOp = resolveRequestOperation(method, pathname);
+      let capturedOp: string = defaultOp;
+      let targetProjectId: string | undefined =
+        url.searchParams.get("project") || (req.headers["x-project-id"] as string) || undefined;
 
       setCorsHeaders(res);
 
@@ -138,20 +228,34 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
 
       const finishCapture = (statusCode: number) => {
         const duration = Date.now() - started;
-        if (pathname === "/health" || pathname === "/sse" || pathname === "/" || pathname === "/message") {
-          captureHttpEvent(bus, method, pathname, statusCode, duration);
-        }
+        captureHttpEvent(
+          bus,
+          method,
+          pathname,
+          statusCode,
+          duration,
+          clientIp,
+          clientName,
+          clientType,
+          capturedOp,
+          targetProjectId
+        );
         recordTelemetry({
           category: 'http_endpoint',
           operation: `${method} ${pathname}`,
           durationMs: duration,
           success: statusCode < 400,
           errorCode: statusCode >= 400 ? `HTTP_${statusCode}` : undefined,
+          projectId: targetProjectId,
           vaultRoot,
           metadata: {
             method,
             path: pathname,
-            statusCode
+            statusCode,
+            clientIp,
+            clientName,
+            clientType,
+            operation: capturedOp
           }
         });
       };
@@ -161,6 +265,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       });
 
       if (!isAuthorized(req, url, authToken)) {
+        capturedOp = "unauthorized_access";
         logErrorReport({
           subsystem: "sse-server",
           port,
@@ -171,7 +276,8 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           level: "WARN",
           context: {
             headers: req.headers,
-            query: Object.fromEntries(url.searchParams.entries())
+            query: Object.fromEntries(url.searchParams.entries()),
+            clientIp
           }
         }, { vaultRoot, logPath: errorLogPath });
         res.writeHead(401, { "Content-Type": "application/json" });
@@ -180,6 +286,16 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       }
 
       if (method === "GET" && pathname === "/health") {
+        capturedOp = "health_check";
+        bus.registerClient({
+          id: `http::${clientIp}`,
+          ip: clientIp,
+          clientName,
+          clientType,
+          userAgent: req.headers["user-agent"],
+          projectId: targetProjectId,
+          lastOperation: "health_check"
+        });
         const projects = getVaultProjectList(vaultRoot);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
@@ -195,11 +311,24 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
 
       // Authenticated HTTP changeset sync endpoints (deployment-modes AC16, AC17)
       if (method === "POST" && pathname === "/api/sync/pull") {
+        capturedOp = "sync_pull";
         try {
           const body = await readJsonBody(req);
+          if (typeof body.projectId === "string") {
+            targetProjectId = body.projectId;
+          }
+          bus.registerClient({
+            id: `sync::${clientIp}`,
+            ip: clientIp,
+            clientName,
+            clientType,
+            userAgent: req.headers["user-agent"],
+            projectId: targetProjectId,
+            lastOperation: "sync_pull"
+          });
           const changeset = withVaultLockSync(vaultRoot, () =>
             exportChangeset(vaultRoot, {
-              projectId: typeof body.projectId === "string" ? body.projectId : undefined,
+              projectId: targetProjectId,
               since: typeof body.since === "string" ? body.since : undefined
             })
           );
@@ -214,7 +343,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             method: "POST",
             endpoint: "/api/sync/pull",
             error: err,
-            context: { headers: req.headers }
+            context: { headers: req.headers, clientIp }
           }, { vaultRoot, logPath: errorLogPath });
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: msg }));
@@ -223,11 +352,21 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       }
 
       if (method === "POST" && pathname === "/api/sync/push") {
+        capturedOp = "sync_push";
         try {
           const body = await readJsonBody(req);
           const rawChangeset = body.changeset || body;
           const force = Boolean(body.force);
           const dryRun = Boolean(body.dryRun);
+          bus.registerClient({
+            id: `sync::${clientIp}`,
+            ip: clientIp,
+            clientName,
+            clientType,
+            userAgent: req.headers["user-agent"],
+            projectId: targetProjectId,
+            lastOperation: "sync_push"
+          });
           const result = await applyChangeset(vaultRoot, rawChangeset, { force, dryRun });
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
@@ -240,7 +379,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             method: "POST",
             endpoint: "/api/sync/push",
             error: err,
-            context: { headers: req.headers }
+            context: { headers: req.headers, clientIp }
           }, { vaultRoot, logPath: errorLogPath });
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: msg }));
@@ -249,6 +388,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       }
 
       if (method === "POST" && pathname === "/api/sync") {
+        capturedOp = "sync_bidirectional";
         try {
           const body = await readJsonBody(req);
           let appliedResult: import('./sync.js').SyncResult | undefined;
@@ -261,13 +401,25 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           }
           let pulledChangeset: import('./sync.js').Changeset | undefined;
           if (body.pull) {
+            if (typeof body.pull.projectId === "string") {
+              targetProjectId = body.pull.projectId;
+            }
             pulledChangeset = withVaultLockSync(vaultRoot, () =>
               exportChangeset(vaultRoot, {
-                projectId: typeof body.pull.projectId === "string" ? body.pull.projectId : undefined,
+                projectId: targetProjectId,
                 since: typeof body.pull.since === "string" ? body.pull.since : undefined
               })
             );
           }
+          bus.registerClient({
+            id: `sync::${clientIp}`,
+            ip: clientIp,
+            clientName,
+            clientType,
+            userAgent: req.headers["user-agent"],
+            projectId: targetProjectId,
+            lastOperation: "sync_bidirectional"
+          });
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ applied: appliedResult, changeset: pulledChangeset }));
         } catch (err: unknown) {
@@ -279,7 +431,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             method: "POST",
             endpoint: "/api/sync",
             error: err,
-            context: { headers: req.headers }
+            context: { headers: req.headers, clientIp }
           }, { vaultRoot, logPath: errorLogPath });
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: msg }));
@@ -288,18 +440,41 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       }
 
       if (method === "GET" && (pathname === "/sse" || pathname === "/")) {
+        capturedOp = "sse_connect";
         try {
           const tokenInQuery = url.searchParams.get("token") || url.searchParams.get("authToken");
           const messageEndpoint = tokenInQuery
             ? `/message?token=${encodeURIComponent(tokenInQuery)}`
             : "/message";
           const transport = new SSEServerTransport(messageEndpoint, res);
-          const mcpServer = createMcpServer({ defaultVaultRoot: vaultRoot, activityBus: bus, errorLogPath });
+          const clientId = transport.sessionId;
+
+          bus.registerClient({
+            id: clientId,
+            ip: clientIp,
+            clientName,
+            clientType,
+            userAgent: req.headers["user-agent"],
+            projectId: targetProjectId,
+            lastOperation: "sse_connect",
+            active: true
+          });
+
+          const mcpServer = createMcpServer({
+            defaultVaultRoot: vaultRoot,
+            activityBus: bus,
+            errorLogPath,
+            clientIp,
+            clientName,
+            clientType,
+            clientId
+          });
           let cleaned = false;
           const cleanup = () => {
             if (cleaned) return;
             cleaned = true;
             transports.delete(transport.sessionId);
+            bus.disconnectClient(clientId);
             void mcpServer.close().catch((closeErr) => {
               logErrorReport({
                 subsystem: "sse-server",
@@ -307,7 +482,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
                 host,
                 endpoint: "/sse",
                 error: closeErr,
-                context: { phase: "mcpServer_close_cleanup", sessionId: transport.sessionId }
+                context: { phase: "mcpServer_close_cleanup", sessionId: transport.sessionId, clientIp }
               }, { vaultRoot, logPath: errorLogPath });
             });
           };
@@ -326,7 +501,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             endpoint: pathname,
             method: "GET",
             error: sseErr,
-            context: { headers: req.headers }
+            context: { headers: req.headers, clientIp }
           }, { vaultRoot, logPath: errorLogPath });
           if (!res.headersSent) {
             res.writeHead(500, { "Content-Type": "application/json" });
@@ -337,6 +512,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       }
 
       if (method === "POST" && pathname === "/message") {
+        capturedOp = "mcp_message";
         const sessionId = url.searchParams.get("sessionId");
         if (!sessionId || !transports.has(sessionId)) {
           logErrorReport({
@@ -346,12 +522,18 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             method: "POST",
             endpoint: "/message",
             error: `Valid sessionId required (received: ${sessionId || "none"})`,
-            context: { sessionId, activeSessions: Array.from(transports.keys()) }
+            context: { sessionId, activeSessions: Array.from(transports.keys()), clientIp }
           }, { vaultRoot, logPath: errorLogPath });
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Valid sessionId required" }));
           return;
         }
+
+        bus.updateClientActivity(sessionId, {
+          operation: "mcp_message",
+          projectId: targetProjectId,
+          clientName
+        });
 
         const transport = transports.get(sessionId)!;
         try {
@@ -364,7 +546,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             method: "POST",
             endpoint: "/message",
             error: postErr,
-            context: { sessionId }
+            context: { sessionId, clientIp }
           }, { vaultRoot, logPath: errorLogPath });
           if (!res.headersSent) {
             res.writeHead(500, { "Content-Type": "application/json" });
@@ -374,6 +556,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         return;
       }
 
+      capturedOp = "route_not_found";
       logErrorReport({
         subsystem: "sse-server",
         port,
@@ -491,6 +674,8 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           await new Promise<void>((res) => {
             server.close(() => res());
           });
+          flushTelemetrySync(vaultRoot);
+          await closeTelemetry(vaultRoot);
         }
       });
     });

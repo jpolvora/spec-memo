@@ -107,6 +107,22 @@ export type DeploymentMode = 'local' | 'hybrid' | 'remote';
 
 export type HostName = 'cursor' | 'vscode' | 'opencode' | 'antigravity' | 'claude' | 'generic';
 
+export type ClientType = 'proxy' | 'direct-remote' | 'web' | 'cli' | 'unknown';
+
+export interface VaultClientInfo {
+  id: string;
+  ip: string;
+  clientName: string;
+  clientType: ClientType;
+  userAgent?: string;
+  projectId?: string;
+  lastOperation?: string;
+  connectedAt: string;
+  lastSeenAt: string;
+  active: boolean;
+  requestCount?: number;
+}
+
 export interface TelemetryConfig {
   maxFileSizeMb?: number;
   flushIntervalMs?: number;
