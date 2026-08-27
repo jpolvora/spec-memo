@@ -105,8 +105,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 - [x] [`deployment-modes`](deployment-modes.spec.md): Local, hybrid, and remote deployment modes with portable MCP wiring
 - [x] [`status-vault-backup-ui`](status-vault-backup-ui.spec.md): Status monitor vault export and import UI
+- [x] [`operational-telemetry`](operational-telemetry.spec.md): Operational Telemetry & Structured Rolling Usage Logging
 - [ ] Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) (`spec: virtual-file-system-over-mcp.spec.md`)
-
 
 ## 8. Next specs
 
@@ -125,7 +125,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 10 | [`write-block-hook`](write-block-hook.spec.md) | `[x] done` | Phase 2 | Git hook & skill rules blocking in-repo workflow writes |
 | 11 | [`trap-dedup`](trap-dedup.spec.md) | `[x] done` | Phase 3 | Deduplicate traps with matching paths & rules |
 | 12 | [`spec-drift`](spec-drift.spec.md) | `[x] done` | Phase 3 | Flag SHA drift between specs and code during bootstrap |
-| 13 | [`vault-git`](vault-git.spec.md) | `[x] done` | Phase 3 | Optional private git remote on vault root |
+| 13 | [`vault-git`](vault-git.spec.md) | `[x] done` | Phase 3 | Optional private git remote sync for vault persistence |
 | 14 | [`cross-project-search`](cross-project-search.spec.md) | `[x] done` | Phase 3 | Opt-in multi-project search across local vault |
 | 15 | [`embeddings-search`](embeddings-search.spec.md) | `[x] done` | Phase 3 | Optional embeddings search backend after kinds/TTL |
 | 16 | [`cli-doctor`](cli-doctor.spec.md) | `[x] done` | Phase 4 | Polished interactive CLI doctor and health inspection |
@@ -141,8 +141,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 26 | `mcp-version-and-skill-install` | `[x]` done | Phase 6: Recurrence learning | MCP tools: check_version and install_skills (+ docs surface) |
 | 27 | [`deployment-modes`](deployment-modes.spec.md) | `[x] done` | Phase 7 | Local, hybrid, and remote deployment modes with portable MCP wiring |
 | 28 | [`status-vault-backup-ui`](status-vault-backup-ui.spec.md) | `[x] done` | Phase 7 | Status monitor vault export and import UI |
-
 | 29 | `virtual-file-system-over-mcp` | `[ ]` todo | Phase 7: Deployment modes | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
+| 30 | [`operational-telemetry`](operational-telemetry.spec.md) | `[x] done` | Phase 7 | Operational Telemetry & Structured Rolling Usage Logging |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -190,6 +190,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-26 | release-0.4.1 | Status monitor vault export and import UI, SSE error logger, ws-memo skill docs update | 0.4.1 |
 | 2026-08-26 | bootstrap-maxbytes-config | Vault config.bootstrap.maxBytes as default bootstrap budget; per-call maxBytes overrides | 0.4.3 |
 | 2026-08-26 | release-0.4.3 | Configurable bootstrap byte budget via ~/.spec-memo/config.json; bump package/MCP/vault to 0.4.3 | 0.4.3 |
+| 2026-08-27 | operational-telemetry | Operational Telemetry & Structured Rolling Usage Logging | npm test 264 pass |
 
 ## Archive
 

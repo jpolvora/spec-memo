@@ -3,6 +3,7 @@ import { ensureVaultStructure, getVaultProjects, getVaultRoot, withVaultLockSync
 import { readHybridState, writeHybridState } from './hybrid-state.js';
 import { isTokenConfigured, getResolvedAuthToken, normalizeRemoteUrl } from './setup.js';
 import { logErrorReport } from './error-logger.js';
+import { recordTelemetry } from './telemetry.js';
 
 export interface HybridSyncOptions {
   vaultRoot?: string;
@@ -314,6 +315,7 @@ export async function pushHybridProject(
 export async function syncHybrid(
   options: HybridSyncOptions = {}
 ): Promise<HybridSyncReport> {
+  const started = performance.now();
   const vaultRoot = getVaultRoot(options.vaultRoot);
   const config = ensureVaultStructure(vaultRoot);
 
@@ -324,41 +326,76 @@ export async function syncHybrid(
   const isAll = options.all === true;
   const targetProjectId = isAll ? undefined : options.projectId;
 
-  const stateBefore = readHybridState(vaultRoot);
-  const isTargetDirty = Boolean(
-    stateBefore.dirty && (!targetProjectId || stateBefore.dirtyProjects?.[targetProjectId] !== false)
-  );
-  const sinceForPush = isTargetDirty
-    ? undefined
-    : targetProjectId && stateBefore.cursors
-      ? stateBefore.cursors[targetProjectId]
-      : undefined;
+  let report: HybridSyncReport;
+  try {
+    const stateBefore = readHybridState(vaultRoot);
+    const isTargetDirty = Boolean(
+      stateBefore.dirty && (!targetProjectId || stateBefore.dirtyProjects?.[targetProjectId] !== false)
+    );
+    const sinceForPush = isTargetDirty
+      ? undefined
+      : targetProjectId && stateBefore.cursors
+        ? stateBefore.cursors[targetProjectId]
+        : undefined;
 
-  const pullResult = await pullHybridProject(
-    vaultRoot,
-    targetProjectId,
-    options.remoteUrl,
-    options.authToken,
-    options.dryRun
-  );
+    const pullResult = await pullHybridProject(
+      vaultRoot,
+      targetProjectId,
+      options.remoteUrl,
+      options.authToken,
+      options.dryRun
+    );
 
-  const pushResult = await pushHybridProject(
-    vaultRoot,
-    targetProjectId,
-    options.remoteUrl,
-    options.authToken,
-    options.dryRun,
-    options.force,
-    sinceForPush
-  );
+    const pushResult = await pushHybridProject(
+      vaultRoot,
+      targetProjectId,
+      options.remoteUrl,
+      options.authToken,
+      options.dryRun,
+      options.force,
+      sinceForPush
+    );
 
-  return {
-    projectId: targetProjectId,
-    all: isAll,
-    pulled: pullResult,
-    pushed: pushResult,
-    timestamp: new Date().toISOString()
-  };
+    report = {
+      projectId: targetProjectId,
+      all: isAll,
+      pulled: pullResult,
+      pushed: pushResult,
+      timestamp: new Date().toISOString()
+    };
+    return report;
+  } catch (err: unknown) {
+    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+    recordTelemetry({
+      category: 'sync_operation',
+      operation: 'sync_hybrid',
+      durationMs,
+      success: false,
+      errorCode: err instanceof Error ? err.name : 'SYNC_FAILED',
+      projectId: targetProjectId,
+      vaultRoot,
+      metadata: { all: isAll, dryRun: Boolean(options.dryRun) }
+    });
+    throw err;
+  } finally {
+    if (report!) {
+      const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+      recordTelemetry({
+        category: 'sync_operation',
+        operation: 'sync_hybrid',
+        durationMs,
+        success: true,
+        projectId: targetProjectId,
+        vaultRoot,
+        metadata: {
+          all: isAll,
+          dryRun: Boolean(options.dryRun),
+          pulledApplied: report.pulled.applied,
+          pushedApplied: report.pushed.applied
+        }
+      });
+    }
+  }
 }
 
 // Debounced push state (timers coalesce bursts; in-flight + pending single-flight per project)

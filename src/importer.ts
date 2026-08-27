@@ -7,6 +7,7 @@ import { ensureProjectVault, getVaultRoot } from './vault.js';
 import { upsertRecord, slugify } from './store.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { rebuildIndex } from './indexer.js';
+import { recordTelemetry } from './telemetry.js';
 
 /**
  * Helper to safely read a file as utf-8.
@@ -51,11 +52,56 @@ function normalizeRecordStatus(status: unknown): { status: RecordStatus; decisio
  * Import a legacy workflow tree (.agents/specs, memory/, plans/, changelog) into the external vault.
  */
 export async function importWorkflowTree(options: ImportOptions = {}): Promise<ImportResult> {
+  const started = performance.now();
   const vaultRoot = options.vaultRoot || getVaultRoot();
   const sourceRoot = options.from || options.productRoot || options.cwd || process.cwd();
   const identity = resolveProjectIdentity(sourceRoot, { vaultRoot });
   const projectId = options.projectId || identity.projectId;
 
+  let result: ImportResult;
+  try {
+    result = await importWorkflowTreeDirect(options, vaultRoot, sourceRoot, identity, projectId);
+    return result;
+  } catch (err: unknown) {
+    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+    recordTelemetry({
+      category: 'importer',
+      operation: 'memo_import',
+      durationMs,
+      success: false,
+      errorCode: err instanceof Error ? err.name : 'IMPORT_FAILED',
+      projectId,
+      vaultRoot,
+      metadata: { sourceRoot }
+    });
+    throw err;
+  } finally {
+    if (result!) {
+      const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+      recordTelemetry({
+        category: 'importer',
+        operation: 'memo_import',
+        durationMs,
+        success: true,
+        projectId,
+        vaultRoot,
+        metadata: {
+          sourceRoot,
+          totalImported: result.totalImported,
+          skippedFilesCount: result.skippedFilesCount
+        }
+      });
+    }
+  }
+}
+
+async function importWorkflowTreeDirect(
+  options: ImportOptions,
+  vaultRoot: string,
+  sourceRoot: string,
+  identity: ReturnType<typeof resolveProjectIdentity>,
+  projectId: string
+): Promise<ImportResult> {
   ensureProjectVault(identity, vaultRoot);
 
   const importedRecords: ImportItem[] = [];

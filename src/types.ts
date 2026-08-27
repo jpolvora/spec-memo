@@ -107,9 +107,50 @@ export type DeploymentMode = 'local' | 'hybrid' | 'remote';
 
 export type HostName = 'cursor' | 'vscode' | 'opencode' | 'antigravity' | 'claude' | 'generic';
 
+export interface TelemetryConfig {
+  maxFileSizeMb?: number;
+  flushIntervalMs?: number;
+  maxQueueSize?: number;
+}
+
+export type TelemetryCategory =
+  | 'mcp_tool'
+  | 'http_endpoint'
+  | 'cli_command'
+  | 'sync_operation'
+  | 'curator_gc'
+  | 'importer';
+
+export interface TelemetryEvent {
+  timestamp: string;
+  eventId: string;
+  category: TelemetryCategory;
+  operation: string;
+  durationMs: number;
+  success: boolean;
+  errorCode?: string;
+  projectId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TelemetryEventInput {
+  category: TelemetryCategory;
+  operation: string;
+  durationMs: number;
+  success: boolean;
+  errorCode?: string;
+  projectId?: string;
+  metadata?: Record<string, unknown>;
+  vaultRoot?: string;
+  timestamp?: string;
+  eventId?: string;
+}
+
 export interface VaultConfig {
   version: string;
   defaultRemote: string;
+  enableTelemetry?: boolean;
+  telemetry?: TelemetryConfig;
   mode?: DeploymentMode;
   remote?: {
     url: string;

@@ -7,6 +7,7 @@ import { parseRecord, serializeRecord } from './schema.js';
 import { openIndex, indexRecord, removeRecord, rebuildIndex } from './indexer.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { recordTombstone } from './sync.js';
+import { recordTelemetry } from './telemetry.js';
 
 /**
  * Check if a record has expired given its date, default TTL days, and optional custom TTL.
@@ -244,14 +245,18 @@ export function compactMonthlyLogs(
  * 5. Update SQLite FTS index and rebuild compiled views.
  */
 export async function runGc(options: GcOptions = {}): Promise<GcResult> {
+  const started = performance.now();
   const vaultRoot = options.vaultRoot || getVaultRoot();
-  return withVaultLock(vaultRoot, async () => {
-  const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
-  const projectId = options.projectId || identity.projectId;
-  const dryRun = Boolean(options.dryRun);
+  let projectId: string | undefined;
 
-  const config = ensureVaultStructure(vaultRoot);
-  ensureProjectVault(identity, vaultRoot);
+  try {
+    return await withVaultLock(vaultRoot, async () => {
+      const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+      projectId = options.projectId || identity.projectId;
+      const dryRun = Boolean(options.dryRun);
+
+      const config = ensureVaultStructure(vaultRoot);
+      ensureProjectVault(identity, vaultRoot);
 
   const scratchTtlDays = config.ttl?.scratchDays ?? 7;
   const reviewTtlDays = config.ttl?.reviewDays ?? 14;
@@ -388,20 +393,45 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
     commitVaultChange(`gc ${projectId}`, vaultRoot, [path.join('projects', projectId)]);
   }
 
-  return {
-    projectId,
-    purgedScratchCount,
-    purgedReviewCount,
-    compactedPlansCount,
-    compactedLogsCount,
-    rebuiltFts,
-    rebuiltViews: !dryRun,
-    dryRun,
-    details: {
-      purgedFiles,
-      compactedPlans,
-      compactedLogs: logCompaction.unlinkedFiles
-    }
-  };
-  });
+    return {
+      projectId,
+      purgedScratchCount,
+      purgedReviewCount,
+      compactedPlansCount,
+      compactedLogsCount,
+      rebuiltFts,
+      rebuiltViews: !dryRun,
+      dryRun,
+      details: {
+        purgedFiles,
+        compactedPlans,
+        compactedLogs: logCompaction.unlinkedFiles
+      }
+    };
+    });
+  } catch (err: unknown) {
+    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+    recordTelemetry({
+      category: 'curator_gc',
+      operation: 'memo_gc',
+      durationMs,
+      success: false,
+      errorCode: err instanceof Error ? err.name : 'GC_FAILED',
+      projectId,
+      vaultRoot,
+      metadata: { dryRun: Boolean(options.dryRun) }
+    });
+    throw err;
+  } finally {
+    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+    recordTelemetry({
+      category: 'curator_gc',
+      operation: 'memo_gc',
+      durationMs,
+      success: true,
+      projectId,
+      vaultRoot,
+      metadata: { dryRun: Boolean(options.dryRun) }
+    });
+  }
 }

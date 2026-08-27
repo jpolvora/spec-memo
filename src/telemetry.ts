@@ -1,0 +1,399 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
+import {
+  TelemetryCategory,
+  TelemetryConfig,
+  TelemetryEvent,
+  TelemetryEventInput,
+  VaultConfig
+} from './types.js';
+import { getVaultRoot } from './vault.js';
+import { redactAbsolutePathsInText, redactSecretsInPayload } from './safety.js';
+
+export interface TelemetryOptions {
+  vaultRoot?: string;
+  maxFileSizeMb?: number;
+  flushIntervalMs?: number;
+  maxQueueSize?: number;
+  enabled?: boolean;
+}
+
+export const DEFAULT_TELEMETRY_CONFIG: Required<TelemetryConfig> = {
+  maxFileSizeMb: 10,
+  flushIntervalMs: 500,
+  maxQueueSize: 50
+};
+
+/**
+ * Returns true if telemetry is enabled by configuration or environment variable.
+ * Precedence: SPEC_MEMO_ENABLE_TELEMETRY env var > config.json enableTelemetry > true (default).
+ */
+export function isTelemetryEnabled(vaultRoot?: string): boolean {
+  if (process.env.SPEC_MEMO_ENABLE_TELEMETRY !== undefined) {
+    const envVal = process.env.SPEC_MEMO_ENABLE_TELEMETRY.trim().toLowerCase();
+    if (envVal === '0' || envVal === 'false' || envVal === 'off' || envVal === 'no') {
+      return false;
+    }
+    if (envVal === '1' || envVal === 'true' || envVal === 'on' || envVal === 'yes') {
+      return true;
+    }
+  }
+
+  const root = getVaultRoot(vaultRoot);
+  const configPath = path.join(root, 'config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Partial<VaultConfig>;
+      if (parsed.enableTelemetry !== undefined) {
+        return Boolean(parsed.enableTelemetry);
+      }
+    } catch {
+      // ignore parse errors and fallback to true
+    }
+  }
+  return true;
+}
+
+/**
+ * Returns the resolved directory path for telemetry log files ($SPEC_MEMO_ROOT/telemetry).
+ */
+export function getTelemetryDir(vaultRoot?: string): string {
+  const root = getVaultRoot(vaultRoot);
+  return path.join(root, 'telemetry');
+}
+
+/**
+ * Sanitizes metadata payloads to strip sensitive secrets and absolute host paths.
+ */
+function sanitizeMetadata(payload?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+  const redacted = redactSecretsInPayload(payload) as Record<string, unknown>;
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(redacted)) {
+    if (typeof v === 'string') {
+      clean[k] = redactAbsolutePathsInText(v);
+    } else {
+      clean[k] = v;
+    }
+  }
+  return clean;
+}
+
+/**
+ * TelemetryRecorder buffers, rotates, and safely flushes structured telemetry logs.
+ */
+export class TelemetryRecorder {
+  private vaultRoot: string;
+  private maxFileSizeBytes: number;
+  private flushIntervalMs: number;
+  private maxQueueSize: number;
+  private queue: TelemetryEvent[] = [];
+  private flushTimer: NodeJS.Timeout | null = null;
+  private isFlushing = false;
+  private currentDate: string | null = null;
+  private currentPart = 1;
+  private currentFileBytes = 0;
+  private closed = false;
+  private lastError: Error | null = null;
+
+  constructor(options: TelemetryOptions = {}) {
+    this.vaultRoot = getVaultRoot(options.vaultRoot);
+    const maxMb = options.maxFileSizeMb ?? DEFAULT_TELEMETRY_CONFIG.maxFileSizeMb;
+    this.maxFileSizeBytes = Math.max(1, maxMb) * 1024 * 1024;
+    this.flushIntervalMs = options.flushIntervalMs ?? DEFAULT_TELEMETRY_CONFIG.flushIntervalMs;
+    this.maxQueueSize = options.maxQueueSize ?? DEFAULT_TELEMETRY_CONFIG.maxQueueSize;
+  }
+
+  public getQueueLength(): number {
+    return this.queue.length;
+  }
+
+  public getLastError(): Error | null {
+    return this.lastError;
+  }
+
+  /**
+   * Enqueues a telemetry event. Discards immediately if telemetry is disabled.
+   */
+  public record(input: TelemetryEventInput): void {
+    if (this.closed) return;
+    if (!isTelemetryEnabled(input.vaultRoot || this.vaultRoot)) {
+      return;
+    }
+
+    try {
+      const event: TelemetryEvent = {
+        timestamp: input.timestamp || new Date().toISOString(),
+        eventId: input.eventId || `tel-${crypto.randomUUID()}`,
+        category: input.category,
+        operation: input.operation,
+        durationMs: Math.max(0, Math.round(input.durationMs * 10) / 10),
+        success: Boolean(input.success),
+        errorCode: input.errorCode,
+        projectId: input.projectId,
+        metadata: sanitizeMetadata(input.metadata)
+      };
+
+      this.queue.push(event);
+
+      if (this.queue.length >= this.maxQueueSize) {
+        void this.flush();
+      } else if (!this.flushTimer && !this.isFlushing) {
+        this.flushTimer = setTimeout(() => {
+          this.flushTimer = null;
+          void this.flush();
+        }, this.flushIntervalMs);
+        if (typeof this.flushTimer.unref === 'function') {
+          this.flushTimer.unref();
+        }
+      }
+    } catch (err: unknown) {
+      this.lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  /**
+   * Resolves the rolling part file path for the given date, advancing part numbers when size limit is exceeded.
+   */
+  public resolveCurrentPartFile(dateStr: string, incomingBytes: number): { filePath: string; part: number } {
+    const telemetryDir = getTelemetryDir(this.vaultRoot);
+    if (!fs.existsSync(telemetryDir)) {
+      fs.mkdirSync(telemetryDir, { recursive: true });
+    }
+
+    if (this.currentDate !== dateStr) {
+      this.currentDate = dateStr;
+      // Scan existing files for this date to locate the highest part number
+      const prefix = `telemetry-${dateStr}.part-`;
+      const suffix = `.jsonl`;
+      let highestPart = 1;
+      let existingBytes = 0;
+
+      try {
+        const files = fs.readdirSync(telemetryDir);
+        for (const file of files) {
+          if (file.startsWith(prefix) && file.endsWith(suffix)) {
+            const partStr = file.slice(prefix.length, file.length - suffix.length);
+            const partNum = parseInt(partStr, 10);
+            if (!isNaN(partNum) && partNum >= highestPart) {
+              highestPart = partNum;
+            }
+          }
+        }
+
+        const candidateFile = path.join(telemetryDir, `telemetry-${dateStr}.part-${highestPart}.jsonl`);
+        if (fs.existsSync(candidateFile)) {
+          existingBytes = fs.statSync(candidateFile).size;
+          if (existingBytes + incomingBytes > this.maxFileSizeBytes) {
+            highestPart += 1;
+            existingBytes = 0;
+          }
+        }
+      } catch {
+        // fallback to part 1
+      }
+
+      this.currentPart = highestPart;
+      this.currentFileBytes = existingBytes;
+    } else {
+      if (this.currentFileBytes + incomingBytes > this.maxFileSizeBytes) {
+        this.currentPart += 1;
+        this.currentFileBytes = 0;
+      }
+    }
+
+    const fileName = `telemetry-${dateStr}.part-${this.currentPart}.jsonl`;
+    const filePath = path.join(telemetryDir, fileName);
+    return { filePath, part: this.currentPart };
+  }
+
+  /**
+   * Asynchronously flushes all buffered telemetry events to disk.
+   */
+  public async flush(): Promise<void> {
+    if (this.queue.length === 0 || this.isFlushing) {
+      return;
+    }
+
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    this.isFlushing = true;
+    const batch = this.queue.splice(0, this.queue.length);
+
+    try {
+      this.writeBatch(batch);
+    } catch (err: unknown) {
+      this.lastError = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      this.isFlushing = false;
+      if (this.queue.length > 0 && !this.closed) {
+        void this.flush();
+      }
+    }
+  }
+
+  /**
+   * Synchronously flushes all remaining buffered events. Safe for exit handlers.
+   */
+  public flushSync(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    if (this.queue.length === 0) {
+      return;
+    }
+
+    const batch = this.queue.splice(0, this.queue.length);
+    try {
+      this.writeBatch(batch);
+    } catch (err: unknown) {
+      this.lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  private writeBatch(batch: TelemetryEvent[]): void {
+    if (batch.length === 0) return;
+
+    // Group events by UTC date (YYYY-MM-DD)
+    const byDate = new Map<string, TelemetryEvent[]>();
+    for (const ev of batch) {
+      const d = (ev.timestamp && ev.timestamp.length >= 10) ? ev.timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
+      const list = byDate.get(d) || [];
+      list.push(ev);
+      byDate.set(d, list);
+    }
+
+    for (const [dateStr, events] of byDate.entries()) {
+      const payloadLines = events.map((e) => JSON.stringify(e)).join('\n') + '\n';
+      const buf = Buffer.from(payloadLines, 'utf8');
+      const { filePath } = this.resolveCurrentPartFile(dateStr, buf.length);
+      fs.appendFileSync(filePath, buf);
+      this.currentFileBytes += buf.length;
+    }
+  }
+
+  /**
+   * Closes the recorder, clearing any active timer and draining pending records.
+   */
+  public async close(): Promise<void> {
+    this.closed = true;
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    await this.flush();
+    this.flushSync();
+  }
+}
+
+let activeRecorder: TelemetryRecorder | null = null;
+
+export function getTelemetryRecorder(vaultRoot?: string, options?: Partial<TelemetryOptions>): TelemetryRecorder {
+  const root = getVaultRoot(vaultRoot);
+  if (!activeRecorder) {
+    activeRecorder = new TelemetryRecorder({ vaultRoot: root, ...options });
+  }
+  return activeRecorder;
+}
+
+export function recordTelemetry(input: TelemetryEventInput): void {
+  try {
+    const recorder = getTelemetryRecorder(input.vaultRoot);
+    recorder.record(input);
+  } catch {
+    // Zero-crash guarantee: telemetry never fails caller
+  }
+}
+
+export async function flushTelemetry(vaultRoot?: string): Promise<void> {
+  const recorder = getTelemetryRecorder(vaultRoot);
+  await recorder.flush();
+}
+
+export function flushTelemetrySync(vaultRoot?: string): void {
+  const recorder = getTelemetryRecorder(vaultRoot);
+  recorder.flushSync();
+}
+
+export async function closeTelemetry(): Promise<void> {
+  if (activeRecorder) {
+    await activeRecorder.close();
+    activeRecorder = null;
+  }
+}
+
+export function resetTelemetryRecorderForTest(): void {
+  if (activeRecorder) {
+    activeRecorder.flushSync();
+    activeRecorder = null;
+  }
+}
+
+/**
+ * Lists all rolling telemetry files in the vault.
+ */
+export function listTelemetryFiles(vaultRoot?: string): string[] {
+  const dir = getTelemetryDir(vaultRoot);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.startsWith('telemetry-') && f.endsWith('.jsonl'))
+    .sort();
+}
+
+/**
+ * Reads and parses telemetry events from vault telemetry files.
+ */
+export function readTelemetryEvents(
+  vaultRoot?: string,
+  options?: { date?: string; part?: number }
+): TelemetryEvent[] {
+  const dir = getTelemetryDir(vaultRoot);
+  if (!fs.existsSync(dir)) return [];
+
+  const files = listTelemetryFiles(vaultRoot);
+  const events: TelemetryEvent[] = [];
+
+  for (const file of files) {
+    if (options?.date && !file.includes(`telemetry-${options.date}.`)) {
+      continue;
+    }
+    if (options?.part !== undefined && !file.includes(`.part-${options.part}.jsonl`)) {
+      continue;
+    }
+
+    const fullPath = path.join(dir, file);
+    try {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      const lines = content.split('\n').filter((l) => l.trim().length > 0);
+      for (const line of lines) {
+        try {
+          events.push(JSON.parse(line));
+        } catch {
+          // ignore corrupted lines
+        }
+      }
+    } catch {
+      // ignore file read errors
+    }
+  }
+
+  return events;
+}
+
+// Global exit handler to drain pending telemetry
+process.on('beforeExit', () => {
+  try {
+    flushTelemetrySync();
+  } catch {
+    // ignore
+  }
+});

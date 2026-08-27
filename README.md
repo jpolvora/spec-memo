@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.4.4**.
+**Local working memory for coding agents outside the product repository.** Version **0.4.5**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -530,8 +530,9 @@ All memory is stored in `$SPEC_MEMO_ROOT` (defaults to `~/.spec-memo/`):
 
 ```
 ~/.spec-memo/
-├── config.json                 # Global vault configuration (TTL, budget, git sync)
+├── config.json                 # Global vault configuration (TTL, budget, enableTelemetry, git sync)
 ├── memo.sqlite                 # Disposable SQLite FTS5 search index
+├── telemetry/                  # Append-only daily rolling usage logs (telemetry-YYYY-MM-DD.part-N.jsonl)
 └── projects/
     └── <projectId>/            # Hash derived from git remote origin
         ├── project.json        # Project metadata, remote URL, display name
@@ -552,6 +553,7 @@ All memory is stored in `$SPEC_MEMO_ROOT` (defaults to `~/.spec-memo/`):
 - **Markdown Source of Truth**: Every record is a human-readable Markdown file with structured YAML frontmatter.
 - **Disposable SQLite FTS5 Index**: `memo.sqlite` provides instant Porter-stemmed search, tag filtering, and path pattern globbing. If deleted or corrupted, it is automatically rebuilt from the Markdown files.
 - **Automatic Project Identity**: Repositories are identified by normalized remote URL (`git@github.com:org/repo.git` → `github.com/org/repo`). Multiple clones on the same machine share the same memory without conflicts.
+- **Operational Telemetry & Usage Analytics**: Built-in rolling JSONL telemetry records tool latencies, endpoints, duration, and error codes under `~/.spec-memo/telemetry/` (`enableTelemetry: true`). Asynchronously batched with zero disk blockages and secret redaction.
 - **Secret Redaction & Safety**: Built-in pattern filters automatically redact API keys, JWTs, private keys, and bearer tokens from memory records before writing. Writes directed to the product repository root are rejected by default.
 - **Automatic Trap Deduplication**: When saving a new trap, `spec-memo` checks token overlap against existing traps with matching path patterns. If overlap exceeds 70%, the older trap is automatically marked as `superseded`.
 - **Spec Code Drift Detection**: When specifications declare `linkedPaths` and `verifiedAtSha`, `bootstrap` compares git status and file contents against the verified commit SHA, warning the agent if the product code drifted from the specification.

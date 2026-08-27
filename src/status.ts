@@ -6,6 +6,7 @@ import { getPackageVersion } from "./version.js";
 import { exportVault, importVault } from "./backup.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { logErrorReport } from "./error-logger.js";
+import { recordTelemetry } from "./telemetry.js";
 
 export interface McpStatusSummary {
   host: string;
@@ -848,10 +849,30 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
   return new Promise((resolve, reject) => {
     const server = http.createServer(async (req, res) => {
+      const started = Date.now();
       const url = new URL(req.url || "/", `http://${host}:${port}`);
       const pathname = url.pathname;
+      const method = req.method || "GET";
 
       setCorsHeaders(res);
+
+      res.on("finish", () => {
+        const durationMs = Date.now() - started;
+        const statusCode = res.statusCode || 500;
+        recordTelemetry({
+          category: 'http_endpoint',
+          operation: `${method} ${pathname}`,
+          durationMs,
+          success: statusCode < 400,
+          errorCode: statusCode >= 400 ? `HTTP_${statusCode}` : undefined,
+          vaultRoot,
+          metadata: {
+            method,
+            path: pathname,
+            statusCode
+          }
+        });
+      });
 
       if (req.method === "OPTIONS") {
         res.writeHead(204);

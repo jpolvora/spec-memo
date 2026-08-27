@@ -7,6 +7,7 @@ import { ActivityBus, createActivityBus } from "./activity.js";
 import { startStatusServer, StatusServerInstance } from "./status.js";
 import { exportChangeset, applyChangeset } from "./sync.js";
 import { logErrorReport } from "./error-logger.js";
+import { recordTelemetry } from "./telemetry.js";
 
 function readJsonBody(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -136,9 +137,23 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       }
 
       const finishCapture = (statusCode: number) => {
+        const duration = Date.now() - started;
         if (pathname === "/health" || pathname === "/sse" || pathname === "/" || pathname === "/message") {
-          captureHttpEvent(bus, method, pathname, statusCode, Date.now() - started);
+          captureHttpEvent(bus, method, pathname, statusCode, duration);
         }
+        recordTelemetry({
+          category: 'http_endpoint',
+          operation: `${method} ${pathname}`,
+          durationMs: duration,
+          success: statusCode < 400,
+          errorCode: statusCode >= 400 ? `HTTP_${statusCode}` : undefined,
+          vaultRoot,
+          metadata: {
+            method,
+            path: pathname,
+            statusCode
+          }
+        });
       };
 
       res.on("finish", () => {
