@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.4.0
+version: 0.4.1
 description: >-
   Route agent working memory through spec-memo MCP (10 tools) and matching CLI extras.
   Trigger on spec-memo, memo vault, bootstrap brief, upsert trap/decision/spec/plan,
@@ -213,9 +213,18 @@ Match intent, then execute the matching step. Load `references/SURFACE.md` only 
 
 ### session
 
-1. Call MCP `bootstrap` (or `memo bootstrap`) with `cwd` = product root. Add `query`, `path`, `slug` when known. Default cap is 8 KB (`config.json` `bootstrap.maxBytes`, default 8192; per-call `maxBytes` overrides). In hybrid mode, bootstrap pulls remote deltas first (fail open).
-2. Apply returned traps (DO NOT / INSTEAD DO) before planning or coding.
-   - Done when: a brief is in context (or truncated notice recorded).
+1. Call MCP `bootstrap` (or `memo bootstrap`) with `cwd` = product root. Add `query`, `path`, `slug` when known. In hybrid mode, bootstrap pulls remote deltas first (fail open).
+2. **Bootstrap byte budget** — UTF-8 payload cap for traps, decisions, spec/plan, drift, and notices. Precedence (first match wins):
+   - **Per-call `maxBytes`** (MCP arg or CLI `--maxBytes` / `--max-bytes`) — agent override for this session only.
+   - **Vault default** — `~/.spec-memo/config.json` → `bootstrap.maxBytes` (8192 when unset).
+   - **Hard fallback** — 8192 (8 KB).
+   Pass a higher `maxBytes` when the brief returns `truncated: true` or the task needs more traps/decisions in context. Do not raise the vault default unless the operator wants a machine-wide change.
+   ```bash
+   memo bootstrap --cwd . --maxBytes 16384 --path src/auth.ts
+   ```
+   MCP: `{ "cwd": "/path/to/product", "maxBytes": 16384 }`
+3. Apply returned traps (DO NOT / INSTEAD DO) before planning or coding.
+   - Done when: a brief is in context (or truncated notice recorded; retry with higher `maxBytes` if critical traps were dropped).
 
 ### recall
 

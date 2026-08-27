@@ -18,12 +18,21 @@ Bind cwd git remote; compile a session brief.
 | `query` | string | Intent filter for traps/decisions |
 | `slug` | string | Live spec/plan slice |
 | `path` | string | Prioritize traps whose pathPatterns match |
-| `maxBytes` | number | UTF-8 budget; defaults to vault `config.bootstrap.maxBytes` (8192) |
+| `maxBytes` | number | UTF-8 byte budget for the entire brief payload |
 | `projectId` | string | Override bound project |
+
+**Budget precedence** (first match wins): per-call `maxBytes` → vault `config.json` `bootstrap.maxBytes` (8192 default) → hard fallback 8192. Operators raise the vault default for all sessions on a machine; agents pass `maxBytes` per call to override without editing config.
+
+Over budget → drop lowest-rank hits, set `truncated: true`. Retry with a higher `maxBytes` when critical context was dropped.
 
 Returns: traps (medium+, path/keyword, cap 10), matching accepted decisions, live spec/plan for slug, drift flags, `truncated` notice.
 
-CLI: `memo bootstrap --slug feature-auth --path src/auth.ts`
+CLI:
+
+```bash
+memo bootstrap --slug feature-auth --path src/auth.ts
+memo bootstrap --maxBytes 16384 --path src/auth.ts
+```
 
 ### `search`
 
