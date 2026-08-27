@@ -25,9 +25,12 @@ export const DEFAULT_TELEMETRY_CONFIG: Required<TelemetryConfig> = {
   maxQueueSize: 50
 };
 
+const enabledCache = new Map<string, boolean>();
+
 /**
- * Returns true if telemetry is enabled by configuration or environment variable.
+ * Checks whether telemetry is enabled for the vault.
  * Precedence: SPEC_MEMO_ENABLE_TELEMETRY env var > config.json enableTelemetry > true (default).
+ * Caches config.json read per vaultRoot to eliminate repeated synchronous disk I/O on the hot path.
  */
 export function isTelemetryEnabled(vaultRoot?: string): boolean {
   if (process.env.SPEC_MEMO_ENABLE_TELEMETRY !== undefined) {
@@ -41,18 +44,38 @@ export function isTelemetryEnabled(vaultRoot?: string): boolean {
   }
 
   const root = getVaultRoot(vaultRoot);
+  const cached = enabledCache.get(root);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const configPath = path.join(root, 'config.json');
+  let enabled = true;
   if (fs.existsSync(configPath)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Partial<VaultConfig>;
       if (parsed.enableTelemetry !== undefined) {
-        return Boolean(parsed.enableTelemetry);
+        enabled = Boolean(parsed.enableTelemetry);
       }
     } catch {
       // ignore parse errors and fallback to true
     }
   }
-  return true;
+  enabledCache.set(root, enabled);
+  return enabled;
+}
+
+function loadTelemetryConfig(vaultRoot: string): Partial<TelemetryConfig> {
+  const configPath = path.join(vaultRoot, 'config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Partial<VaultConfig>;
+      return parsed.telemetry ?? {};
+    } catch {
+      // ignore
+    }
+  }
+  return {};
 }
 
 /**
@@ -304,7 +327,14 @@ export function getTelemetryRecorder(vaultRoot?: string, options?: Partial<Telem
   const root = recorderKey(vaultRoot);
   let recorder = recorders.get(root);
   if (!recorder) {
-    recorder = new TelemetryRecorder({ vaultRoot: root, ...options });
+    const fileCfg = loadTelemetryConfig(root);
+    recorder = new TelemetryRecorder({
+      vaultRoot: root,
+      maxFileSizeMb: options?.maxFileSizeMb ?? fileCfg.maxFileSizeMb,
+      flushIntervalMs: options?.flushIntervalMs ?? fileCfg.flushIntervalMs,
+      maxQueueSize: options?.maxQueueSize ?? fileCfg.maxQueueSize,
+      ...options
+    });
     recorders.set(root, recorder);
   }
   return recorder;
@@ -351,10 +381,12 @@ export async function closeTelemetry(vaultRoot?: string): Promise<void> {
       await recorder.close();
       recorders.delete(key);
     }
+    enabledCache.delete(key);
     return;
   }
   await Promise.all([...recorders.values()].map((r) => r.close()));
   recorders.clear();
+  enabledCache.clear();
 }
 
 export function resetTelemetryRecorderForTest(vaultRoot?: string): void {
@@ -365,12 +397,14 @@ export function resetTelemetryRecorderForTest(vaultRoot?: string): void {
       recorder.flushSync();
       recorders.delete(key);
     }
+    enabledCache.delete(key);
     return;
   }
   for (const recorder of recorders.values()) {
     recorder.flushSync();
   }
   recorders.clear();
+  enabledCache.clear();
 }
 
 /**

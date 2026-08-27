@@ -428,4 +428,45 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
       fs.rmSync(secondVault, { recursive: true, force: true });
     }
   });
+
+  it('should consume telemetry config block from config.json when constructing recorder', async () => {
+    const configPath = path.join(tempVault, 'config.json');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        telemetry: {
+          maxQueueSize: 2,
+          flushIntervalMs: 50
+        }
+      })
+    );
+    resetTelemetryRecorderForTest();
+
+    recordTelemetry({
+      category: 'mcp_tool',
+      operation: 'cfg-1',
+      durationMs: 1,
+      success: true,
+      vaultRoot: tempVault
+    });
+
+    // Not yet flushed because maxQueueSize is 2
+    let events = readTelemetryEvents(tempVault);
+    assert.equal(events.length, 0);
+
+    // Second event triggers flush due to maxQueueSize: 2
+    recordTelemetry({
+      category: 'mcp_tool',
+      operation: 'cfg-2',
+      durationMs: 2,
+      success: true,
+      vaultRoot: tempVault
+    });
+
+    // Wait a tick for async flush to complete
+    await new Promise((r) => setTimeout(r, 60));
+
+    events = readTelemetryEvents(tempVault);
+    assert.equal(events.length, 2);
+  });
 });
