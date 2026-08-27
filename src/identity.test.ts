@@ -116,10 +116,11 @@ describe('Git Remote and Project Identity', () => {
       assert.equal(findGitRoot(tempVault, tempVault), null);
       assert.equal(findGitRoot(path.join(tempVault, 'projects', 'p1'), tempVault), null);
 
-      // resolveProjectIdentity from within vaultRoot should fallback
+      // resolveProjectIdentity from within vaultRoot should reuse the project partition
       const identity = resolveProjectIdentity(path.join(tempVault, 'projects', 'p1'), { vaultRoot: tempVault });
       assert.equal(identity.isGit, false);
       assert.equal(identity.isFallback, true);
+      assert.equal(identity.projectId, 'p1');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

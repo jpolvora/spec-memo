@@ -185,6 +185,15 @@ export function getGitRemoteUrl(gitRoot: string, remoteName = 'origin'): string 
 }
 
 /**
+ * When cwd is under `<vaultRoot>/projects/<projectId>/...`, reuse that partition id.
+ */
+export function projectIdFromVaultPath(usableCwd: string, vaultRoot: string): string | null {
+  const rel = path.relative(path.resolve(vaultRoot), path.resolve(usableCwd)).replace(/\\/g, '/');
+  const m = rel.match(/^projects\/([^/]+)(?:\/|$)/);
+  return m ? m[1] : null;
+}
+
+/**
  * Resolve project identity for a directory.
  */
 export function resolveProjectIdentity(
@@ -214,8 +223,14 @@ export function resolveProjectIdentity(
       projectId = generateProjectIdFromPath(rootPath);
     }
   } else {
-    rootPath = usableCwd;
-    projectId = generateProjectIdFromPath(rootPath);
+    const vaultProjectId = projectIdFromVaultPath(usableCwd, resolvedVaultRoot);
+    if (vaultProjectId) {
+      projectId = vaultProjectId;
+      rootPath = usableCwd;
+    } else {
+      rootPath = usableCwd;
+      projectId = generateProjectIdFromPath(rootPath);
+    }
   }
 
   const vaultProjectPath = path.join(resolvedVaultRoot, 'projects', projectId);

@@ -282,4 +282,20 @@ describe('Promote Engine (promoteRecord)', () => {
       }
     );
   });
+
+  it('should reject promote when cwd is inside vaultRoot', async () => {
+    await assert.rejects(
+      async () => {
+        await promoteRecord({
+          cwd: tempVaultRoot,
+          vaultRoot: tempVaultRoot,
+          id: 'dec-001',
+          destination: 'docs/test.md'
+        });
+      },
+      {
+        message: /vault paths are not valid product roots/
+      }
+    );
+  });
 });

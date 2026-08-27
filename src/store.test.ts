@@ -467,6 +467,23 @@ describe('Store Engine (upsert and get)', () => {
     });
     assert.ok(rec);
     assert.equal(rec.frontmatter.title, 'Vault CWD Trap');
+
+    // Upsert with cwd inside a specific vault project directory
+    const p1Dir = path.join(tempVault, 'projects', 'p1');
+    fs.mkdirSync(p1Dir, { recursive: true });
+    const p1Res = await upsertRecord({
+      cwd: p1Dir,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'p1-trap',
+      frontmatter: {
+        id: 'p1-trap',
+        title: 'P1 Trap'
+      },
+      body: 'Body inside p1 partition'
+    });
+    assert.ok(p1Res);
+    assert.ok(p1Res.path.includes(path.join('projects', 'p1', 'traps')));
   });
 
   it('should normalize frontmatter.path into pathPatterns and linkedPaths', async () => {
