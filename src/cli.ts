@@ -485,6 +485,7 @@ async function runCliInner(
         try {
           await instance.close();
         } finally {
+          flushTelemetrySync(vaultRoot);
           process.exit(signal === 'SIGTERM' ? 0 : 130);
         }
       };
@@ -529,6 +530,7 @@ async function runCliInner(
         try {
           await instance.close();
         } finally {
+          flushTelemetrySync(vaultRoot);
           process.exit(signal === 'SIGTERM' ? 0 : 130);
         }
       };

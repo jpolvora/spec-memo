@@ -9,7 +9,7 @@ import {
   VaultConfig
 } from './types.js';
 import { getVaultRoot } from './vault.js';
-import { redactAbsolutePathsInText, redactSecretsInPayload } from './safety.js';
+import { sanitizeToolOutput } from './safety.js';
 
 export interface TelemetryOptions {
   vaultRoot?: string;
@@ -87,22 +87,13 @@ export function getTelemetryDir(vaultRoot?: string): string {
 }
 
 /**
- * Sanitizes metadata payloads to strip sensitive secrets and absolute host paths.
+ * Sanitizes metadata payloads to strip sensitive secrets, absolute host paths, and internal vault paths.
  */
 function sanitizeMetadata(payload?: Record<string, unknown>): Record<string, unknown> | undefined {
   if (!payload || typeof payload !== 'object') {
     return undefined;
   }
-  const redacted = redactSecretsInPayload(payload) as Record<string, unknown>;
-  const clean: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(redacted)) {
-    if (typeof v === 'string') {
-      clean[k] = redactAbsolutePathsInText(v);
-    } else {
-      clean[k] = v;
-    }
-  }
-  return clean;
+  return sanitizeToolOutput(payload) as Record<string, unknown>;
 }
 
 /**

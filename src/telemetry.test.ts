@@ -353,9 +353,7 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
   });
 
   it('AC11: should sanitize credentials and tokens from metadata', () => {
-    const recorder = new TelemetryRecorder({ vaultRoot: tempVault });
-
-    recorder.record({
+    recordTelemetry({
       category: 'mcp_tool',
       operation: 'test-sanitization',
       durationMs: 10,
@@ -364,11 +362,16 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
       metadata: {
         token: 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890',
         bearer: 'Bearer secret-jwt-token-with-many-characters-12345',
-        safeKey: 'valid_data'
+        safeKey: 'valid_data',
+        vaultRoot: tempVault,
+        nested: {
+          pathWithSecret: 'key is ghp_9876543210ZYXWVUTSRQPONMLKJIHGFEDCBA',
+          hostPath: 'C:\\Users\\john\\secret\\file.txt'
+        }
       }
     });
 
-    recorder.flushSync();
+    flushTelemetrySync(tempVault);
 
     const events = readTelemetryEvents(tempVault);
     assert.equal(events.length, 1);
@@ -377,6 +380,11 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
     assert.equal(meta.safeKey, 'valid_data');
     assert.ok(typeof meta.token === 'string' && (meta.token as string).includes('[REDACTED'));
     assert.ok(typeof meta.bearer === 'string' && (meta.bearer as string).includes('[REDACTED'));
+    assert.equal(meta.vaultRoot, undefined); // stripped by stripVaultPaths
+    const nested = meta.nested as Record<string, string>;
+    assert.ok(nested);
+    assert.ok(nested.pathWithSecret.includes('[REDACTED'));
+    assert.ok(!nested.hostPath.includes('Users'));
   });
 
   it('AC12: should flush pending telemetry on closeTelemetry and flushTelemetrySync', async () => {
