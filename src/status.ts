@@ -6,6 +6,7 @@ import { getPackageVersion } from "./version.js";
 import { exportVault, importVault } from "./backup.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { logErrorReport } from "./error-logger.js";
+import { recordTelemetry } from "./telemetry.js";
 
 export interface McpStatusSummary {
   host: string;
@@ -147,6 +148,46 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     .badge.live { border-color: var(--ok); color: var(--ok); }
     .badge.reconnecting { border-color: #d29922; color: #d29922; }
     .badge.offline { border-color: var(--err); color: var(--err); }
+    .badge-proxy { background: #2e1065; border-color: #a855f7; color: #d8b4fe; }
+    .badge-direct-remote { background: #0c2d48; border-color: #38bdf8; color: #7dd3fc; }
+    .badge-cli { background: #064e3b; border-color: #34d399; color: #6ee7b7; }
+    .badge-web { background: #451a03; border-color: #f59e0b; color: #fcd34d; }
+    .badge-unknown { background: var(--card); border-color: var(--border); color: var(--muted); }
+
+    .client-list { list-style: none; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .client-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+    }
+    .client-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .client-name { font-weight: 600; color: var(--bright); }
+    .client-ip { font-family: monospace; font-size: 0.72rem; color: var(--muted); }
+    .client-detail {
+      font-size: 0.72rem;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    .status-dot.active { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+    .status-dot.idle { background: var(--muted); }
+
     main { display: grid; grid-template-columns: 280px 1fr; flex: 1; min-height: 0; position: relative; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
     aside {
@@ -232,7 +273,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       padding: 6px 12px;
       border-bottom: 1px solid rgba(48, 54, 61, 0.5);
       display: grid;
-      grid-template-columns: 72px 56px 48px 1fr;
+      grid-template-columns: 68px 52px 42px 1fr;
       gap: 8px;
       align-items: start;
       animation: fadeIn 0.25s ease;
@@ -336,9 +377,16 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           <div class="stat"><label>Status</label><div class="value" id="stat-status">—</div></div>
           <div class="stat"><label>Version</label><div class="value" id="stat-version">${versionLabel}</div></div>
           <div class="stat"><label>MCP SSE</label><div class="value" id="stat-mcp">—</div></div>
+          <div class="stat"><label>Active Clients</label><div class="value" id="stat-clients">—</div></div>
           <div class="stat"><label>Vaults</label><div class="value" id="stat-vaults">—</div></div>
           <div class="stat"><label>Uptime</label><div class="value" id="stat-uptime">—</div></div>
           <div class="stat"><label>Buffered events</label><div class="value" id="stat-buffered">—</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Vault Clients (<span id="client-count">0</span>)</h2>
+        <div class="client-list" id="client-list">
+          <div class="helper-text">No clients connected yet</div>
         </div>
       </div>
       <div class="panel">
@@ -470,24 +518,70 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       return v ? (v.displayName || v.id) : id;
     }
 
+    function renderClients(clients) {
+      const listEl = document.getElementById("client-list");
+      const countEl = document.getElementById("client-count");
+      if (!clients || clients.length === 0) {
+        listEl.innerHTML = '<div class="helper-text">No clients connected yet</div>';
+        countEl.textContent = "0";
+        return;
+      }
+      const activeList = clients.filter(c => c.active);
+      countEl.textContent = String(activeList.length);
+      listEl.innerHTML = "";
+      for (const c of clients) {
+        const card = document.createElement("div");
+        card.className = "client-card";
+        const typeClass = c.clientType ? "badge-" + c.clientType : "badge-unknown";
+        const typeLabel = c.clientType === "proxy" ? "PROXY" : c.clientType === "direct-remote" ? "DIRECT REMOTE" : (c.clientType || "CLIENT").toUpperCase();
+        const dotClass = c.active ? "active" : "idle";
+        const targetVault = c.projectId ? displayNameForProject(c.projectId) : "All vaults";
+        const lastOp = c.lastOperation || "connected";
+        card.innerHTML =
+          '<div class="client-card-header">' +
+            '<div><span class="status-dot ' + dotClass + '"></span><span class="client-name">' + escapeHtml(c.clientName || "MCP Client") + '</span></div>' +
+            '<span class="badge ' + typeClass + '" style="font-size:0.62rem; padding:1px 6px;">' + escapeHtml(typeLabel) + '</span>' +
+          '</div>' +
+          '<div class="client-detail">' +
+            '<span>IP: <code>' + escapeHtml(c.ip || "127.0.0.1") + '</code></span>' +
+            '<span>Vault: <b>' + escapeHtml(targetVault) + '</b></span>' +
+          '</div>' +
+          '<div class="client-detail" style="color:var(--bright);">' +
+            '<span>Op: <code>' + escapeHtml(lastOp) + '</code></span>' +
+            (c.requestCount ? '<span>Reqs: ' + c.requestCount + '</span>' : '') +
+          '</div>';
+        listEl.appendChild(card);
+      }
+    }
+
     function renderLogLine(ev) {
       const line = document.createElement("div");
       const kindClass = ev.kind === "write" ? "write" : ev.type === "http" ? "http" : "";
       line.className = "log-line " + kindClass + (ev.ok ? " ok-line" : " error");
       const time = ev.ts ? ev.ts.slice(11, 19) : "";
       const kind = ev.kind || ev.type;
+      const typeClass = ev.clientType ? "badge-" + ev.clientType : "";
+      const clientBadge = ev.clientName
+        ? '<span class="badge ' + typeClass + '" style="font-size:0.65rem; padding:1px 6px; margin-right:4px;">' +
+          escapeHtml(ev.clientName) +
+          (ev.clientIp ? " (" + escapeHtml(ev.clientIp) + ")" : "") +
+          '</span>'
+        : (ev.clientIp ? '<span class="client-ip" style="margin-right:4px;">[' + escapeHtml(ev.clientIp) + ']</span>' : '');
       const detail = ev.tool
         ? ev.tool
         : (ev.method && ev.path ? ev.method + " " + ev.path : ev.type);
       const proj = ev.projectId && !selectedProject
         ? displayNameForProject(ev.projectId)
         : "";
+      const opText = ev.operation && ev.operation !== detail ? " · op: " + escapeHtml(ev.operation) : "";
       line.innerHTML =
         '<span class="time">' + time + '</span>' +
         '<span class="kind-tag">' + kind + '</span>' +
         '<span class="ok-tag">' + (ev.ok ? "ok" : "err") + '</span>' +
-        '<div><div class="log-summary">' + escapeHtml(ev.summary || "") + '</div>' +
+        '<div>' +
+        '<div class="log-summary" style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">' + clientBadge + '<span>' + escapeHtml(ev.summary || "") + '</span></div>' +
         '<div class="log-meta">' + escapeHtml(detail) +
+        opText +
         (ev.durationMs != null ? " · " + ev.durationMs + "ms" : "") +
         (proj ? " · " + escapeHtml(proj) : "") + '</div></div>';
       return line;
@@ -607,11 +701,15 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         document.getElementById("stat-vaults").textContent = String(data.projectsCount ?? "—");
         document.getElementById("stat-buffered").textContent = String(data.eventsBuffered ?? "—");
         document.getElementById("stat-uptime").textContent = data.uptimeMs != null ? formatUptime(data.uptimeMs) : "—";
+        document.getElementById("stat-clients").textContent = String(data.activeClientsCount ?? (data.clients ? data.clients.filter(c=>c.active).length : "0"));
         const mcp = data.mcp;
         if (mcp && mcp.available) {
           document.getElementById("stat-mcp").textContent = mcp.host + ":" + mcp.port + " (" + mcp.activeTransports + " transports)";
         } else {
           document.getElementById("stat-mcp").textContent = "disconnected";
+        }
+        if (Array.isArray(data.clients)) {
+          renderClients(data.clients);
         }
         const badge = document.getElementById("server-badge");
         badge.textContent = data.status === "ok" ? "Server OK" : "Degraded";
@@ -807,10 +905,10 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       document.getElementById("activity-log").innerHTML = "";
     });
 
-loadVaults().then(() => {
+    loadVaults().then(() => {
       reconnectStream(true);
       refreshStatus();
-      setInterval(refreshStatus, 5000);
+      setInterval(refreshStatus, 3000);
     });
   </script>
 </body>
@@ -848,10 +946,30 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
   return new Promise((resolve, reject) => {
     const server = http.createServer(async (req, res) => {
+      const started = Date.now();
       const url = new URL(req.url || "/", `http://${host}:${port}`);
       const pathname = url.pathname;
+      const method = req.method || "GET";
 
       setCorsHeaders(res);
+
+      res.on("finish", () => {
+        const durationMs = Date.now() - started;
+        const statusCode = res.statusCode || 500;
+        recordTelemetry({
+          category: 'http_endpoint',
+          operation: `${method} ${pathname}`,
+          durationMs,
+          success: statusCode < 400,
+          errorCode: statusCode >= 400 ? `HTTP_${statusCode}` : undefined,
+          vaultRoot,
+          metadata: {
+            method,
+            path: pathname,
+            statusCode
+          }
+        });
+      });
 
       if (req.method === "OPTIONS") {
         res.writeHead(204);
@@ -888,6 +1006,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       if (req.method === "GET" && pathname === "/api/status") {
         const projects = getVaultProjectList(vaultRoot);
         const mcp = options.getMcp?.();
+        const clients = bus.listClients();
         writeJson(res, 200, {
           status: "ok",
           service: "spec-memo-status-monitor",
@@ -904,7 +1023,16 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             : { available: false, disconnected: true },
           projectsCount: projects.length,
           uptimeMs: Date.now() - bus.startedAt,
-          eventsBuffered: bus.list().length
+          eventsBuffered: bus.list().length,
+          clients,
+          activeClientsCount: clients.filter((c) => c.active).length
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/clients") {
+        writeJson(res, 200, {
+          clients: bus.listClients()
         });
         return;
       }

@@ -6,8 +6,14 @@ import { ProjectIdentity, ProjectMetadata, VaultConfig } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 
 export const DEFAULT_VAULT_CONFIG: VaultConfig = {
-  version: '0.4.4',
+  version: '0.4.5',
   defaultRemote: 'origin',
+  enableTelemetry: true,
+  telemetry: {
+    maxFileSizeMb: 10,
+    flushIntervalMs: 500,
+    maxQueueSize: 50
+  },
   ttl: {
     scratchDays: 7,
     reviewDays: 14
@@ -203,6 +209,8 @@ export function ensureVaultStructure(vaultRoot: string = getVaultRoot()): VaultC
       config = {
         ...DEFAULT_VAULT_CONFIG,
         ...parsed,
+        enableTelemetry: parsed.enableTelemetry !== undefined ? Boolean(parsed.enableTelemetry) : DEFAULT_VAULT_CONFIG.enableTelemetry,
+        telemetry: { ...DEFAULT_VAULT_CONFIG.telemetry, ...(parsed.telemetry || {}) },
         ttl: { ...DEFAULT_VAULT_CONFIG.ttl, ...(parsed.ttl || {}) },
         bootstrap: { ...DEFAULT_VAULT_CONFIG.bootstrap, ...(parsed.bootstrap || {}) }
       };
@@ -211,6 +219,11 @@ export function ensureVaultStructure(vaultRoot: string = getVaultRoot()): VaultC
     }
   } else {
     fs.writeFileSync(configPath, JSON.stringify(DEFAULT_VAULT_CONFIG, null, 2), 'utf8');
+  }
+
+  const telemetryDir = path.join(root, 'telemetry');
+  if (!fs.existsSync(telemetryDir)) {
+    fs.mkdirSync(telemetryDir, { recursive: true });
   }
 
   return config;

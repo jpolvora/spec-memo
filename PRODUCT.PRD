@@ -226,6 +226,8 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 26 | `mcp-version-and-skill-install` | `[x]` | Ops | check_version and install_skills MCP tools |
 | 27 | `deployment-modes` | `[x]` | Phase 7 | Local, Hybrid, Remote modes and portable stdio MCP wiring |
 | 28 | `status-vault-backup-ui` | `[x]` | UI | Status monitor vault export and import UI |
+| 29 | `virtual-file-system-over-mcp` | `[ ]` | Phase 7 | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
+| 30 | `operational-telemetry` | `[x]` | Phase 7 | Operational telemetry & rolling JSONL usage logging |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
@@ -276,6 +278,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-26 | release-0.4.2 | Fix test suite error log leakage and auth token env isolation, classify 401 unauthorized requests as WARN, format descriptive hybrid sync timeout errors | 0.4.2 |
 | 2026-08-26 | bootstrap-maxbytes-config | Vault config.bootstrap.maxBytes as default bootstrap budget; per-call maxBytes overrides | npm test 250 pass |
 | 2026-08-26 | release-0.4.3 | Configurable bootstrap byte budget via ~/.spec-memo/config.json; bump package/MCP/vault to 0.4.3 | 0.4.3 |
+| 2026-08-27 | operational-telemetry | Operational telemetry & rolling JSONL usage logging with enableTelemetry config switch | npm test 264 pass |
 
 ## 12. Related docs
 

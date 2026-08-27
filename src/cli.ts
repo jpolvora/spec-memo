@@ -19,6 +19,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { runSetup } from './setup.js';
 import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
+import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -300,8 +301,40 @@ function resolveCliCommand(command: string | undefined): string | undefined {
 }
 
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
+  const started = performance.now();
   const parsed = parseCliArgs(argv);
-  parsed.command = resolveCliCommand(parsed.command);
+  const command = resolveCliCommand(parsed.command);
+  const vaultRootArg = (parsed.options.vaultRoot as string) || undefined;
+  let exitCode = 1;
+
+  try {
+    exitCode = await runCliInner(argv, parsed, command, vaultRootArg);
+    return exitCode;
+  } finally {
+    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+    recordTelemetry({
+      category: 'cli_command',
+      operation: command || (parsed.options.help ? 'help' : 'unknown'),
+      durationMs,
+      success: exitCode === 0,
+      errorCode: exitCode !== 0 ? `EXIT_${exitCode}` : undefined,
+      vaultRoot: vaultRootArg,
+      metadata: {
+        isJson: parsed.isJson,
+        subcommandHelp: parsed.subcommandHelp
+      }
+    });
+    flushTelemetrySync(vaultRootArg);
+  }
+}
+
+async function runCliInner(
+  argv: string[],
+  parsed: ParsedCliArgs,
+  command: string | undefined,
+  vaultRootArg: string | undefined
+): Promise<number> {
+  parsed.command = command;
 
   if (!parsed.command || (parsed.options.help && !parsed.command)) {
     printGeneralHelp();
@@ -313,7 +346,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     return 0;
   }
 
-  const vaultRootArg = (parsed.options.vaultRoot as string) || undefined;
+  vaultRootArg = (parsed.options.vaultRoot as string) || vaultRootArg;
   const activeVaultConfig = ensureVaultStructure(getVaultRoot(vaultRootArg));
   const isRemoteMode = activeVaultConfig.mode === 'remote';
 
@@ -452,6 +485,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         try {
           await instance.close();
         } finally {
+          flushTelemetrySync(vaultRoot);
           process.exit(signal === 'SIGTERM' ? 0 : 130);
         }
       };
@@ -496,6 +530,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         try {
           await instance.close();
         } finally {
+          flushTelemetrySync(vaultRoot);
           process.exit(signal === 'SIGTERM' ? 0 : 130);
         }
       };

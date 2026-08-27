@@ -382,4 +382,52 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
       await errorLogServer.close();
     }
   });
+
+  await t.test("should identify and track proxy and direct clients with operations", async () => {
+    const trackingServer = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      statusPort: 0,
+      enableStatus: true
+    });
+
+    try {
+      // 1. Proxy client sending custom header
+      await fetch(`${trackingServer.url}/health`, {
+        headers: {
+          "x-spec-memo-client": "test-remote-proxy",
+          "x-spec-memo-mode": "remote"
+        }
+      });
+
+      const clients = trackingServer.activityBus.listClients();
+      assert.ok(clients.length >= 1);
+      const proxyClient = clients.find((c) => c.clientName === "test-remote-proxy");
+      assert.ok(proxyClient);
+      assert.strictEqual(proxyClient.clientType, "proxy");
+      assert.strictEqual(proxyClient.lastOperation, "health_check");
+
+      // 2. Direct remote client connecting via SSE
+      const sseUrl = new URL(`${trackingServer.url}/sse`);
+      const transport = new SSEClientTransport(sseUrl);
+      const client = new Client({ name: "Cursor IDE", version: "1.0.0" });
+      await client.connect(transport);
+
+      await client.callTool({
+        name: "search",
+        arguments: { query: "test" }
+      });
+
+      const sseEvents = trackingServer.activityBus.list().filter((e) => e.type === "tool");
+      assert.ok(sseEvents.length >= 1);
+      const lastToolEv = sseEvents[sseEvents.length - 1];
+      assert.strictEqual(lastToolEv.operation, "mcp:search");
+      assert.strictEqual(lastToolEv.clientIp, "127.0.0.1");
+
+      await client.close();
+    } finally {
+      await trackingServer.close();
+    }
+  });
 });

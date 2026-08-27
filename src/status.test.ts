@@ -114,6 +114,9 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes("<title>spec-memo"));
     assert.ok(html.includes("(status monitor v" + version + ")"));
     assert.ok(html.includes('id="stat-version"'));
+    assert.ok(html.includes('id="stat-clients"'));
+    assert.ok(html.includes('id="client-list"'));
+    assert.ok(html.includes('Vault Clients'));
     assert.ok(html.includes('id="btn-export"'));
     assert.ok(html.includes('id="btn-choose-file"'));
     assert.ok(html.includes('id="btn-run-import"'));
@@ -144,7 +147,16 @@ test("MCP status monitor", async (t) => {
 
   const baseUrl = statusInstance.url;
 
-  await t.test("serves HTML and JSON status and vaults", async () => {
+  await t.test("serves HTML and JSON status, clients, and vaults", async () => {
+    bus.registerClient({
+      id: "test-client-1",
+      ip: "127.0.0.1",
+      clientName: "spec-memo-remote-proxy",
+      clientType: "proxy",
+      projectId,
+      lastOperation: "mcp:bootstrap"
+    });
+
     const htmlRes = await fetch(`${baseUrl}/`);
     assert.strictEqual(htmlRes.status, 200);
     assert.match(htmlRes.headers.get("content-type") || "", /text\/html/);
@@ -160,7 +172,16 @@ test("MCP status monitor", async (t) => {
     assert.strictEqual(status.version, getPackageVersion());
     assert.ok(typeof status.uptimeMs === "number");
     assert.ok(typeof status.eventsBuffered === "number");
+    assert.strictEqual(status.activeClientsCount, 1);
+    assert.ok(Array.isArray(status.clients));
     assert.ok(status.mcp && (status.mcp as { available: boolean }).available);
+
+    const clientsRes = await fetch(`${baseUrl}/api/clients`);
+    assert.strictEqual(clientsRes.status, 200);
+    const clientsData = await clientsRes.json() as { clients: Array<{ clientName: string; clientType: string }> };
+    assert.ok(Array.isArray(clientsData.clients));
+    assert.strictEqual(clientsData.clients[0].clientName, "spec-memo-remote-proxy");
+    assert.strictEqual(clientsData.clients[0].clientType, "proxy");
 
     const vaultsRes = await fetch(`${baseUrl}/api/vaults`);
     assert.strictEqual(vaultsRes.status, 200);

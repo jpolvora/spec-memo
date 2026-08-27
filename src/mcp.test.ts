@@ -1,11 +1,36 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createMcpServer } from './mcp.js';
 import { TOOL_NAMES } from './types.js';
+import { closeIndex } from './indexer.js';
 
 describe('MCP Server Integration', () => {
+  let tempVault: string;
+  let tempProject: string;
+  let originalEnv: string | undefined;
+
+  beforeEach(() => {
+    tempVault = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-mcp-vault-'));
+    tempProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-mcp-proj-'));
+    originalEnv = process.env.SPEC_MEMO_ROOT;
+    process.env.SPEC_MEMO_ROOT = tempVault;
+  });
+
+  afterEach(() => {
+    closeIndex(tempVault);
+    if (originalEnv !== undefined) {
+      process.env.SPEC_MEMO_ROOT = originalEnv;
+    } else {
+      delete process.env.SPEC_MEMO_ROOT;
+    }
+    fs.rmSync(tempVault, { recursive: true, force: true });
+    fs.rmSync(tempProject, { recursive: true, force: true });
+  });
   it('should list all 10 tools via MCP handshake', async () => {
     const server = createMcpServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -107,7 +132,7 @@ describe('MCP Server Integration', () => {
     const bootRes = await client.callTool({
       name: 'bootstrap',
       arguments: {
-        cwd: '.'
+        cwd: tempProject
       }
     });
     assert.equal(bootRes.isError, undefined);

@@ -21,3 +21,4 @@ export * from './canvas.js';
 export * from './sync.js';
 export * from './server.js';
 export * from './error-logger.js';
+export * from './telemetry.js';

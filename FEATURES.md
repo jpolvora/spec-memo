@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.4.4** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.4.5** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -143,6 +143,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] **Hybrid Bidirectional Sync & Debounced Push.** Low-latency local cache with automatic remote delta pulls on `bootstrap` (fail open) and debounced push scheduling after mutating operations (`upsert`, `append`, `forget`, `gc`).
 - [x] **Remote Stdio Proxy Server.** In `remote` mode, `memo serve` transparently proxies all 10 MCP tools to the remote daemon over SSE with bearer authentication. Fails closed with structured `REMOTE_UNREACHABLE` errors.
 - [x] **Remote Mode CLI Restrictions.** Extras (`canvas`, `sync-vault`, `export-vault`, `import-vault`, `hook`) refuse with exit code 1. `doctor`, `setup`, and `check-version` run locally. `rank` proxies to the daemon.
+- [x] **Operational Telemetry & Rolling Usage Logging.** Configurable switch `enableTelemetry` in `config.json` (default `true`); append-only structured JSONL streaming under `$SPEC_MEMO_ROOT/telemetry/`; rolling daily part rotation (`telemetry-YYYY-MM-DD.part-N.jsonl`) by file size limit (`maxFileSizeMb`); non-blocking fail-safe queue with zero-crash error isolation and secret redaction.
 
 ---
 

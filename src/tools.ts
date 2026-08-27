@@ -25,6 +25,7 @@ import { sanitizeToolOutput } from './safety.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot } from './vault.js';
+import { recordTelemetry } from './telemetry.js';
 
 function resolveHybridPushProjectId(opts: {
   cwd?: string;
@@ -327,6 +328,50 @@ function fail(code: string, err: unknown, details?: unknown): ToolResponse {
 }
 
 export async function executeTool(name: string, args: unknown): Promise<ToolResponse> {
+  const started = performance.now();
+  let projectId: string | undefined;
+  let vaultRoot: string | undefined;
+
+  if (args && typeof args === 'object') {
+    const a = args as Record<string, unknown>;
+    if (typeof a.projectId === 'string') projectId = a.projectId;
+    if (typeof a.vaultRoot === 'string') vaultRoot = a.vaultRoot;
+    if (!projectId && typeof a.cwd === 'string') {
+      try {
+        projectId = resolveHybridPushProjectId({ cwd: a.cwd, vaultRoot });
+      } catch {
+        // ignore project resolution error
+      }
+    }
+  }
+
+  let response: ToolResponse;
+  try {
+    response = await executeToolDirect(name, args);
+  } catch (err: unknown) {
+    response = fail('EXECUTE_TOOL_FAILED', err);
+  } finally {
+    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+    const success = response! ? !response!.isError : false;
+    const errorCode = response! && response!.isError ? response!.code : undefined;
+    recordTelemetry({
+      category: 'mcp_tool',
+      operation: name,
+      durationMs,
+      success,
+      errorCode,
+      projectId,
+      vaultRoot,
+      metadata: {
+        tool: name
+      }
+    });
+  }
+
+  return response;
+}
+
+async function executeToolDirect(name: string, args: unknown): Promise<ToolResponse> {
   if (!TOOL_NAMES.includes(name as ToolName)) {
     return fail('UNKNOWN_TOOL', `Unknown tool: ${name}`, { supportedTools: TOOL_NAMES });
   }

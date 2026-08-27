@@ -1,9 +1,34 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 import { TOOL_NAMES, ToolName } from './types.js';
+import { closeIndex } from './indexer.js';
 
 describe('Tool Definitions and Execution', () => {
+  let tempVault: string;
+  let tempProject: string;
+  let originalEnv: string | undefined;
+
+  beforeEach(() => {
+    tempVault = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-tools-vault-'));
+    tempProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-tools-proj-'));
+    originalEnv = process.env.SPEC_MEMO_ROOT;
+    process.env.SPEC_MEMO_ROOT = tempVault;
+  });
+
+  afterEach(() => {
+    closeIndex();
+    if (originalEnv !== undefined) {
+      process.env.SPEC_MEMO_ROOT = originalEnv;
+    } else {
+      delete process.env.SPEC_MEMO_ROOT;
+    }
+    fs.rmSync(tempVault, { recursive: true, force: true });
+    fs.rmSync(tempProject, { recursive: true, force: true });
+  });
   it('should define all 10 core tools', () => {
     assert.equal(TOOL_NAMES.length, 10);
     for (const name of TOOL_NAMES) {
@@ -87,7 +112,7 @@ describe('Tool Definitions and Execution', () => {
 
     // Bootstrap tool
     const bootstrapRes = await executeTool('bootstrap', {
-      cwd: '.'
+      cwd: tempProject
     });
     assert.equal(bootstrapRes.isError, undefined);
     assert.ok(bootstrapRes.data);
