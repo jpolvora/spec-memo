@@ -673,6 +673,8 @@ test('Status HTML includes prompts explorer polish markers', async () => {
   assert.ok(html.includes('data-ide="pi"'));
   assert.ok(html.includes('secret-badge') || html.includes('Secrets redacted'));
   assert.ok(html.includes('prompt-drawer'));
+  assert.ok(html.includes('btn-drawer-export'));
+  assert.ok(html.includes('exportParams') || html.includes('project'));
 });
 
 

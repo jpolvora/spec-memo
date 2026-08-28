@@ -1559,8 +1559,14 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     document.getElementById("btn-drawer-export").addEventListener("click", () => {
       if (!activePromptRecord || !activePromptRecord.frontmatter.sessionId) return;
       const sessId = activePromptRecord.frontmatter.sessionId;
-      let exportUrl = "/api/prompts/sessions/" + encodeURIComponent(sessId) + "/export";
-      if (authToken) exportUrl += "?token=" + encodeURIComponent(authToken);
+      const exportParams = new URLSearchParams();
+      if (activePromptRecord.frontmatter.project) {
+        exportParams.set("project", activePromptRecord.frontmatter.project);
+      }
+      if (authToken) exportParams.set("token", authToken);
+      const exportUrl =
+        "/api/prompts/sessions/" + encodeURIComponent(sessId) + "/export" +
+        (exportParams.toString() ? "?" + exportParams.toString() : "");
       window.open(exportUrl, "_blank");
     });
 
@@ -2455,10 +2461,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const parts = pathname.slice("/api/prompts/sessions/".length).split("/");
         const sessionId = parts[0];
         const project = url.searchParams.get("project") || undefined;
+        if (!project || project === "all") {
+          writeJson(res, 400, { error: "project query parameter is required for session export" });
+          return;
+        }
         const story = await exportSessionStory({
           sessionId,
           vaultRoot,
-          projectId: project && project !== "all" ? project : undefined
+          projectId: project
         });
         setCorsHeaders(res);
         res.writeHead(200, {
@@ -2472,10 +2482,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       if (req.method === "GET" && pathname.startsWith("/api/prompts/sessions/")) {
         const sessionId = pathname.slice("/api/prompts/sessions/".length);
         const project = url.searchParams.get("project") || undefined;
+        if (!project || project === "all") {
+          writeJson(res, 400, { error: "project query parameter is required for session turns" });
+          return;
+        }
         const turns = getSessionTurns({
           sessionId,
           vaultRoot,
-          projectId: project && project !== "all" ? project : undefined
+          projectId: project
         });
         writeJson(res, 200, sanitizeToolOutput({ sessionId, turns }));
         return;
@@ -2546,7 +2560,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           since,
           until
         });
-        writeJson(res, 200, result);
+        writeJson(res, 200, sanitizeToolOutput(result));
         return;
       }
 
