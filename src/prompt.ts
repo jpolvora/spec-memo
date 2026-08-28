@@ -132,49 +132,59 @@ export async function startSessionRecord(options: PromptOptions): Promise<Sessio
 
   const sessionId = options.sessionId || generateSessionId().replace(/^session-/, '');
   const id = options.id || `session-${sessionId}`;
-  const now = new Date().toISOString();
-  const startTime = options.since || now;
 
-  const fm: Partial<RecordFrontmatter> = {
-    id,
-    kind: 'session',
-    project: projectId,
-    status: 'active',
-    created: now,
-    updated: now,
-    source: 'agent',
-    sessionId,
-    startTime,
-    taskSlug: options.taskSlug,
-    client: options.client,
-    billable: options.billable !== undefined ? Boolean(options.billable) : true,
-    summary: options.body || `Active session ${sessionId}`
-  };
+  return withVaultLock(vaultRoot, async () => {
+    const existing = await getRecord({ id, kind: 'session', cwd, vaultRoot, projectId });
+    if (existing?.frontmatter.status === 'completed') {
+      throw new Error(
+        `Cannot restart completed session '${sessionId}'. Start a new sessionId.`
+      );
+    }
 
-  const body = options.body || `# Session ${sessionId}\n\nTask: ${options.taskSlug || 'unspecified'}\nStarted: ${startTime}`;
+    const now = new Date().toISOString();
+    const startTime = options.since || now;
 
-  const res = await upsertRecord({
-    kind: 'session',
-    slug: id,
-    frontmatter: fm,
-    body,
-    cwd,
-    vaultRoot,
-    projectId
+    const fm: Partial<RecordFrontmatter> = {
+      id,
+      kind: 'session',
+      project: projectId,
+      status: 'active',
+      created: existing?.frontmatter.created || now,
+      updated: now,
+      source: 'agent',
+      sessionId,
+      startTime,
+      taskSlug: options.taskSlug,
+      client: options.client,
+      billable: options.billable !== undefined ? Boolean(options.billable) : true,
+      summary: options.body || `Active session ${sessionId}`
+    };
+
+    const body = options.body || `# Session ${sessionId}\n\nTask: ${options.taskSlug || 'unspecified'}\nStarted: ${startTime}`;
+
+    const res = await upsertRecord({
+      kind: 'session',
+      slug: id,
+      frontmatter: fm,
+      body,
+      cwd,
+      vaultRoot,
+      projectId
+    });
+
+    return {
+      id: res.id,
+      sessionId,
+      projectId,
+      status: 'active',
+      startTime,
+      taskSlug: options.taskSlug,
+      client: options.client,
+      billable: fm.billable ?? true,
+      summary: fm.summary,
+      path: res.path
+    };
   });
-
-  return {
-    id: res.id,
-    sessionId,
-    projectId,
-    status: 'active',
-    startTime,
-    taskSlug: options.taskSlug,
-    client: options.client,
-    billable: fm.billable ?? true,
-    summary: fm.summary,
-    path: res.path
-  };
 }
 
 export async function endSessionRecord(options: PromptOptions): Promise<SessionResult> {

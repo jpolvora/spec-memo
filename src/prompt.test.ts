@@ -794,3 +794,32 @@ test('endSessionRecord rejects sessions that were never started', async () => {
     cleanup();
   }
 });
+
+test('startSessionRecord rejects restart of a completed session', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    await startSessionRecord({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-done',
+      client: 'acme'
+    });
+    await endSessionRecord({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-done',
+      body: 'done'
+    });
+    await assert.rejects(
+      () =>
+        startSessionRecord({
+          vaultRoot,
+          projectId,
+          sessionId: 'sess-done'
+        }),
+      /Cannot restart completed session|Start a new sessionId/
+    );
+  } finally {
+    cleanup();
+  }
+});
