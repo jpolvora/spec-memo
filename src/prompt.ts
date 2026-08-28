@@ -203,18 +203,24 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
       projectId
     });
 
+    if (!existing) {
+      throw new Error(
+        `Cannot end session '${sessionId}': no session record found. Call session_start first.`
+      );
+    }
+
     const now = new Date().toISOString();
     const endTime = options.until || now;
-    const startTime = (existing?.frontmatter.startTime as string) || (existing?.frontmatter.created as string) || now;
+    const startTime = (existing.frontmatter.startTime as string) || (existing.frontmatter.created as string) || now;
 
     // Never reuse PromptOptions.limit (pagination) as duration — compute from timestamps only.
     let durationMinutes: number | undefined;
     if (startTime) {
       const diffMs = new Date(endTime).getTime() - new Date(startTime).getTime();
-      durationMinutes = Number.isFinite(diffMs) ? Math.max(1, Math.round(diffMs / 60000)) : 1;
+      durationMinutes = Number.isFinite(diffMs) ? Math.max(0, Math.round(diffMs / 60000)) : 0;
     }
 
-    const existingDeliverables = (existing?.frontmatter.deliverables as SessionDeliverable[]) || [];
+    const existingDeliverables = (existing.frontmatter.deliverables as SessionDeliverable[]) || [];
     const mergedDeliverables = [...existingDeliverables];
     if (options.deliverables && Array.isArray(options.deliverables)) {
       for (const d of options.deliverables) {
@@ -224,10 +230,10 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
       }
     }
 
-    const summary = options.body || (existing?.frontmatter.summary as string) || `Completed session ${sessionId}`;
+    const summary = options.body || (existing.frontmatter.summary as string) || `Completed session ${sessionId}`;
 
     const fm: Partial<RecordFrontmatter> = {
-      ...(existing?.frontmatter || {}),
+      ...(existing.frontmatter || {}),
       id,
       kind: 'session',
       project: projectId,
@@ -237,9 +243,9 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
       startTime,
       endTime,
       durationMinutes: durationMinutes ?? 0,
-      taskSlug: options.taskSlug || (existing?.frontmatter.taskSlug as string),
-      client: options.client || (existing?.frontmatter.client as string),
-      billable: options.billable !== undefined ? Boolean(options.billable) : (existing?.frontmatter.billable as boolean ?? true),
+      taskSlug: options.taskSlug || (existing.frontmatter.taskSlug as string),
+      client: options.client || (existing.frontmatter.client as string),
+      billable: options.billable !== undefined ? Boolean(options.billable) : (existing.frontmatter.billable as boolean ?? true),
       deliverables: mergedDeliverables,
       summary
     };

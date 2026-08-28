@@ -774,3 +774,21 @@ test('auto turn allocation uses max(turn)+1 after gaps', async () => {
     cleanup();
   }
 });
+
+test('endSessionRecord rejects sessions that were never started', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    await assert.rejects(
+      () =>
+        endSessionRecord({
+          vaultRoot,
+          projectId,
+          sessionId: 'orphan-never-started',
+          body: 'should fail'
+        }),
+      /no session record found|session_start first/
+    );
+  } finally {
+    cleanup();
+  }
+});
