@@ -85,7 +85,9 @@ memo session end session-1740000000-a1b2 --summary "Implemented OAuth2 token ref
 ### 3. Export Session Story (Markdown Narrative)
 
 ```bash
-memo prompt export-story session-1740000000-a1b2 --promote docs/stories/oauth-refresh.md
+# Output must be outside the product tree (assertNotInProductRoot). Or omit --output and use stdout/JSON.
+memo prompt export-story session-1740000000-a1b2 --output /tmp/oauth-refresh-story.md
+# Status monitor: GET /api/prompts/sessions/:id/export?project=<projectId>
 ```
 
 ---

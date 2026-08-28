@@ -226,12 +226,18 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
     }
 
     const now = new Date().toISOString();
-    const endTime = options.until || now;
+    const alreadyCompleted = existing.frontmatter.status === 'completed';
+    const endTime = alreadyCompleted
+      ? ((existing.frontmatter.endTime as string) || options.until || now)
+      : (options.until || now);
     const startTime = (existing.frontmatter.startTime as string) || (existing.frontmatter.created as string) || now;
 
     // Never reuse PromptOptions.limit (pagination) as duration — compute from timestamps only.
+    // Preserve duration when appending deliverables to an already-completed session.
     let durationMinutes: number | undefined;
-    if (startTime) {
+    if (alreadyCompleted && existing.frontmatter.durationMinutes != null) {
+      durationMinutes = Number(existing.frontmatter.durationMinutes);
+    } else if (startTime) {
       const diffMs = new Date(endTime).getTime() - new Date(startTime).getTime();
       durationMinutes = Number.isFinite(diffMs) ? Math.max(0, Math.round(diffMs / 60000)) : 0;
     }
