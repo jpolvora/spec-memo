@@ -1445,7 +1445,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           const model = fm.model || '-';
           const sess = fm.sessionId ? fm.sessionId.slice(0, 16) : '-';
           const turn = fm.turn != null ? String(fm.turn) : '-';
-          const snippet = p.body.replace(/\n+/g, ' ').slice(0, 75);
+          const snippet = p.body.replace(/\\n+/g, ' ').slice(0, 75);
 
           const tr = document.createElement("tr");
           tr.className = "master-row";

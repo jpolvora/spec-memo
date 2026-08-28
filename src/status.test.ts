@@ -20,6 +20,45 @@ function countTrapFiles(vaultRoot: string, projectId: string): number {
   return fs.readdirSync(dir).filter((f) => f.endsWith(".md")).length;
 }
 
+/** Inline <script> bodies from generateStatusHtml (excludes src= external). */
+function extractInlineScripts(html: string): string[] {
+  const out: string[] = [];
+  const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const attrs = m[1] ?? "";
+    if (/\bsrc\s*=/i.test(attrs)) continue;
+    out.push(m[2] ?? "");
+  }
+  return out;
+}
+
+/**
+ * Guard against template-literal escape bugs (issue #20): host `\n` inside
+ * generateStatusHtml`...` becomes a real newline in browser JS, breaking `/.../` regexes.
+ */
+function assertStatusInlineScriptsParse(html: string): void {
+  const scripts = extractInlineScripts(html);
+  assert.ok(scripts.length > 0, "status HTML must embed at least one inline <script>");
+  for (const [i, source] of scripts.entries()) {
+    // Classic failure mode: `/\n+/g` in a host template becomes `/` + real newline + `+/g`.
+    const brokenRegex = source.match(/\/\r?\n[^\/\n]{0,40}\//);
+    assert.equal(
+      brokenRegex,
+      null,
+      `inline script[${i}] has a regex that starts with a newline (template \\n escape bug):\n${brokenRegex?.[0]?.slice(0, 120) ?? ""}`
+    );
+    try {
+      // Parse-only: do not execute status UI side effects.
+      // eslint-disable-next-line no-new-func -- intentional syntax check for served HTML
+      new Function(source);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      assert.fail(`inline script[${i}] must be valid JavaScript (issue #20 class): ${msg}`);
+    }
+  }
+}
+
 async function readSseEvents(
   response: Response,
   maxEvents = 3,
@@ -123,6 +162,29 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('id="modal-export"'));
     assert.ok(html.includes('id="modal-import"'));
     assert.ok(!html.includes("cdn.jsdelivr"));
+  });
+
+  await t.test("generateStatusHtml inline scripts parse (no template-escape SyntaxError)", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assertStatusInlineScriptsParse(html);
+    // Canary for the known prompts-snippet line (issue #20)
+    assert.ok(
+      html.includes("p.body.replace(/\\n+/g, ' ')"),
+      "prompt snippet regex must emit /\\n+/g to the browser"
+    );
+    assert.ok(
+      !/p\.body\.replace\(\/\n\+\/g/.test(html),
+      "prompt snippet regex must not contain a literal newline"
+    );
+  });
+
+  await t.test("assertStatusInlineScriptsParse rejects broken template-escape regex", () => {
+    const broken =
+      "<html><script>const snippet = p.body.replace(/\n+/g, ' ');</script></html>";
+    assert.throws(
+      () => assertStatusInlineScriptsParse(broken),
+      /embedded newline|valid JavaScript|template/i
+    );
   });
 
   await t.test("refuses non-loopback host without auth token", () => {

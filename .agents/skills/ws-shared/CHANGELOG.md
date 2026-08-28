@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-28 19:45] Agent: Cursor Composer
+- **Prompt**: Fix #20 status monitor UI SyntaxError (broken /\n+/g in template)
+- **Done**: Escaped template regex in `src/status.ts` so browser receives `/\n+/g`; added generateStatusHtml regression assert
+- **Result**: status tests 25/25 pass (inline script parse + negative fixture). Learning: N/A (template-literal escape pitfall already diagnosed in issue)
+
 ### [2026-08-28 19:20] Agent: Cursor Composer
 - **Prompt**: /ws-fable-method fix GitHub #17 ws-memo reverse-handoff + MCP template align
 - **Done**: Narrowed ws-memo description; dropped `spec-memo` invocation; added Consumer handoff + Session Router rows; labeled `memo setup` host/deployment; MCP-TEMPLATE primary npx `spec-memo` with git fallback; linked workflow-skills#253
