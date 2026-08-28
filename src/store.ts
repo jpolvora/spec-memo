@@ -442,6 +442,8 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
     }
   }
 
+const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
+
   // Fallback: search across other projects in vault if projectId was not explicitly specified
   if (!options.projectId && lookupId) {
     const projectsDir = path.join(vaultRoot, 'projects');
@@ -456,11 +458,17 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
         }
 
         if (options.kind && directLookup) {
+          if (CROSS_PROJECT_GET_EXCLUDED.includes(options.kind)) {
+            continue;
+          }
           const subdir = getSubdirForKind(options.kind);
           const directPath = path.join(otherProjectDir, subdir, `${directLookup}.md`);
           if (fs.existsSync(directPath)) {
             try {
-              return parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
+              const parsed = parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
+              if (!CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind)) {
+                return parsed;
+              }
             } catch {
               // continue scanning
             }
@@ -471,11 +479,18 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
           const otherSubdirs = fs.readdirSync(otherProjectDir, { withFileTypes: true });
           for (const d of otherSubdirs) {
             if (d.isDirectory()) {
+              const kindFromDir = d.name.replace(/s$/, '') as RecordKind;
+              if (CROSS_PROJECT_GET_EXCLUDED.includes(kindFromDir) || d.name === 'scratch' || d.name === 'state' || d.name === 'reviews' || d.name === 'scratches' || d.name === 'states') {
+                continue;
+              }
               const dirPath = path.join(otherProjectDir, d.name);
               const directFile = path.join(dirPath, `${lookupId}.md`);
               if (fs.existsSync(directFile)) {
                 try {
-                  return parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
+                  const parsed = parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
+                  if (!CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind)) {
+                    return parsed;
+                  }
                 } catch {
                   // continue scanning
                 }
@@ -486,7 +501,7 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
                   const filePath = path.join(dirPath, file);
                   try {
                     const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
-                    if (parsed.frontmatter.id === lookupId) {
+                    if (!CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind) && parsed.frontmatter.id === lookupId) {
                       return parsed;
                     }
                   } catch {

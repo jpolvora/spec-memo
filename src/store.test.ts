@@ -569,5 +569,74 @@ describe('Store Engine (upsert and get)', () => {
       fs.rmSync(otherProject, { recursive: true, force: true });
     }
   });
+
+  it('should not retrieve ephemeral records (scratch, state, review) from sibling projects in getRecord fallback', async () => {
+    // 1. Create ephemeral records in project A
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'scratch',
+      slug: 'temp-notes',
+      frontmatter: {
+        id: 'scratch-alpha-notes',
+        title: 'Alpha Scratch Notes'
+      },
+      body: 'Temporary notes in Alpha'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'state',
+      slug: 'session-state',
+      frontmatter: {
+        id: 'state-alpha-session',
+        title: 'Alpha Session State'
+      },
+      body: 'State in Alpha'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'review',
+      slug: 'pr-review',
+      frontmatter: {
+        id: 'review-alpha-pr',
+        title: 'Alpha PR Review'
+      },
+      body: 'Review findings in Alpha'
+    });
+
+    // 2. Query from project B directory without explicit projectId
+    const otherProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-b-'));
+    try {
+      const scratchRec = await getRecord({
+        cwd: otherProject,
+        vaultRoot: tempVault,
+        id: 'scratch-alpha-notes'
+      });
+      assert.equal(scratchRec, null, 'Ephemeral scratch must not leak cross-project in getRecord');
+
+      const stateRec = await getRecord({
+        cwd: otherProject,
+        vaultRoot: tempVault,
+        id: 'state-alpha-session'
+      });
+      assert.equal(stateRec, null, 'Ephemeral state must not leak cross-project in getRecord');
+
+      const reviewRec = await getRecord({
+        cwd: otherProject,
+        vaultRoot: tempVault,
+        id: 'review-alpha-pr'
+      });
+      assert.equal(reviewRec, null, 'Ephemeral review must not leak cross-project in getRecord');
+    } finally {
+      fs.rmSync(otherProject, { recursive: true, force: true });
+    }
+  });
 });
 
