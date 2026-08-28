@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-28 19:20] Agent: Cursor Composer
+- **Prompt**: /ws-fable-method fix GitHub #17 ws-memo reverse-handoff + MCP template align
+- **Done**: Narrowed ws-memo description; dropped `spec-memo` invocation; added Consumer handoff + Session Router rows; labeled `memo setup` host/deployment; MCP-TEMPLATE primary npx `spec-memo` with git fallback; linked workflow-skills#253
+- **Result**: Issue #17 ACs verified locally. Learning: N/A (standard documentation/skill contract fix)
+
 ### [2026-08-26 17:16] Agent: Cursor Grok 4.6
 - **Prompt**: /ws-goal-fix-pr fix 6 session dry-run hybrid-sync findings (not a GitHub PR)
 - **Done**: Daemon `/api/sync/push` and `/api/sync` honor `dryRun`; mutating tools resolve cwd `projectId` before `scheduleHybridPush`; debounce single-flights with one trailing push; `writeHybridState` uses `withVaultLockSync`; added AC21/AC18/AC25 tests
