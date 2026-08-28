@@ -153,6 +153,15 @@ You should provide your token via environment variables rather than hardcoding i
         /allowlisted IDE rule path/
       );
     });
+
+    it('refuses promote destinations outside the product repository', async () => {
+      const { assertAllowedIdeRulePromote } = await import('./safety.js');
+      const outside = path.join(os.tmpdir(), 'spec-memo-other-repo', 'src', 'injected.ts');
+      assert.throws(
+        () => assertAllowedIdeRulePromote(outside, productRepo, vaultRoot),
+        /must resolve inside the product repository/
+      );
+    });
   });
 
   describe('Integration with Store (upsertRecord & appendEvent)', () => {

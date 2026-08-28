@@ -67,7 +67,11 @@ export async function recordPromptTurn(options: PromptOptions): Promise<PromptRe
     let turn = options.turn;
     if (sessionId && turn == null) {
       const existing = listSessionPromptRecords(vaultRoot, projectId!, sessionId);
-      turn = existing.length + 1;
+      const maxTurn = existing.reduce(
+        (max, r) => Math.max(max, Number(r.frontmatter.turn) || 0),
+        0
+      );
+      turn = maxTurn + 1;
     }
 
     const id = options.id || generatePromptId(sessionId, turn);
@@ -676,7 +680,19 @@ export function generateActivityReport(options: {
     const sessionRecords = records.filter((r) => r.frontmatter.kind === 'session');
     const promptRecords = records.filter((r) => r.frontmatter.kind === 'prompt');
 
-    totalPrompts += promptRecords.length;
+    for (const pr of promptRecords) {
+      const created = new Date(String(pr.frontmatter.created || '')).getTime();
+      if (Number.isFinite(created) && (created < sinceTime || created > untilTime)) {
+        continue;
+      }
+      if (options.client) {
+        const pc = (pr.frontmatter.client as string) || 'internal';
+        if (pc.toLowerCase() !== options.client.toLowerCase()) {
+          continue;
+        }
+      }
+      totalPrompts += 1;
+    }
 
     for (const sr of sessionRecords) {
       const fm = sr.frontmatter;

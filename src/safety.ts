@@ -282,7 +282,9 @@ export function assertAllowedIdeRulePromote(
     return;
   }
   if (!isPathInside(resolvedTarget, resolvedProduct)) {
-    return;
+    throw new Error(
+      `Safety violation: Derived-rule promote destination must resolve inside the product repository (${resolvedProduct}).`
+    );
   }
 
   const rel = path.relative(resolvedProduct, resolvedTarget).replace(/\\/g, '/');

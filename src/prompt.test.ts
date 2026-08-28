@@ -22,6 +22,7 @@ import { closeIndex } from './indexer.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { createActivityBus } from './activity.js';
 import { startStatusServer } from './status.js';
+import { forgetRecord } from './store.js';
 
 function createTempVault(): { vaultRoot: string; projectId: string; cleanup: () => void } {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-prompt-test-'));
@@ -410,6 +411,8 @@ test('Status Monitor REST Endpoints for Prompts & Activity', async () => {
     const promptsData = (await promptsRes.json()) as any;
     assert.strictEqual(promptsData.total, 1);
     assert.strictEqual(promptsData.items[0].frontmatter.sessionId, 'sess-rest-1');
+    assert.strictEqual(promptsData.items[0].path, undefined);
+    assert.ok(!JSON.stringify(promptsData).includes(vaultRoot.replace(/\\/g, '\\\\')));
 
     // 2. GET /api/prompts/sessions/:sessionId
     const sessionRes = await fetch(`${baseUrl}/api/prompts/sessions/sess-rest-1?project=${projectId}`);
@@ -448,6 +451,7 @@ test('Status Monitor REST Endpoints for Prompts & Activity', async () => {
     const detailData = (await detailRes.json()) as any;
     assert.strictEqual(detailData.ok, true);
     assert.ok(detailData.record);
+    assert.strictEqual(detailData.record.path, undefined);
     assert.ok(typeof detailData.renderedHtml === 'string');
     assert.ok(detailData.renderedHtml.includes('sanitize') || detailData.renderedHtml.includes('Always'));
 
@@ -636,6 +640,20 @@ test('derive-rules promote allowlist accepts IDE paths and refuses src/', async 
         }),
       /allowlisted IDE rule path|Safety violation/
     );
+
+    const outsideRepo = path.join(os.tmpdir(), 'spec-memo-foreign-repo', 'CLAUDE.md');
+    await assert.rejects(
+      () =>
+        deriveRulesFromPrompts({
+          vaultRoot,
+          projectId,
+          cwd: productRoot,
+          sessionId: 'sess-promote',
+          promote: outsideRepo,
+          format: 'markdown'
+        }),
+      /must resolve inside the product repository|Safety violation/
+    );
   } finally {
     cleanup();
     try {
@@ -655,4 +673,104 @@ test('Status HTML includes prompts explorer polish markers', async () => {
   assert.ok(html.includes('data-ide="pi"'));
   assert.ok(html.includes('secret-badge') || html.includes('Secrets redacted'));
   assert.ok(html.includes('prompt-drawer'));
+});
+
+
+test('activity report totalPrompts respects since/until/client filters', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    await recordPromptTurn({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-old',
+      turn: 1,
+      body: 'Old prompt outside window',
+      client: 'client-x',
+      ide: 'cursor'
+    });
+    const oldPath = path.join(vaultRoot, 'projects', projectId, 'prompts');
+    for (const f of fs.readdirSync(oldPath).filter((name) => name.endsWith('.md'))) {
+      const full = path.join(oldPath, f);
+      let md = fs.readFileSync(full, 'utf8');
+      md = md.replace(/^created: .*$/m, 'created: 2020-01-01T00:00:00.000Z');
+      fs.writeFileSync(full, md, 'utf8');
+    }
+
+    await startSessionRecord({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-win',
+      client: 'client-x',
+      billable: true
+    });
+    await recordPromptTurn({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-win',
+      turn: 1,
+      body: 'In-window prompt',
+      client: 'client-x'
+    });
+    await endSessionRecord({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-win',
+      body: 'done'
+    });
+
+    const report = generateActivityReport({
+      vaultRoot,
+      projectId,
+      since: '2026-01-01T00:00:00.000Z',
+      until: '2099-12-31T23:59:59.999Z',
+      client: 'client-x'
+    });
+    assert.ok(report.totalPrompts >= 1);
+    assert.ok(report.totalPrompts < 3, `expected filtered prompt count, got ${report.totalPrompts}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test('auto turn allocation uses max(turn)+1 after gaps', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    const t1 = await recordPromptTurn({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-gap',
+      turn: 1,
+      body: 'turn one'
+    });
+    const t2 = await recordPromptTurn({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-gap',
+      turn: 2,
+      body: 'turn two'
+    });
+    await recordPromptTurn({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-gap',
+      turn: 3,
+      body: 'turn three'
+    });
+
+    await forgetRecord({ id: t2.id, vaultRoot, projectId, purge: true });
+
+    const next = await recordPromptTurn({
+      vaultRoot,
+      projectId,
+      sessionId: 'sess-gap',
+      body: 'auto after gap'
+    });
+    assert.strictEqual(Number(next.turn), 4);
+    assert.notStrictEqual(next.id, t1.id);
+    const turns = getSessionTurns({ vaultRoot, projectId, sessionId: 'sess-gap' });
+    assert.ok(turns.some((r) => Number(r.frontmatter.turn) === 3));
+    assert.ok(turns.some((r) => Number(r.frontmatter.turn) === 4));
+  } finally {
+    cleanup();
+  }
 });

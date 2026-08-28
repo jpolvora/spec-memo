@@ -1,5 +1,5 @@
 import http from "node:http";
-import { getVaultRoot } from "./vault.js";
+import { getVaultRoot, getProjectMetadata } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
 import { getPackageVersion } from "./version.js";
@@ -8,6 +8,7 @@ import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-b
 import { logErrorReport } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
+import { sanitizeToolOutput } from "./safety.js";
 import {
   listPrompts,
   searchPrompts,
@@ -2425,7 +2426,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           sort
         };
         const result = query && query.trim() ? searchPrompts(listOpts) : listPrompts(listOpts);
-        writeJson(res, 200, result);
+        writeJson(res, 200, sanitizeToolOutput(result));
         return;
       }
 
@@ -2455,7 +2456,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           vaultRoot,
           projectId: project && project !== "all" ? project : undefined
         });
-        writeJson(res, 200, { sessionId, turns });
+        writeJson(res, 200, sanitizeToolOutput({ sessionId, turns }));
         return;
       }
 
@@ -2477,7 +2478,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const redacted = typeof record.body === "string" && record.body.includes("[REDACTED");
         writeJson(res, 200, {
           ok: true,
-          record,
+          record: sanitizeToolOutput(record),
           renderedHtml: renderPromptMarkdownHtml(record.body || ""),
           secretsRedacted: redacted
         });
@@ -2505,7 +2506,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           limit,
           offset
         });
-        writeJson(res, 200, result);
+        writeJson(res, 200, sanitizeToolOutput(result));
         return;
       }
 
@@ -2539,15 +2540,17 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             return;
           }
         }
+        const meta = parsed.projectId ? getProjectMetadata(parsed.projectId, vaultRoot) : null;
         const result = await deriveRulesFromPrompts({
           vaultRoot,
           projectId: parsed.projectId,
+          cwd: meta?.lastSeenRoot,
           sessionId: parsed.sessionId,
           saveTraps: parsed.saveTraps,
           promote: parsed.promote,
           format: parsed.format
         });
-        writeJson(res, 200, { ok: true, result });
+        writeJson(res, 200, { ok: true, result: sanitizeToolOutput(result) });
         return;
       }
 
