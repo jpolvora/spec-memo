@@ -2,11 +2,11 @@
 name: ws-memo
 version: 0.5.0
 description: >-
-  Route agent working memory through spec-memo MCP (10 tools) and matching CLI extras.
+  Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on spec-memo, memo vault, bootstrap brief, upsert trap/decision/spec/plan,
-  search vault, promote ADR, check version, install skills, memo doctor, rank traps,
-  canvas, serve --sse, status monitor, import/export vault, sync-vault, uninstall/teardown,
-  configure deployment mode (local, hybrid, remote), or configure project with spec-memo.
+  search vault, prompt history, session tracking, promote ADR, check version, install skills,
+  memo doctor, rank traps, canvas, serve --sse, status monitor, import/export vault, sync-vault,
+  uninstall/teardown, configure deployment mode (local, hybrid, remote), or configure project with spec-memo.
 invocation_names:
   - ws-memo
   - memo
@@ -17,7 +17,7 @@ invocation_names:
 
 > When this skill is loaded, output "ws-memo loaded."
 
-**Runtime skill** shipped by [spec-memo](https://github.com/jpolvora/spec-memo). Guides agents to use the **MCP server (10 tools) + CLI (`memo`)** for out-of-repo working memory, diagnostics, and project lifecycle management across **local**, **hybrid**, and **remote** deployment modes.
+**Runtime skill** shipped by [spec-memo](https://github.com/jpolvora/spec-memo). Guides agents to use the **MCP server (11 tools) + CLI (`memo`)** for out-of-repo working memory, diagnostics, and project lifecycle management across **local**, **hybrid**, and **remote** deployment modes.
 
 Full tool/CLI parameter matrix → [`references/SURFACE.md`](references/SURFACE.md). Record schemas and git boundaries → [`references/RECORDS.md`](references/RECORDS.md). Host snippet → [`references/MCP-TEMPLATE.json`](references/MCP-TEMPLATE.json).
 
@@ -43,22 +43,23 @@ Agents calling spec-memo MCP tools must follow this strict **Pre-Validation Prot
 
 ---
 
-## 🚀 The 10 MCP Tools: Pre-Validation & Calling Reference
+## 🚀 The 11 MCP Tools: Pre-Validation & Calling Reference
 
-All 10 MCP tools are available over MCP stdio (`memo serve`) or MCP SSE (`memo serve --sse`). CLI commands match tool names 1:1.
+All 11 MCP tools are available over MCP stdio (`memo serve`) or MCP SSE (`memo serve --sse`). CLI commands match tool names 1:1.
 
 | # | MCP Tool | Purpose | Required Fields | Key Defaults & Enums |
 |---|---|---|---|---|
 | 1 | `bootstrap` | Session brief & traps | _(none)_ | `maxBytes`: 8192, `cwd`: current dir |
 | 2 | `search` | FTS5 memory retrieval | _(none)_ | `sort`: `relevance`\|`occurrences`\|`updated` |
-| 3 | `get` | Read single record | `id` **or** (`kind` + `slug`) | `kind`: closed enum of 8 kinds |
-| 4 | `upsert` | Write memory record | `kind`, `body` | `kind`: 8 kinds; frontmatter optional |
+| 3 | `get` | Read single record | `id` **or** (`kind` + `slug`) | `kind`: closed enum of 10 kinds |
+| 4 | `upsert` | Write memory record | `kind`, `body` | `kind`: 10 kinds; frontmatter optional |
 | 5 | `append` | Write-only audit event | `event` | `kind`: defaults to `"log"` |
 | 6 | `forget` | Archive or purge record | `id` **or** (`kind` + `slug`) | `purge`: boolean (default `false`) |
 | 7 | `gc` | TTL & compaction | _(none)_ | `dryRun`: boolean (default `false`) |
 | 8 | `promote` | Export to product repo | `destination` | `format`: `raw`\|`adr`\|`madr`\|`skill` |
 | 9 | `check_version` | Compare package version | _(none)_ | Soft-fails offline |
-| 10 | `install_skills` | Install runtime skill | _(none)_ | `skills`: `["ws-memo"]`, `skillsRoot`: `.agents/skills` |
+| 10 | `install_skills` | Install runtime skill | _(none)_ | `skills`: `["ws-memo", "ws-session-tracking"]`, `skillsRoot`: `.agents/skills` |
+| 11 | `prompt` | Prompt ingestion & sessions | `action` (default: `record`) | 10 actions: `record`, `list`, `get`, `search`, `session`, `session_start`, `session_end`, `activity_report`, `derive_rules`, `export_story` |
 
 ---
 
@@ -432,6 +433,50 @@ memo check-version --json
 #### CLI Equivalent
 ```bash
 memo install-skills --product-root /path/to/consumer-app --force
+```
+
+---
+
+### 11. `prompt`
+
+**Job:** Ingest prompt turns, track session lifecycles, query prompts, derive AI rules, export intent stories, and generate activity/invoicing reports.
+
+#### Parameter Specification
+- `action` (string, optional): `"record"`, `"list"`, `"get"`, `"search"`, `"session"`, `"session_start"`, `"session_end"`, `"activity_report"`, `"derive_rules"`, `"export_story"` (default: `"record"`).
+- `body` (string, optional): Prompt content or work summary.
+- `id` (string, optional): Unique record ID.
+- `sessionId` (string, optional): Session correlation identifier.
+- `turn` (number, optional): Turn number in session.
+- `taskSlug` (string, optional): Feature or task slug.
+- `client` (string, optional): Client or account identifier.
+- `billable` (boolean, optional): Whether session/prompt is billable (default: `true`).
+- `ide` (string, optional): Host environment / IDE (`cursor`, `vscode`, `claude`, `gemini`, `antigravity`, etc.).
+- `model` (string, optional): Model identifier.
+- `agent` (string, optional): Agent role or name.
+- `deliverables` (array, optional): Completed deliverables (`[{ type: "pr"|"commit"|"spec", url, sha, title }]`).
+- `query` (string, optional): FTS query term.
+- `since` / `until` (string, optional): ISO date bounds.
+- `saveTraps` (boolean, optional): Save derived rules as traps in vault (for `derive_rules`).
+- `promote` (string, optional): Destination file path to export rules or stories to.
+
+#### MCP Calling Example
+```json
+{
+  "action": "record",
+  "sessionId": "session-1740000000-a1b2",
+  "turn": 1,
+  "taskSlug": "feature-oauth-refresh",
+  "client": "acme-corp",
+  "body": "Add support for OAuth2 token refresh."
+}
+```
+
+#### CLI Equivalent
+```bash
+memo prompt record --session-id session-1740000000-a1b2 --turn 1 --body "Add support for OAuth2 token refresh."
+memo session start session-1740000000-a1b2 --task-slug feature-oauth-refresh
+memo prompt derive-rules --session-id session-1740000000-a1b2 --save-traps
+memo activity --client acme-corp
 ```
 
 ---

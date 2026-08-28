@@ -94,7 +94,7 @@ If you prefer not using npm global link or want a standalone wrapper script:
 
 1. **Local Mode (Default):** All memory records, indexing, and queries run directly on the local machine in `~/.spec-memo/`. Zero network dependencies.
 2. **Hybrid Mode:** Local vault remains the primary low-latency cache; transparently pulls updates from a shared daemon during `bootstrap` and debounces pushes on mutating operations (`upsert`, `append`, `forget`, `gc`). Works offline seamlessly (fails open).
-3. **Remote Mode:** Agent hosts run a local stdio MCP proxy (`memo serve`) that forwards all 10 tools to a central remote daemon. Zero memory records stored on local disk. Fails closed with structured errors when unreachable.
+3. **Remote Mode:** Agent hosts run a local stdio MCP proxy (`memo serve`) that forwards all 11 tools to a central remote daemon. Zero memory records stored on local disk. Fails closed with structured errors when unreachable.
 
 #### Configure with `memo setup`
 
@@ -642,7 +642,10 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `gc` | Apply TTL retention and compact plans | `--dry-run`, `--project` |
 | `promote` | Safe export of record to product repo | `--id`, `--to`, `--format` (`raw`/`adr`/`madr`/`skill`), `--force`, `--limit` |
 | `check_version` / `check-version` | Compare running version to npm latest | `--json` |
-| `install_skills` / `install-skills` | Install `ws-memo` into a consumer repo | `--product-root`, `--skill`, `--force`, `--json` |
+| `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into a consumer repo | `--product-root`, `--skill`, `--force`, `--json` |
+| `prompt` / `prompts` | Ingest & query prompt history; derive rules; export stories | `record`/`list`/`search`/`show`/`session`/`export`/`derive-rules` |
+| `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`show`/`export`, `--summary`, `--pr` |
+| `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
 | `doctor` | Diagnose health, mode, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
 | `sync` | Synchronize vault records (hybrid mode or vault-git) | `--all`, `--dry-run`, `--json` |

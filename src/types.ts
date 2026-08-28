@@ -6,16 +6,26 @@ export type RecordKind =
   | 'state'
   | 'log'
   | 'scratch'
-  | 'review';
+  | 'review'
+  | 'prompt'
+  | 'session';
 
 export type RecordStatus =
   | 'active'
   | 'paused'
   | 'shipped'
   | 'superseded'
-  | 'archived';
+  | 'archived'
+  | 'completed';
 
 export type RecordSource = 'agent' | 'human' | 'imported';
+
+export interface SessionDeliverable {
+  type: 'pr' | 'commit' | 'spec';
+  url?: string;
+  sha?: string;
+  title?: string;
+}
 
 export interface RecordFrontmatter {
   id: string;
@@ -38,6 +48,24 @@ export interface RecordFrontmatter {
   module?: string;
   occurrences?: number;
   lastSeen?: string;
+  // Prompt & Session extended fields
+  ide?: string;
+  model?: string;
+  agent?: string;
+  sessionId?: string;
+  turn?: number;
+  taskSlug?: string;
+  client?: string;
+  billable?: boolean;
+  branch?: string;
+  gitSha?: string;
+  startTime?: string;
+  endTime?: string;
+  durationMinutes?: number;
+  humanTotalMinutes?: number;
+  agentRunningMinutes?: number;
+  deliverables?: SessionDeliverable[];
+  summary?: string;
   [key: string]: unknown;
 }
 
@@ -80,7 +108,8 @@ export const TOOL_NAMES = [
   'gc',
   'promote',
   'check_version',
-  'install_skills'
+  'install_skills',
+  'prompt'
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -529,5 +558,135 @@ export interface ImportResult {
   records: ImportItem[];
   skippedPaths: string[];
 }
+
+export type PromptAction =
+  | 'record'
+  | 'list'
+  | 'get'
+  | 'search'
+  | 'session'
+  | 'session_start'
+  | 'session_end'
+  | 'activity_report'
+  | 'derive_rules'
+  | 'export_story';
+
+export interface PaginatedResult<T> {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  items: T[];
+}
+
+export interface PromptOptions {
+  action?: PromptAction;
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+  crossProject?: boolean;
+  id?: string;
+  body?: string;
+  sessionId?: string;
+  turn?: number;
+  taskSlug?: string;
+  client?: string;
+  billable?: boolean;
+  ide?: string;
+  model?: string;
+  agent?: string;
+  branch?: string;
+  gitSha?: string;
+  linkedPaths?: string[];
+  tags?: string[];
+  deliverables?: SessionDeliverable[];
+  query?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+  offset?: number;
+  sort?: 'date-desc' | 'date-asc' | 'relevance';
+  saveTraps?: boolean;
+  promote?: string;
+  format?: string;
+}
+
+export interface PromptRecordResult {
+  id: string;
+  path: string;
+  created: string;
+  turn?: number;
+  sessionId?: string;
+  projectId: string;
+}
+
+export interface SessionResult {
+  id: string;
+  sessionId: string;
+  projectId: string;
+  status: RecordStatus;
+  startTime: string;
+  endTime?: string;
+  durationMinutes?: number;
+  taskSlug?: string;
+  client?: string;
+  billable: boolean;
+  deliverables?: SessionDeliverable[];
+  summary?: string;
+  path: string;
+}
+
+export interface ActivityReportResult {
+  since?: string;
+  until?: string;
+  client?: string;
+  projectId?: string;
+  totalDurationMinutes: number;
+  totalBillableHours: number;
+  totalSessions: number;
+  totalPrompts: number;
+  sessions: Array<{
+    id: string;
+    sessionId: string;
+    projectId: string;
+    client?: string;
+    taskSlug?: string;
+    startTime: string;
+    endTime?: string;
+    durationMinutes: number;
+    billable: boolean;
+    deliverables?: SessionDeliverable[];
+    summary?: string;
+  }>;
+  byClient: Record<string, { totalHours: number; sessionCount: number }>;
+  byProject: Record<string, { totalHours: number; sessionCount: number }>;
+}
+
+export interface DerivedRuleCandidate {
+  ruleTitle: string;
+  pattern: string;
+  category: string;
+  confidence: number;
+  sourcePromptIds: string[];
+  suggestedBody: string;
+}
+
+export interface DeriveRulesResult {
+  projectId?: string;
+  sessionId?: string;
+  scannedPromptsCount: number;
+  rules: DerivedRuleCandidate[];
+  savedTraps?: Array<{ id: string; title: string; path: string }>;
+  promotedPath?: string;
+}
+
+export interface ExportStoryResult {
+  sessionId: string;
+  projectId: string;
+  turnsCount: number;
+  markdown: string;
+  outputPath?: string;
+}
+
 
 

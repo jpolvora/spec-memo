@@ -56,6 +56,12 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       } else {
         result.options.help = true;
       }
+    } else if (arg === '-o') {
+      const next = args[i + 1];
+      if (next && !next.startsWith('-')) {
+        result.options.output = next;
+        i++;
+      }
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
       if (key.includes('=')) {
@@ -99,6 +105,9 @@ Core Memory Commands:
   promote         Copy one record into the product repository
   check_version   Compare running version to npm latest (alias: check-version)
   install_skills  Install ws-memo skill into a consumer repo (alias: install-skills)
+  prompt          Ingest, query, export prompt turns, stories, and derive rules
+  session         Start, complete, export, or inspect session lifecycles
+  activity        Generate timesheet activity and invoicing report
 
 Utility Commands:
   setup         Configure deployment mode (local, hybrid, remote) and host MCP wiring
@@ -270,6 +279,43 @@ Options:
     return;
   }
 
+  if (cmd === 'prompt' || cmd === 'prompts' || cmd === 'session' || cmd === 'activity') {
+    console.log(`Usage:
+  memo prompt <action> [options]
+  memo prompts <action> [options]     (alias)
+  memo session start|end|show|export [sessionId] [options]
+  memo activity [options]
+
+Actions (prompt):
+  record              Ingest a prompt turn (--body required)
+  list                List prompts (metadata filters; no FTS)
+  search <query>      FTS5 search over prompt body/title/tags
+  show|get <id>       Fetch one prompt or session by id
+  session <id>        List chronological turns for a session
+  session-start|start Start a work session
+  session-end|end     Complete a session (--summary, --pr, --deliverables)
+  export|export-story Export session intent story (--output path outside product tree)
+  derive-rules        Scan prompts for AI rule candidates (--save-traps, --promote)
+  activity|activity-report  Timesheet / invoicing report
+
+Preferred IDE vocabulary (free string): cursor, vscode, claude, gemini, antigravity, opencode, codex, pi, terminal, generic
+
+Key options:
+  --body, --session-id, --turn, --task-slug|--slug, --client, --billable
+  --ide, --model, --agent, --branch, --git-sha, --tags, --since, --until
+  --query, --limit, --offset, --cross-project|--all
+  --output|-o         Export story path (refused inside product tree)
+  --summary           Session-end summary body
+  --pr <url>          Append a PR deliverable on session-end
+  --promote <path>    Allowlisted IDE rule dest (.cursor/rules/*, CLAUDE.md, GEMINI.md, .github/copilot-instructions.md)
+  --save-traps        Persist high-confidence derived rules as vault traps
+  --format            cursor|copilot|claude|gemini|markdown
+  --json              Machine-readable output
+  -h, --help          Show this help
+`);
+    return;
+  }
+
   const tool = TOOL_DEFINITIONS[cmd as ToolName];
   if (tool) {
     console.log(`Usage: memo ${cmd} [options]
@@ -295,7 +341,10 @@ Options:
 /** Map CLI kebab aliases to MCP tool names. */
 const CLI_TOOL_ALIASES: Record<string, ToolName> = {
   'check-version': 'check_version',
-  'install-skills': 'install_skills'
+  'install-skills': 'install_skills',
+  prompts: 'prompt',
+  session: 'prompt',
+  activity: 'prompt'
 };
 
 function resolveCliCommand(command: string | undefined): string | undefined {
@@ -1249,6 +1298,139 @@ async function runCliInner(
       }
     }
 
+    // Normalization for prompt / session / activity commands
+    if (parsed.command === 'prompt') {
+      const origCmd = argv[0];
+      const pos0 = parsed.positionals[0];
+
+      if (origCmd === 'session') {
+        if (pos0 === 'start') {
+          payload.action = 'session_start';
+          if (parsed.positionals[1]) payload.sessionId = parsed.positionals[1];
+        } else if (pos0 === 'end') {
+          payload.action = 'session_end';
+          if (parsed.positionals[1]) payload.sessionId = parsed.positionals[1];
+        } else if (pos0 === 'export') {
+          payload.action = 'export_story';
+          if (parsed.positionals[1]) payload.sessionId = parsed.positionals[1];
+        } else if (pos0 === 'show' || pos0 === 'get') {
+          payload.action = 'session';
+          if (parsed.positionals[1]) payload.sessionId = parsed.positionals[1];
+        } else if (pos0 === 'list') {
+          payload.action = 'list';
+        } else if (pos0 && !payload.sessionId) {
+          payload.action = 'session';
+          payload.sessionId = pos0;
+        } else if (!payload.action) {
+          payload.action = 'list';
+        }
+      } else if (origCmd === 'activity') {
+        payload.action = 'activity_report';
+      } else {
+        // memo prompt <action>
+        const ACTION_MAP: Record<string, string> = {
+          record: 'record',
+          list: 'list',
+          get: 'get',
+          show: 'get',
+          search: 'search',
+          session: 'session',
+          session_start: 'session_start',
+          'session-start': 'session_start',
+          start: 'session_start',
+          session_end: 'session_end',
+          'session-end': 'session_end',
+          end: 'session_end',
+          activity: 'activity_report',
+          activity_report: 'activity_report',
+          'activity-report': 'activity_report',
+          derive_rules: 'derive_rules',
+          'derive-rules': 'derive_rules',
+          export_story: 'export_story',
+          'export-story': 'export_story',
+          export: 'export_story'
+        };
+
+        if (pos0 && ACTION_MAP[pos0]) {
+          payload.action = ACTION_MAP[pos0];
+          const rest = parsed.positionals.slice(1);
+          if (rest.length > 0) {
+            if (payload.action === 'get') {
+              payload.id = rest[0];
+            } else if (payload.action === 'search' && !payload.query) {
+              payload.query = rest.join(' ');
+            } else if (payload.action === 'session' || payload.action === 'export_story') {
+              payload.sessionId = rest[0];
+            } else if (payload.action === 'record' && !payload.body) {
+              payload.body = rest.join(' ');
+            }
+          }
+        } else if (parsed.positionals.length > 0 && !payload.body) {
+          payload.body = parsed.positionals.join(' ');
+          if (!payload.action) payload.action = 'record';
+        }
+      }
+
+      if (!payload.action) {
+        payload.action = payload.body ? 'record' : 'list';
+      }
+
+      if (payload['session-id'] && !payload.sessionId) {
+        payload.sessionId = String(payload['session-id']);
+        delete payload['session-id'];
+      }
+      if (payload['task-slug'] && !payload.taskSlug) {
+        payload.taskSlug = String(payload['task-slug']);
+        delete payload['task-slug'];
+      }
+      if (payload.slug && !payload.taskSlug) {
+        payload.taskSlug = String(payload.slug);
+        delete payload.slug;
+      }
+      if ((payload.output || payload.o) && !payload.promote) {
+        payload.promote = String(payload.output || payload.o);
+        delete payload.output;
+        delete payload.o;
+      }
+      if (payload.summary && !payload.body) {
+        payload.body = String(payload.summary);
+        delete payload.summary;
+      }
+      if (payload.pr) {
+        const prUrl = String(payload.pr);
+        const existing = Array.isArray(payload.deliverables) ? payload.deliverables : [];
+        payload.deliverables = [...existing, { type: 'pr', url: prUrl, title: prUrl }];
+        delete payload.pr;
+      }
+      if (payload['save-traps'] === true || payload['save-traps'] === 'true' || payload.saveTraps === true || payload.saveTraps === 'true') {
+        payload.saveTraps = true;
+        delete payload['save-traps'];
+      }
+      if (payload['cross-project'] === true || payload['cross-project'] === 'true' || payload.all === true || payload.all === 'true') {
+        payload.crossProject = true;
+        delete payload['cross-project'];
+      }
+      if (payload.billable === 'false' || payload.billable === false) {
+        payload.billable = false;
+      } else if (payload.billable === 'true' || payload.billable === true) {
+        payload.billable = true;
+      }
+      if (typeof payload.turn === 'string') {
+        payload.turn = parseInt(payload.turn, 10);
+      }
+      if (typeof payload.limit === 'string') {
+        payload.limit = parseInt(payload.limit, 10);
+      }
+      if (typeof payload.offset === 'string') {
+        payload.offset = parseInt(payload.offset, 10);
+      }
+      if (typeof payload.deliverables === 'string') {
+        try {
+          payload.deliverables = JSON.parse(payload.deliverables as string);
+        } catch {}
+      }
+    }
+
     const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
     const response = isRemoteMode
       ? await callRemoteTool(parsed.command, payload, { vaultRoot })
@@ -1360,6 +1542,64 @@ async function runCliInner(
         for (const row of i.installed) {
           const note = row.identical ? ' (already identical)' : ` (${row.bytesWritten} bytes)`;
           console.log(`  - ${row.skill} → ${row.destination}${note}`);
+        }
+      } else if (parsed.command === 'prompt' && response.data) {
+        const data = response.data as any;
+        if (data.markdown) {
+          console.log(data.markdown);
+        } else if (data.turn != null && data.sessionId) {
+          console.log(`[PROMPT] Recorded turn ${data.turn} in session ${data.sessionId} (${data.id})`);
+        } else if (data.sessionId && Array.isArray(data.deliverables) && data.endTime) {
+          console.log(
+            `[SESSION] Completed session ${data.sessionId} (${data.durationMinutes ?? 0} min, ${data.deliverables.length} deliverables)`
+          );
+        } else if (data.sessionId && data.startTime && !data.turns && !data.endTime) {
+          console.log(`[SESSION] Started session ${data.sessionId} (${data.id})`);
+        } else if (data.turns && Array.isArray(data.turns)) {
+          console.log(`spec-memo — Session ${data.sessionId} (${data.turns.length} turns)\n`);
+          for (const t of data.turns) {
+            console.log(`Turn ${t.frontmatter.turn} [${t.frontmatter.created}]:\n${t.body}\n`);
+          }
+        } else if (data.items && Array.isArray(data.items)) {
+          console.log(`spec-memo — Prompt Records (${data.total} total)\n`);
+          for (const p of data.items) {
+            const ide = p.frontmatter.ide || 'generic';
+            const sess = p.frontmatter.sessionId ? ` [${p.frontmatter.sessionId}]` : '';
+            const snippet = p.body.replace(/\n+/g, ' ').slice(0, 70);
+            console.log(`  - [${ide}] ${p.frontmatter.id}${sess} (turn ${p.frontmatter.turn ?? 1}): ${snippet}…`);
+          }
+        } else if (data.totalBillableHours != null) {
+          console.log(`spec-memo — Activity & Invoicing Report\n`);
+          console.log(`  Total Billable Hours:  ${data.totalBillableHours} hrs`);
+          console.log(`  Total Work Sessions:   ${data.totalSessions}`);
+          console.log(`  Total Ingested Prompts:${data.totalPrompts}`);
+          console.log(`  Total Work Duration:   ${data.totalDurationMinutes} min\n`);
+          if (data.byClient && Object.keys(data.byClient).length > 0) {
+            console.log(`Breakdown by Client:`);
+            for (const [cl, m] of Object.entries(data.byClient as Record<string, any>)) {
+              console.log(`  - ${cl}: ${m.totalHours} hrs (${m.sessionCount} sessions)`);
+            }
+          }
+          if (data.byProject && Object.keys(data.byProject).length > 0) {
+            console.log(`Breakdown by Project:`);
+            for (const [pid, m] of Object.entries(data.byProject as Record<string, any>)) {
+              console.log(`  - ${pid}: ${m.totalHours} hrs (${m.sessionCount} sessions)`);
+            }
+          }
+        } else if (data.rules && Array.isArray(data.rules)) {
+          console.log(`spec-memo — Derived Rules (${data.rules.length} candidates from ${data.scannedPromptsCount} prompts)\n`);
+          for (const r of data.rules) {
+            console.log(`  - [${Math.round(r.confidence * 100)}%] ${r.ruleTitle} (${r.category})`);
+            console.log(`    Pattern: ${r.pattern}`);
+          }
+          if (data.savedTraps && data.savedTraps.length > 0) {
+            console.log(`\nSaved ${data.savedTraps.length} trap(s) to vault:`);
+            for (const st of data.savedTraps) {
+              console.log(`  - ${st.id}: ${st.title}`);
+            }
+          }
+        } else {
+          console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));
         }
       } else {
         console.log(typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2));

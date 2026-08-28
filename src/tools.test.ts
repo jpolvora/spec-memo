@@ -29,8 +29,8 @@ describe('Tool Definitions and Execution', () => {
     fs.rmSync(tempVault, { recursive: true, force: true });
     fs.rmSync(tempProject, { recursive: true, force: true });
   });
-  it('should define all 10 core tools', () => {
-    assert.equal(TOOL_NAMES.length, 10);
+  it('should define all 11 core tools', () => {
+    assert.equal(TOOL_NAMES.length, 11);
     for (const name of TOOL_NAMES) {
       assert.ok(TOOL_DEFINITIONS[name], `Missing definition for ${name}`);
       assert.equal(TOOL_DEFINITIONS[name].name, name);
@@ -142,8 +142,8 @@ describe('Tool Definitions and Execution', () => {
     }
   });
 
-  it('should execute all 10 tools without NOT_IMPLEMENTED errors', () => {
-    assert.equal(TOOL_NAMES.length, 10);
+  it('should execute all 11 tools without NOT_IMPLEMENTED errors', () => {
+    assert.equal(TOOL_NAMES.length, 11);
   });
 
   it('should omit vaultRoot from advertised MCP schemas and strip vault paths from search hits', async () => {

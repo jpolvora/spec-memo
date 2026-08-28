@@ -140,6 +140,21 @@ You should provide your token via environment variables rather than hardcoding i
     });
   });
 
+  describe('assertAllowedIdeRulePromote', () => {
+    it('allows .cursor/rules and refuses arbitrary src paths', async () => {
+      const { assertAllowedIdeRulePromote } = await import('./safety.js');
+      const cursorRule = path.join(productRepo, '.cursor', 'rules', 'derived.mdc');
+      assert.doesNotThrow(() => assertAllowedIdeRulePromote(cursorRule, productRepo, vaultRoot));
+      assert.doesNotThrow(() =>
+        assertAllowedIdeRulePromote(path.join(productRepo, 'CLAUDE.md'), productRepo, vaultRoot)
+      );
+      assert.throws(
+        () => assertAllowedIdeRulePromote(path.join(productRepo, 'src', 'evil.ts'), productRepo, vaultRoot),
+        /allowlisted IDE rule path/
+      );
+    });
+  });
+
   describe('Integration with Store (upsertRecord & appendEvent)', () => {
     it('should reject upsertRecord with secret PEM block in body', async () => {
       const pemHeader = ['-----BEGIN', 'RSA', 'PRIVATE', 'KEY-----'].join(' ');

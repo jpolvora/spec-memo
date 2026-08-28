@@ -6,7 +6,7 @@ import { getVaultRoot } from './vault.js';
 import { isPathInside } from './safety.js';
 import { getPackageRoot } from './version.js';
 
-export const ALLOWED_SKILLS = ['ws-memo'] as const;
+export const ALLOWED_SKILLS = ['ws-memo', 'ws-session-tracking'] as const;
 export type AllowedSkill = (typeof ALLOWED_SKILLS)[number];
 
 const DEFAULT_SKILLS_ROOT = '.agents/skills';

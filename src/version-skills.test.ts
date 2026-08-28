@@ -14,10 +14,11 @@ import { getPackageRoot } from './version.js';
 import { runCli } from './cli.js';
 
 describe('check_version and install_skills', () => {
-  it('registers 10 MCP tools including check_version and install_skills', async () => {
-    assert.equal(TOOL_NAMES.length, 10);
+  it('registers 11 MCP tools including check_version and install_skills', async () => {
+    assert.equal(TOOL_NAMES.length, 11);
     assert.ok(TOOL_NAMES.includes('check_version'));
     assert.ok(TOOL_NAMES.includes('install_skills'));
+    assert.ok(TOOL_NAMES.includes('prompt'));
 
     const server = createMcpServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -26,10 +27,11 @@ describe('check_version and install_skills', () => {
     await client.connect(clientTransport);
 
     const toolsResult = await client.listTools();
-    assert.equal(toolsResult.tools.length, 10);
+    assert.equal(toolsResult.tools.length, 11);
     const names = toolsResult.tools.map((t) => t.name);
     assert.ok(names.includes('check_version'));
     assert.ok(names.includes('install_skills'));
+    assert.ok(names.includes('prompt'));
 
     await client.close();
     await server.close();
@@ -173,6 +175,30 @@ describe('check_version and install_skills', () => {
           }),
         /vault/i
       );
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('install_skills copies ws-session-tracking into a temp product root', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-st-'));
+    const productRoot = path.join(tmp, 'consumer');
+    fs.mkdirSync(productRoot, { recursive: true });
+    const gitDir = path.join(productRoot, '.git');
+    fs.mkdirSync(gitDir, { recursive: true });
+    fs.writeFileSync(path.join(gitDir, 'config'), '[remote "origin"]\n\turl = https://github.com/example/consumer.git\n');
+    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
+
+    try {
+      const result = await installSkills({
+        productRoot,
+        skills: ['ws-session-tracking'],
+        packageRoot: getPackageRoot()
+      });
+      assert.equal(result.installed.length, 1);
+      assert.equal(result.installed[0].skill, 'ws-session-tracking');
+      const dest = path.join(productRoot, result.installed[0].destination);
+      assert.ok(fs.existsSync(path.join(dest, 'SKILL.md')));
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

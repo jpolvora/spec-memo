@@ -113,6 +113,10 @@ export function getSubdirForKind(kind: RecordKind): string {
       return 'scratch';
     case 'state':
       return 'plans'; // state records live under plans/ or state subfolder
+    case 'prompt':
+      return 'prompts';
+    case 'session':
+      return 'sessions';
     default:
       return `${kind}s`;
   }
@@ -156,20 +160,19 @@ function findMatchingTrap(
 }
 
 /**
- * Upsert a memory record (trap, decision, spec, plan, state, log, scratch, review)
- * and update compiled index views.
+ * Write or update a memory record in the project vault.
  */
 export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
   return withVaultLock(vaultRoot, async () => {
-  const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
-  const projectId = options.projectId || identity.projectId;
+    const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+    const projectId = options.projectId || identity.projectId;
 
-  ensureProjectVault(identity, vaultRoot);
+    ensureProjectVault(identity, vaultRoot);
 
-  const projectDir = path.join(vaultRoot, 'projects', projectId);
-  const subdir = getSubdirForKind(options.kind);
-  const targetDir = path.join(projectDir, subdir);
+    const projectDir = path.join(vaultRoot, 'projects', projectId);
+    const subdir = getSubdirForKind(options.kind);
+    const targetDir = path.join(projectDir, subdir);
 
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
@@ -181,7 +184,24 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     slug = slugify(options.frontmatter.title);
   }
   if (!slug) {
-    slug = `${options.kind}-${Date.now()}`;
+    if (options.kind === 'prompt') {
+      const sessId = options.frontmatter?.sessionId as string | undefined;
+      const turnNum = options.frontmatter?.turn as number | undefined;
+      if (sessId && turnNum != null) {
+        slug = `prompt-${sessId}-t${turnNum}`;
+      } else {
+        slug = `prompt-${Date.now()}-${randomBytes(3).toString('hex')}`;
+      }
+    } else if (options.kind === 'session') {
+      const sessId = options.frontmatter?.sessionId as string | undefined;
+      if (sessId) {
+        slug = `session-${sessId}`;
+      } else {
+        slug = `session-${Date.now()}-${randomBytes(3).toString('hex')}`;
+      }
+    } else {
+      slug = `${options.kind}-${Date.now()}`;
+    }
   }
 
   const recordId = (typeof options.frontmatter?.id === 'string' ? options.frontmatter.id : null) || slug;

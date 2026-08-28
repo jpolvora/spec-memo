@@ -31,7 +31,7 @@ describe('MCP Server Integration', () => {
     fs.rmSync(tempVault, { recursive: true, force: true });
     fs.rmSync(tempProject, { recursive: true, force: true });
   });
-  it('should list all 10 tools via MCP handshake', async () => {
+  it('should list all 11 tools via MCP handshake', async () => {
     const server = createMcpServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -42,7 +42,7 @@ describe('MCP Server Integration', () => {
 
     const toolsResult = await client.listTools();
     assert.ok(toolsResult.tools);
-    assert.equal(toolsResult.tools.length, 10);
+    assert.equal(toolsResult.tools.length, 11);
 
     const toolNames = toolsResult.tools.map((t) => t.name);
     for (const name of TOOL_NAMES) {

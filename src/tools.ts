@@ -10,6 +10,7 @@ import {
   PromoteOptions,
   CheckVersionOptions,
   InstallSkillsOptions,
+  PromptOptions,
   RecordKind,
   RecordStatus,
   SearchOptions
@@ -22,6 +23,17 @@ import { runGc } from './curator.js';
 import { promoteRecord } from './promote.js';
 import { checkVersion } from './version.js';
 import { installSkills } from './skills-install.js';
+import {
+  recordPromptTurn,
+  startSessionRecord,
+  endSessionRecord,
+  getSessionTurns,
+  exportSessionStory,
+  listPrompts,
+  searchPrompts,
+  deriveRulesFromPrompts,
+  generateActivityReport
+} from './prompt.js';
 import { sanitizeToolOutput } from './safety.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
@@ -344,6 +356,115 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       vaultRoot: z.string().optional(),
       packageRoot: z.string().optional()
     })
+  },
+  prompt: {
+    name: 'prompt',
+    description:
+      'Ingest prompt history, session lifecycles, and timesheet deliverables; query prompts, derive AI rules, export intent stories, and generate activity reports.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'record',
+            'list',
+            'get',
+            'search',
+            'session',
+            'session_start',
+            'session_end',
+            'activity_report',
+            'derive_rules',
+            'export_story'
+          ],
+          description: 'Action to perform (default: "record")'
+        },
+        body: { type: 'string', description: 'Prompt content or work summary' },
+        id: { type: 'string', description: 'Unique record identifier' },
+        sessionId: { type: 'string', description: 'Session correlation identifier' },
+        turn: { type: 'number', description: 'Turn number in conversational session' },
+        taskSlug: { type: 'string', description: 'Active feature / task slug' },
+        client: { type: 'string', description: 'Client or account identifier for invoicing' },
+        billable: { type: 'boolean', description: 'Whether the prompt/session is billable (default: true)' },
+        ide: { type: 'string', description: 'Host environment / IDE (cursor, vscode, claude, gemini, etc.)' },
+        model: { type: 'string', description: 'LLM model identifier' },
+        agent: { type: 'string', description: 'Subagent or role identifier' },
+        deliverables: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['pr', 'commit', 'spec'] },
+              url: { type: 'string' },
+              sha: { type: 'string' },
+              title: { type: 'string' }
+            }
+          },
+          description: 'Deliverables completed during session'
+        },
+        query: { type: 'string', description: 'Search term or FTS query' },
+        since: { type: 'string', description: 'ISO date/time lower bound' },
+        until: { type: 'string', description: 'ISO date/time upper bound' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Tags for categorization' },
+        limit: { type: 'number', description: 'Pagination limit (default: 20, max: 100)' },
+        offset: { type: 'number', description: 'Pagination offset (default: 0)' },
+        sort: { type: 'string', enum: ['date-desc', 'date-asc', 'relevance'], description: 'Sort order' },
+        saveTraps: { type: 'boolean', description: 'Save derived rules as traps in vault (for derive_rules)' },
+        promote: { type: 'string', description: 'Destination path to promote derived rules to' },
+        format: { type: 'string', description: 'Format for rule export (cursor, copilot, claude, gemini, markdown)' },
+        cwd: { type: 'string', description: 'Product repository working directory' },
+        projectId: { type: 'string', description: 'Specific project ID override' },
+        crossProject: { type: 'boolean', description: 'Query across all vaults' }
+      }
+    },
+    zodSchema: z.object({
+      action: z.enum([
+        'record',
+        'list',
+        'get',
+        'search',
+        'session',
+        'session_start',
+        'session_end',
+        'activity_report',
+        'derive_rules',
+        'export_story'
+      ]).default('record'),
+      body: z.string().optional(),
+      id: z.string().optional(),
+      sessionId: z.string().optional(),
+      turn: z.number().int().positive().optional(),
+      taskSlug: z.string().optional(),
+      client: z.string().optional(),
+      billable: z.boolean().optional(),
+      ide: z.string().optional(),
+      model: z.string().optional(),
+      agent: z.string().optional(),
+      branch: z.string().optional(),
+      gitSha: z.string().optional(),
+      linkedPaths: z.array(z.string()).optional(),
+      tags: z.array(z.string()).optional(),
+      deliverables: z.array(z.object({
+        type: z.enum(['pr', 'commit', 'spec']),
+        url: z.string().optional(),
+        sha: z.string().optional(),
+        title: z.string().optional()
+      })).optional(),
+      query: z.string().optional(),
+      since: z.string().optional(),
+      until: z.string().optional(),
+      limit: z.number().int().positive().optional(),
+      offset: z.number().int().min(0).optional(),
+      sort: z.enum(['date-desc', 'date-asc', 'relevance']).optional(),
+      saveTraps: z.boolean().optional(),
+      promote: z.string().optional(),
+      format: z.string().optional(),
+      cwd: z.string().optional(),
+      vaultRoot: z.string().optional(),
+      projectId: z.string().optional(),
+      crossProject: z.boolean().optional()
+    })
   }
 };
 
@@ -612,6 +733,126 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       return ok(result);
     } catch (err: unknown) {
       return fail('INSTALL_SKILLS_FAILED', err);
+    }
+  }
+
+  if (name === 'prompt') {
+    try {
+      const promptOpts = parseResult.data as PromptOptions;
+      const action = promptOpts.action || 'record';
+      const vaultRoot = promptOpts.vaultRoot;
+      const cwd = promptOpts.cwd;
+      const projectId = promptOpts.projectId;
+
+      if (action === 'record') {
+        if (!promptOpts.body || !promptOpts.body.trim()) {
+          return fail('INVALID_ARGUMENTS', "Parameter 'body' is required for prompt record action.");
+        }
+        const result = await recordPromptTurn(promptOpts);
+        scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
+        return ok(result);
+      }
+
+      if (action === 'session_start') {
+        const result = await startSessionRecord(promptOpts);
+        scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
+        return ok(result);
+      }
+
+      if (action === 'session_end') {
+        if (!promptOpts.sessionId) {
+          return fail('INVALID_ARGUMENTS', "Parameter 'sessionId' is required for session_end action.");
+        }
+        const result = await endSessionRecord(promptOpts);
+        scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
+        return ok(result);
+      }
+
+      if (action === 'search') {
+        const result = searchPrompts(promptOpts);
+        return ok(result);
+      }
+
+      if (action === 'list') {
+        const result = listPrompts(promptOpts);
+        return ok(result);
+      }
+
+      if (action === 'session') {
+        if (!promptOpts.sessionId) {
+          return fail('INVALID_ARGUMENTS', "Parameter 'sessionId' is required for session action.");
+        }
+        const result = getSessionTurns({
+          sessionId: promptOpts.sessionId,
+          cwd: promptOpts.cwd,
+          projectId: promptOpts.projectId,
+          vaultRoot: promptOpts.vaultRoot
+        });
+        return ok(result);
+      }
+
+      if (action === 'get') {
+        if (!promptOpts.id) {
+          return fail('INVALID_ARGUMENTS', "Parameter 'id' is required for get action.");
+        }
+        const record = (await getRecord({
+          id: promptOpts.id,
+          kind: 'prompt',
+          cwd: promptOpts.cwd,
+          vaultRoot: promptOpts.vaultRoot,
+          projectId: promptOpts.projectId
+        })) || (await getRecord({
+          id: promptOpts.id,
+          kind: 'session',
+          cwd: promptOpts.cwd,
+          vaultRoot: promptOpts.vaultRoot,
+          projectId: promptOpts.projectId
+        }));
+
+        if (!record) {
+          return fail('RECORD_NOT_FOUND', `Prompt or session record '${promptOpts.id}' not found`);
+        }
+        return ok(record);
+      }
+
+      if (action === 'activity_report') {
+        const result = generateActivityReport(promptOpts);
+        return ok(result);
+      }
+
+      if (action === 'derive_rules') {
+        const result = await deriveRulesFromPrompts({
+          cwd: promptOpts.cwd,
+          projectId: promptOpts.projectId,
+          vaultRoot: promptOpts.vaultRoot,
+          sessionId: promptOpts.sessionId,
+          saveTraps: promptOpts.saveTraps,
+          promote: promptOpts.promote,
+          format: promptOpts.format as any
+        });
+        if (result.savedTraps && result.savedTraps.length > 0) {
+          scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
+        }
+        return ok(result);
+      }
+
+      if (action === 'export_story') {
+        if (!promptOpts.sessionId) {
+          return fail('INVALID_ARGUMENTS', "Parameter 'sessionId' is required for export_story action.");
+        }
+        const result = await exportSessionStory({
+          sessionId: promptOpts.sessionId,
+          cwd: promptOpts.cwd,
+          projectId: promptOpts.projectId,
+          vaultRoot: promptOpts.vaultRoot,
+          outputPath: promptOpts.promote
+        });
+        return ok(result);
+      }
+
+      return fail('INVALID_ARGUMENTS', `Unsupported prompt action: ${action}`);
+    } catch (err: unknown) {
+      return fail('PROMPT_TOOL_FAILED', err);
     }
   }
 
