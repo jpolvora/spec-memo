@@ -144,7 +144,7 @@ export function generateDecisionsView(metadata: ProjectMetadata | null, decision
       const dTitle = d.frontmatter.title || d.frontmatter.id;
       const relPath = `./decisions/${d.frontmatter.id}.md`;
       const superId = d.frontmatter.supersedes ? `[[${d.frontmatter.supersedes}]]` : '-';
-      md += `| [\`${d.frontmatter.id}\`](${relPath}) | ${dTitle} | \`${d.frontmatter.status}\` | ${d.frontmatter.updated.slice(0, 10)} | ${superId} |\n`;
+      md += `| [\`${d.frontmatter.id}\`](${relPath}) | ${dTitle} | \`${d.frontmatter.status}\` | ${d.frontmatter.updated} | ${superId} |\n`;
     }
     md += `\n`;
   }
@@ -222,7 +222,7 @@ export function generateIndexView(metadata: ProjectMetadata | null, records: Mem
         const rTitle = r.frontmatter.title || r.frontmatter.relatedSlug || r.frontmatter.id;
         const kindSubdir = `${kind}s`;
         const relPath = `./${kindSubdir}/${r.frontmatter.id}.md`;
-        md += `| [\`${r.frontmatter.id}\`](${relPath}) | ${rTitle} | \`${r.frontmatter.status}\` | ${r.frontmatter.updated.slice(0, 10)} |\n`;
+        md += `| [\`${r.frontmatter.id}\`](${relPath}) | ${rTitle} | \`${r.frontmatter.status}\` | ${r.frontmatter.updated} |\n`;
       }
       md += `\n`;
     }

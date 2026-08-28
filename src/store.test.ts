@@ -512,5 +512,62 @@ describe('Store Engine (upsert and get)', () => {
     assert.deepEqual(rec.frontmatter.linkedPaths, ['src/modules/auth.ts']);
     assert.equal(rec.frontmatter.path, undefined);
   });
+
+  it('should accept uppercase and mixed case severity and normalize it to lowercase', async () => {
+    const res = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'case-trap',
+      frontmatter: {
+        id: 'trap-casing-test',
+        title: 'Casing Test Trap',
+        severity: 'High' as any
+      },
+      body: 'Trap body with High severity'
+    });
+
+    assert.ok(res);
+    const rec = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-casing-test'
+    });
+
+    assert.ok(rec);
+    assert.equal(rec.frontmatter.severity, 'high');
+  });
+
+  it('should retrieve record from sibling project when projectId is omitted in getRecord', async () => {
+    // 1. Create a record in project A
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'decision',
+      slug: 'cross-project-decision',
+      frontmatter: {
+        id: 'dec-alpha-001',
+        title: 'Project Alpha Architectural Decision'
+      },
+      body: 'Alpha architecture details'
+    });
+
+    // 2. Query from project B directory without explicit projectId
+    const otherProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-b-'));
+    try {
+      const rec = await getRecord({
+        cwd: otherProject,
+        vaultRoot: tempVault,
+        id: 'dec-alpha-001'
+      });
+
+      assert.ok(rec, 'Should find record in sibling project fallback');
+      assert.equal(rec.frontmatter.id, 'dec-alpha-001');
+      assert.equal(rec.frontmatter.project, 'project-alpha');
+    } finally {
+      fs.rmSync(otherProject, { recursive: true, force: true });
+    }
+  });
 });
 

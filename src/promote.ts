@@ -15,7 +15,7 @@ export function formatAsAdr(record: MemoRecord): string {
   const fm = record.frontmatter;
   const title = (fm.title as string) || fm.id || 'Architectural Decision';
   const status = (fm.status as string) || 'accepted';
-  const date = (fm.updated || fm.created || new Date().toISOString()).slice(0, 10);
+  const date = fm.updated || fm.created || new Date().toISOString();
   const source = fm.source || 'agent';
   const tags = Array.isArray(fm.tags) ? fm.tags.join(', ') : 'architecture';
 
@@ -56,7 +56,7 @@ export function formatAsMadr(record: MemoRecord): string {
   const fm = record.frontmatter;
   const title = (fm.title as string) || fm.id || 'Architectural Decision';
   const status = (fm.status as string) || 'accepted';
-  const date = (fm.updated || fm.created || new Date().toISOString()).slice(0, 10);
+  const date = fm.updated || fm.created || new Date().toISOString();
   const source = fm.source || 'agent';
 
   const bodyTrimmed = record.body.trim();

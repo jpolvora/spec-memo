@@ -254,6 +254,13 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     source: options.source || options.frontmatter?.source || existingRecord?.frontmatter.source || 'agent'
   };
 
+  if (typeof rawFrontmatter.severity === 'string') {
+    rawFrontmatter.severity = rawFrontmatter.severity.trim().toLowerCase() as RecordFrontmatter['severity'];
+  }
+  if (typeof rawFrontmatter.status === 'string') {
+    rawFrontmatter.status = rawFrontmatter.status.trim().toLowerCase() as RecordStatus;
+  }
+
   if (rawFrontmatter.path && typeof rawFrontmatter.path === 'string') {
     const rawPath = String(rawFrontmatter.path).trim();
     if (rawPath) {
@@ -379,57 +386,118 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
   const projectId = options.projectId || identity.projectId;
   const projectDir = path.join(vaultRoot, 'projects', projectId);
 
-  if (!fs.existsSync(projectDir)) {
+  const directLookup = options.slug || options.id;
+  const lookupId = options.id || options.slug;
+  if (!lookupId && !directLookup) {
     return null;
   }
 
-  // If kind and slug or id provided, check direct path
-  const directLookup = options.slug || options.id;
-  if (options.kind && directLookup) {
-    const subdir = getSubdirForKind(options.kind);
-    const directPath = path.join(projectDir, subdir, `${directLookup}.md`);
-    if (fs.existsSync(directPath)) {
-      try {
-        return parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
-      } catch {
-        return null;
+  if (fs.existsSync(projectDir)) {
+    // If kind and slug or id provided, check direct path
+    if (options.kind && directLookup) {
+      const subdir = getSubdirForKind(options.kind);
+      const directPath = path.join(projectDir, subdir, `${directLookup}.md`);
+      if (fs.existsSync(directPath)) {
+        try {
+          return parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
+        } catch {
+          return null;
+        }
+      }
+    }
+
+    // Otherwise search across subdirectories
+    if (lookupId) {
+      const subdirs = fs.readdirSync(projectDir, { withFileTypes: true });
+      for (const d of subdirs) {
+        if (d.isDirectory()) {
+          const dirPath = path.join(projectDir, d.name);
+          // Check exact slug filename first
+          const directFile = path.join(dirPath, `${lookupId}.md`);
+          if (fs.existsSync(directFile)) {
+            try {
+              return parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
+            } catch {
+              // Continue scanning
+            }
+          }
+
+          // Check all files in directory for matching frontmatter id
+          const files = fs.readdirSync(dirPath);
+          for (const file of files) {
+            if (file.endsWith('.md')) {
+              const filePath = path.join(dirPath, file);
+              try {
+                const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
+                if (parsed.frontmatter.id === lookupId) {
+                  return parsed;
+                }
+              } catch {
+                // Ignore unparseable
+              }
+            }
+          }
+        }
       }
     }
   }
 
-  // Otherwise search across subdirectories
-  const lookupId = options.id || options.slug;
-  if (!lookupId) {
-    return null;
-  }
-
-  const subdirs = fs.readdirSync(projectDir, { withFileTypes: true });
-  for (const d of subdirs) {
-    if (d.isDirectory()) {
-      const dirPath = path.join(projectDir, d.name);
-      // Check exact slug filename first
-      const directFile = path.join(dirPath, `${lookupId}.md`);
-      if (fs.existsSync(directFile)) {
+  // Fallback: search across other projects in vault if projectId was not explicitly specified
+  if (!options.projectId && lookupId) {
+    const projectsDir = path.join(vaultRoot, 'projects');
+    if (fs.existsSync(projectsDir)) {
+      const otherProjects = fs.readdirSync(projectsDir).filter((p) => p !== projectId);
+      for (const otherProj of otherProjects) {
+        const otherProjectDir = path.join(projectsDir, otherProj);
         try {
-          return parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
+          if (!fs.statSync(otherProjectDir).isDirectory()) continue;
         } catch {
-          // Continue scanning
+          continue;
         }
-      }
 
-      // Check all files in directory for matching frontmatter id
-      const files = fs.readdirSync(dirPath);
-      for (const file of files) {
-        if (file.endsWith('.md')) {
-          const filePath = path.join(dirPath, file);
-          try {
-            const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
-            if (parsed.frontmatter.id === lookupId) {
-              return parsed;
+        if (options.kind && directLookup) {
+          const subdir = getSubdirForKind(options.kind);
+          const directPath = path.join(otherProjectDir, subdir, `${directLookup}.md`);
+          if (fs.existsSync(directPath)) {
+            try {
+              return parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
+            } catch {
+              // continue scanning
             }
-          } catch {
-            // Ignore unparseable
           }
+        }
+
+        try {
+          const otherSubdirs = fs.readdirSync(otherProjectDir, { withFileTypes: true });
+          for (const d of otherSubdirs) {
+            if (d.isDirectory()) {
+              const dirPath = path.join(otherProjectDir, d.name);
+              const directFile = path.join(dirPath, `${lookupId}.md`);
+              if (fs.existsSync(directFile)) {
+                try {
+                  return parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
+                } catch {
+                  // continue scanning
+                }
+              }
+              const files = fs.readdirSync(dirPath);
+              for (const file of files) {
+                if (file.endsWith('.md')) {
+                  const filePath = path.join(dirPath, file);
+                  try {
+                    const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
+                    if (parsed.frontmatter.id === lookupId) {
+                      return parsed;
+                    }
+                  } catch {
+                    // ignore
+                  }
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
         }
       }
     }

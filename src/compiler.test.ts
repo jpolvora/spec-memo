@@ -126,5 +126,31 @@ describe('Compiled Views (TRAPS.md, DECISIONS.md, INDEX.md)', () => {
     assert.ok(indexContent.includes('./traps/trap-obsidian.md'));
     assert.ok(indexContent.includes('./decisions/adr-obsidian.md'));
   });
+
+  it('should include full datetime timestamps in DECISIONS.md and INDEX.md views', async () => {
+    const fixedIso = '2026-08-28T14:30:45.123Z';
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'datetime-adr',
+      frontmatter: {
+        id: 'adr-datetime',
+        title: 'Datetime Precision ADR',
+        updated: fixedIso,
+        created: fixedIso
+      },
+      body: 'Full datetime body'
+    });
+
+    const identity = resolveProjectIdentity(tempProject, { vaultRoot: tempVault });
+    const projectDir = identity.vaultProjectPath;
+
+    const decisionsContent = fs.readFileSync(path.join(projectDir, 'DECISIONS.md'), 'utf8');
+    const indexContent = fs.readFileSync(path.join(projectDir, 'INDEX.md'), 'utf8');
+
+    assert.ok(decisionsContent.includes(fixedIso), 'DECISIONS.md summary table should contain full datetime');
+    assert.ok(indexContent.includes(fixedIso), 'INDEX.md table should contain full datetime');
+  });
 });
 

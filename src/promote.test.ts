@@ -206,6 +206,7 @@ describe('Promote Engine (promoteRecord)', () => {
     assert.equal(result.format, 'adr');
     const content = fs.readFileSync(result.targetPath, 'utf8');
     assert.ok(content.includes('# ADR: Use AES-256-GCM for encrypted vault backups'));
+    assert.ok(content.includes('- **Date:** '));
     assert.ok(content.includes('## Context and Problem Statement'));
     assert.ok(content.includes('## Decision Outcome'));
     assert.ok(content.includes('## Consequences'));
@@ -213,6 +214,7 @@ describe('Promote Engine (promoteRecord)', () => {
   });
 
   it('should format decision records as MADR when format=madr', async () => {
+    const fixedIso = '2026-08-28T19:20:21.456Z';
     await upsertRecord({
       cwd: tempProductRepo,
       vaultRoot: tempVaultRoot,
@@ -221,7 +223,9 @@ describe('Promote Engine (promoteRecord)', () => {
       frontmatter: {
         id: 'adr-003-logging',
         title: 'Use monthly log roll-ups for curator compaction',
-        status: 'active'
+        status: 'active',
+        created: fixedIso,
+        updated: fixedIso
       },
       body: 'Roll-ups prevent filesystem inode exhaustion while preserving FTS searchability.'
     });
@@ -237,6 +241,7 @@ describe('Promote Engine (promoteRecord)', () => {
     assert.equal(result.format, 'madr');
     const content = fs.readFileSync(result.targetPath, 'utf8');
     assert.ok(content.includes('# Use monthly log roll-ups for curator compaction'));
+    assert.ok(content.includes(`* Date: ${fixedIso}`));
     assert.ok(content.includes('Technical Story: `adr-003-logging`'));
     assert.ok(content.includes('## Decision Drivers'));
     assert.ok(content.includes('## Considered Options'));

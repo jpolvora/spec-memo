@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import matter from 'gray-matter';
-import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus } from './types.js';
+import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus, TrapLayer } from './types.js';
 
 export const RecordKindSchema = z.enum([
   'trap',
@@ -13,17 +13,17 @@ export const RecordKindSchema = z.enum([
   'review'
 ]);
 
-export const RecordStatusSchema = z.enum([
-  'active',
-  'paused',
-  'shipped',
-  'superseded',
-  'archived'
-]);
+export const RecordStatusSchema = z.preprocess(
+  (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
+  z.enum(['active', 'paused', 'shipped', 'superseded', 'archived'])
+);
 
 export const RecordSourceSchema = z.enum(['agent', 'human', 'imported']);
 
-export const SeveritySchema = z.enum(['low', 'medium', 'high', 'critical']);
+export const SeveritySchema = z.preprocess(
+  (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
+  z.enum(['low', 'medium', 'high', 'critical'])
+);
 
 export const DateOrStringSchema = z.union([z.string(), z.date()]).transform((val) => {
   if (val instanceof Date) {

@@ -198,10 +198,10 @@ memo get --kind trap --slug sqlite-wal-lock
 #### Pre-Flight Checklist
 - [ ] `kind` and `body` are **mandatory** and non-empty.
 - [ ] Never include secrets (tokens, API keys, private keys) in body or frontmatter — payloads matching secret patterns are rejected (`SAFETY_VIOLATION`).
-- [ ] For **traps**, follow the standard structured template:
+- [ ] For **traps**, follow the standard structured template (use ISO datetime or date in heading; frontmatter created/updated/lastSeen track exact UTC ISO datetime):
 
 ```markdown
-### [YYYY-MM-DD] Short descriptive title
+### [YYYY-MM-DDTHH:mm:ssZ] Short descriptive title
 - **Layer**: Application
 - **Module**: subsystem / component
 - **Severity**: High
@@ -210,6 +210,8 @@ memo get --kind trap --slug sqlite-wal-lock
 - **DO NOT**: Anti-pattern action to avoid.
 - **INSTEAD DO**: Correct implementation / workaround.
 ```
+
+*(Note: `### [YYYY-MM-DD]` is also accepted as shorthand; full ISO datetime `[YYYY-MM-DDTHH:mm:ssZ]` is recommended for precise resolution.)*
 
 #### MCP Calling Example
 ```json
@@ -224,7 +226,7 @@ memo get --kind trap --slug sqlite-wal-lock
     "pathPatterns": ["src/db/**/*.ts", "src/**/*.test.ts"],
     "tags": ["sqlite", "windows", "locks"]
   },
-  "body": "### [2026-08-27] Close SQLite DB before unlink on Windows\n- **Layer**: Infrastructure\n- **Module**: sqlite\n- **Severity**: Critical\n- **PathPattern**: src/db/**/*.ts\n- **Scenario / Context**: On Windows, deleting a SQLite database file while handles remain open causes EBUSY / EPERM.\n- **DO NOT**: Delete temporary database directories before explicitly closing database handles.\n- **INSTEAD DO**: Always invoke `closeIndex()` or `db.close()` in test `afterEach` hooks before directory cleanup."
+  "body": "### [2026-08-27T19:47:16Z] Close SQLite DB before unlink on Windows\n- **Layer**: Infrastructure\n- **Module**: sqlite\n- **Severity**: Critical\n- **PathPattern**: src/db/**/*.ts\n- **Scenario / Context**: On Windows, deleting a SQLite database file while handles remain open causes EBUSY / EPERM.\n- **DO NOT**: Delete temporary database directories before explicitly closing database handles.\n- **INSTEAD DO**: Always invoke `closeIndex()` or `db.close()` in test `afterEach` hooks before directory cleanup."
 }
 ```
 
