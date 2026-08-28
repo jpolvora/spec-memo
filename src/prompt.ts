@@ -647,7 +647,12 @@ export async function deriveRulesFromPrompts(options: {
   if (options.saveTraps) {
     for (const rule of rules) {
       if (rule.confidence >= 0.8) {
-        const trapId = `trap-derived-${slugify(rule.ruleTitle).slice(0, 40)}`;
+        const base = slugify(rule.ruleTitle).slice(0, 32);
+        const suffix =
+          (rule.sourcePromptIds?.[0] || '')
+            .replace(/[^a-z0-9-]/gi, '')
+            .slice(-8) || randomBytes(2).toString('hex');
+        const trapId = `trap-derived-${base}-${suffix}`;
         const res = await upsertRecord({
           kind: 'trap',
           slug: trapId,

@@ -1427,7 +1427,14 @@ async function runCliInner(
       if (typeof payload.deliverables === 'string') {
         try {
           payload.deliverables = JSON.parse(payload.deliverables as string);
-        } catch {}
+        } catch {
+          throw new Error(
+            'Invalid JSON for --deliverables; expected an array of {type,url,sha,title} objects.'
+          );
+        }
+      }
+      if (payload.deliverables != null && !Array.isArray(payload.deliverables)) {
+        throw new Error('--deliverables must be a JSON array.');
       }
     }
 
