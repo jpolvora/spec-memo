@@ -549,6 +549,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           '<div class="client-detail" style="color:var(--bright);">' +
             '<span>Op: <code>' + escapeHtml(lastOp) + '</code></span>' +
             (c.requestCount ? '<span>Reqs: ' + c.requestCount + '</span>' : '') +
+            (c.lastSeenAt ? '<span>Seen: <code>' + escapeHtml(c.lastSeenAt.length >= 19 ? c.lastSeenAt.slice(0, 19).replace('T', ' ') : c.lastSeenAt) + '</code></span>' : '') +
           '</div>';
         listEl.appendChild(card);
       }
@@ -558,7 +559,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       const line = document.createElement("div");
       const kindClass = ev.kind === "write" ? "write" : ev.type === "http" ? "http" : "";
       line.className = "log-line " + kindClass + (ev.ok ? " ok-line" : " error");
-      const time = ev.ts ? ev.ts.slice(11, 19) : "";
+      const time = ev.ts ? (ev.ts.length >= 19 ? ev.ts.slice(0, 19).replace('T', ' ') : ev.ts) : "";
       const kind = ev.kind || ev.type;
       const typeClass = ev.clientType ? "badge-" + ev.clientType : "";
       const clientBadge = ev.clientName
@@ -575,7 +576,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         : "";
       const opText = ev.operation && ev.operation !== detail ? " · op: " + escapeHtml(ev.operation) : "";
       line.innerHTML =
-        '<span class="time">' + time + '</span>' +
+        '<span class="time" title="' + escapeHtml(ev.ts || "") + '">' + escapeHtml(time) + '</span>' +
         '<span class="kind-tag">' + kind + '</span>' +
         '<span class="ok-tag">' + (ev.ok ? "ok" : "err") + '</span>' +
         '<div>' +

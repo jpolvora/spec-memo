@@ -512,5 +512,243 @@ describe('Store Engine (upsert and get)', () => {
     assert.deepEqual(rec.frontmatter.linkedPaths, ['src/modules/auth.ts']);
     assert.equal(rec.frontmatter.path, undefined);
   });
+
+  it('should accept uppercase and mixed case severity and normalize it to lowercase', async () => {
+    const res = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'case-trap',
+      frontmatter: {
+        id: 'trap-casing-test',
+        title: 'Casing Test Trap',
+        severity: 'High' as any
+      },
+      body: 'Trap body with High severity'
+    });
+
+    assert.ok(res);
+    const rec = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-casing-test'
+    });
+
+    assert.ok(rec);
+    assert.equal(rec.frontmatter.severity, 'high');
+  });
+
+  it('should retrieve record from sibling project when projectId is omitted in getRecord', async () => {
+    // 1. Create a record in project A
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'decision',
+      slug: 'cross-project-decision',
+      frontmatter: {
+        id: 'dec-alpha-001',
+        title: 'Project Alpha Architectural Decision'
+      },
+      body: 'Alpha architecture details'
+    });
+
+    // 2. Query from project B directory without explicit projectId
+    const otherProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-b-'));
+    try {
+      const rec = await getRecord({
+        cwd: otherProject,
+        vaultRoot: tempVault,
+        id: 'dec-alpha-001'
+      });
+
+      assert.ok(rec, 'Should find record in sibling project fallback');
+      assert.equal(rec.frontmatter.id, 'dec-alpha-001');
+      assert.equal(rec.frontmatter.project, 'project-alpha');
+    } finally {
+      fs.rmSync(otherProject, { recursive: true, force: true });
+    }
+  });
+
+  it('should not retrieve ephemeral records (scratch, state, review) from sibling projects in getRecord fallback', async () => {
+    // 1. Create ephemeral records in project A
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'scratch',
+      slug: 'temp-notes',
+      frontmatter: {
+        id: 'scratch-alpha-notes',
+        title: 'Alpha Scratch Notes'
+      },
+      body: 'Temporary notes in Alpha'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'state',
+      slug: 'session-state',
+      frontmatter: {
+        id: 'state-alpha-session',
+        title: 'Alpha Session State'
+      },
+      body: 'State in Alpha'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'review',
+      slug: 'pr-review',
+      frontmatter: {
+        id: 'review-alpha-pr',
+        title: 'Alpha PR Review'
+      },
+      body: 'Review findings in Alpha'
+    });
+
+    // 2. Query from project B directory without explicit projectId
+    const otherProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-b-'));
+    try {
+      const scratchRec = await getRecord({
+        cwd: otherProject,
+        vaultRoot: tempVault,
+        id: 'scratch-alpha-notes'
+      });
+      assert.equal(scratchRec, null, 'Ephemeral scratch must not leak cross-project in getRecord');
+
+      const stateRec = await getRecord({
+        cwd: otherProject,
+        vaultRoot: tempVault,
+        id: 'state-alpha-session'
+      });
+      assert.equal(stateRec, null, 'Ephemeral state must not leak cross-project in getRecord');
+
+      const reviewRec = await getRecord({
+        cwd: otherProject,
+        vaultRoot: tempVault,
+        id: 'review-alpha-pr'
+      });
+      assert.equal(reviewRec, null, 'Ephemeral review must not leak cross-project in getRecord');
+    } finally {
+      fs.rmSync(otherProject, { recursive: true, force: true });
+    }
+  });
+
+  it('should fail closed (return null) on ambiguous ID existing across multiple sibling projects in getRecord fallback', async () => {
+    // 1. Create a trap with the same ID in project A and project B
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'trap',
+      slug: 'duplicate-id-trap',
+      frontmatter: {
+        id: 'trap-duplicate-shared',
+        title: 'Alpha Shared Trap'
+      },
+      body: 'Trap in Alpha'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-beta',
+      kind: 'trap',
+      slug: 'duplicate-id-trap',
+      frontmatter: {
+        id: 'trap-duplicate-shared',
+        title: 'Beta Shared Trap'
+      },
+      body: 'Trap in Beta'
+    });
+
+    // 2. Query from project Gamma without projectId
+    const gammaProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-gamma-'));
+    try {
+      const rec = await getRecord({
+        cwd: gammaProject,
+        vaultRoot: tempVault,
+        id: 'trap-duplicate-shared'
+      });
+      assert.equal(rec, null, 'Ambiguous ID across sibling projects must return null (fail closed)');
+    } finally {
+      fs.rmSync(gammaProject, { recursive: true, force: true });
+    }
+  });
+
+  it('should retrieve record from sibling project when filename matches id without false ambiguity', async () => {
+    // 1. Create a decision in project Alpha where slug is defaulted to id
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'decision',
+      frontmatter: {
+        id: 'adr-shared-default-slug',
+        title: 'Alpha Shared Decision Default Slug'
+      },
+      body: 'Body of shared decision'
+    });
+
+    // 2. Query from project Beta without projectId
+    const betaProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-beta-'));
+    try {
+      const rec = await getRecord({
+        cwd: betaProject,
+        vaultRoot: tempVault,
+        id: 'adr-shared-default-slug'
+      });
+      assert.ok(rec, 'Must find single unique record from sibling project');
+      assert.equal(rec.frontmatter.id, 'adr-shared-default-slug');
+      assert.equal(rec.frontmatter.project, 'project-alpha');
+    } finally {
+      fs.rmSync(betaProject, { recursive: true, force: true });
+    }
+  });
+
+  it('should ignore coincidental sibling filename collisions when frontmatter.id differs', async () => {
+    // 1. Create alpha record with target-id in alpha-custom-slug.md
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'decision',
+      slug: 'alpha-custom-slug',
+      frontmatter: {
+        id: 'target-unique-id',
+        title: 'Alpha Real Target'
+      },
+      body: 'Body of real target'
+    });
+
+    // 2. Create beta record stored at filename target-unique-id.md but with frontmatter.id = beta-other-id
+    const betaProjDir = path.join(tempVault, 'projects', 'project-beta', 'decisions');
+    fs.mkdirSync(betaProjDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(betaProjDir, 'target-unique-id.md'),
+      '---\nid: beta-other-id\nkind: decision\nproject: project-beta\nstatus: active\ncreated: 2026-08-28T00:00:00.000Z\nupdated: 2026-08-28T00:00:00.000Z\n---\nOther body',
+      'utf8'
+    );
+
+    // 3. Query from project Gamma for target-unique-id
+    const gammaProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-gamma-'));
+    try {
+      const rec = await getRecord({
+        cwd: gammaProject,
+        vaultRoot: tempVault,
+        id: 'target-unique-id'
+      });
+      assert.ok(rec, 'Should match alpha record despite beta filename collision');
+      assert.equal(rec.frontmatter.id, 'target-unique-id');
+      assert.equal(rec.frontmatter.project, 'project-alpha');
+    } finally {
+      fs.rmSync(gammaProject, { recursive: true, force: true });
+    }
+  });
 });
 

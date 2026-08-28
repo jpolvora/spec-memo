@@ -674,7 +674,8 @@ async function runCliInner(
             for (const hit of hits) {
               const occ = hit.occurrences || 1;
               const layerLabel = hit.layer || 'other';
-              console.log(`[${occ}x] [${layerLabel}] ${hit.title || hit.id}`);
+              const lastSeenStr = hit.lastSeen ? ` (lastSeen: ${hit.lastSeen})` : '';
+              console.log(`[${occ}x] [${layerLabel}] ${hit.title || hit.id}${lastSeenStr}`);
             }
           }
         }
@@ -717,7 +718,8 @@ async function runCliInner(
           for (const hit of hits) {
             const occ = hit.occurrences || 1;
             const layerLabel = hit.layer || 'other';
-            console.log(`[${occ}x] [${layerLabel}] ${hit.title || hit.id}`);
+            const lastSeenStr = hit.lastSeen ? ` (lastSeen: ${hit.lastSeen})` : '';
+            console.log(`[${occ}x] [${layerLabel}] ${hit.title || hit.id}${lastSeenStr}`);
           }
         }
       }
@@ -1223,9 +1225,15 @@ async function runCliInner(
         payload.productRoot = String(payload['product-root']);
         delete payload['product-root'];
       }
+      if (typeof payload.productRoot !== 'string') {
+        delete payload.productRoot;
+      }
       if (payload['skills-root'] && !payload.skillsRoot) {
         payload.skillsRoot = String(payload['skills-root']);
         delete payload['skills-root'];
+      }
+      if (typeof payload.skillsRoot !== 'string') {
+        delete payload.skillsRoot;
       }
       if (payload.skill && !payload.skills) {
         payload.skills = [String(payload.skill)];
@@ -1272,7 +1280,8 @@ async function runCliInner(
         } else {
           for (const t of b.traps) {
             const sev = (t.frontmatter.severity || 'medium').toUpperCase();
-            console.log(`  - [${sev}] ${t.frontmatter.id}: ${t.frontmatter.title || ''}`);
+            const timeStr = t.frontmatter.updated || t.frontmatter.created ? ` (${t.frontmatter.updated || t.frontmatter.created})` : '';
+            console.log(`  - [${sev}] ${t.frontmatter.id}: ${t.frontmatter.title || ''}${timeStr}`);
           }
         }
         console.log(`\nActive Decisions (${b.decisions.length} of ${b.totalDecisionsCount}):`);
@@ -1280,7 +1289,8 @@ async function runCliInner(
           console.log(`  (None)`);
         } else {
           for (const d of b.decisions) {
-            console.log(`  - ${d.frontmatter.id}: ${d.frontmatter.title || ''}`);
+            const timeStr = d.frontmatter.updated || d.frontmatter.created ? ` (${d.frontmatter.updated || d.frontmatter.created})` : '';
+            console.log(`  - ${d.frontmatter.id}: ${d.frontmatter.title || ''}${timeStr}`);
           }
         }
         if (b.truncated) {
@@ -1307,7 +1317,8 @@ async function runCliInner(
             const kindStr = `[${hit.kind.toUpperCase()}${statusStr}]`;
             const titleStr = hit.title ? `: ${hit.title}` : '';
             const patternsStr = hit.pathPatterns ? ` (paths: ${hit.pathPatterns.join(', ')})` : '';
-            console.log(`${kindStr} ${hit.id}${titleStr}${patternsStr}`);
+            const timeStr = (hit as any).updated ? ` [${(hit as any).updated}]` : ((hit as any).lastSeen ? ` [${(hit as any).lastSeen}]` : '');
+            console.log(`${kindStr} ${hit.id}${titleStr}${patternsStr}${timeStr}`);
             if (hit.snippet) {
               console.log(`  ${hit.snippet.trim()}`);
             }

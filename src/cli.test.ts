@@ -617,6 +617,94 @@ describe('CLI Integration', () => {
       }
     }
   });
+
+  it('should execute memo install-skills without crashing when boolean flags are passed', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-inst-'));
+    const tempConsumer = path.join(tempDir, 'consumer');
+    fs.mkdirSync(path.join(tempConsumer, '.git'), { recursive: true });
+
+    try {
+      const code = await runCli([
+        'install-skills',
+        tempConsumer,
+        '--force',
+        '--json'
+      ]);
+      assert.equal(code, 0);
+      const parsed = JSON.parse(capturedLogs.trim());
+      assert.ok(Array.isArray(parsed.installed));
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
+
+  it('should output datetime in search and rank human-readable CLI outputs', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-dt-'));
+    const tempVault = path.join(tempDir, 'vault');
+    const tempRepo = path.join(tempDir, 'repo');
+    fs.mkdirSync(tempVault, { recursive: true });
+    fs.mkdirSync(path.join(tempRepo, '.git'), { recursive: true });
+
+    try {
+      const fixedIso = '2026-08-28T16:45:00.000Z';
+      await runCli([
+        'upsert',
+        '--cwd', tempRepo,
+        '--vaultRoot', tempVault,
+        '--kind', 'trap',
+        '--slug', 'dt-test-trap',
+        '--title', 'Datetime Output Trap',
+        '--severity', 'high',
+        '--body', '### [2026-08-28T16:45:00Z] Datetime Output Trap\n- **Layer**: Web\n- **Module**: UI\n- **Severity**: High\n- **PathPattern**: src/ui.ts\n- **Scenario / Context**: X\n- **DO NOT**: Y\n- **INSTEAD DO**: Z'
+      ]);
+
+      // Search in text mode
+      capturedLogs = '';
+      const searchCode = await runCli([
+        'search',
+        'Datetime Output Trap',
+        '--cwd', tempRepo,
+        '--vaultRoot', tempVault
+      ]);
+      assert.equal(searchCode, 0);
+      assert.ok(capturedLogs.includes('dt-test-trap'));
+      assert.ok(capturedLogs.includes('2026-08-28T'));
+
+      // Rank in text mode
+      capturedLogs = '';
+      const rankCode = await runCli([
+        'rank',
+        '--cwd', tempRepo,
+        '--vaultRoot', tempVault
+      ]);
+      assert.equal(rankCode, 0);
+      assert.ok(capturedLogs.includes('lastSeen: 2026-08-28T'));
+    } finally {
+      console.log = origLog;
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
 });
 
 

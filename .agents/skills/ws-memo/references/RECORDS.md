@@ -54,7 +54,7 @@ All records have YAML frontmatter.
 Traps must use the structured template for automated classification and recurrence ranking:
 
 ```markdown
-### [YYYY-MM-DD] Short title
+### [YYYY-MM-DDTHH:mm:ssZ] Short title
 - **Layer**: Application
 - **Module**: store / sqlite
 - **Severity**: High
@@ -63,6 +63,8 @@ Traps must use the structured template for automated classification and recurren
 - **DO NOT**: Anti-pattern action to avoid.
 - **INSTEAD DO**: Correct pattern / solution.
 ```
+
+*(Note: `### [YYYY-MM-DD]` is also accepted as shorthand; full ISO datetime `[YYYY-MM-DDTHH:mm:ssZ]` is recommended for precise resolution.)*
 
 **Deduplication & Recurrence:**
 - Same `id` or `slug` upsert = in-place edit (no occurrence bump).
