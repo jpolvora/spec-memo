@@ -142,7 +142,10 @@ export async function startSessionRecord(options: PromptOptions): Promise<Sessio
     }
 
     const now = new Date().toISOString();
-    const startTime = options.since || now;
+    const startTime =
+      (existing?.frontmatter.startTime as string) ||
+      options.since ||
+      now;
 
     const fm: Partial<RecordFrontmatter> = {
       id,
@@ -154,10 +157,13 @@ export async function startSessionRecord(options: PromptOptions): Promise<Sessio
       source: 'agent',
       sessionId,
       startTime,
-      taskSlug: options.taskSlug,
-      client: options.client,
-      billable: options.billable !== undefined ? Boolean(options.billable) : true,
-      summary: options.body || `Active session ${sessionId}`
+      taskSlug: options.taskSlug || (existing?.frontmatter.taskSlug as string),
+      client: options.client || (existing?.frontmatter.client as string),
+      billable:
+        options.billable !== undefined
+          ? Boolean(options.billable)
+          : (existing?.frontmatter.billable as boolean ?? true),
+      summary: options.body || (existing?.frontmatter.summary as string) || `Active session ${sessionId}`
     };
 
     const body = options.body || `# Session ${sessionId}\n\nTask: ${options.taskSlug || 'unspecified'}\nStarted: ${startTime}`;

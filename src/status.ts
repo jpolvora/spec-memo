@@ -2503,9 +2503,13 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       ) {
         const id = pathname.slice("/api/prompts/".length);
         const project = url.searchParams.get("project") || undefined;
+        if (!project || project === "all") {
+          writeJson(res, 400, { error: "project query parameter is required for prompt detail" });
+          return;
+        }
         const record =
-          (await getRecord({ id, kind: "prompt", vaultRoot, projectId: project && project !== "all" ? project : undefined })) ||
-          (await getRecord({ id, kind: "session", vaultRoot, projectId: project && project !== "all" ? project : undefined }));
+          (await getRecord({ id, kind: "prompt", vaultRoot, projectId: project })) ||
+          (await getRecord({ id, kind: "session", vaultRoot, projectId: project }));
         if (!record) {
           writeJson(res, 404, { error: `Prompt or session '${id}' not found` });
           return;
