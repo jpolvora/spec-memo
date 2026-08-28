@@ -1,8 +1,4 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { DerivedRuleCandidate, DeriveRulesResult, MemoRecord } from './types.js';
-import { upsertRecord } from './store.js';
-import { slugify } from './store.js';
+import { DerivedRuleCandidate, MemoRecord } from './types.js';
 
 interface SignalDefinition {
   regex: RegExp;

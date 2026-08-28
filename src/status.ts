@@ -1080,6 +1080,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     let promptLimit = 20;
     let promptTotal = 0;
     let selectedIde = "";
+    let selectedSessionId = "";
     let activePromptRecord = null;
     let lastDerivedRules = [];
 
@@ -1406,6 +1407,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       else params.set("crossProject", "true");
       if (query) params.set("query", query);
       if (selectedIde) params.set("ide", selectedIde);
+      if (selectedSessionId) params.set("sessionId", selectedSessionId);
       if (model) params.set("model", model);
       if (agent) params.set("agent", agent);
       if (client) params.set("client", client);
@@ -1546,6 +1548,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (!activePromptRecord || !activePromptRecord.frontmatter.sessionId) return;
       document.getElementById("prompt-query-input").value = "";
       document.getElementById("prompt-vault-select").value = activePromptRecord.frontmatter.project;
+      selectedSessionId = String(activePromptRecord.frontmatter.sessionId);
+      promptOffset = 0;
       closeDrawer();
       loadPrompts();
     });
@@ -1612,6 +1616,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       document.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
       document.querySelector('.chip[data-ide=""]').classList.add("active");
       selectedIde = "";
+      selectedSessionId = "";
       promptOffset = 0;
       loadPrompts();
     });

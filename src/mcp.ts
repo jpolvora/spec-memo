@@ -11,7 +11,7 @@ import { logErrorReport } from './error-logger.js';
 import { getPackageVersion } from './version.js';
 
 const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get', 'check_version']);
-const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote', 'install_skills']);
+const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote', 'install_skills', 'prompt']);
 
 export function resolveToolProjectId(
   name: ToolName,
@@ -64,6 +64,11 @@ export function buildToolSummary(name: ToolName, args: Record<string, unknown>, 
       return 'check_version';
     case 'install_skills':
       return `install_skills${args.skills ? ` ${(args.skills as string[]).join(',')}` : ' ws-memo'}`;
+    case 'prompt': {
+      const action = args.action ? String(args.action) : 'record';
+      const sess = args.sessionId ? ` session=${String(args.sessionId)}` : '';
+      return `prompt ${action}${sess}`;
+    }
     default:
       return name;
   }

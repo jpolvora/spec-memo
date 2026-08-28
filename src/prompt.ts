@@ -59,59 +59,61 @@ export async function recordPromptTurn(options: PromptOptions): Promise<PromptRe
     throw new Error("Parameter 'body' must be a non-empty string for prompt record.");
   }
   const body = (redactSecretsInPayload(rawBody) as string).trim();
-
-  let turn = options.turn;
   const sessionId = options.sessionId;
 
-  // Auto-calculate turn if sessionId provided but turn omitted
-  if (sessionId && turn == null) {
-    const existing = listSessionPromptRecords(vaultRoot, projectId, sessionId);
-    turn = existing.length + 1;
-  }
+  // Allocate turn + write under one vault lock so concurrent session turns cannot collide
+  // on deterministic ids (`prompt-{sessionId}-t{N}`). withVaultLock is reentrant with upsertRecord.
+  return withVaultLock(vaultRoot, async () => {
+    let turn = options.turn;
+    if (sessionId && turn == null) {
+      const existing = listSessionPromptRecords(vaultRoot, projectId!, sessionId);
+      turn = existing.length + 1;
+    }
 
-  const id = options.id || generatePromptId(sessionId, turn);
-  const now = new Date().toISOString();
+    const id = options.id || generatePromptId(sessionId, turn);
+    const now = new Date().toISOString();
 
-  const fm: Partial<RecordFrontmatter> = {
-    id,
-    kind: 'prompt',
-    project: projectId,
-    status: 'active',
-    created: now,
-    updated: now,
-    source: 'agent',
-    ide: options.ide || 'generic',
-    model: options.model,
-    agent: options.agent,
-    sessionId: options.sessionId,
-    turn: turn,
-    taskSlug: options.taskSlug,
-    client: options.client,
-    billable: options.billable !== undefined ? Boolean(options.billable) : true,
-    branch: options.branch,
-    gitSha: options.gitSha,
-    linkedPaths: options.linkedPaths,
-    tags: options.tags
-  };
+    const fm: Partial<RecordFrontmatter> = {
+      id,
+      kind: 'prompt',
+      project: projectId,
+      status: 'active',
+      created: now,
+      updated: now,
+      source: 'agent',
+      ide: options.ide || 'generic',
+      model: options.model,
+      agent: options.agent,
+      sessionId: options.sessionId,
+      turn: turn,
+      taskSlug: options.taskSlug,
+      client: options.client,
+      billable: options.billable !== undefined ? Boolean(options.billable) : true,
+      branch: options.branch,
+      gitSha: options.gitSha,
+      linkedPaths: options.linkedPaths,
+      tags: options.tags
+    };
 
-  const res = await upsertRecord({
-    kind: 'prompt',
-    slug: id,
-    frontmatter: fm,
-    body: body.trim(),
-    cwd,
-    vaultRoot,
-    projectId
+    const res = await upsertRecord({
+      kind: 'prompt',
+      slug: id,
+      frontmatter: fm,
+      body: body.trim(),
+      cwd,
+      vaultRoot,
+      projectId
+    });
+
+    return {
+      id: res.id,
+      path: res.path,
+      created: now,
+      turn: turn,
+      sessionId: options.sessionId,
+      projectId: projectId!
+    };
   });
-
-  return {
-    id: res.id,
-    path: res.path,
-    created: now,
-    turn: turn,
-    sessionId: options.sessionId,
-    projectId
-  };
 }
 
 export async function startSessionRecord(options: PromptOptions): Promise<SessionResult> {
@@ -199,10 +201,11 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
   const endTime = options.until || now;
   const startTime = (existing?.frontmatter.startTime as string) || (existing?.frontmatter.created as string) || now;
 
-  let durationMinutes = options.limit;
-  if (durationMinutes == null && startTime) {
+  // Never reuse PromptOptions.limit (pagination) as duration — compute from timestamps only.
+  let durationMinutes: number | undefined;
+  if (startTime) {
     const diffMs = new Date(endTime).getTime() - new Date(startTime).getTime();
-    durationMinutes = Math.max(1, Math.round(diffMs / 60000));
+    durationMinutes = Number.isFinite(diffMs) ? Math.max(1, Math.round(diffMs / 60000)) : 1;
   }
 
   const existingDeliverables = (existing?.frontmatter.deliverables as SessionDeliverable[]) || [];
