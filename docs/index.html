@@ -34,7 +34,7 @@
           </svg>
         </div>
         <span>spec-memo</span>
-        <span class="version-badge brand-badge">v0.4.7</span>
+        <span class="version-badge brand-badge">v0.10.0</span>
       </a>
 
       <ul class="nav-links">
@@ -65,7 +65,7 @@
       <div class="hero-pill">
         <span class="hero-pill-dot"></span>
         <span>Local Working Memory for AI Coding Agents</span>
-        <span class="version-badge">v0.4.7</span>
+        <span class="version-badge">v0.10.0</span>
       </div>
 
       <h1 class="hero-title">
@@ -90,7 +90,7 @@
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <span>Explore 10 MCP Tools</span>
+          <span>Explore 11 MCP Tools</span>
         </a>
       </div>
 
@@ -420,7 +420,7 @@ memo doctor --fix</code></pre>
     <div class="container">
       <div class="section-header">
         <span class="section-tag">API &amp; CLI Reference</span>
-        <h2 class="section-title">Explore 10 MCP Tools &amp; CLI Commands</h2>
+        <h2 class="section-title">Explore 11 MCP Tools &amp; CLI Commands</h2>
         <p class="section-subtitle">
           Every tool is available through MCP for AI agents and matching CLI commands for developers.
         </p>
@@ -614,6 +614,23 @@ memo doctor --fix</code></pre>
           </p>
           <div class="tool-example-box">
             <code>memo install-skills --product-root /path/to/project --force</code>
+          </div>
+        </div>
+
+        <!-- 11. prompt -->
+        <div class="tool-card" data-name="prompt" data-desc="ingest prompt history sessions activity derive rules export stories" data-category="mcp" data-tags="mcp prompt session activity">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">prompt</span>
+              <span class="tool-role-tag">MCP &bull; CLI</span>
+            </div>
+            <span class="kind-badge plan">History</span>
+          </div>
+          <p class="tool-desc">
+            Ingests prompt turns and session lifecycles into the vault; supports FTS search, activity reports, AI rule derivation, and intent-story export. Aliases: <code>memo prompts</code>, <code>memo session</code>, <code>memo activity</code>.
+          </p>
+          <div class="tool-example-box">
+            <code>memo prompt record --body "Always close SQLite before unlink" --session-id s1</code>
           </div>
         </div>
 
@@ -909,7 +926,7 @@ memo doctor --fix</code></pre>
             <h3 class="faq-card-title">What is the difference between IDE MCP and Terminal CLI?</h3>
           </div>
           <div class="faq-card-body">
-            <p><strong>IDE MCP Configuration:</strong> AI editors (Cursor, VS Code, Claude Desktop, Antigravity) use MCP stdio (<code>memo serve</code> or <code>node /path/to/dist/cli.js serve</code>) to call the 10 MCP tools natively inside prompt context.</p>
+            <p><strong>IDE MCP Configuration:</strong> AI editors (Cursor, VS Code, Claude Desktop, Antigravity) use MCP stdio (<code>memo serve</code> or <code>node /path/to/dist/cli.js serve</code>) to call the 11 MCP tools natively inside prompt context.</p>
             <p><strong>Terminal CLI (on PATH):</strong> Adding <code>memo</code> to PATH enables developers and terminal subagents to run quick commands like <code>memo bootstrap</code>, <code>memo doctor --fix</code>, <code>memo rank</code>, and <code>memo search</code> directly from any shell.</p>
           </div>
         </div>
@@ -994,7 +1011,7 @@ memo doctor --fix</code></pre>
       </ul>
 
       <p class="footer-copy">
-        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.4.7</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
+        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.10.0</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
       </p>
     </div>
   </footer>

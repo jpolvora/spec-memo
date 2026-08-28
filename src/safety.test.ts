@@ -140,6 +140,43 @@ You should provide your token via environment variables rather than hardcoding i
     });
   });
 
+  describe('assertAllowedIdeRulePromote', () => {
+    it('allows .cursor/rules and refuses arbitrary src paths', async () => {
+      const { assertAllowedIdeRulePromote } = await import('./safety.js');
+      const cursorRule = path.join(productRepo, '.cursor', 'rules', 'derived.mdc');
+      assert.doesNotThrow(() => assertAllowedIdeRulePromote(cursorRule, productRepo, vaultRoot));
+      assert.doesNotThrow(() =>
+        assertAllowedIdeRulePromote(path.join(productRepo, 'CLAUDE.md'), productRepo, vaultRoot)
+      );
+      assert.throws(
+        () => assertAllowedIdeRulePromote(path.join(productRepo, 'src', 'evil.ts'), productRepo, vaultRoot),
+        /allowlisted IDE rule path/
+      );
+    });
+
+    it('refuses promote destinations outside the product repository', async () => {
+      const { assertAllowedIdeRulePromote } = await import('./safety.js');
+      const outside = path.join(os.tmpdir(), 'spec-memo-other-repo', 'src', 'injected.ts');
+      assert.throws(
+        () => assertAllowedIdeRulePromote(outside, productRepo, vaultRoot),
+        /must resolve inside the product repository/
+      );
+    });
+
+    it('refuses vault root as product cwd for promote', async () => {
+      const { assertAllowedIdeRulePromote } = await import('./safety.js');
+      const dest = path.join(productRepo, 'CLAUDE.md');
+      assert.throws(
+        () => assertAllowedIdeRulePromote(dest, vaultRoot, vaultRoot),
+        /vault root is not valid|consumer product repository/
+      );
+      assert.throws(
+        () => assertAllowedIdeRulePromote(path.join(vaultRoot, 'evil.md'), productRepo, vaultRoot),
+        /not the vault|must target the product/
+      );
+    });
+  });
+
   describe('Integration with Store (upsertRecord & appendEvent)', () => {
     it('should reject upsertRecord with secret PEM block in body', async () => {
       const pemHeader = ['-----BEGIN', 'RSA', 'PRIVATE', 'KEY-----'].join(' ');

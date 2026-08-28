@@ -705,6 +705,203 @@ describe('CLI Integration', () => {
       }
     }
   });
+
+  it('prompt / prompts / session / activity CLI actions (JSON)', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-prompt-'));
+    const tempVault = path.join(tempDir, 'vault');
+    const tempRepo = path.join(tempDir, 'repo');
+    fs.mkdirSync(tempVault, { recursive: true });
+    fs.mkdirSync(tempRepo, { recursive: true });
+
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      capturedLogs = '';
+      const helpCode = await runCli(['prompt', '--help']);
+      assert.equal(helpCode, 0);
+      assert.ok(capturedLogs.includes('memo prompt'));
+      assert.ok(capturedLogs.includes('derive-rules'));
+
+      capturedLogs = '';
+      const startCode = await runCli([
+        'session',
+        'start',
+        'cli-sess-1',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--slug',
+        'cli-prompt-slice',
+        '--client',
+        'acme',
+        '--json'
+      ]);
+      assert.equal(startCode, 0);
+      const started = JSON.parse(capturedLogs.trim());
+      assert.equal(started.isError, undefined);
+      assert.equal(started.sessionId, 'cli-sess-1');
+
+      capturedLogs = '';
+      const recordCode = await runCli([
+        'prompt',
+        'record',
+        '--body',
+        'Always use uniqueCliZebraToken in backoff loops.',
+        '--session-id',
+        'cli-sess-1',
+        '--ide',
+        'cursor',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(recordCode, 0);
+
+      capturedLogs = '';
+      const listCode = await runCli([
+        'prompts',
+        'list',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(listCode, 0);
+      const listed = JSON.parse(capturedLogs.trim());
+      assert.ok(listed.total >= 1);
+      const promptId = listed.items[0].frontmatter.id;
+
+      capturedLogs = '';
+      const searchCode = await runCli([
+        'prompt',
+        'search',
+        'uniqueCliZebraToken',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(searchCode, 0);
+      const searched = JSON.parse(capturedLogs.trim());
+      assert.ok(searched.total >= 1);
+
+      capturedLogs = '';
+      const showCode = await runCli([
+        'prompt',
+        'show',
+        promptId,
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(showCode, 0);
+      const shown = JSON.parse(capturedLogs.trim());
+      assert.equal(shown.frontmatter.id, promptId);
+
+      capturedLogs = '';
+      const sessCode = await runCli([
+        'prompt',
+        'session',
+        'cli-sess-1',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(sessCode, 0);
+      const sess = JSON.parse(capturedLogs.trim());
+      assert.ok(Array.isArray(sess.turns) || Array.isArray(sess));
+
+      const exportOut = path.join(tempDir, 'story.md');
+      capturedLogs = '';
+      const exportCode = await runCli([
+        'prompt',
+        'export',
+        'cli-sess-1',
+        '--output',
+        exportOut,
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(exportCode, 0);
+      assert.ok(fs.existsSync(exportOut));
+
+      capturedLogs = '';
+      const endCode = await runCli([
+        'session',
+        'end',
+        'cli-sess-1',
+        '--summary',
+        'Finished CLI prompt coverage',
+        '--pr',
+        'https://github.com/org/repo/pull/42',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(endCode, 0);
+      const ended = JSON.parse(capturedLogs.trim());
+      assert.equal(ended.status, 'completed');
+      assert.ok(Array.isArray(ended.deliverables));
+      assert.ok(ended.deliverables.length >= 1);
+
+      capturedLogs = '';
+      const actCode = await runCli([
+        'activity',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(actCode, 0);
+      const act = JSON.parse(capturedLogs.trim());
+      assert.ok(act.totalSessions >= 1);
+      assert.ok(act.byClient);
+
+      capturedLogs = '';
+      const deriveCode = await runCli([
+        'prompt',
+        'derive-rules',
+        '--session-id',
+        'cli-sess-1',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(deriveCode, 0);
+      const derived = JSON.parse(capturedLogs.trim());
+      assert.ok(Array.isArray(derived.rules));
+    } finally {
+      console.log = origLog;
+      try {
+        const { closeIndex } = await import('./indexer.js');
+        closeIndex(tempVault);
+      } catch {}
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+    }
+  });
 });
 
 

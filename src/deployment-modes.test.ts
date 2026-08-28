@@ -1403,4 +1403,112 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
     assert.ok(errorLogs.includes('Remote daemon communication failed'));
     assert.ok(errorLogs.includes('[hybrid-sync]'));
   });
+
+  await t.test('AC25/AC26: prompt tool hybrid changeset + remote proxy parity', async () => {
+    const daemonVault = trackVault(path.join(tempDir, 'prompt-daemon-vault'));
+    const clientVault = trackVault(path.join(tempDir, 'prompt-client-vault'));
+    const authToken = 'prompt-hybrid-token';
+    const pid = 'prompt-parity-proj';
+
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(daemonVault, 'projects', pid)
+      },
+      daemonVault
+    );
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(clientVault, 'projects', pid)
+      },
+      clientVault
+    );
+
+    // Hybrid: local prompt record appears in exportChangeset under prompts/
+    const recordRes = await executeTool('prompt', {
+      action: 'record',
+      vaultRoot: clientVault,
+      projectId: pid,
+      sessionId: 'hybrid-sess-1',
+      turn: 1,
+      body: 'Hybrid uniquePromptZebraToken must sync across vaults.'
+    });
+    assert.strictEqual(recordRes.isError, undefined);
+
+    const changeset = exportChangeset(clientVault, { projectId: pid });
+    assert.ok(
+      changeset.records.some((r) => r.frontmatter?.kind === 'prompt'),
+      'changeset must include prompt record'
+    );
+
+    // Remote: prompt action via callRemoteTool
+    const daemonServer = await startSseServer({
+      vaultRoot: daemonVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken,
+      enableStatus: false
+    });
+
+    const remoteClientVault = trackVault(path.join(tempDir, 'prompt-remote-client'));
+    ensureVaultStructure(remoteClientVault);
+    fs.writeFileSync(
+      path.join(remoteClientVault, 'config.json'),
+      JSON.stringify(
+        {
+          version: '0.4.5',
+          mode: 'remote',
+          remote: { url: daemonServer.url },
+          ttl: { scratchDays: 7, reviewDays: 14 },
+          bootstrap: { maxBytes: 8192, maxTraps: 10 }
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    try {
+      const remoteRecord = await callRemoteTool(
+        'prompt',
+        {
+          action: 'record',
+          body: 'Remote proxied prompt uniqueRemoteZebraToken',
+          sessionId: 'remote-sess-1',
+          turn: 1,
+          projectId: pid,
+          ide: 'cursor'
+        },
+        { vaultRoot: remoteClientVault, authToken }
+      );
+      assert.strictEqual(remoteRecord.isError, false);
+
+      const promptFiles = fs.readdirSync(path.join(daemonVault, 'projects', pid, 'prompts'));
+      assert.ok(promptFiles.length >= 1, 'remote prompt must land on daemon vault');
+
+      const localPrompts = path.join(remoteClientVault, 'projects', pid, 'prompts');
+      assert.ok(!fs.existsSync(localPrompts) || fs.readdirSync(localPrompts).length === 0);
+
+      const failClosed = await callRemoteTool(
+        'prompt',
+        { action: 'list', projectId: pid },
+        { vaultRoot: remoteClientVault, remoteUrl: 'http://127.0.0.1:59998', authToken }
+      );
+      assert.strictEqual(failClosed.isError, true);
+    } finally {
+      await daemonServer.close();
+      closeIndex(daemonVault);
+      closeIndex(clientVault);
+      closeIndex(remoteClientVault);
+    }
+  });
 });

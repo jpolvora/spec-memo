@@ -6,7 +6,7 @@ import { getVaultRoot } from './vault.js';
 import { isPathInside } from './safety.js';
 import { getPackageRoot } from './version.js';
 
-export const ALLOWED_SKILLS = ['ws-memo'] as const;
+export const ALLOWED_SKILLS = ['ws-memo', 'ws-session-tracking'] as const;
 export type AllowedSkill = (typeof ALLOWED_SKILLS)[number];
 
 const DEFAULT_SKILLS_ROOT = '.agents/skills';
@@ -104,7 +104,7 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
     throw new Error('skillsRoot must be a relative path without ".." segments.');
   }
 
-  const skills = options.skills?.length ? options.skills : ['ws-memo'];
+  const skills = options.skills?.length ? options.skills : ['ws-memo', 'ws-session-tracking'];
   const force = options.force === true;
   const packageRoot = options.packageRoot || getPackageRoot();
   const installed: InstallSkillsResult['installed'] = [];

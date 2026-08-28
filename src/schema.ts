@@ -10,12 +10,14 @@ export const RecordKindSchema = z.enum([
   'state',
   'log',
   'scratch',
-  'review'
+  'review',
+  'prompt',
+  'session'
 ]);
 
 export const RecordStatusSchema = z.preprocess(
   (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
-  z.enum(['active', 'paused', 'shipped', 'superseded', 'archived'])
+  z.enum(['active', 'paused', 'shipped', 'superseded', 'archived', 'completed'])
 );
 
 export const RecordSourceSchema = z.enum(['agent', 'human', 'imported']);
@@ -24,6 +26,13 @@ export const SeveritySchema = z.preprocess(
   (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
   z.enum(['low', 'medium', 'high', 'critical'])
 );
+
+export const DeliverableSchema = z.object({
+  type: z.enum(['pr', 'commit', 'spec']),
+  url: z.string().optional(),
+  sha: z.string().optional(),
+  title: z.string().optional()
+});
 
 export const DateOrStringSchema = z.union([z.string(), z.date()]).transform((val) => {
   if (val instanceof Date) {
@@ -54,7 +63,25 @@ export const RecordFrontmatterSchema = z.object({
   layer: z.enum(['application', 'domain', 'web', 'infrastructure', 'tests', 'devops', 'other']).optional(),
   module: z.string().optional(),
   occurrences: z.coerce.number().int().min(1).optional(),
-  lastSeen: DateOrStringSchema.optional()
+  lastSeen: DateOrStringSchema.optional(),
+  // Prompt & Session extended fields
+  ide: z.string().optional(),
+  model: z.string().optional(),
+  agent: z.string().optional(),
+  sessionId: z.string().optional(),
+  turn: z.coerce.number().int().positive().optional(),
+  taskSlug: z.string().optional(),
+  client: z.string().optional(),
+  billable: z.boolean().optional(),
+  branch: z.string().optional(),
+  gitSha: z.string().optional(),
+  startTime: DateOrStringSchema.optional(),
+  endTime: DateOrStringSchema.optional(),
+  durationMinutes: z.coerce.number().optional(),
+  humanTotalMinutes: z.coerce.number().optional(),
+  agentRunningMinutes: z.coerce.number().optional(),
+  deliverables: z.array(DeliverableSchema).optional(),
+  summary: z.string().optional()
 }).passthrough();
 
 export type ValidatedFrontmatter = z.infer<typeof RecordFrontmatterSchema> & RecordFrontmatter;

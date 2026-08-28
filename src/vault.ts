@@ -59,7 +59,9 @@ export const RECORD_SUBDIRS = [
   'plans',
   'logs',
   'reviews',
-  'scratch'
+  'scratch',
+  'prompts',
+  'sessions'
 ] as const;
 
 const vaultLockDepth = new Map<string, number>();

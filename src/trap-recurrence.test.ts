@@ -594,8 +594,8 @@ ${TRAP_BODY}
     );
   });
 
-  it('lists ranked traps via memo rank without adding a ninth MCP tool', async () => {
-    assert.equal(TOOL_NAMES.length, 10);
+  it('lists ranked traps via memo rank without adding rank as an MCP tool', async () => {
+    assert.equal(TOOL_NAMES.length, 11);
     assert.equal(TOOL_NAMES.includes('rank' as (typeof TOOL_NAMES)[number]), false);
 
     await upsertRecord({

@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.4.7** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.10.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -26,8 +26,8 @@ Package version: **0.4.7** (`develop`). Status marks: `[ ]` planned · `[~]` in 
 ## 2. Record store
 
 - [x] **Typed Markdown records.** One file per record, YAML frontmatter per [`PRODUCT.PRD`](PRODUCT.PRD) § Frontmatter. Body is Markdown.
-- [x] **Kinds.** `trap`, `decision`, `spec`, `plan`, `state`, `log`, `scratch`, `review` with the retention table in the PRD.
-- [x] **Compiled views.** Regenerated, never hand-edited: `INDEX.md`, `TRAPS.md`, `DECISIONS.md`. Rebuild from sources (no merge of compiled files).
+- [x] **Kinds.** `trap`, `decision`, `spec`, `plan`, `state`, `log`, `scratch`, `review`, `prompt`, `session` with the retention table in the PRD.
+- [x] **Compiled views.** Regenerated, never hand-edited: `INDEX.md`, `TRAPS.md`, `DECISIONS.md`, `PROMPTS.md`, `SESSIONS.md`. Rebuild from sources (no merge of compiled files).
 - [x] **Trap shape.** Layer, module, severity, pathPatterns, scenario, DO NOT, INSTEAD DO, plus frontmatter `occurrences` / `lastSeen` — compatible with today’s workflow-skills memory entries so import is mechanical.
 - [x] **Decision shape.** Title, status (`proposed` / `accepted` / `superseded`), rationale, alternatives considered (optional).
 - [x] **Spec of record.** Single spec per slug in the vault. No `step-00` duplicate. Optional `linkedPaths` + `verifiedAtSha`.
@@ -114,7 +114,8 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] Relocatable consumer hub data (`MEMORY`, `memory/*`, changelog) off `{sharedDir}`-fixed layout.
 - [x] `read-memory` / `update-memory` call spec-memo MCP (or CLI) instead of `Read`/`Write` in the product tree.
 - [x] Skill or git hook blocks new files under product `{plansDir}` / `{specsDir}` / hub memory once the project is bound.
-- [x] **`ws-memo` runtime skill** (this repo, [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)): routes all 10 MCP tools plus CLI extras. Install into consumers via `memo install-skills` / MCP `install_skills`. Consumer enable/setup remains workflow-skills `ws-spec-memo`.
+- [x] **`ws-memo` runtime skill** (this repo, [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)): routes all 11 MCP tools plus CLI extras. Install into consumers via `memo install-skills` / MCP `install_skills`. Consumer enable/setup remains workflow-skills `ws-spec-memo`.
+- [x] **`ws-session-tracking` runtime skill** (this repo): session lifecycle, prompt ingestion, deliverable correlation, rule derivation, activity/timesheet reports.
 
 ---
 
@@ -142,9 +143,10 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] **Setup & Host Wiring Helper (`memo setup`).** Configures mode, remote URL, checks environment bearer tokens without persisting them to disk, and prints/writes editor MCP configs (`--host`, `--print-mcp`, `--write-mcp`).
 - [x] **Daemon HTTP Sync Routes.** `/api/sync/pull`, `/api/sync/push`, and `/api/sync` on the SSE daemon origin with bearer token authentication.
 - [x] **Hybrid Bidirectional Sync & Debounced Push.** Low-latency local cache with automatic remote delta pulls on `bootstrap` (fail open) and debounced push scheduling after mutating operations (`upsert`, `append`, `forget`, `gc`).
-- [x] **Remote Stdio Proxy Server.** In `remote` mode, `memo serve` transparently proxies all 10 MCP tools to the remote daemon over SSE with bearer authentication. Fails closed with structured `REMOTE_UNREACHABLE` errors.
+- [x] **Remote Stdio Proxy Server.** In `remote` mode, `memo serve` transparently proxies all 11 MCP tools to the remote daemon over SSE with bearer authentication. Fails closed with structured `REMOTE_UNREACHABLE` errors.
 - [x] **Remote Mode CLI Restrictions.** Extras (`canvas`, `sync-vault`, `export-vault`, `import-vault`, `hook`) refuse with exit code 1. `doctor`, `setup`, and `check-version` run locally. `rank` proxies to the daemon.
 - [x] **Operational Telemetry & Rolling Usage Logging.** Configurable switch `enableTelemetry` in `config.json` (default `true`); append-only structured JSONL streaming under `$SPEC_MEMO_ROOT/telemetry/`; rolling daily part rotation (`telemetry-YYYY-MM-DD.part-N.jsonl`) by file size limit (`maxFileSizeMb`); non-blocking fail-safe queue with zero-crash error isolation and secret redaction.
+- [x] **Prompt, session, activity & rule derivation.** Vault kinds `prompt`/`session`; 11th MCP tool `prompt` (record/list/get/search/session lifecycle/activity/derive/export); FTS search; status monitor Prompts explorer; CLI `memo prompt|session|activity`; IDE rule promote allowlist; packaged `ws-session-tracking`.
 
 ---
 
@@ -152,7 +154,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 
 | Idea | Why not |
 |------|---------|
-| Eleventh MCP tool for sync | Sync is daemon HTTP transport route, not an MCP tool |
+| MCP tool for sync | Sync is daemon HTTP transport route, not an MCP tool |
 | Extra MCP tool for “list files in vault” | Leaks layout; use `search` |
 | Auto-rewrite specs when code changes | Drift is a flag, not an author |
 | Auto-`promote` into README | Default deny |

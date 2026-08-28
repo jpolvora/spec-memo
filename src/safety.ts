@@ -30,6 +30,10 @@ export const SECRET_PATTERNS: Array<{ name: string; regex: RegExp }> = [
     regex: /(?:api_key|apikey|secret_key|private_key|auth_token|access_token|secret_token|client_secret)\s*[:=]\s*['"][a-zA-Z0-9_\-]{16,}['"]/i
   },
   {
+    name: 'Stripe / Generic Secret Key',
+    regex: /\b(?:sk_live|sk_test|rk_live|rk_test)_[0-9a-zA-Z]{16,}\b/i
+  },
+  {
     name: 'Bearer Token Header',
     regex: /\bBearer\s+[a-zA-Z0-9_\-\.]{25,}\b/i
   }
@@ -242,6 +246,64 @@ export function assertNotInProductRoot(
   if (isPathInside(resolvedTarget, resolvedProduct)) {
     throw new Error(
       `Safety violation: Attempted to write memory record inside consumer product repository (${targetPath}). Workflow artifacts must be stored outside the product repository in the spec-memo vault.`
+    );
+  }
+}
+
+/** Allowlisted relative destinations for derived-rule IDE promote (AC18). */
+const IDE_RULE_PROMOTE_ALLOWLIST = [
+  { prefix: '.cursor/rules/', fileOnly: false },
+  { exact: '.github/copilot-instructions.md' },
+  { exact: 'CLAUDE.md' },
+  { exact: 'GEMINI.md' }
+] as const;
+
+/**
+ * Allow writes of derived IDE rules into known product-tree destinations.
+ * Arbitrary in-repo paths (e.g. src/) remain refused.
+ */
+export function assertAllowedIdeRulePromote(
+  targetPath: string,
+  productRoot: string | null,
+  vaultRoot?: string
+): void {
+  if (!productRoot) {
+    throw new Error(
+      'Safety violation: Derived-rule promote requires a consumer product repository cwd.'
+    );
+  }
+
+  const resolvedVault = path.resolve(vaultRoot || getVaultRoot());
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedProduct = path.resolve(productRoot);
+
+  if (resolvedProduct === resolvedVault || isPathInside(resolvedProduct, resolvedVault)) {
+    throw new Error(
+      'Safety violation: Derived-rule promote requires a consumer product repository cwd; vault root is not valid.'
+    );
+  }
+  if (isPathInside(resolvedTarget, resolvedVault)) {
+    throw new Error(
+      'Safety violation: Derived-rule promote must target the product repository, not the vault.'
+    );
+  }
+  if (!isPathInside(resolvedTarget, resolvedProduct)) {
+    throw new Error(
+      `Safety violation: Derived-rule promote destination must resolve inside the product repository (${resolvedProduct}).`
+    );
+  }
+
+  const rel = path.relative(resolvedProduct, resolvedTarget).replace(/\\/g, '/');
+  const allowed = IDE_RULE_PROMOTE_ALLOWLIST.some((entry) => {
+    if ('exact' in entry) {
+      return rel === entry.exact;
+    }
+    return rel.startsWith(entry.prefix) && rel.length > entry.prefix.length && !rel.includes('..');
+  });
+
+  if (!allowed) {
+    throw new Error(
+      `Safety violation: Derived-rule promote destination is not an allowlisted IDE rule path (${rel}). Allowed: .cursor/rules/*, .github/copilot-instructions.md, CLAUDE.md, GEMINI.md.`
     );
   }
 }

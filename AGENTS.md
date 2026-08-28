@@ -53,7 +53,7 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 
 ### Vault / spec-memo runtime
 
-When the task means using the spec-memo **vault** (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills), load **only** [`ws-memo`](.agents/skills/ws-memo/SKILL.md) (documents all **10** MCP tools + CLI extras). Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
+When the task means using the spec-memo **vault** (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills, prompt), load **only** [`ws-memo`](.agents/skills/ws-memo/SKILL.md) (documents all **11** MCP tools + CLI extras). Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
 
 ---
 
@@ -160,7 +160,7 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 
 - **`local` (default):** Local records, indexing, and tool execution in `~/.spec-memo/`.
 - **`hybrid`:** Local vault is authoritative cache; auto-pulls deltas during `bootstrap` and debounces pushes on mutations. Manual sync via `memo sync`. Fails open when daemon is down.
-- **`remote`:** Local agent hosts run stdio proxy `memo serve` forwarding the 10 tools to remote daemon. Zero local records. Fails closed when daemon is down.
+- **`remote`:** Local agent hosts run stdio proxy `memo serve` forwarding the 11 tools to remote daemon. Zero local records. Fails closed when daemon is down.
 
 ### CLI Binary & PATH Resolution Contract
 
@@ -223,7 +223,7 @@ When the user asks to install a boot service for the SSE daemon:
 
 ## 🛠️ How to Use (MCP Tools & CLI Commands)
 
-`spec-memo` exposes exactly **10** core tools through MCP stdio and matching CLI commands (`memo <command>`):
+`spec-memo` exposes exactly **11** core tools through MCP stdio and matching CLI commands (`memo <command>`):
 
 ### 1. `bootstrap`
 - **Purpose**: Bind working directory to project identity; return token-budgeted brief (default 8 KB; overridable).
@@ -278,6 +278,18 @@ When the user asks to install a boot service for the SSE daemon:
 - **Purpose**: Install packaged runtime skill(s) (default `ws-memo`) into a consumer product `{skillsRoot}`.
 - **Parameters**: `productRoot` (string), `cwd` (string), `skills` (string[]), `skillsRoot` (string), `force` (boolean).
 - **CLI Example**: `memo install-skills --product-root /path/to/consumer --force`
+
+### 11. `prompt`
+- **Purpose**: Ingest prompt turns, manage session lifecycles, FTS/list query, activity reports, rule derivation, and session story export.
+- **Parameters**: `action` (required intent; default `record`), plus action-specific fields (`body`, `sessionId`, `query`, `ide`, `client`, `since`/`until`, `saveTraps`, `promote`, …).
+- **Actions**: `record`, `list`, `get`, `search`, `session`, `session_start`, `session_end`, `activity_report`, `derive_rules`, `export_story`.
+- **CLI Example**:
+  ```bash
+  memo prompt record --body "Always close SQLite before unlink on Windows" --session-id s1 --ide cursor
+  memo prompts search "exponential backoff" --json
+  memo session end s1 --summary "Shipped auth refresh" --pr https://github.com/org/repo/pull/1
+  memo activity --json
+  ```
 
 ---
 

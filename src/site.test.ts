@@ -35,7 +35,7 @@ describe('Website and GitHub Pages deploy pipeline', () => {
     );
   });
 
-  it('docs/index.html documents all 10 MCP tools', () => {
+  it('docs/index.html documents all 11 MCP tools', () => {
     const html = fs.readFileSync(indexHtmlPath, 'utf-8');
     for (const toolName of TOOL_NAMES) {
       assert.ok(
