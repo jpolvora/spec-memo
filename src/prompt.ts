@@ -425,6 +425,14 @@ export async function exportSessionStory(options: {
   };
 }
 
+function parseDateBound(value: string, label: 'since' | 'until'): number {
+  const ms = new Date(value).getTime();
+  if (!Number.isFinite(ms)) {
+    throw new Error(`Invalid ${label} date: ${value}`);
+  }
+  return ms;
+}
+
 function applyPromptMetadataFilters(allPrompts: MemoRecord[], options: PromptOptions): MemoRecord[] {
   let filtered = allPrompts;
   if (options.ide) {
@@ -452,11 +460,11 @@ function applyPromptMetadataFilters(allPrompts: MemoRecord[], options: PromptOpt
     filtered = filtered.filter((p) => Boolean(p.frontmatter.billable) === Boolean(options.billable));
   }
   if (options.since) {
-    const sinceTime = new Date(options.since).getTime();
+    const sinceTime = parseDateBound(options.since, 'since');
     filtered = filtered.filter((p) => new Date(p.frontmatter.created).getTime() >= sinceTime);
   }
   if (options.until) {
-    const untilTime = new Date(options.until).getTime();
+    const untilTime = parseDateBound(options.until, 'until');
     filtered = filtered.filter((p) => new Date(p.frontmatter.created).getTime() <= untilTime);
   }
   if (options.tags && options.tags.length > 0) {
@@ -585,11 +593,11 @@ export function listSessions(options: PromptOptions): PaginatedResult<MemoRecord
     allSessions = allSessions.filter((s) => s.frontmatter.taskSlug === options.taskSlug);
   }
   if (options.since) {
-    const sinceTime = new Date(options.since).getTime();
+    const sinceTime = parseDateBound(options.since, 'since');
     allSessions = allSessions.filter((s) => new Date(s.frontmatter.startTime as string || s.frontmatter.created).getTime() >= sinceTime);
   }
   if (options.until) {
-    const untilTime = new Date(options.until).getTime();
+    const untilTime = parseDateBound(options.until, 'until');
     allSessions = allSessions.filter((s) => new Date(s.frontmatter.startTime as string || s.frontmatter.created).getTime() <= untilTime);
   }
 
@@ -702,8 +710,8 @@ export function generateActivityReport(options: {
   const byClient: Record<string, { totalHours: number; sessionCount: number }> = {};
   const byProject: Record<string, { totalHours: number; sessionCount: number }> = {};
 
-  const sinceTime = options.since ? new Date(options.since).getTime() : 0;
-  const untilTime = options.until ? new Date(options.until).getTime() : Number.MAX_SAFE_INTEGER;
+  const sinceTime = options.since ? parseDateBound(options.since, 'since') : 0;
+  const untilTime = options.until ? parseDateBound(options.until, 'until') : Number.MAX_SAFE_INTEGER;
 
   for (const pid of projectIds) {
     const records = listProjectRecords(vaultRoot, pid);

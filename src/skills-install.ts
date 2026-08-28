@@ -104,7 +104,7 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
     throw new Error('skillsRoot must be a relative path without ".." segments.');
   }
 
-  const skills = options.skills?.length ? options.skills : ['ws-memo'];
+  const skills = options.skills?.length ? options.skills : ['ws-memo', 'ws-session-tracking'];
   const force = options.force === true;
   const packageRoot = options.packageRoot || getPackageRoot();
   const installed: InstallSkillsResult['installed'] = [];

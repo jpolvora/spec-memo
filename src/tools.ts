@@ -37,7 +37,7 @@ import {
 import { sanitizeToolOutput } from './safety.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
-import { getVaultRoot } from './vault.js';
+import { getVaultRoot, getProjectMetadata } from './vault.js';
 import { recordTelemetry } from './telemetry.js';
 import { logErrorReport } from './error-logger.js';
 
@@ -326,7 +326,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   install_skills: {
     name: 'install_skills',
     description:
-      'Install packaged spec-memo runtime skill(s) (default ws-memo) into a consumer product {skillsRoot}.',
+      'Install packaged spec-memo runtime skill(s) (default ws-memo + ws-session-tracking) into a consumer product {skillsRoot}.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -338,7 +338,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         skills: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Skill IDs to install (default ["ws-memo"])'
+          description: 'Skill IDs to install (default ["ws-memo", "ws-session-tracking"])'
         },
         skillsRoot: {
           type: 'string',
@@ -821,8 +821,19 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       }
 
       if (action === 'derive_rules') {
+        const productCwd =
+          promptOpts.cwd ||
+          (promptOpts.projectId
+            ? getProjectMetadata(promptOpts.projectId, getVaultRoot(promptOpts.vaultRoot))?.lastSeenRoot
+            : undefined);
+        if (promptOpts.promote && !productCwd) {
+          return fail(
+            'INVALID_ARGUMENTS',
+            'cwd or a bootstrapped projectId with lastSeenRoot is required when promote is set.'
+          );
+        }
         const result = await deriveRulesFromPrompts({
-          cwd: promptOpts.cwd,
+          cwd: productCwd,
           projectId: promptOpts.projectId,
           vaultRoot: promptOpts.vaultRoot,
           sessionId: promptOpts.sessionId,
@@ -840,9 +851,20 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         if (!promptOpts.sessionId) {
           return fail('INVALID_ARGUMENTS', "Parameter 'sessionId' is required for export_story action.");
         }
+        const productCwd =
+          promptOpts.cwd ||
+          (promptOpts.projectId
+            ? getProjectMetadata(promptOpts.projectId, getVaultRoot(promptOpts.vaultRoot))?.lastSeenRoot
+            : undefined);
+        if (promptOpts.promote && !productCwd) {
+          return fail(
+            'INVALID_ARGUMENTS',
+            'cwd or a bootstrapped projectId with lastSeenRoot is required when promote/outputPath is set.'
+          );
+        }
         const result = await exportSessionStory({
           sessionId: promptOpts.sessionId,
-          cwd: promptOpts.cwd,
+          cwd: productCwd,
           projectId: promptOpts.projectId,
           vaultRoot: promptOpts.vaultRoot,
           outputPath: promptOpts.promote

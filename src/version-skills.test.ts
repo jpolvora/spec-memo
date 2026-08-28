@@ -99,8 +99,9 @@ describe('check_version and install_skills', () => {
         productRoot,
         packageRoot: getPackageRoot()
       });
-      assert.equal(result.installed.length, 1);
+      assert.equal(result.installed.length, 2);
       assert.equal(result.installed[0].skill, 'ws-memo');
+      assert.equal(result.installed[1].skill, 'ws-session-tracking');
       assert.equal(result.installed[0].identical, false);
       const dest = path.join(productRoot, result.installed[0].destination);
       assert.ok(fs.existsSync(path.join(dest, 'SKILL.md')));
@@ -113,6 +114,7 @@ describe('check_version and install_skills', () => {
       });
       assert.equal(again.installed[0].identical, true);
       assert.equal(again.installed[0].bytesWritten, 0);
+      assert.equal(again.installed[1].identical, true);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
