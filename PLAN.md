@@ -212,6 +212,8 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-27 | release-0.4.5 | Operational telemetry & status monitor client tracking; bump package/MCP/vault to 0.4.5; PR #15 merged |
 | 2026-08-27 | release-0.4.6 | MCP tool pre-validation, error crash protection & logging, ws-memo skill refresh, single source of truth versioning in package.json; npm test 280 pass |
 | 2026-08-28 | release-0.4.7 | Datetime resolution across logging/queries/views, error log diagnostics & frontmatter casing normalization, cross-project getRecord fallback; npm test 286 pass |
+| 2026-08-28 | prompt-history-and-query | Prompt/session vault kinds, 11th MCP `prompt` tool, FTS search, rule derivation, status explorer, CLI, ws-session-tracking; npm test 307 pass |
+| 2026-08-28 | release-0.10.0 | Prompt history & session tracking feature; bump package to 0.10.0 |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

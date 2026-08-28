@@ -107,7 +107,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`status-vault-backup-ui`](status-vault-backup-ui.spec.md): Status monitor vault export and import UI
 - [x] [`operational-telemetry`](operational-telemetry.spec.md): Operational Telemetry & Structured Rolling Usage Logging
 - [ ] Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) (`spec: virtual-file-system-over-mcp.spec.md`)
-- [ ] [`prompt-history-and-query`](prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
+- [x] [`prompt-history-and-query`](prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
 
 ## 8. Next specs
 
@@ -144,7 +144,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 28 | [`status-vault-backup-ui`](status-vault-backup-ui.spec.md) | `[x] done` | Phase 7 | Status monitor vault export and import UI |
 | 29 | `virtual-file-system-over-mcp` | `[ ]` todo | Phase 7: Deployment modes | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
 | 30 | [`operational-telemetry`](operational-telemetry.spec.md) | `[x] done` | Phase 7 | Operational Telemetry & Structured Rolling Usage Logging |
-| 31 | [`prompt-history-and-query`](prompt-history-and-query.spec.md) | `[ ]` todo | Phase 7 | Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer |
+| 31 | [`prompt-history-and-query`](prompt-history-and-query.spec.md) | `[x]` done | Phase 7 | Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -194,6 +194,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-27 | release-0.4.5 | Operational telemetry & status monitor client tracking; bump package/MCP/vault to 0.4.5; PR #15 merged | 0.4.5 |
 | 2026-08-27 | release-0.4.6 | MCP tool pre-validation, error crash protection & logging, ws-memo skill refresh, single source of truth versioning in package.json | 0.4.6 |
 | 2026-08-28 | release-0.4.7 | Datetime resolution across logging/queries/views, error log diagnostics & frontmatter casing normalization, cross-project getRecord fallback | 0.4.7 |
+
+- 2026-08-28: prompt-history-and-query — Prompt/session vault, MCP prompt tool, UI explorer, CLI, skills (v0.10.0)
 
 ## Archive
 

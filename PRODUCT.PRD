@@ -281,6 +281,8 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-27 | release-0.4.5 | Operational telemetry & status monitor client tracking; bump package/MCP/vault to 0.4.5; PR #15 merged | 0.4.5 |
 | 2026-08-27 | release-0.4.6 | MCP tool pre-validation, error crash protection & logging, ws-memo skill refresh, single source of truth versioning in package.json | 0.4.6 |
 | 2026-08-28 | release-0.4.7 | Datetime resolution across logging/queries/views, error log diagnostics & frontmatter casing normalization, cross-project getRecord fallback | 0.4.7 |
+| 2026-08-28 | prompt-history-and-query | Prompt/session vault, MCP prompt tool, FTS, rules, status UI, CLI, skills | npm test 307 pass |
+| 2026-08-28 | release-0.10.0 | Prompt history & session tracking; bump package to 0.10.0 | 0.10.0 |
 
 ## 12. Related docs
 
