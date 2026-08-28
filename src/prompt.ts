@@ -18,7 +18,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { getVaultProjects, getVaultRoot, withVaultLock, withVaultLockSync } from './vault.js';
 import { getRecord, listProjectRecords, upsertRecord } from './store.js';
 import { extractRulesFromPrompts, formatDerivedRulesForExport } from './rules-engine.js';
-import { assertAllowedIdeRulePromote, assertNotInProductRoot, redactSecretsInPayload } from './safety.js';
+import { assertAllowedIdeRulePromote, assertNotInProductRoot, isPathInside, redactSecretsInPayload } from './safety.js';
 import { searchIndex } from './indexer.js';
 import { parseRecord } from './schema.js';
 
@@ -404,8 +404,13 @@ export async function exportSessionStory(options: {
   let writtenPath: string | undefined = undefined;
   if (options.outputPath) {
     const cwd = options.cwd || process.cwd();
+    const vaultRootResolved = path.resolve(vaultRoot);
+    const resolvedCwd = path.resolve(cwd);
+    if (resolvedCwd === vaultRootResolved || isPathInside(resolvedCwd, vaultRootResolved)) {
+      throw new Error('export_story requires a consumer product repository cwd, not the vault root.');
+    }
     const resolvedOut = path.resolve(cwd, options.outputPath);
-    assertNotInProductRoot(resolvedOut, cwd);
+    assertNotInProductRoot(resolvedOut, cwd, true, vaultRoot);
     fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
     fs.writeFileSync(resolvedOut, md, 'utf8');
     writtenPath = resolvedOut;

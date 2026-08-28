@@ -162,6 +162,19 @@ You should provide your token via environment variables rather than hardcoding i
         /must resolve inside the product repository/
       );
     });
+
+    it('refuses vault root as product cwd for promote', async () => {
+      const { assertAllowedIdeRulePromote } = await import('./safety.js');
+      const dest = path.join(productRepo, 'CLAUDE.md');
+      assert.throws(
+        () => assertAllowedIdeRulePromote(dest, vaultRoot, vaultRoot),
+        /vault root is not valid|consumer product repository/
+      );
+      assert.throws(
+        () => assertAllowedIdeRulePromote(path.join(vaultRoot, 'evil.md'), productRepo, vaultRoot),
+        /not the vault|must target the product/
+      );
+    });
   });
 
   describe('Integration with Store (upsertRecord & appendEvent)', () => {

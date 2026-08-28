@@ -268,7 +268,9 @@ export function assertAllowedIdeRulePromote(
   vaultRoot?: string
 ): void {
   if (!productRoot) {
-    return;
+    throw new Error(
+      'Safety violation: Derived-rule promote requires a consumer product repository cwd.'
+    );
   }
 
   const resolvedVault = path.resolve(vaultRoot || getVaultRoot());
@@ -276,10 +278,14 @@ export function assertAllowedIdeRulePromote(
   const resolvedProduct = path.resolve(productRoot);
 
   if (resolvedProduct === resolvedVault || isPathInside(resolvedProduct, resolvedVault)) {
-    return;
+    throw new Error(
+      'Safety violation: Derived-rule promote requires a consumer product repository cwd; vault root is not valid.'
+    );
   }
   if (isPathInside(resolvedTarget, resolvedVault)) {
-    return;
+    throw new Error(
+      'Safety violation: Derived-rule promote must target the product repository, not the vault.'
+    );
   }
   if (!isPathInside(resolvedTarget, resolvedProduct)) {
     throw new Error(
