@@ -680,5 +680,35 @@ describe('Store Engine (upsert and get)', () => {
       fs.rmSync(gammaProject, { recursive: true, force: true });
     }
   });
+
+  it('should retrieve record from sibling project when filename matches id without false ambiguity', async () => {
+    // 1. Create a decision in project Alpha where slug is defaulted to id
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'decision',
+      frontmatter: {
+        id: 'adr-shared-default-slug',
+        title: 'Alpha Shared Decision Default Slug'
+      },
+      body: 'Body of shared decision'
+    });
+
+    // 2. Query from project Beta without projectId
+    const betaProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-beta-'));
+    try {
+      const rec = await getRecord({
+        cwd: betaProject,
+        vaultRoot: tempVault,
+        id: 'adr-shared-default-slug'
+      });
+      assert.ok(rec, 'Must find single unique record from sibling project');
+      assert.equal(rec.frontmatter.id, 'adr-shared-default-slug');
+      assert.equal(rec.frontmatter.project, 'project-alpha');
+    } finally {
+      fs.rmSync(betaProject, { recursive: true, force: true });
+    }
+  });
 });
 

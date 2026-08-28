@@ -517,10 +517,19 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
         }
       }
 
-      if (crossProjectMatches.length === 1) {
-        return crossProjectMatches[0];
+      const uniqueMatches = [
+        ...new Map(
+          crossProjectMatches.map((r) => [
+            r.path ?? `${r.frontmatter.project}:${r.frontmatter.id}`,
+            r
+          ])
+        ).values()
+      ];
+
+      if (uniqueMatches.length === 1) {
+        return uniqueMatches[0];
       }
-      if (crossProjectMatches.length > 1) {
+      if (uniqueMatches.length > 1) {
         // Ambiguous match across multiple sibling projects — fail closed
         return null;
       }
