@@ -467,7 +467,12 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
           if (fs.existsSync(directPath)) {
             try {
               const parsed = parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
-              if (!CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind)) {
+              if (
+                !CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind) &&
+                (options.slug
+                  ? parsed.frontmatter.id === directLookup || parsed.frontmatter.slug === options.slug
+                  : parsed.frontmatter.id === lookupId)
+              ) {
                 crossProjectMatches.push(parsed);
               }
             } catch {
@@ -489,7 +494,10 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
               if (fs.existsSync(directFile)) {
                 try {
                   const parsed = parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
-                  if (!CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind)) {
+                  if (
+                    !CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind) &&
+                    parsed.frontmatter.id === lookupId
+                  ) {
                     crossProjectMatches.push(parsed);
                   }
                 } catch {

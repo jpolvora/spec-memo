@@ -710,5 +710,45 @@ describe('Store Engine (upsert and get)', () => {
       fs.rmSync(betaProject, { recursive: true, force: true });
     }
   });
+
+  it('should ignore coincidental sibling filename collisions when frontmatter.id differs', async () => {
+    // 1. Create alpha record with target-id in alpha-custom-slug.md
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'decision',
+      slug: 'alpha-custom-slug',
+      frontmatter: {
+        id: 'target-unique-id',
+        title: 'Alpha Real Target'
+      },
+      body: 'Body of real target'
+    });
+
+    // 2. Create beta record stored at filename target-unique-id.md but with frontmatter.id = beta-other-id
+    const betaProjDir = path.join(tempVault, 'projects', 'project-beta', 'decisions');
+    fs.mkdirSync(betaProjDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(betaProjDir, 'target-unique-id.md'),
+      '---\nid: beta-other-id\nkind: decision\nproject: project-beta\nstatus: active\ncreated: 2026-08-28T00:00:00.000Z\nupdated: 2026-08-28T00:00:00.000Z\n---\nOther body',
+      'utf8'
+    );
+
+    // 3. Query from project Gamma for target-unique-id
+    const gammaProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-gamma-'));
+    try {
+      const rec = await getRecord({
+        cwd: gammaProject,
+        vaultRoot: tempVault,
+        id: 'target-unique-id'
+      });
+      assert.ok(rec, 'Should match alpha record despite beta filename collision');
+      assert.equal(rec.frontmatter.id, 'target-unique-id');
+      assert.equal(rec.frontmatter.project, 'project-alpha');
+    } finally {
+      fs.rmSync(gammaProject, { recursive: true, force: true });
+    }
+  });
 });
 
