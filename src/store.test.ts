@@ -638,5 +638,47 @@ describe('Store Engine (upsert and get)', () => {
       fs.rmSync(otherProject, { recursive: true, force: true });
     }
   });
+
+  it('should fail closed (return null) on ambiguous ID existing across multiple sibling projects in getRecord fallback', async () => {
+    // 1. Create a trap with the same ID in project A and project B
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-alpha',
+      kind: 'trap',
+      slug: 'duplicate-id-trap',
+      frontmatter: {
+        id: 'trap-duplicate-shared',
+        title: 'Alpha Shared Trap'
+      },
+      body: 'Trap in Alpha'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      projectId: 'project-beta',
+      kind: 'trap',
+      slug: 'duplicate-id-trap',
+      frontmatter: {
+        id: 'trap-duplicate-shared',
+        title: 'Beta Shared Trap'
+      },
+      body: 'Trap in Beta'
+    });
+
+    // 2. Query from project Gamma without projectId
+    const gammaProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-store-proj-gamma-'));
+    try {
+      const rec = await getRecord({
+        cwd: gammaProject,
+        vaultRoot: tempVault,
+        id: 'trap-duplicate-shared'
+      });
+      assert.equal(rec, null, 'Ambiguous ID across sibling projects must return null (fail closed)');
+    } finally {
+      fs.rmSync(gammaProject, { recursive: true, force: true });
+    }
+  });
 });
 

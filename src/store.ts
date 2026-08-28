@@ -448,6 +448,7 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
   if (!options.projectId && lookupId) {
     const projectsDir = path.join(vaultRoot, 'projects');
     if (fs.existsSync(projectsDir)) {
+      const crossProjectMatches: MemoRecord[] = [];
       const otherProjects = fs.readdirSync(projectsDir).filter((p) => p !== projectId);
       for (const otherProj of otherProjects) {
         const otherProjectDir = path.join(projectsDir, otherProj);
@@ -467,7 +468,7 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
             try {
               const parsed = parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
               if (!CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind)) {
-                return parsed;
+                crossProjectMatches.push(parsed);
               }
             } catch {
               // continue scanning
@@ -489,7 +490,7 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
                 try {
                   const parsed = parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
                   if (!CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind)) {
-                    return parsed;
+                    crossProjectMatches.push(parsed);
                   }
                 } catch {
                   // continue scanning
@@ -502,7 +503,7 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
                   try {
                     const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
                     if (!CROSS_PROJECT_GET_EXCLUDED.includes(parsed.frontmatter.kind) && parsed.frontmatter.id === lookupId) {
-                      return parsed;
+                      crossProjectMatches.push(parsed);
                     }
                   } catch {
                     // ignore
@@ -514,6 +515,14 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
         } catch {
           // ignore
         }
+      }
+
+      if (crossProjectMatches.length === 1) {
+        return crossProjectMatches[0];
+      }
+      if (crossProjectMatches.length > 1) {
+        // Ambiguous match across multiple sibling projects — fail closed
+        return null;
       }
     }
   }
