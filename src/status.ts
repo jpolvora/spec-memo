@@ -9,6 +9,7 @@ import { logErrorReport } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
 import { sanitizeToolOutput } from "./safety.js";
+import { scheduleHybridPush } from "./hybrid-sync.js";
 import {
   listPrompts,
   searchPrompts,
@@ -1733,17 +1734,27 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       btn.textContent = "Scanning prompts…";
       const vault = document.getElementById("rules-vault-select").value;
       const sess = document.getElementById("rules-session-input").value.trim();
+      if (!vault || vault === "all") {
+        showBanner("Select a specific vault/project before deriving rules.", "error");
+        btn.disabled = false;
+        btn.textContent = "Derive Rules from Prompts";
+        return;
+      }
 
       try {
         const res = await fetch("/api/prompts/derive-rules", {
           method: "POST",
           headers: { ...apiHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
-            projectId: vault && vault !== "all" ? vault : undefined,
+            projectId: vault,
             sessionId: sess || undefined
           })
         });
         const data = await res.json();
+        if (!res.ok) {
+          showBanner(data.error || "Scan failed", "error");
+          return;
+        }
         if (data.ok && data.result) {
           showBanner("Scan complete: " + data.result.rules.length + " candidate rules found across " + data.result.scannedPromptsCount + " prompts.", "success");
           renderDerivedRules(data.result.rules);
@@ -1761,17 +1772,27 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       btn.disabled = true;
       btn.textContent = "Saving to vault…";
       const vault = document.getElementById("rules-vault-select").value;
+      if (!vault || vault === "all") {
+        showBanner("Select a specific vault/project before saving traps.", "error");
+        btn.disabled = false;
+        btn.textContent = "Save High Confidence as Traps";
+        return;
+      }
 
       try {
         const res = await fetch("/api/prompts/derive-rules", {
           method: "POST",
           headers: { ...apiHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
-            projectId: vault && vault !== "all" ? vault : undefined,
+            projectId: vault,
             saveTraps: true
           })
         });
         const data = await res.json();
+        if (!res.ok) {
+          showBanner(data.error || "Save failed", "error");
+          return;
+        }
         if (data.ok && data.result) {
           const count = data.result.savedTraps ? data.result.savedTraps.length : 0;
           showBanner("Successfully saved " + count + " derived rule(s) as active traps in vault!", "success");
@@ -2540,16 +2561,29 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             return;
           }
         }
-        const meta = parsed.projectId ? getProjectMetadata(parsed.projectId, vaultRoot) : null;
+        if (!parsed.projectId || typeof parsed.projectId !== "string") {
+          writeJson(res, 400, { error: "projectId is required for derive-rules" });
+          return;
+        }
+        const meta = getProjectMetadata(parsed.projectId, vaultRoot);
+        if (!meta?.lastSeenRoot) {
+          writeJson(res, 400, {
+            error: "Project metadata missing lastSeenRoot; bind project via bootstrap first"
+          });
+          return;
+        }
         const result = await deriveRulesFromPrompts({
           vaultRoot,
           projectId: parsed.projectId,
-          cwd: meta?.lastSeenRoot,
+          cwd: meta.lastSeenRoot,
           sessionId: parsed.sessionId,
           saveTraps: parsed.saveTraps,
           promote: parsed.promote,
           format: parsed.format
         });
+        if (result.savedTraps?.length) {
+          scheduleHybridPush(vaultRoot, parsed.projectId);
+        }
         writeJson(res, 200, { ok: true, result: sanitizeToolOutput(result) });
         return;
       }

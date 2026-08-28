@@ -192,57 +192,59 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
     throw new Error("Parameter 'sessionId' is required to end a session.");
   }
 
-  const id = options.id || `session-${sessionId}`;
-  const existing = await getRecord({
-    id,
-    kind: 'session',
-    cwd,
-    vaultRoot,
-    projectId
-  });
+  // Merge deliverables under vault lock so concurrent session_end cannot drop entries (TOCTOU).
+  return withVaultLock(vaultRoot, async () => {
+    const id = options.id || `session-${sessionId}`;
+    const existing = await getRecord({
+      id,
+      kind: 'session',
+      cwd,
+      vaultRoot,
+      projectId
+    });
 
-  const now = new Date().toISOString();
-  const endTime = options.until || now;
-  const startTime = (existing?.frontmatter.startTime as string) || (existing?.frontmatter.created as string) || now;
+    const now = new Date().toISOString();
+    const endTime = options.until || now;
+    const startTime = (existing?.frontmatter.startTime as string) || (existing?.frontmatter.created as string) || now;
 
-  // Never reuse PromptOptions.limit (pagination) as duration — compute from timestamps only.
-  let durationMinutes: number | undefined;
-  if (startTime) {
-    const diffMs = new Date(endTime).getTime() - new Date(startTime).getTime();
-    durationMinutes = Number.isFinite(diffMs) ? Math.max(1, Math.round(diffMs / 60000)) : 1;
-  }
+    // Never reuse PromptOptions.limit (pagination) as duration — compute from timestamps only.
+    let durationMinutes: number | undefined;
+    if (startTime) {
+      const diffMs = new Date(endTime).getTime() - new Date(startTime).getTime();
+      durationMinutes = Number.isFinite(diffMs) ? Math.max(1, Math.round(diffMs / 60000)) : 1;
+    }
 
-  const existingDeliverables = (existing?.frontmatter.deliverables as SessionDeliverable[]) || [];
-  const mergedDeliverables = [...existingDeliverables];
-  if (options.deliverables && Array.isArray(options.deliverables)) {
-    for (const d of options.deliverables) {
-      if (!mergedDeliverables.some((ex) => ex.url === d.url && ex.sha === d.sha && ex.type === d.type)) {
-        mergedDeliverables.push(d);
+    const existingDeliverables = (existing?.frontmatter.deliverables as SessionDeliverable[]) || [];
+    const mergedDeliverables = [...existingDeliverables];
+    if (options.deliverables && Array.isArray(options.deliverables)) {
+      for (const d of options.deliverables) {
+        if (!mergedDeliverables.some((ex) => ex.url === d.url && ex.sha === d.sha && ex.type === d.type)) {
+          mergedDeliverables.push(d);
+        }
       }
     }
-  }
 
-  const summary = options.body || (existing?.frontmatter.summary as string) || `Completed session ${sessionId}`;
+    const summary = options.body || (existing?.frontmatter.summary as string) || `Completed session ${sessionId}`;
 
-  const fm: Partial<RecordFrontmatter> = {
-    ...(existing?.frontmatter || {}),
-    id,
-    kind: 'session',
-    project: projectId,
-    status: 'completed',
-    updated: now,
-    sessionId,
-    startTime,
-    endTime,
-    durationMinutes: durationMinutes ?? 0,
-    taskSlug: options.taskSlug || (existing?.frontmatter.taskSlug as string),
-    client: options.client || (existing?.frontmatter.client as string),
-    billable: options.billable !== undefined ? Boolean(options.billable) : (existing?.frontmatter.billable as boolean ?? true),
-    deliverables: mergedDeliverables,
-    summary
-  };
+    const fm: Partial<RecordFrontmatter> = {
+      ...(existing?.frontmatter || {}),
+      id,
+      kind: 'session',
+      project: projectId,
+      status: 'completed',
+      updated: now,
+      sessionId,
+      startTime,
+      endTime,
+      durationMinutes: durationMinutes ?? 0,
+      taskSlug: options.taskSlug || (existing?.frontmatter.taskSlug as string),
+      client: options.client || (existing?.frontmatter.client as string),
+      billable: options.billable !== undefined ? Boolean(options.billable) : (existing?.frontmatter.billable as boolean ?? true),
+      deliverables: mergedDeliverables,
+      summary
+    };
 
-  const body = `# Session ${sessionId} — Completed
+    const body = `# Session ${sessionId} — Completed
 - **Status:** Completed
 - **Task:** ${fm.taskSlug || 'unspecified'}
 - **Start:** ${startTime}
@@ -255,31 +257,32 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
 ${summary}
 `;
 
-  const res = await upsertRecord({
-    kind: 'session',
-    slug: id,
-    frontmatter: fm,
-    body,
-    cwd,
-    vaultRoot,
-    projectId
-  });
+    const res = await upsertRecord({
+      kind: 'session',
+      slug: id,
+      frontmatter: fm,
+      body,
+      cwd,
+      vaultRoot,
+      projectId
+    });
 
-  return {
-    id: res.id,
-    sessionId,
-    projectId,
-    status: 'completed',
-    startTime,
-    endTime,
-    durationMinutes,
-    taskSlug: fm.taskSlug,
-    client: fm.client,
-    billable: fm.billable ?? true,
-    deliverables: mergedDeliverables,
-    summary,
-    path: res.path
-  };
+    return {
+      id: res.id,
+      sessionId,
+      projectId,
+      status: 'completed',
+      startTime,
+      endTime,
+      durationMinutes,
+      taskSlug: fm.taskSlug,
+      client: fm.client,
+      billable: fm.billable ?? true,
+      deliverables: mergedDeliverables,
+      summary,
+      path: res.path
+    };
+  });
 }
 
 function listSessionPromptRecords(vaultRoot: string, projectId: string, sessionId: string): MemoRecord[] {
