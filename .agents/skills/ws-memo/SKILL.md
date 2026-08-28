@@ -1,27 +1,39 @@
 ---
 name: ws-memo
-version: 0.5.0
+version: 0.5.1
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
-  Trigger on spec-memo, memo vault, bootstrap brief, upsert trap/decision/spec/plan,
-  search vault, prompt history, session tracking, promote ADR, check version, install skills,
-  memo doctor, rank traps, canvas, serve --sse, status monitor, import/export vault, sync-vault,
-  uninstall/teardown, configure deployment mode (local, hybrid, remote), or configure project with spec-memo.
+  Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
+  prompt history, session tracking, promote ADR, check version, install skills,
+  memo doctor, rank traps, canvas, serve --sse, status monitor, import/export vault,
+  sync-vault, uninstall/teardown, or host MCP wiring / deployment mode (local, hybrid, remote)
+  via memo setup. Not for first-time workflow-skills consumer enable or config.json
+  (that is ws-spec-memo).
 invocation_names:
   - ws-memo
   - memo
-  - spec-memo
 ---
 
 # ws-memo
 
 > When this skill is loaded, output "ws-memo loaded."
 
-**Runtime skill** shipped by [spec-memo](https://github.com/jpolvora/spec-memo). Guides agents to use the **MCP server (11 tools) + CLI (`memo`)** for out-of-repo working memory, diagnostics, and project lifecycle management across **local**, **hybrid**, and **remote** deployment modes.
+**Runtime skill** shipped by [spec-memo](https://github.com/jpolvora/spec-memo). Guides agents to use the **MCP server (11 tools) + CLI (`memo`)** for out-of-repo working memory, diagnostics, and host deployment across **local**, **hybrid**, and **remote** modes.
 
 Full tool/CLI parameter matrix → [`references/SURFACE.md`](references/SURFACE.md). Record schemas and git boundaries → [`references/RECORDS.md`](references/RECORDS.md). Host snippet → [`references/MCP-TEMPLATE.json`](references/MCP-TEMPLATE.json).
 
 **Core Mission:** Provide high-precision, zero-leak, out-of-repo working memory. Never dump `.agents/plans/`, `MEMORY.md`, `.state.md`, or runtime logs into product git.
+
+### Consumer handoff (workflow-skills)
+
+If the product uses **workflow-skills** (`ws-shared/config.json` or skill `ws-spec-memo` is present):
+
+| Need | Do |
+|------|-----|
+| First-time enable, `specMemo.*` / harness flags, import MEMORY, write-block hook, disable | **`/ws-spec-memo setup\|check\|import\|disable`** — do **not** write `specMemo.*` from this skill |
+| Runtime vault ops after MCP is registered | Stay on **this skill** (`bootstrap`, `search`, `upsert`, …) |
+
+Standalone spec-memo hosts (no workflow-skills) use CLI `memo setup` for **host MCP wiring and deployment mode** only — not as a substitute for `ws-spec-memo` harness config. Companion: [workflow-skills#253](https://github.com/jpolvora/workflow-skills/issues/253).
 
 ---
 
@@ -487,7 +499,7 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 
 | CLI Command | Description & Flags |
 |---|---|
-| `memo setup` | Configure mode (`local`, `hybrid`, `remote`) & host MCP wiring (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). Flags: `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
+| `memo setup` | **Host/deployment only:** mode (`local`, `hybrid`, `remote`) & host MCP wiring (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). Does **not** write workflow-skills `{sharedDir}/config.json` / `specMemo.*` — use `ws-spec-memo` for that. Flags: `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo doctor` | Vault health, project identity, FTS5 integrity, and in-repo pollution scan. Flags: `--rebuild` (re-index FTS), `--fix` (delete forbidden in-repo files), `--json`. |
 | `memo rank` | Recurrence-ranked traps report by occurrence count. Flags: `--layer <name>`, `--limit <n>`, `--backfill`, `--json`. |
 | `memo canvas` | Launch graph visualizer dashboard (default port `4100`). Flags: `--port`, `--host`, `--project`. |
@@ -518,6 +530,8 @@ Match user intent to the correct action:
 
 | Intent | Action | Command / MCP Tool |
 |---|---|---|
+| First-time enable / `config.json` / import MEMORY (workflow-skills consumer) | **handoff** | `/ws-spec-memo setup\|check\|import\|disable` — do not write `specMemo.*` here |
+| Host MCP wiring / deployment mode (standalone host) | **host-setup** | CLI `memo setup` (`--mode`, `--write-mcp`) — not harness `config.json` |
 | Session start / brief / traps | **session** | MCP `bootstrap` (`cwd: "."`) |
 | Find / read memory records | **recall** | MCP `search` → MCP `get` |
 | Record trap, decision, spec, plan | **remember** | MCP `upsert` (strict trap format) |
