@@ -416,7 +416,17 @@ async function runCliInner(
     return 0;
   }
 
-  assertSupportedNodeRuntime();
+  try {
+    assertSupportedNodeRuntime();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (parsed.isJson) {
+      printJson({ isError: true, error: message, code: 'UNSUPPORTED_NODE' });
+    } else {
+      console.error(message);
+    }
+    return 1;
+  }
 
   vaultRootArg = (parsed.options.vaultRoot as string) || vaultRootArg;
   const activeVaultConfig = ensureVaultStructure(getVaultRoot(vaultRootArg));
@@ -1647,11 +1657,16 @@ async function runCliInner(
 }
 
 if (isCliMainEntry()) {
-  runCli().then((exitCode) => {
-    if (exitCode !== 0) {
-      process.exit(exitCode);
-    }
-  });
+  runCli()
+    .then((exitCode) => {
+      if (exitCode !== 0) {
+        process.exit(exitCode);
+      }
+    })
+    .catch((err: unknown) => {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    });
 } else if (process.env.SPEC_MEMO_DEBUG === '1' && process.argv[1]) {
   console.error(`spec-memo: skipped CLI entry (argv[1]=${process.argv[1]})`);
 }

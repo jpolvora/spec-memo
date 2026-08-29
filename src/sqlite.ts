@@ -14,7 +14,9 @@ export const MIN_NODE_MAJOR = 22;
 export const SQLITE_ABI_REBUILD_HINT =
   'better-sqlite3 native module ABI mismatch for this Node.js version. Install compile tools if needed (Debian/Ubuntu: apt install build-essential), then run npm rebuild better-sqlite3 and memo doctor --rebuild.';
 
-export function assertSupportedNodeRuntime(nodeVersion: string = process.versions.node): void {
+export function assertSupportedNodeRuntime(
+  nodeVersion: string = process.env.SPEC_MEMO_SIMULATE_NODE || process.versions.node
+): void {
   const major = Number.parseInt(nodeVersion, 10);
   if (!Number.isFinite(major) || major < MIN_NODE_MAJOR) {
     throw new Error(

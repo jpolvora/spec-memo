@@ -26,6 +26,28 @@ describe('CLI entry gate (npm-link shim)', () => {
     assert.equal(isCliMainEntry('/opt/spec-memo/dist/cli.test.js'), false);
     assert.equal(isCliMainEntry('/usr/bin/node'), false);
   });
+
+  it('returns exit 1 with stderr when Node runtime guard throws', async () => {
+    const prev = process.env.SPEC_MEMO_SIMULATE_NODE;
+    process.env.SPEC_MEMO_SIMULATE_NODE = '20.19.0';
+    let capturedErr = '';
+    const origErr = console.error;
+    console.error = (...args) => {
+      capturedErr += args.join(' ') + '\n';
+    };
+    try {
+      const code = await runCli(['bootstrap', '--cwd', '.']);
+      assert.equal(code, 1);
+      assert.ok(capturedErr.includes('requires Node.js >= 22'));
+    } finally {
+      console.error = origErr;
+      if (prev === undefined) {
+        delete process.env.SPEC_MEMO_SIMULATE_NODE;
+      } else {
+        process.env.SPEC_MEMO_SIMULATE_NODE = prev;
+      }
+    }
+  });
 });
 
 describe('CLI Integration', () => {
