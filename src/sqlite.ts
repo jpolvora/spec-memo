@@ -7,7 +7,15 @@ const require = createRequire(import.meta.url);
 type SqliteConstructor = {
   new (filename?: string | Buffer, options?: Database.Options): Database.Database;
 };
-const Sqlite = require('better-sqlite3') as SqliteConstructor;
+
+let SqliteCtor: SqliteConstructor | undefined;
+
+function getSqliteConstructor(): SqliteConstructor {
+  if (!SqliteCtor) {
+    SqliteCtor = require('better-sqlite3') as SqliteConstructor;
+  }
+  return SqliteCtor;
+}
 
 export const MIN_NODE_MAJOR = 22;
 
@@ -83,7 +91,7 @@ export function createSqliteDatabase(
 ): Database.Database {
   const nativeBinding = options.nativeBinding ?? cachedBinding ?? (cachedBinding = resolveSqliteNativeBinding());
   try {
-    return new Sqlite(filename, { ...options, nativeBinding });
+    return new (getSqliteConstructor())(filename, { ...options, nativeBinding });
   } catch (err) {
     throw wrapSqliteOpenError(err);
   }
