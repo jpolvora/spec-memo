@@ -663,7 +663,8 @@ describe('CLI Integration', () => {
     fs.mkdirSync(path.join(tempRepo, '.git'), { recursive: true });
 
     try {
-      const fixedIso = '2026-08-28T16:45:00.000Z';
+      const fixedIso = new Date().toISOString();
+      const dayPrefix = fixedIso.slice(0, 10); // YYYY-MM-DD
       await runCli([
         'upsert',
         '--cwd', tempRepo,
@@ -672,7 +673,7 @@ describe('CLI Integration', () => {
         '--slug', 'dt-test-trap',
         '--title', 'Datetime Output Trap',
         '--severity', 'high',
-        '--body', '### [2026-08-28T16:45:00Z] Datetime Output Trap\n- **Layer**: Web\n- **Module**: UI\n- **Severity**: High\n- **PathPattern**: src/ui.ts\n- **Scenario / Context**: X\n- **DO NOT**: Y\n- **INSTEAD DO**: Z'
+        '--body', `### [${fixedIso}] Datetime Output Trap\n- **Layer**: Web\n- **Module**: UI\n- **Severity**: High\n- **PathPattern**: src/ui.ts\n- **Scenario / Context**: X\n- **DO NOT**: Y\n- **INSTEAD DO**: Z`
       ]);
 
       // Search in text mode
@@ -685,7 +686,7 @@ describe('CLI Integration', () => {
       ]);
       assert.equal(searchCode, 0);
       assert.ok(capturedLogs.includes('dt-test-trap'));
-      assert.ok(capturedLogs.includes('2026-08-28T'));
+      assert.ok(capturedLogs.includes(dayPrefix + 'T'));
 
       // Rank in text mode
       capturedLogs = '';
@@ -695,7 +696,7 @@ describe('CLI Integration', () => {
         '--vaultRoot', tempVault
       ]);
       assert.equal(rankCode, 0);
-      assert.ok(capturedLogs.includes('lastSeen: 2026-08-28T'));
+      assert.ok(capturedLogs.includes('lastSeen: ' + dayPrefix + 'T'));
     } finally {
       console.log = origLog;
       try {

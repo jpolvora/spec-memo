@@ -1,5 +1,5 @@
 {
-  "_comment": "Register stdio MCP. For HTTP/SSE use memo serve --sse and point the host at http://127.0.0.1:3000/sse. Status UI is http://127.0.0.1:3001/ (not an MCP transport).",
+  "_comment": "Canonical stdio MCP snippet (server key must be spec-memo to match specMemo.mcpServerName). Primary npx: npm package. Fallback: github:jpolvora/spec-memo. For HTTP/SSE use memo serve --sse → http://127.0.0.1:3000/sse; status UI http://127.0.0.1:3001/ (not MCP).",
   "mcpServers": {
     "spec-memo": {
       "command": "memo",
@@ -7,7 +7,12 @@
     },
     "spec-memo-npx": {
       "command": "npx",
-      "args": ["-y", "github:jpolvora/spec-memo", "serve"]
+      "args": ["-y", "spec-memo", "serve"]
+    },
+    "spec-memo-npx-git": {
+      "command": "npx",
+      "args": ["-y", "github:jpolvora/spec-memo", "serve"],
+      "_comment": "Fallback when npm registry package is unavailable; prefer spec-memo-npx."
     }
   }
 }

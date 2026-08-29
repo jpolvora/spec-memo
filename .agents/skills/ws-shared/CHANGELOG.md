@@ -1,5 +1,33 @@
 # Changelog
 
+### [2026-08-28 20:20] Agent: Cursor Grok 4.6
+- **Prompt**: /ws-goal-fix-pr PR 21 round 2 (cookie vs stale token; preserve query on promote)
+- **Done**: `isAuthorized` accepts any matching candidate; token cookie promote keeps other query params
+- **Result**: `npm test` 316 pass. Learning: Do not let a wrong header/query mask a valid status cookie
+
+
+### [2026-08-28 20:12] Agent: Cursor Grok 4.6
+- **Prompt**: /ws-goal-fix-pr PR 21 login next open-redirect
+- **Done**: `safeStatusNextPath` rejects `//host`; login + 401 bounce use same rule; tests for protocol-relative next
+- **Result**: `npm test` 316 pass. Learning: Status login `next` must reject protocol-relative URLs
+
+
+### [2026-08-28 19:55] Agent: Cursor Composer
+- **Prompt**: Status UI :3001 login page (token only, password-manager friendly)
+- **Done**: `/login` + cookie session (`spec_memo_status_token`); unauthenticated `/` redirects; `apiFetch` sends credentials and bounces on 401; tests for redirect/login/cookie
+- **Result**: status.test 26/26 pass
+
+
+### [2026-08-28 19:45] Agent: Cursor Composer
+- **Prompt**: Fix #20 status monitor UI SyntaxError (broken /\n+/g in template)
+- **Done**: Escaped template regex in `src/status.ts` so browser receives `/\n+/g`; added generateStatusHtml regression assert
+- **Result**: status tests 25/25 pass (inline script parse + negative fixture). Learning: N/A (template-literal escape pitfall already diagnosed in issue)
+
+### [2026-08-28 19:20] Agent: Cursor Composer
+- **Prompt**: /ws-fable-method fix GitHub #17 ws-memo reverse-handoff + MCP template align
+- **Done**: Narrowed ws-memo description; dropped `spec-memo` invocation; added Consumer handoff + Session Router rows; labeled `memo setup` host/deployment; MCP-TEMPLATE primary npx `spec-memo` with git fallback; linked workflow-skills#253
+- **Result**: Issue #17 ACs verified locally. Learning: N/A (standard documentation/skill contract fix)
+
 ### [2026-08-26 17:16] Agent: Cursor Grok 4.6
 - **Prompt**: /ws-goal-fix-pr fix 6 session dry-run hybrid-sync findings (not a GitHub PR)
 - **Done**: Daemon `/api/sync/push` and `/api/sync` honor `dryRun`; mutating tools resolve cwd `projectId` before `scheduleHybridPush`; debounce single-flights with one trailing push; `writeHybridState` uses `withVaultLockSync`; added AC21/AC18/AC25 tests

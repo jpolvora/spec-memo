@@ -110,16 +110,65 @@ function parseAfterSeq(raw: string | null): number {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
-function isAuthorized(req: http.IncomingMessage, url: URL, authToken?: string): boolean {
-  if (!authToken) return true;
+const STATUS_AUTH_COOKIE = "spec_memo_status_token";
+
+/** Same-origin path only. Rejects protocol-relative `//host` and backslash tricks. */
+export function safeStatusNextPath(raw: string | null | undefined): string {
+  const next = String(raw ?? "").trim() || "/";
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) {
+    return "/";
+  }
+  return next;
+}
+
+function parseCookies(header: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx <= 0) continue;
+    const key = part.slice(0, idx).trim();
+    const raw = part.slice(idx + 1).trim();
+    if (!key) continue;
+    try {
+      out[key] = decodeURIComponent(raw);
+    } catch {
+      out[key] = raw;
+    }
+  }
+  return out;
+}
+
+function statusAuthCookie(token: string, maxAgeSec = 60 * 60 * 24 * 365): string {
+  return `${STATUS_AUTH_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSec}`;
+}
+
+function clearStatusAuthCookie(): string {
+  return `${STATUS_AUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
+}
+
+function collectAuthCandidates(req: http.IncomingMessage, url: URL): string[] {
+  const candidates: string[] = [];
   const header = req.headers.authorization;
   if (header) {
     const match = header.match(/^Bearer\s+(.+)$/i);
-    if (match && match[1].trim() === authToken) return true;
-    if (header === authToken) return true;
+    if (match?.[1]) candidates.push(match[1].trim());
+    else if (header.trim()) candidates.push(header.trim());
   }
   const queryToken = url.searchParams.get("token") || url.searchParams.get("authToken");
-  return queryToken === authToken;
+  if (queryToken) candidates.push(queryToken);
+  const cookies = parseCookies(req.headers.cookie);
+  if (cookies[STATUS_AUTH_COOKIE]) candidates.push(cookies[STATUS_AUTH_COOKIE]);
+  return candidates;
+}
+
+function providedAuthToken(req: http.IncomingMessage, url: URL): string | undefined {
+  return collectAuthCandidates(req, url)[0];
+}
+
+function isAuthorized(req: http.IncomingMessage, url: URL, authToken?: string): boolean {
+  if (!authToken) return true;
+  return collectAuthCandidates(req, url).some((c) => c === authToken);
 }
 
 function setCorsHeaders(res: http.ServerResponse): void {
@@ -164,6 +213,171 @@ function readBodyBuffer(req: http.IncomingMessage, maxBytes: number): Promise<Bu
 
     req.on("error", reject);
   });
+}
+
+export function generateLoginHtml(version = getPackageVersion()): string {
+  const versionLabel = `v${version}`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>spec-memo — Sign in</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --bright: #f0f6fc;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --err: #f85149;
+      --err-bg: rgba(248, 81, 73, 0.15);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+    }
+    h1 {
+      font-size: 1.15rem;
+      color: var(--bright);
+      margin-bottom: 6px;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input[type="password"], input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--bright);
+      font-size: 0.95rem;
+      margin-bottom: 14px;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .username-assist {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+    button {
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #04101f;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    .error {
+      display: none;
+      background: var(--err-bg);
+      color: var(--err);
+      border: 1px solid rgba(248, 81, 73, 0.35);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      margin-bottom: 14px;
+    }
+    .error.show { display: block; }
+    .foot {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>spec-memo status</h1>
+    <p class="sub">Enter the access token to open the monitor (${versionLabel}).</p>
+    <div id="login-error" class="error" role="alert">Invalid access token.</div>
+    <form id="login-form" method="post" action="/api/auth/login" autocomplete="on">
+      <div class="username-assist">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" value="spec-memo-status" autocomplete="username" tabindex="-1" aria-hidden="true">
+      </div>
+      <label for="password">Access token</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus spellcheck="false">
+      <button type="submit" id="login-submit">Sign in</button>
+    </form>
+    <p class="foot">Token is stored in an HttpOnly cookie for this browser.</p>
+  </main>
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const err = document.getElementById("login-error");
+      if (params.get("error") === "1") err.classList.add("show");
+      const form = document.getElementById("login-form");
+      const submit = document.getElementById("login-submit");
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        err.classList.remove("show");
+        submit.disabled = true;
+        const password = document.getElementById("password").value;
+        try {
+          const res = await fetch("/api/auth/login", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ token: password, password: password })
+          });
+          if (!res.ok) {
+            err.classList.add("show");
+            submit.disabled = false;
+            return;
+          }
+          const next = params.get("next") || "/";
+          const safeNext =
+            next.startsWith("/") && !next.startsWith("//") && next.indexOf("\\\\") === -1
+              ? next
+              : "/";
+          window.location.href = safeNext;
+        } catch (_) {
+          err.classList.add("show");
+          submit.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>`;
 }
 
 export function generateStatusHtml(version = getPackageVersion()): string {
@@ -1068,7 +1282,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
   <script>
     const STORAGE_KEY = "spec-memo-status-project";
     const urlParams = new URLSearchParams(window.location.search);
-    const authToken = urlParams.get("token") || "";
     let vaults = [];
     let selectedProject = "";
     let lastSeq = 0;
@@ -1105,15 +1318,34 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
 
     function apiHeaders() {
-      const h = {};
-      if (authToken) h["Authorization"] = "Bearer " + authToken;
-      return h;
+      return {};
+    }
+
+    async function apiFetch(input, init = {}) {
+      const headers = Object.assign({}, apiHeaders(), init.headers || {});
+      const res = await fetch(input, Object.assign({}, init, {
+        credentials: "same-origin",
+        headers
+      }));
+      if (res.status === 401) {
+        const qs = new URLSearchParams(window.location.search);
+        qs.delete("token");
+        qs.delete("authToken");
+        const rest = qs.toString();
+        const next = window.location.pathname + (rest ? "?" + rest : "");
+        const safeNext =
+          next.startsWith("/") && !next.startsWith("//") && next.indexOf("\\\\") === -1
+            ? next
+            : "/";
+        window.location.href = "/login?next=" + encodeURIComponent(safeNext);
+        throw new Error("Unauthorized");
+      }
+      return res;
     }
 
     function streamUrl() {
       let u = "/api/events/stream?afterSeq=" + lastSeq;
       if (selectedProject) u += "&project=" + encodeURIComponent(selectedProject);
-      if (authToken) u += "&token=" + encodeURIComponent(authToken);
       return u;
     }
 
@@ -1304,7 +1536,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         reconnectTimer = null;
       }
       setStreamBadge(initial ? "reconnecting" : "reconnecting");
-      const es = new EventSource(streamUrl());
+      const es = new EventSource(streamUrl(), { withCredentials: true });
       eventSource = es;
 
       es.addEventListener("open", () => {
@@ -1335,7 +1567,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     async function loadVaults() {
       try {
-        const res = await fetch("/api/vaults" + (authToken ? "?token=" + encodeURIComponent(authToken) : ""), {
+        const res = await apiFetch("/api/vaults", {
           headers: apiHeaders()
         });
         if (!res.ok) return;
@@ -1349,7 +1581,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     async function refreshStatus() {
       try {
-        const res = await fetch("/api/status" + (authToken ? "?token=" + encodeURIComponent(authToken) : ""), {
+        const res = await apiFetch("/api/status", {
           headers: apiHeaders()
         });
         if (!res.ok) {
@@ -1417,10 +1649,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (until) params.set("until", until);
       params.set("limit", String(promptLimit));
       params.set("offset", String(promptOffset));
-      if (authToken) params.set("token", authToken);
 
       try {
-        const res = await fetch("/api/prompts?" + params.toString(), { headers: apiHeaders() });
+        const res = await apiFetch("/api/prompts?" + params.toString(), { headers: apiHeaders() });
         const data = await res.json();
         promptTotal = data.total || 0;
         document.getElementById("prompt-count-badge").textContent = promptTotal + " prompt(s) found";
@@ -1445,7 +1676,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           const model = fm.model || '-';
           const sess = fm.sessionId ? fm.sessionId.slice(0, 16) : '-';
           const turn = fm.turn != null ? String(fm.turn) : '-';
-          const snippet = p.body.replace(/\n+/g, ' ').slice(0, 75);
+          const snippet = p.body.replace(/\\n+/g, ' ').slice(0, 75);
 
           const tr = document.createElement("tr");
           tr.className = "master-row";
@@ -1499,8 +1730,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       try {
         const params = new URLSearchParams();
         if (fm.project) params.set("project", fm.project);
-        if (authToken) params.set("token", authToken);
-        const res = await fetch("/api/prompts/" + encodeURIComponent(fm.id) + "?" + params.toString(), { headers: apiHeaders() });
+        const res = await apiFetch("/api/prompts/" + encodeURIComponent(fm.id) + "?" + params.toString(), { headers: apiHeaders() });
         if (res.ok) {
           const data = await res.json();
           if (data.record) full = data.record;
@@ -1563,7 +1793,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (activePromptRecord.frontmatter.project) {
         exportParams.set("project", activePromptRecord.frontmatter.project);
       }
-      if (authToken) exportParams.set("token", authToken);
       const exportUrl =
         "/api/prompts/sessions/" + encodeURIComponent(sessId) + "/export" +
         (exportParams.toString() ? "?" + exportParams.toString() : "");
@@ -1576,7 +1805,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       btn.disabled = true;
       btn.textContent = "Deriving…";
       try {
-        const res = await fetch("/api/prompts/derive-rules", {
+        const res = await apiFetch("/api/prompts/derive-rules", {
           method: "POST",
           headers: { ...apiHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1661,10 +1890,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (client) params.set("client", client);
       if (since) params.set("since", since);
       if (until) params.set("until", until);
-      if (authToken) params.set("token", authToken);
 
       try {
-        const res = await fetch("/api/activity?" + params.toString(), { headers: apiHeaders() });
+        const res = await apiFetch("/api/activity?" + params.toString(), { headers: apiHeaders() });
         const data = await res.json();
         
         document.getElementById("inv-total-hours").textContent = (data.totalBillableHours || 0) + " hrs";
@@ -1748,7 +1976,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
 
       try {
-        const res = await fetch("/api/prompts/derive-rules", {
+        const res = await apiFetch("/api/prompts/derive-rules", {
           method: "POST",
           headers: { ...apiHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1786,7 +2014,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
 
       try {
-        const res = await fetch("/api/prompts/derive-rules", {
+        const res = await apiFetch("/api/prompts/derive-rules", {
           method: "POST",
           headers: { ...apiHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1843,9 +2071,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         };
 
         let exportUrl = "/api/vaults/export";
-        if (authToken) exportUrl += "?token=" + encodeURIComponent(authToken);
 
-        const res = await fetch(exportUrl, {
+        const res = await apiFetch(exportUrl, {
           method: "POST",
           headers: {
             ...apiHeaders(),
@@ -1939,9 +2166,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         if (pass) formData.append("password", pass);
 
         let importUrl = "/api/vaults/import";
-        if (authToken) importUrl += "?token=" + encodeURIComponent(authToken);
 
-        const res = await fetch(importUrl, {
+        const res = await apiFetch(importUrl, {
           method: "POST",
           headers: apiHeaders(),
           body: formData
@@ -2027,6 +2253,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
   const packageVersion = getPackageVersion();
   const html = generateStatusHtml(packageVersion);
+  const loginHtml = generateLoginHtml(packageVersion);
 
   return new Promise((resolve, reject) => {
     const server = http.createServer(async (req, res) => {
@@ -2061,6 +2288,87 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         return;
       }
 
+      if (req.method === "GET" && pathname === "/login") {
+        if (!authToken) {
+          res.writeHead(302, { Location: "/" });
+          res.end();
+          return;
+        }
+        if (isAuthorized(req, url, authToken)) {
+          res.writeHead(302, { Location: "/" });
+          res.end();
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(loginHtml);
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/login") {
+        if (!authToken) {
+          writeJson(res, 200, { ok: true, authRequired: false });
+          return;
+        }
+        let submitted = "";
+        try {
+          const buf = await readBodyBuffer(req, 64 * 1024);
+          const raw = buf.toString("utf8").trim();
+          const ct = String(req.headers["content-type"] || "");
+          if (raw && ct.includes("application/json")) {
+            const parsed = JSON.parse(raw) as { token?: string; password?: string };
+            submitted = String(parsed.token || parsed.password || "").trim();
+          } else if (raw) {
+            const params = new URLSearchParams(raw);
+            submitted = String(params.get("password") || params.get("token") || "").trim();
+          }
+        } catch {
+          submitted = "";
+        }
+        const wantsJson = String(req.headers.accept || "").includes("application/json")
+          || String(req.headers["content-type"] || "").includes("application/json");
+        if (submitted === authToken) {
+          if (wantsJson) {
+            res.writeHead(200, {
+              "Content-Type": "application/json; charset=utf-8",
+              "Set-Cookie": statusAuthCookie(submitted)
+            });
+            res.end(JSON.stringify({ ok: true }));
+          } else {
+            res.writeHead(302, {
+              Location: "/",
+              "Set-Cookie": statusAuthCookie(submitted)
+            });
+            res.end();
+          }
+          return;
+        }
+        if (wantsJson) {
+          writeJson(res, 401, { error: "Unauthorized", ok: false });
+        } else {
+          res.writeHead(302, { Location: "/login?error=1" });
+          res.end();
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/logout") {
+        const wantsJson = String(req.headers.accept || "").includes("application/json");
+        if (wantsJson) {
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Set-Cookie": clearStatusAuthCookie()
+          });
+          res.end(JSON.stringify({ ok: true }));
+        } else {
+          res.writeHead(302, {
+            Location: "/login",
+            "Set-Cookie": clearStatusAuthCookie()
+          });
+          res.end();
+        }
+        return;
+      }
+
       if (pathname.startsWith("/api/")) {
         if (!isAuthorized(req, url, authToken)) {
           logErrorReport({
@@ -2082,6 +2390,31 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       }
 
       if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {
+        if (authToken && !isAuthorized(req, url, authToken)) {
+          const base = pathname === "/index.html" ? "/index.html" : "/";
+          const cleanParams = new URLSearchParams(url.searchParams);
+          cleanParams.delete("token");
+          cleanParams.delete("authToken");
+          const qs = cleanParams.toString();
+          const next = safeStatusNextPath(base + (qs ? `?${qs}` : ""));
+          res.writeHead(302, { Location: "/login?next=" + encodeURIComponent(next) });
+          res.end();
+          return;
+        }
+        // Optional: promote ?token= into a cookie and strip from URL on next navigation
+        const queryToken = url.searchParams.get("token") || url.searchParams.get("authToken");
+        if (authToken && queryToken && queryToken === authToken) {
+          const cleanParams = new URLSearchParams(url.searchParams);
+          cleanParams.delete("token");
+          cleanParams.delete("authToken");
+          const qs = cleanParams.toString();
+          res.writeHead(302, {
+            Location: "/" + (qs ? `?${qs}` : ""),
+            "Set-Cookie": statusAuthCookie(queryToken)
+          });
+          res.end();
+          return;
+        }
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(html);
         return;

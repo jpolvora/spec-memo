@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createActivityBus } from "./activity.js";
-import { generateStatusHtml, startStatusServer } from "./status.js";
+import { generateStatusHtml, generateLoginHtml, startStatusServer, safeStatusNextPath } from "./status.js";
 import { getPackageVersion } from "./version.js";
 import { ensureProjectVault } from "./vault.js";
 import { closeIndex } from "./indexer.js";
@@ -18,6 +18,45 @@ function countTrapFiles(vaultRoot: string, projectId: string): number {
   const dir = path.join(vaultRoot, "projects", projectId, "traps");
   if (!fs.existsSync(dir)) return 0;
   return fs.readdirSync(dir).filter((f) => f.endsWith(".md")).length;
+}
+
+/** Inline <script> bodies from generateStatusHtml (excludes src= external). */
+function extractInlineScripts(html: string): string[] {
+  const out: string[] = [];
+  const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const attrs = m[1] ?? "";
+    if (/\bsrc\s*=/i.test(attrs)) continue;
+    out.push(m[2] ?? "");
+  }
+  return out;
+}
+
+/**
+ * Guard against template-literal escape bugs (issue #20): host `\n` inside
+ * generateStatusHtml`...` becomes a real newline in browser JS, breaking `/.../` regexes.
+ */
+function assertStatusInlineScriptsParse(html: string): void {
+  const scripts = extractInlineScripts(html);
+  assert.ok(scripts.length > 0, "status HTML must embed at least one inline <script>");
+  for (const [i, source] of scripts.entries()) {
+    // Classic failure mode: `/\n+/g` in a host template becomes `/` + real newline + `+/g`.
+    const brokenRegex = source.match(/\/\r?\n[^\/\n]{0,40}\//);
+    assert.equal(
+      brokenRegex,
+      null,
+      `inline script[${i}] has a regex that starts with a newline (template \\n escape bug):\n${brokenRegex?.[0]?.slice(0, 120) ?? ""}`
+    );
+    try {
+      // Parse-only: do not execute status UI side effects.
+      // eslint-disable-next-line no-new-func -- intentional syntax check for served HTML
+      new Function(source);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      assert.fail(`inline script[${i}] must be valid JavaScript (issue #20 class): ${msg}`);
+    }
+  }
 }
 
 async function readSseEvents(
@@ -123,6 +162,33 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('id="modal-export"'));
     assert.ok(html.includes('id="modal-import"'));
     assert.ok(!html.includes("cdn.jsdelivr"));
+    assert.ok(!html.includes('params.set("token"'));
+    assert.ok(!html.includes("?token="));
+    assert.ok(html.includes("withCredentials: true"));
+    assert.ok(html.includes('credentials: "same-origin"'));
+  });
+
+  await t.test("generateStatusHtml inline scripts parse (no template-escape SyntaxError)", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assertStatusInlineScriptsParse(html);
+    // Canary for the known prompts-snippet line (issue #20)
+    assert.ok(
+      html.includes("p.body.replace(/\\n+/g, ' ')"),
+      "prompt snippet regex must emit /\\n+/g to the browser"
+    );
+    assert.ok(
+      !/p\.body\.replace\(\/\n\+\/g/.test(html),
+      "prompt snippet regex must not contain a literal newline"
+    );
+  });
+
+  await t.test("assertStatusInlineScriptsParse rejects broken template-escape regex", () => {
+    const broken =
+      "<html><script>const snippet = p.body.replace(/\n+/g, ' ');</script></html>";
+    assert.throws(
+      () => assertStatusInlineScriptsParse(broken),
+      /embedded newline|valid JavaScript|template/i
+    );
   });
 
   await t.test("refuses non-loopback host without auth token", () => {
@@ -306,6 +372,105 @@ test("MCP status monitor", async (t) => {
       const stream = await fetch(`${authServer.url}/api/events/stream?token=status-secret`);
       assert.strictEqual(stream.status, 200);
       stream.body?.cancel().catch(() => {});
+    } finally {
+      authBus.close();
+      await authServer.close();
+    }
+  });
+
+  await t.test("login page redirects unauthenticated / and accepts token cookie", async () => {
+    const loginHtml = generateLoginHtml("0.0.0-test");
+    assert.ok(loginHtml.includes('type="password"'));
+    assert.ok(loginHtml.includes('autocomplete="current-password"'));
+    assert.ok(loginHtml.includes('autocomplete="username"'));
+    assert.ok(loginHtml.includes('name="password"'));
+    assert.ok(generateStatusHtml("0.0.0-test").includes("apiFetch"));
+    assert.ok(loginHtml.includes('!next.startsWith("//")'), "login HTML must reject protocol-relative next");
+
+    assert.equal(safeStatusNextPath("/"), "/");
+    assert.equal(safeStatusNextPath("/index.html"), "/index.html");
+    assert.equal(safeStatusNextPath("//evil.example"), "/");
+    assert.equal(safeStatusNextPath("https://evil.example"), "/");
+    assert.equal(safeStatusNextPath("\\evil"), "/");
+    assert.equal(safeStatusNextPath(null), "/");
+
+    const authBus = createActivityBus();
+    const authServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "login-secret",
+      activityBus: authBus
+    });
+    try {
+      const root = await fetch(`${authServer.url}/`, { redirect: "manual" });
+      assert.strictEqual(root.status, 302);
+      assert.match(String(root.headers.get("location") || ""), /\/login/);
+
+      const deepLink = await fetch(`${authServer.url}/?project=my-repo`, { redirect: "manual" });
+      assert.strictEqual(deepLink.status, 302);
+      const deepLoc = String(deepLink.headers.get("location") || "");
+      const deepUrl = new URL(deepLoc, authServer.url);
+      assert.equal(deepUrl.pathname, "/login");
+      const nextAfterLogin = deepUrl.searchParams.get("next") || "";
+      assert.match(nextAfterLogin, /project=my-repo/);
+      assert.ok(!nextAfterLogin.includes("token="));
+
+      const loginPage = await fetch(`${authServer.url}/login`);
+      assert.strictEqual(loginPage.status, 200);
+      const loginBody = await loginPage.text();
+      assert.ok(loginBody.includes('type="password"'));
+      assert.ok(loginBody.includes("Access token"));
+
+      const bad = await fetch(`${authServer.url}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ token: "wrong" })
+      });
+      assert.strictEqual(bad.status, 401);
+
+      const good = await fetch(`${authServer.url}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ token: "login-secret" })
+      });
+      assert.strictEqual(good.status, 200);
+      const setCookie = String(good.headers.get("set-cookie") || "");
+      assert.match(setCookie, /spec_memo_status_token=/);
+      assert.match(setCookie, /HttpOnly/i);
+      const cookie = setCookie.split(";")[0];
+
+      const authedRoot = await fetch(`${authServer.url}/`, {
+        headers: { Cookie: cookie },
+        redirect: "manual"
+      });
+      assert.strictEqual(authedRoot.status, 200);
+      const page = await authedRoot.text();
+      assert.ok(page.includes("MCP Status Monitor") || page.includes("spec-memo"));
+
+      const api = await fetch(`${authServer.url}/api/status`, {
+        headers: { Cookie: cookie }
+      });
+      assert.strictEqual(api.status, 200);
+
+      const streamCookie = await fetch(`${authServer.url}/api/events/stream`, {
+        headers: { Cookie: cookie }
+      });
+      assert.strictEqual(streamCookie.status, 200);
+      streamCookie.body?.cancel().catch(() => {});
+
+      const conflict = await fetch(`${authServer.url}/api/status?token=stale-wrong`, {
+        headers: { Cookie: cookie }
+      });
+      assert.strictEqual(conflict.status, 200);
+
+      const promote = await fetch(`${authServer.url}/?project=my-repo&token=login-secret`, {
+        redirect: "manual"
+      });
+      assert.strictEqual(promote.status, 302);
+      const loc = String(promote.headers.get("location") || "");
+      assert.match(loc, /project=my-repo/);
+      assert.ok(!loc.includes("token="));
     } finally {
       authBus.close();
       await authServer.close();
