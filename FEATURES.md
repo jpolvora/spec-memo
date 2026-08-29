@@ -57,7 +57,7 @@ One stdio MCP server. Tool descriptions are the interface; vault paths are not.
 | `gc` | [x] | Apply TTL, compact shipped plans, rebuild FTS | Counts archived/compacted/deleted (scratch only) |
 | `promote` | [x] | Copy one record into the product repo | Product-relative path. **Default deny** without `destination` inside the product root |
 | `check_version` | [x] | Compare running package version to npm `latest` | `current`, `latest`, `updateAvailable`, `source` (soft-fail offline) |
-| `install_skills` | [x] | Install packaged runtime skill(s) (default `ws-memo`) into consumer `{skillsRoot}` | Destination path(s); default-deny outside product root; `force` to overwrite |
+| `install_skills` | [x] | Install packaged runtime skill(s) (default `ws-memo` + `ws-session-tracking`) into consumer `{skillsRoot}`, or `--global` / `global: true` into `$HOME/.agents/skills` (+ Antigravity if present) | Destination path(s); default-deny outside product root (local); `force` to overwrite; skill frontmatter version tracks `package.json` |
 
 Do not add an eleventh tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 

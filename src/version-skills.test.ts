@@ -182,6 +182,61 @@ describe('check_version and install_skills', () => {
     }
   });
 
+  it('install_skills --global refuses destinations that overlap the vault', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-global-vault-'));
+    const home = path.join(tmp, 'home');
+    const vaultRoot = path.join(home, '.agents', 'skills', 'ws-memo');
+    fs.mkdirSync(path.join(vaultRoot, 'projects'), { recursive: true });
+    fs.writeFileSync(
+      path.join(vaultRoot, 'config.json'),
+      JSON.stringify({ version: '0.11.0', projects: {} })
+    );
+    try {
+      await assert.rejects(
+        () =>
+          installSkills({
+            global: true,
+            homeDir: home,
+            vaultRoot,
+            packageRoot: getPackageRoot(),
+            force: true
+          }),
+        /vault/i
+      );
+      assert.ok(fs.existsSync(path.join(vaultRoot, 'config.json')));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('install_skills --global refuses when the vault sits inside destDir', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-global-nested-vault-'));
+    const home = path.join(tmp, 'home');
+    const destDir = path.join(home, '.agents', 'skills', 'ws-memo');
+    const vaultRoot = path.join(destDir, 'nested-vault');
+    fs.mkdirSync(path.join(vaultRoot, 'projects'), { recursive: true });
+    fs.writeFileSync(
+      path.join(vaultRoot, 'config.json'),
+      JSON.stringify({ version: '0.11.0', projects: {} })
+    );
+    try {
+      await assert.rejects(
+        () =>
+          installSkills({
+            global: true,
+            homeDir: home,
+            vaultRoot,
+            packageRoot: getPackageRoot(),
+            force: true
+          }),
+        /overlap the vault/i
+      );
+      assert.ok(fs.existsSync(path.join(vaultRoot, 'config.json')));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it('install_skills copies ws-session-tracking into a temp product root', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-st-'));
     const productRoot = path.join(tmp, 'consumer');
@@ -222,6 +277,68 @@ describe('check_version and install_skills', () => {
       );
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('install_skills --global installs to agents and antigravity when present', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-global-'));
+    const home = path.join(tmp, 'home');
+    const agentsSkills = path.join(home, '.agents', 'skills');
+    const geminiConfig = path.join(home, '.gemini', 'config');
+    const antiSkills = path.join(geminiConfig, 'skills');
+    fs.mkdirSync(geminiConfig, { recursive: true });
+
+    try {
+      const result = await installSkills({
+        global: true,
+        homeDir: home,
+        packageRoot: getPackageRoot(),
+        force: true
+      });
+      assert.equal(result.mode, 'global');
+      assert.equal(result.installed.length, 4);
+      assert.ok(result.installed.every((r) => r.target === 'agents' || r.target === 'antigravity'));
+      assert.ok(fs.existsSync(path.join(agentsSkills, 'ws-memo', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(agentsSkills, 'ws-session-tracking', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(antiSkills, 'ws-memo', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(antiSkills, 'ws-session-tracking', 'SKILL.md')));
+      assert.equal(result.skippedTargets, undefined);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('install_skills --global skips antigravity when config missing', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-global-skip-'));
+    const home = path.join(tmp, 'home');
+    fs.mkdirSync(home, { recursive: true });
+
+    try {
+      const result = await installSkills({
+        global: true,
+        homeDir: home,
+        packageRoot: getPackageRoot(),
+        force: true
+      });
+      assert.equal(result.mode, 'global');
+      assert.equal(result.installed.length, 2);
+      assert.ok(result.installed.every((r) => r.target === 'agents'));
+      assert.ok(result.skippedTargets?.some((s) => s.kind === 'antigravity'));
+      assert.ok(fs.existsSync(path.join(home, '.agents', 'skills', 'ws-memo', 'SKILL.md')));
+      assert.equal(fs.existsSync(path.join(home, '.gemini')), false);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('packaged skill versions match package.json version', () => {
+    const version = getPackageVersion();
+    const root = getPackageRoot();
+    for (const skill of ['ws-memo', 'ws-session-tracking']) {
+      const text = fs.readFileSync(path.join(root, '.agents', 'skills', skill, 'SKILL.md'), 'utf8');
+      const m = text.match(/^version:\s*(.+)$/m);
+      assert.ok(m, `${skill} missing version frontmatter`);
+      assert.equal(m![1].trim(), version, `${skill} version must match package.json`);
     }
   });
 

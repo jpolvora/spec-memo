@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.5.1
+version: 0.11.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -70,7 +70,7 @@ All 11 MCP tools are available over MCP stdio (`memo serve`) or MCP SSE (`memo s
 | 7 | `gc` | TTL & compaction | _(none)_ | `dryRun`: boolean (default `false`) |
 | 8 | `promote` | Export to product repo | `destination` | `format`: `raw`\|`adr`\|`madr`\|`skill` |
 | 9 | `check_version` | Compare package version | _(none)_ | Soft-fails offline |
-| 10 | `install_skills` | Install runtime skill | _(none)_ | `skills`: `["ws-memo", "ws-session-tracking"]`, `skillsRoot`: `.agents/skills` |
+| 10 | `install_skills` | Install runtime skill | _(none)_ | `skills`: `["ws-memo", "ws-session-tracking"]`, `skillsRoot`: `.agents/skills`, `global`: `$HOME/.agents/skills` (+ Antigravity if present) |
 | 11 | `prompt` | Prompt ingestion & sessions | `action` (default: `record`) | 10 actions: `record`, `list`, `get`, `search`, `session`, `session_start`, `session_end`, `activity_report`, `derive_rules`, `export_story` |
 
 ---
@@ -420,24 +420,33 @@ memo check-version --json
 
 ### 10. `install_skills`
 
-**Job:** Install or update packaged spec-memo runtime skill(s) (`ws-memo`) into a consumer product repository.
+**Job:** Install or update packaged runtime skill(s) (`ws-memo`, `ws-session-tracking`) into a consumer product repository (default), or into global skills roots with `global: true`.
 
 #### Parameter Specification
-- `productRoot` (string, optional): Consumer product repository root directory.
+- `productRoot` (string, optional): Consumer product repository root directory (local mode).
 - `cwd` (string, optional): Working directory used to resolve product root when `productRoot` is omitted.
-- `skills` (string[], optional): Skill IDs to install. Defaults to `["ws-memo"]`.
-- `skillsRoot` (string, optional): Relative destination directory under product root (default: `".agents/skills"`).
+- `skills` (string[], optional): Skill IDs to install. Defaults to `["ws-memo", "ws-session-tracking"]`.
+- `skillsRoot` (string, optional): Relative destination under product root (default: `".agents/skills"`). Ignored when `global` is true.
 - `force` (boolean, optional): Overwrite destination when it differs from the packaged skill (default: `false`).
+- `global` (boolean, optional): Install into `$HOME/.agents/skills` (always created) and `$HOME/.gemini/config/skills` when Antigravity/Gemini `~/.gemini/config` exists (skipped otherwise). Default: `false` (local product install).
 
 #### Pre-Flight Checklist
-- [ ] Only packaged runtime skills (`"ws-memo"`) are accepted. Unknown skill IDs fail closed.
-- [ ] Destination must be inside the product repository and outside `.git/`.
+- [ ] Only packaged runtime skills (`"ws-memo"`, `"ws-session-tracking"`) are accepted. Unknown skill IDs fail closed.
+- [ ] Local: destination must be inside the product repository and outside `.git/`.
+- [ ] Global: `productRoot` not required; Antigravity target is skipped (not created) when missing.
 
 #### MCP Calling Example
 ```json
 {
   "productRoot": "/path/to/consumer-app",
-  "skills": ["ws-memo"],
+  "skills": ["ws-memo", "ws-session-tracking"],
+  "force": true
+}
+```
+
+```json
+{
+  "global": true,
   "force": true
 }
 ```
@@ -445,6 +454,7 @@ memo check-version --json
 #### CLI Equivalent
 ```bash
 memo install-skills --product-root /path/to/consumer-app --force
+memo install-skills --global --force
 ```
 
 ---
@@ -540,7 +550,7 @@ Match user intent to the correct action:
 | TTL cleanup & compaction | **maintain** | MCP `gc` (`dryRun: true` first) |
 | Export documentation / skill | **publish** | MCP `promote` (`destination: "..."`) |
 | Package version check | **version** | MCP `check_version` |
-| Install runtime skill in consumer | **install** | MCP `install_skills` (`productRoot: "."`) |
+| Install runtime skill in consumer | **install** | MCP `install_skills` (`productRoot: "."`) or `global: true` / CLI `--global` |
 | Visual graph UI | **observe** | CLI `memo canvas` |
 | Start SSE daemon + status UI | **serve** | CLI `memo serve --sse --status-port 3001` |
 | Pre-commit write guard | **guard** | CLI `memo hook install` |

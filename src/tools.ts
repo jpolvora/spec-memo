@@ -326,13 +326,13 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   install_skills: {
     name: 'install_skills',
     description:
-      'Install packaged spec-memo runtime skill(s) (default ws-memo + ws-session-tracking) into a consumer product {skillsRoot}.',
+      'Install packaged spec-memo runtime skill(s) (default ws-memo + ws-session-tracking) into a consumer product {skillsRoot}, or with global=true into $HOME/.agents/skills (+ Antigravity if present).',
     inputSchema: {
       type: 'object',
       properties: {
         productRoot: {
           type: 'string',
-          description: 'Consumer product repository root (required unless cwd resolves one)'
+          description: 'Consumer product repository root (required for local install unless cwd resolves one; ignored when global=true)'
         },
         cwd: { type: 'string', description: 'Working directory used to resolve product root when productRoot omitted' },
         skills: {
@@ -342,9 +342,14 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         },
         skillsRoot: {
           type: 'string',
-          description: 'Relative skills directory under product root (default .agents/skills)'
+          description: 'Relative skills directory under product root (default .agents/skills); ignored when global=true'
         },
-        force: { type: 'boolean', description: 'Overwrite destination when it differs from packaged skill' }
+        force: { type: 'boolean', description: 'Overwrite destination when it differs from packaged skill' },
+        global: {
+          type: 'boolean',
+          description:
+            'Install into $HOME/.agents/skills (always) and $HOME/.gemini/config/skills when Antigravity/Gemini config exists'
+        }
       }
     },
     zodSchema: z.object({
@@ -353,8 +358,10 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       skills: z.array(z.string()).optional(),
       skillsRoot: z.string().optional(),
       force: z.boolean().optional(),
+      global: z.boolean().optional(),
       vaultRoot: z.string().optional(),
-      packageRoot: z.string().optional()
+      packageRoot: z.string().optional(),
+      homeDir: z.string().optional()
     })
   },
   prompt: {
