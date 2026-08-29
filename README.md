@@ -309,7 +309,7 @@ If connecting your IDE (Cursor, VS Code, Claude Desktop, Antigravity) directly t
 
 #### 5. Status Monitor & API Health Checks
 
-* **Status Monitor Web UI (Port 3001):** Open `http://daemon.internal:3001/` — when a token is configured, the UI redirects to `/login` (password-manager-friendly token field; HttpOnly cookie). `?token=` still works and is promoted into the cookie.
+* **Status Monitor Web UI (Port 3001):** Open `http://daemon.internal:3001/` — when a token is configured, the UI redirects to `/login` (password-manager-friendly token field). The session is an HttpOnly cookie; the browser does not put the token in the address bar or API URLs.
 * **Health & API Verification:**
   ```bash
   # Check MCP daemon health (port 3000)
@@ -341,7 +341,7 @@ curl -s http://127.0.0.1:3001/api/vaults
 # Live stream (SSE): GET http://127.0.0.1:3001/api/events/stream
 ```
 
-When a token is set, send `Authorization: Bearer <token>` (streams also accept `?token=`). All diagnostic status routes remain read-only; only the dedicated backup routes (`POST /api/vaults/export` and `POST /api/vaults/import`) mutate the vault. Canvas (`:4100`) remains a separate graph UI.
+When a token is set, send `Authorization: Bearer <token>` (or a session cookie from `/login`). All diagnostic status routes remain read-only; only the dedicated backup routes (`POST /api/vaults/export` and `POST /api/vaults/import`) mutate the vault. Canvas (`:4100`) remains a separate graph UI.
 
 ### Status monitor backup (UI export & import)
 

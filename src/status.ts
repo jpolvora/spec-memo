@@ -1282,7 +1282,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
   <script>
     const STORAGE_KEY = "spec-memo-status-project";
     const urlParams = new URLSearchParams(window.location.search);
-    const authToken = urlParams.get("token") || "";
     let vaults = [];
     let selectedProject = "";
     let lastSeq = 0;
@@ -1319,9 +1318,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
 
     function apiHeaders() {
-      const h = {};
-      if (authToken) h["Authorization"] = "Bearer " + authToken;
-      return h;
+      return {};
     }
 
     async function apiFetch(input, init = {}) {
@@ -1331,7 +1328,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         headers
       }));
       if (res.status === 401) {
-        const next = window.location.pathname + window.location.search;
+        const qs = new URLSearchParams(window.location.search);
+        qs.delete("token");
+        qs.delete("authToken");
+        const rest = qs.toString();
+        const next = window.location.pathname + (rest ? "?" + rest : "");
         const safeNext =
           next.startsWith("/") && !next.startsWith("//") && next.indexOf("\\\\") === -1
             ? next
@@ -1345,7 +1346,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     function streamUrl() {
       let u = "/api/events/stream?afterSeq=" + lastSeq;
       if (selectedProject) u += "&project=" + encodeURIComponent(selectedProject);
-      if (authToken) u += "&token=" + encodeURIComponent(authToken);
       return u;
     }
 
@@ -1536,7 +1536,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         reconnectTimer = null;
       }
       setStreamBadge(initial ? "reconnecting" : "reconnecting");
-      const es = new EventSource(streamUrl());
+      const es = new EventSource(streamUrl(), { withCredentials: true });
       eventSource = es;
 
       es.addEventListener("open", () => {
@@ -1567,7 +1567,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     async function loadVaults() {
       try {
-        const res = await apiFetch("/api/vaults" + (authToken ? "?token=" + encodeURIComponent(authToken) : ""), {
+        const res = await apiFetch("/api/vaults", {
           headers: apiHeaders()
         });
         if (!res.ok) return;
@@ -1581,7 +1581,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     async function refreshStatus() {
       try {
-        const res = await apiFetch("/api/status" + (authToken ? "?token=" + encodeURIComponent(authToken) : ""), {
+        const res = await apiFetch("/api/status", {
           headers: apiHeaders()
         });
         if (!res.ok) {
@@ -1649,7 +1649,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (until) params.set("until", until);
       params.set("limit", String(promptLimit));
       params.set("offset", String(promptOffset));
-      if (authToken) params.set("token", authToken);
 
       try {
         const res = await apiFetch("/api/prompts?" + params.toString(), { headers: apiHeaders() });
@@ -1731,7 +1730,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       try {
         const params = new URLSearchParams();
         if (fm.project) params.set("project", fm.project);
-        if (authToken) params.set("token", authToken);
         const res = await apiFetch("/api/prompts/" + encodeURIComponent(fm.id) + "?" + params.toString(), { headers: apiHeaders() });
         if (res.ok) {
           const data = await res.json();
@@ -1795,7 +1793,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (activePromptRecord.frontmatter.project) {
         exportParams.set("project", activePromptRecord.frontmatter.project);
       }
-      if (authToken) exportParams.set("token", authToken);
       const exportUrl =
         "/api/prompts/sessions/" + encodeURIComponent(sessId) + "/export" +
         (exportParams.toString() ? "?" + exportParams.toString() : "");
@@ -1893,7 +1890,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (client) params.set("client", client);
       if (since) params.set("since", since);
       if (until) params.set("until", until);
-      if (authToken) params.set("token", authToken);
 
       try {
         const res = await apiFetch("/api/activity?" + params.toString(), { headers: apiHeaders() });
@@ -2075,7 +2071,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         };
 
         let exportUrl = "/api/vaults/export";
-        if (authToken) exportUrl += "?token=" + encodeURIComponent(authToken);
 
         const res = await apiFetch(exportUrl, {
           method: "POST",
@@ -2171,7 +2166,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         if (pass) formData.append("password", pass);
 
         let importUrl = "/api/vaults/import";
-        if (authToken) importUrl += "?token=" + encodeURIComponent(authToken);
 
         const res = await apiFetch(importUrl, {
           method: "POST",

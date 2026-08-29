@@ -162,6 +162,10 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('id="modal-export"'));
     assert.ok(html.includes('id="modal-import"'));
     assert.ok(!html.includes("cdn.jsdelivr"));
+    assert.ok(!html.includes('params.set("token"'));
+    assert.ok(!html.includes("?token="));
+    assert.ok(html.includes("withCredentials: true"));
+    assert.ok(html.includes('credentials: "same-origin"'));
   });
 
   await t.test("generateStatusHtml inline scripts parse (no template-escape SyntaxError)", () => {
@@ -439,6 +443,12 @@ test("MCP status monitor", async (t) => {
         headers: { Cookie: cookie }
       });
       assert.strictEqual(api.status, 200);
+
+      const streamCookie = await fetch(`${authServer.url}/api/events/stream`, {
+        headers: { Cookie: cookie }
+      });
+      assert.strictEqual(streamCookie.status, 200);
+      streamCookie.body?.cancel().catch(() => {});
 
       const conflict = await fetch(`${authServer.url}/api/status?token=stale-wrong`, {
         headers: { Cookie: cookie }
