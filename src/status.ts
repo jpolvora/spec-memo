@@ -147,22 +147,28 @@ function clearStatusAuthCookie(): string {
   return `${STATUS_AUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
 }
 
-function providedAuthToken(req: http.IncomingMessage, url: URL): string | undefined {
+function collectAuthCandidates(req: http.IncomingMessage, url: URL): string[] {
+  const candidates: string[] = [];
   const header = req.headers.authorization;
   if (header) {
     const match = header.match(/^Bearer\s+(.+)$/i);
-    if (match?.[1]) return match[1].trim();
-    if (header.trim()) return header.trim();
+    if (match?.[1]) candidates.push(match[1].trim());
+    else if (header.trim()) candidates.push(header.trim());
   }
   const queryToken = url.searchParams.get("token") || url.searchParams.get("authToken");
-  if (queryToken) return queryToken;
+  if (queryToken) candidates.push(queryToken);
   const cookies = parseCookies(req.headers.cookie);
-  return cookies[STATUS_AUTH_COOKIE];
+  if (cookies[STATUS_AUTH_COOKIE]) candidates.push(cookies[STATUS_AUTH_COOKIE]);
+  return candidates;
+}
+
+function providedAuthToken(req: http.IncomingMessage, url: URL): string | undefined {
+  return collectAuthCandidates(req, url)[0];
 }
 
 function isAuthorized(req: http.IncomingMessage, url: URL, authToken?: string): boolean {
   if (!authToken) return true;
-  return providedAuthToken(req, url) === authToken;
+  return collectAuthCandidates(req, url).some((c) => c === authToken);
 }
 
 function setCorsHeaders(res: http.ServerResponse): void {
@@ -2397,10 +2403,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           return;
         }
         // Optional: promote ?token= into a cookie and strip from URL on next navigation
-        const queryToken = url.searchParams.get("token");
+        const queryToken = url.searchParams.get("token") || url.searchParams.get("authToken");
         if (authToken && queryToken && queryToken === authToken) {
+          const cleanParams = new URLSearchParams(url.searchParams);
+          cleanParams.delete("token");
+          cleanParams.delete("authToken");
+          const qs = cleanParams.toString();
           res.writeHead(302, {
-            Location: "/",
+            Location: "/" + (qs ? `?${qs}` : ""),
             "Set-Cookie": statusAuthCookie(queryToken)
           });
           res.end();

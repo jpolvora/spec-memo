@@ -439,6 +439,19 @@ test("MCP status monitor", async (t) => {
         headers: { Cookie: cookie }
       });
       assert.strictEqual(api.status, 200);
+
+      const conflict = await fetch(`${authServer.url}/api/status?token=stale-wrong`, {
+        headers: { Cookie: cookie }
+      });
+      assert.strictEqual(conflict.status, 200);
+
+      const promote = await fetch(`${authServer.url}/?project=my-repo&token=login-secret`, {
+        redirect: "manual"
+      });
+      assert.strictEqual(promote.status, 302);
+      const loc = String(promote.headers.get("location") || "");
+      assert.match(loc, /project=my-repo/);
+      assert.ok(!loc.includes("token="));
     } finally {
       authBus.close();
       await authServer.close();

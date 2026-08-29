@@ -1,5 +1,11 @@
 # Changelog
 
+### [2026-08-28 20:20] Agent: Cursor Grok 4.6
+- **Prompt**: /ws-goal-fix-pr PR 21 round 2 (cookie vs stale token; preserve query on promote)
+- **Done**: `isAuthorized` accepts any matching candidate; token cookie promote keeps other query params
+- **Result**: `npm test` 316 pass. Learning: Do not let a wrong header/query mask a valid status cookie
+
+
 ### [2026-08-28 20:12] Agent: Cursor Grok 4.6
 - **Prompt**: /ws-goal-fix-pr PR 21 login next open-redirect
 - **Done**: `safeStatusNextPath` rejects `//host`; login + 401 bounce use same rule; tests for protocol-relative next
