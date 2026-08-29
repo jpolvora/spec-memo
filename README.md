@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.10.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.10.1**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -309,7 +309,7 @@ If connecting your IDE (Cursor, VS Code, Claude Desktop, Antigravity) directly t
 
 #### 5. Status Monitor & API Health Checks
 
-* **Status Monitor Web UI (Port 3001):** Open `http://daemon.internal:3001/?token=your_generated_token_here`
+* **Status Monitor Web UI (Port 3001):** Open `http://daemon.internal:3001/` — when a token is configured, the UI redirects to `/login` (password-manager-friendly token field; HttpOnly cookie). `?token=` still works and is promoted into the cookie.
 * **Health & API Verification:**
   ```bash
   # Check MCP daemon health (port 3000)
