@@ -33,6 +33,8 @@ Load **every** skill listed in [`.agents/skills/ws-shared/autoload.md`](.agents/
 | `ws-fable-method` | `{globalSkillsRoot}/ws-fable-method/SKILL.md` | Every prompt | 7-step structured investigation & verification loop |
 | `ws-tdah` | `{globalSkillsRoot}/ws-tdah/SKILL.md` | Every prompt | Action-first reply shape & operational judgment |
 | `ws-task-lifecycle` | `{globalSkillsRoot}/ws-task-lifecycle/SKILL.md` | Every prompt | Task lifecycle management |
+| `ws-memo` | [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md) | Every prompt | Vault runtime (11 MCP tools + CLI); bootstrap, search, upsert, prompt, serve/status |
+| `ws-session-tracking` | [`.agents/skills/ws-session-tracking/SKILL.md`](.agents/skills/ws-session-tracking/SKILL.md) | Every prompt | Prompt/session ingestion, deliverables, activity reports, derive-rules |
 
 ---
 
@@ -53,15 +55,16 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 
 ### Vault / spec-memo runtime
 
-When the task means using the spec-memo **vault** (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills, prompt), load **only** [`ws-memo`](.agents/skills/ws-memo/SKILL.md) (documents all **11** MCP tools + CLI extras). Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
+[`ws-memo`](.agents/skills/ws-memo/SKILL.md) and [`ws-session-tracking`](.agents/skills/ws-session-tracking/SKILL.md) are **Always-applied** in this repo (see Autoload table above). Use `ws-memo` for vault ops (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills, prompt + CLI extras). Use `ws-session-tracking` to record prompt turns and session start/end via MCP `prompt`. Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
 
 ---
 
 ## 🚀 Session Start Protocol
 
-1. **Invoke Bootstrap**: Load [`ws-memo`](.agents/skills/ws-memo/SKILL.md). Call the `bootstrap` MCP tool or run `memo bootstrap` to retrieve active anti-regression traps, open architecture decisions, the active spec/plan slice, and code drift warnings.
-2. **Review Product Docs**: Check [`PRODUCT.PRD`](PRODUCT.PRD), [`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), and [`.agents/specs/index.PRD`](.agents/specs/index.PRD) for active phase constraints and slice definitions.
-3. **Respect Git Boundaries**: Never create in-repo `.agents/plans/`, `MEMORY.md`, `.state.md`, or session log dumps in the product repository.
+1. **Invoke Bootstrap**: [`ws-memo`](.agents/skills/ws-memo/SKILL.md) is Always-applied. Call the `bootstrap` MCP tool or run `memo bootstrap` to retrieve active anti-regression traps, open architecture decisions, the active spec/plan slice, and code drift warnings.
+2. **Session tracking**: [`ws-session-tracking`](.agents/skills/ws-session-tracking/SKILL.md) is Always-applied. On meaningful work, `prompt` `session_start` / `record` turns; on completion, `session_end` with deliverables.
+3. **Review Product Docs**: Check [`PRODUCT.PRD`](PRODUCT.PRD), [`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), and [`.agents/specs/index.PRD`](.agents/specs/index.PRD) for active phase constraints and slice definitions.
+4. **Respect Git Boundaries**: Never create in-repo `.agents/plans/`, `MEMORY.md`, `.state.md`, or session log dumps in the product repository.
 
 ---
 
