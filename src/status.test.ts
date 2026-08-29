@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createActivityBus } from "./activity.js";
-import { generateStatusHtml, startStatusServer } from "./status.js";
+import { generateStatusHtml, generateLoginHtml, startStatusServer } from "./status.js";
 import { getPackageVersion } from "./version.js";
 import { ensureProjectVault } from "./vault.js";
 import { closeIndex } from "./indexer.js";
@@ -368,6 +368,69 @@ test("MCP status monitor", async (t) => {
       const stream = await fetch(`${authServer.url}/api/events/stream?token=status-secret`);
       assert.strictEqual(stream.status, 200);
       stream.body?.cancel().catch(() => {});
+    } finally {
+      authBus.close();
+      await authServer.close();
+    }
+  });
+
+  await t.test("login page redirects unauthenticated / and accepts token cookie", async () => {
+    const loginHtml = generateLoginHtml("0.0.0-test");
+    assert.ok(loginHtml.includes('type="password"'));
+    assert.ok(loginHtml.includes('autocomplete="current-password"'));
+    assert.ok(loginHtml.includes('autocomplete="username"'));
+    assert.ok(loginHtml.includes('name="password"'));
+    assert.ok(generateStatusHtml("0.0.0-test").includes("apiFetch"));
+
+    const authBus = createActivityBus();
+    const authServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "login-secret",
+      activityBus: authBus
+    });
+    try {
+      const root = await fetch(`${authServer.url}/`, { redirect: "manual" });
+      assert.strictEqual(root.status, 302);
+      assert.match(String(root.headers.get("location") || ""), /\/login/);
+
+      const loginPage = await fetch(`${authServer.url}/login`);
+      assert.strictEqual(loginPage.status, 200);
+      const loginBody = await loginPage.text();
+      assert.ok(loginBody.includes('type="password"'));
+      assert.ok(loginBody.includes("Access token"));
+
+      const bad = await fetch(`${authServer.url}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ token: "wrong" })
+      });
+      assert.strictEqual(bad.status, 401);
+
+      const good = await fetch(`${authServer.url}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ token: "login-secret" })
+      });
+      assert.strictEqual(good.status, 200);
+      const setCookie = String(good.headers.get("set-cookie") || "");
+      assert.match(setCookie, /spec_memo_status_token=/);
+      assert.match(setCookie, /HttpOnly/i);
+      const cookie = setCookie.split(";")[0];
+
+      const authedRoot = await fetch(`${authServer.url}/`, {
+        headers: { Cookie: cookie },
+        redirect: "manual"
+      });
+      assert.strictEqual(authedRoot.status, 200);
+      const page = await authedRoot.text();
+      assert.ok(page.includes("MCP Status Monitor") || page.includes("spec-memo"));
+
+      const api = await fetch(`${authServer.url}/api/status`, {
+        headers: { Cookie: cookie }
+      });
+      assert.strictEqual(api.status, 200);
     } finally {
       authBus.close();
       await authServer.close();

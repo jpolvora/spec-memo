@@ -1,5 +1,11 @@
 # Changelog
 
+### [2026-08-28 19:55] Agent: Cursor Composer
+- **Prompt**: Status UI :3001 login page (token only, password-manager friendly)
+- **Done**: `/login` + cookie session (`spec_memo_status_token`); unauthenticated `/` redirects; `apiFetch` sends credentials and bounces on 401; tests for redirect/login/cookie
+- **Result**: status.test 26/26 pass
+
+
 ### [2026-08-28 19:45] Agent: Cursor Composer
 - **Prompt**: Fix #20 status monitor UI SyntaxError (broken /\n+/g in template)
 - **Done**: Escaped template regex in `src/status.ts` so browser receives `/\n+/g`; added generateStatusHtml regression assert
