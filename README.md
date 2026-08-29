@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.11.1**.
+**Local working memory for coding agents outside the product repository.** Version **0.11.2**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -350,6 +350,7 @@ Quick machine checks:
 curl -s http://127.0.0.1:3000/health
 curl -s http://127.0.0.1:3001/api/status
 curl -s http://127.0.0.1:3001/api/vaults
+# JSON array of `{ id, displayName }` — the monitor sidebar and vault selectors use this array (not `{ vaults: [...] }`).
 # Live stream (SSE): GET http://127.0.0.1:3001/api/events/stream
 ```
 

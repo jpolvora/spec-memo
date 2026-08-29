@@ -1572,7 +1572,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         });
         if (!res.ok) return;
         const data = await res.json();
-        vaults = data.vaults || [];
+        vaults = Array.isArray(data) ? data : (data.vaults || []);
         populateVaultSelectors();
         renderVaultList();
         updateFilterContext();

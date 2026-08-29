@@ -168,6 +168,15 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('credentials: "same-origin"'));
   });
 
+  await t.test("generateStatusHtml loadVaults accepts GET /api/vaults array payload", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.match(
+      html,
+      /vaults = Array\.isArray\(data\) \? data : \(data\.vaults \|\| \[\]\)/,
+      "loadVaults must treat a JSON array as the project list (GET /api/vaults is not { vaults: [...] })"
+    );
+  });
+
   await t.test("generateStatusHtml inline scripts parse (no template-escape SyntaxError)", () => {
     const html = generateStatusHtml(getPackageVersion());
     assertStatusInlineScriptsParse(html);
