@@ -2391,8 +2391,13 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
       if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {
         if (authToken && !isAuthorized(req, url, authToken)) {
-          const next = pathname === "/index.html" ? "/index.html" : "/";
-          res.writeHead(302, { Location: "/login?next=" + encodeURIComponent(safeStatusNextPath(next)) });
+          const base = pathname === "/index.html" ? "/index.html" : "/";
+          const cleanParams = new URLSearchParams(url.searchParams);
+          cleanParams.delete("token");
+          cleanParams.delete("authToken");
+          const qs = cleanParams.toString();
+          const next = safeStatusNextPath(base + (qs ? `?${qs}` : ""));
+          res.writeHead(302, { Location: "/login?next=" + encodeURIComponent(next) });
           res.end();
           return;
         }

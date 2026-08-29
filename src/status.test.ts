@@ -407,6 +407,15 @@ test("MCP status monitor", async (t) => {
       assert.strictEqual(root.status, 302);
       assert.match(String(root.headers.get("location") || ""), /\/login/);
 
+      const deepLink = await fetch(`${authServer.url}/?project=my-repo`, { redirect: "manual" });
+      assert.strictEqual(deepLink.status, 302);
+      const deepLoc = String(deepLink.headers.get("location") || "");
+      const deepUrl = new URL(deepLoc, authServer.url);
+      assert.equal(deepUrl.pathname, "/login");
+      const nextAfterLogin = deepUrl.searchParams.get("next") || "";
+      assert.match(nextAfterLogin, /project=my-repo/);
+      assert.ok(!nextAfterLogin.includes("token="));
+
       const loginPage = await fetch(`${authServer.url}/login`);
       assert.strictEqual(loginPage.status, 200);
       const loginBody = await loginPage.text();
