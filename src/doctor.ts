@@ -4,7 +4,7 @@ import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
 import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { openIndex, rebuildIndex } from './indexer.js';
-import { createSqliteDatabase, wrapSqliteOpenError } from './sqlite.js';
+import { wrapSqliteOpenError } from './sqlite.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { readHybridState } from './hybrid-state.js';
 import { isPathInside } from './safety.js';
@@ -189,22 +189,13 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     warnings.push(`Vault root directory does not exist: ${vaultRoot}`);
   }
 
-  // Check FTS index (probe native binding first so ABI mismatch is not a silent/stale healthy)
+  // Check FTS index
   const dbPath = path.join(vaultRoot, 'memo.sqlite');
   const dbExists = fs.existsSync(dbPath);
   let indexedRecordsCount = 0;
   let ftsHealthy = false;
-  let nativeBindingOk = false;
 
-  try {
-    const probe = createSqliteDatabase(':memory:');
-    probe.close();
-    nativeBindingOk = true;
-  } catch (err: unknown) {
-    warnings.push(wrapSqliteOpenError(err).message);
-  }
-
-  if (dbExists && nativeBindingOk) {
+  if (dbExists) {
     try {
       const db = openIndex(vaultRoot);
       const row = db.prepare('SELECT count(*) as count FROM records_fts').get() as { count: number };
@@ -214,7 +205,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       const msg = wrapSqliteOpenError(err).message;
       warnings.push(`SQLite FTS5 database error: ${msg}`);
     }
-  } else if (!dbExists && nativeBindingOk) {
+  } else {
     warnings.push(`SQLite FTS5 database not yet initialized at ${dbPath}`);
   }
 

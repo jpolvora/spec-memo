@@ -27,7 +27,7 @@ import * as path from 'node:path';
 /** True when this process is a CLI invocation (dist/cli.js, src/cli.ts, or npm bin shim named memo). */
 export function isCliMainEntry(argv1: string | undefined = process.argv[1]): boolean {
   if (!argv1) return false;
-  const base = path.basename(argv1).toLowerCase();
+  const base = path.posix.basename(argv1.replace(/\\/g, '/')).toLowerCase();
   return base === 'cli.js' || base === 'cli.ts' || base === 'memo' || base === 'memo.cmd' || base === 'memo.ps1';
 }
 
