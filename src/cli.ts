@@ -21,6 +21,7 @@ import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
 import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
 import { getPackageVersion } from './version.js';
+import { assertSupportedNodeRuntime } from './sqlite.js';
 import * as path from 'node:path';
 
 /** True when this process is a CLI invocation (dist/cli.js, src/cli.ts, or npm bin shim named memo). */
@@ -414,6 +415,8 @@ async function runCliInner(
     printCommandHelp(parsed.command);
     return 0;
   }
+
+  assertSupportedNodeRuntime();
 
   vaultRootArg = (parsed.options.vaultRoot as string) || vaultRootArg;
   const activeVaultConfig = ensureVaultStructure(getVaultRoot(vaultRootArg));

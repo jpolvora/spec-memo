@@ -18,6 +18,7 @@ import {
 import { RecordKindSchema, RecordStatusSchema } from './schema.js';
 import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
 import { searchIndex } from './indexer.js';
+import { wrapSqliteOpenError } from './sqlite.js';
 import { compileBootstrapBrief } from './bootstrap.js';
 import { runGc } from './curator.js';
 import { promoteRecord } from './promote.js';
@@ -480,7 +481,7 @@ function ok(data: unknown): { data: unknown } {
 }
 
 function fail(code: string, err: unknown, details?: unknown): ToolResponse {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = wrapSqliteOpenError(err).message;
   return {
     isError: true,
     error: String(sanitizeToolOutput(message)),

@@ -1,10 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Database from 'better-sqlite3';
 import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
 import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { openIndex, rebuildIndex } from './indexer.js';
+import { createSqliteDatabase, wrapSqliteOpenError } from './sqlite.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { readHybridState } from './hybrid-state.js';
 import { isPathInside } from './safety.js';
@@ -189,23 +189,32 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     warnings.push(`Vault root directory does not exist: ${vaultRoot}`);
   }
 
-  // Check FTS index
+  // Check FTS index (probe native binding first so ABI mismatch is not a silent/stale healthy)
   const dbPath = path.join(vaultRoot, 'memo.sqlite');
   const dbExists = fs.existsSync(dbPath);
   let indexedRecordsCount = 0;
   let ftsHealthy = false;
+  let nativeBindingOk = false;
 
-  if (dbExists) {
+  try {
+    const probe = createSqliteDatabase(':memory:');
+    probe.close();
+    nativeBindingOk = true;
+  } catch (err: unknown) {
+    warnings.push(wrapSqliteOpenError(err).message);
+  }
+
+  if (dbExists && nativeBindingOk) {
     try {
       const db = openIndex(vaultRoot);
       const row = db.prepare('SELECT count(*) as count FROM records_fts').get() as { count: number };
       indexedRecordsCount = row.count;
       ftsHealthy = true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = wrapSqliteOpenError(err).message;
       warnings.push(`SQLite FTS5 database error: ${msg}`);
     }
-  } else {
+  } else if (!dbExists && nativeBindingOk) {
     warnings.push(`SQLite FTS5 database not yet initialized at ${dbPath}`);
   }
 
@@ -225,7 +234,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       ftsHealthy = true;
       rebuilt = true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = wrapSqliteOpenError(err).message;
       warnings.push(`FTS index rebuild failed: ${msg}`);
     }
   }

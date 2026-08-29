@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.11.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.11.1**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -86,6 +86,16 @@ If you prefer not using npm global link or want a standalone wrapper script:
 3. **IDE MCP vs Terminal CLI:**
    * Your AI editor (Cursor, VS Code, Claude Desktop, Antigravity) configures stdio MCP via `memo setup --write-mcp` or `node /path/to/dist/cli.js serve`.
    * Putting `memo` on your system `PATH` ensures that interactive terminal commands and AI agents executing shell scripts can call `memo bootstrap`, `memo doctor --fix`, `memo search`, etc. anywhere on your machine.
+
+4. **After upgrading Node.js (FTS empty / `GC_FAILED` / ABI mismatch):**
+   `better-sqlite3` is a native addon. A Node upgrade (for example 22 → 24) leaves the old `NODE_MODULE_VERSION` binding in place. Search may error or look empty, `gc` returns `GC_FAILED`, and `doctor` must report **unhealthy** with rebuild steps rather than a stale healthy count.
+   ```bash
+   # Debian/Ubuntu (needed when no prebuild exists for your Node version)
+   sudo apt install build-essential
+   npm rebuild better-sqlite3
+   memo doctor --rebuild
+   ```
+   spec-memo requires **Node.js 22+** (`package.json` `engines.node`). CI runs the test suite on Node 22 and Node 24. FTS still uses `better-sqlite3` (not `node:sqlite`); rebuild after every Node upgrade.
 
 
 ### 2. Deployment Modes & Agent Host Setup
@@ -386,7 +396,7 @@ Use this so the MCP SSE daemon (and status monitor) start on boot. Prefer a dura
 
 ```bash
 sudo mkdir -p /var/lib/spec-memo
-# Install Node 22 + clone/build to /opt/spec-memo (or npm i -g spec-memo and point ExecStart at `memo`)
+# Install Node 22+ + clone/build to /opt/spec-memo (or npm i -g spec-memo and point ExecStart at `memo`)
 ```
 
 `/etc/systemd/system/spec-memo.service`:
@@ -425,7 +435,7 @@ sudo cat /proc/$(pgrep -f "spec-memo" | head -n 1)/environ | tr '\0' '\n' | grep
 
 #### Windows — Task Scheduler (autoboot at logon)
 
-1. Install Node 22 and `npm install -g github:jpolvora/spec-memo` (or build this repo and use the full path to `node` + `dist\cli.js`).
+1. Install Node 22+ and `npm install -g github:jpolvora/spec-memo` (or build this repo and use the full path to `node` + `dist\cli.js`).
 2. Create a vault dir, e.g. `C:\spec-memo-vault`.
 3. **Task Scheduler → Create Task**:
    - Trigger: **At log on** (or **At startup** with a service account).
