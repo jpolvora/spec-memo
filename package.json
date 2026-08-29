@@ -1,6 +1,6 @@
 {
   "name": "spec-memo",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Local working memory for coding agents outside the product repository",
   "type": "module",
   "main": "dist/index.js",
@@ -43,9 +43,12 @@
   },
   "author": "",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.1",
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^13.0.3",
     "gray-matter": "^4.0.3",
     "zod": "^3.24.2"
   },

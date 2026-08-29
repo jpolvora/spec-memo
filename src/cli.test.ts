@@ -3,8 +3,52 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { runCli } from './cli.js';
+import { isCliMainEntry, runCli } from './cli.js';
 import { TOOL_NAMES } from './types.js';
+
+describe('CLI entry gate (npm-link shim)', () => {
+  it('treats compiled and source cli paths as main', () => {
+    assert.equal(isCliMainEntry('/opt/spec-memo/dist/cli.js'), true);
+    assert.equal(isCliMainEntry('L:\\source\\spec-memo\\src\\cli.ts'), true);
+  });
+
+  it('treats npm-link / global bin shims named memo as main', () => {
+    assert.equal(
+      isCliMainEntry('/root/.nvm/versions/node/v24.16.0/bin/memo'),
+      true
+    );
+    assert.equal(isCliMainEntry('C:\\Users\\me\\AppData\\Roaming\\npm\\memo.cmd'), true);
+    assert.equal(isCliMainEntry('/usr/local/bin/memo.ps1'), true);
+  });
+
+  it('does not treat unrelated scripts as main', () => {
+    assert.equal(isCliMainEntry(undefined), false);
+    assert.equal(isCliMainEntry('/opt/spec-memo/dist/cli.test.js'), false);
+    assert.equal(isCliMainEntry('/usr/bin/node'), false);
+  });
+
+  it('returns exit 1 with stderr when Node runtime guard throws', async () => {
+    const prev = process.env.SPEC_MEMO_SIMULATE_NODE;
+    process.env.SPEC_MEMO_SIMULATE_NODE = '20.19.0';
+    let capturedErr = '';
+    const origErr = console.error;
+    console.error = (...args) => {
+      capturedErr += args.join(' ') + '\n';
+    };
+    try {
+      const code = await runCli(['bootstrap', '--cwd', '.']);
+      assert.equal(code, 1);
+      assert.ok(capturedErr.includes('requires Node.js >= 22'));
+    } finally {
+      console.error = origErr;
+      if (prev === undefined) {
+        delete process.env.SPEC_MEMO_SIMULATE_NODE;
+      } else {
+        process.env.SPEC_MEMO_SIMULATE_NODE = prev;
+      }
+    }
+  });
+});
 
 describe('CLI Integration', () => {
   it('should print general help with 0 exit code', async () => {

@@ -1,10 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Database from 'better-sqlite3';
 import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
 import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { openIndex, rebuildIndex } from './indexer.js';
+import { wrapSqliteOpenError } from './sqlite.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { readHybridState } from './hybrid-state.js';
 import { isPathInside } from './safety.js';
@@ -202,7 +202,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       indexedRecordsCount = row.count;
       ftsHealthy = true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = wrapSqliteOpenError(err).message;
       warnings.push(`SQLite FTS5 database error: ${msg}`);
     }
   } else {
@@ -225,7 +225,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       ftsHealthy = true;
       rebuilt = true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = wrapSqliteOpenError(err).message;
       warnings.push(`FTS index rebuild failed: ${msg}`);
     }
   }

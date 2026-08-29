@@ -21,6 +21,15 @@ import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
 import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
 import { getPackageVersion } from './version.js';
+import { assertSupportedNodeRuntime } from './sqlite.js';
+import * as path from 'node:path';
+
+/** True when this process is a CLI invocation (dist/cli.js, src/cli.ts, or npm bin shim named memo). */
+export function isCliMainEntry(argv1: string | undefined = process.argv[1]): boolean {
+  if (!argv1) return false;
+  const base = path.posix.basename(argv1.replace(/\\/g, '/')).toLowerCase();
+  return base === 'cli.js' || base === 'cli.ts' || base === 'memo' || base === 'memo.cmd' || base === 'memo.ps1';
+}
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
@@ -405,6 +414,18 @@ async function runCliInner(
   if (parsed.subcommandHelp) {
     printCommandHelp(parsed.command);
     return 0;
+  }
+
+  try {
+    assertSupportedNodeRuntime();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (parsed.isJson) {
+      printJson({ isError: true, error: message, code: 'UNSUPPORTED_NODE' });
+    } else {
+      console.error(message);
+    }
+    return 1;
   }
 
   vaultRootArg = (parsed.options.vaultRoot as string) || vaultRootArg;
@@ -1635,11 +1656,18 @@ async function runCliInner(
   return 1;
 }
 
-if (process.argv[1] && (process.argv[1].endsWith('cli.js') || process.argv[1].endsWith('cli.ts'))) {
-  runCli().then((exitCode) => {
-    if (exitCode !== 0) {
-      process.exit(exitCode);
-    }
-  });
+if (isCliMainEntry()) {
+  runCli()
+    .then((exitCode) => {
+      if (exitCode !== 0) {
+        process.exit(exitCode);
+      }
+    })
+    .catch((err: unknown) => {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    });
+} else if (process.env.SPEC_MEMO_DEBUG === '1' && process.argv[1]) {
+  console.error(`spec-memo: skipped CLI entry (argv[1]=${process.argv[1]})`);
 }
 
