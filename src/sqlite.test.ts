@@ -14,7 +14,7 @@ import {
 describe('SQLite native binding loader', () => {
   it('resolves better-sqlite3.node from the package, not process.cwd()', () => {
     const binding = resolveSqliteNativeBinding();
-    assert.equal(path.basename(binding), 'better_sqlite3.node');
+    assert.ok(binding.endsWith('.node'));
     assert.ok(fs.existsSync(binding));
     const normalized = binding.replace(/\\/g, '/');
     assert.ok(

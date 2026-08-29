@@ -50,6 +50,8 @@ export function wrapSqliteOpenError(err: unknown): Error {
 export function resolveSqliteNativeBinding(): string {
   const pkgDir = path.dirname(require.resolve('better-sqlite3/package.json'));
   const candidates = [
+    path.join(pkgDir, 'prebuilds', `${process.platform}-${process.arch}.node`),
+    path.join(pkgDir, 'prebuilds', `linuxmusl-${process.arch}.node`),
     path.join(pkgDir, 'build', 'Release', 'better_sqlite3.node'),
     path.join(pkgDir, 'build', 'Debug', 'better_sqlite3.node')
   ];
