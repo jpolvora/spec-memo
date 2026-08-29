@@ -1,5 +1,12 @@
 # Changelog
 
+### [2026-08-28 22:50] Agent: Cursor Grok 4.6
+- **Prompt**: Fix empty vaults/projects list on status monitor after 0.9.0/0.10.0
+- **Done**: `loadVaults` treats GET `/api/vaults` JSON array as the list (`Array.isArray(data) ? data : (data.vaults || [])`); HTML regression test
+- **Result**: `node --test dist/status.test.js` 27 pass. Learning: Do not parse `{ vaults }` when the handler returns a raw array
+
+
+
 ### [2026-08-28 20:20] Agent: Cursor Grok 4.6
 - **Prompt**: /ws-goal-fix-pr PR 21 round 2 (cookie vs stale token; preserve query on promote)
 - **Done**: `isAuthorized` accepts any matching candidate; token cookie promote keeps other query params
