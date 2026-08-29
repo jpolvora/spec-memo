@@ -182,6 +182,61 @@ describe('check_version and install_skills', () => {
     }
   });
 
+  it('install_skills --global refuses destinations that overlap the vault', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-global-vault-'));
+    const home = path.join(tmp, 'home');
+    const vaultRoot = path.join(home, '.agents', 'skills', 'ws-memo');
+    fs.mkdirSync(path.join(vaultRoot, 'projects'), { recursive: true });
+    fs.writeFileSync(
+      path.join(vaultRoot, 'config.json'),
+      JSON.stringify({ version: '0.11.0', projects: {} })
+    );
+    try {
+      await assert.rejects(
+        () =>
+          installSkills({
+            global: true,
+            homeDir: home,
+            vaultRoot,
+            packageRoot: getPackageRoot(),
+            force: true
+          }),
+        /vault/i
+      );
+      assert.ok(fs.existsSync(path.join(vaultRoot, 'config.json')));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('install_skills --global refuses when the vault sits inside destDir', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-global-nested-vault-'));
+    const home = path.join(tmp, 'home');
+    const destDir = path.join(home, '.agents', 'skills', 'ws-memo');
+    const vaultRoot = path.join(destDir, 'nested-vault');
+    fs.mkdirSync(path.join(vaultRoot, 'projects'), { recursive: true });
+    fs.writeFileSync(
+      path.join(vaultRoot, 'config.json'),
+      JSON.stringify({ version: '0.11.0', projects: {} })
+    );
+    try {
+      await assert.rejects(
+        () =>
+          installSkills({
+            global: true,
+            homeDir: home,
+            vaultRoot,
+            packageRoot: getPackageRoot(),
+            force: true
+          }),
+        /overlap the vault/i
+      );
+      assert.ok(fs.existsSync(path.join(vaultRoot, 'config.json')));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it('install_skills copies ws-session-tracking into a temp product root', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-st-'));
     const productRoot = path.join(tmp, 'consumer');

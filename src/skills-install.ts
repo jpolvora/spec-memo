@@ -85,6 +85,19 @@ function removeTree(dir: string): void {
   }
 }
 
+/** destDir must not be the vault, inside the vault, or a parent of the vault (force wipe). */
+function assertDestDoesNotOverlapVault(destDir: string, vaultRoot: string): void {
+  if (
+    destDir === vaultRoot ||
+    isPathInside(destDir, vaultRoot) ||
+    isPathInside(vaultRoot, destDir)
+  ) {
+    throw new Error(
+      `Safety violation (Default Deny): skill destination must not overlap the vault (${vaultRoot}). Target: ${destDir}`
+    );
+  }
+}
+
 /**
  * Resolve global install roots.
  * - Always include `$HOME/.agents/skills` (created on write).
@@ -191,6 +204,7 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
         assertAllowedSkill(skillId);
         const srcDir = packagedSkillDir(skillId, packageRoot);
         const destDir = path.join(target.root, skillId);
+        assertDestDoesNotOverlapVault(destDir, vaultRoot);
         installed.push(
           installOneSkill({
             skillId,
@@ -253,6 +267,7 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
         `Safety violation (Default Deny): skill destination must not target .git. Target: ${destDir}`
       );
     }
+    assertDestDoesNotOverlapVault(destDir, vaultRoot);
 
     const destinationLabel = path.relative(productRoot, destDir).replace(/\\/g, '/');
     installed.push(
