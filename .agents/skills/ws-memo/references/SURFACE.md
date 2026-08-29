@@ -208,19 +208,21 @@ memo check-version --json
 
 ### 10. `install_skills`
 
-Install packaged spec-memo runtime skill(s) (default `ws-memo`) into a consumer product tree.
+Install packaged runtime skills (`ws-memo`, `ws-session-tracking`) into a consumer product tree, or into global skills roots with `global: true`.
 
 | Arg | Type | Required | Notes |
 |---|---|---|---|
-| `productRoot` | string | Optional | Preferred consumer product repository root |
+| `productRoot` | string | Optional | Preferred consumer product repository root (local mode) |
 | `cwd` | string | Optional | Working directory to resolve product root when omitted |
-| `skills` | string[] | Optional | Skill IDs to install (default `["ws-memo"]`) |
-| `skillsRoot` | string | Optional | Relative skills directory (default `.agents/skills`) |
+| `skills` | string[] | Optional | Skill IDs (default `["ws-memo", "ws-session-tracking"]`) |
+| `skillsRoot` | string | Optional | Relative skills directory (default `.agents/skills`); ignored when `global` |
 | `force` | boolean | Optional | Overwrite destination when it differs |
+| `global` | boolean | Optional | Install to `$HOME/.agents/skills` (always) and `$HOME/.gemini/config/skills` when Antigravity/Gemini config exists |
 
 CLI:
 ```bash
-memo install-skills --product-root <path> [--skill ws-memo] [--force] [--json]
+memo install-skills --product-root <path> [--skills ws-memo,ws-session-tracking] [--force] [--json]
+memo install-skills --global [--force] [--json]
 ```
 
 ---

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
-import { InstallSkillsOptions, InstallSkillsResult } from './types.js';
+import { InstallSkillsOptions, InstallSkillsResult, InstallSkillsInstalledRow } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot } from './vault.js';
 import { isPathInside } from './safety.js';
@@ -10,6 +11,14 @@ export const ALLOWED_SKILLS = ['ws-memo', 'ws-session-tracking'] as const;
 export type AllowedSkill = (typeof ALLOWED_SKILLS)[number];
 
 const DEFAULT_SKILLS_ROOT = '.agents/skills';
+
+export type GlobalSkillTargetKind = 'agents' | 'antigravity';
+
+export interface GlobalSkillTarget {
+  kind: GlobalSkillTargetKind;
+  /** Absolute skills directory (…/skills). */
+  root: string;
+}
 
 function assertAllowedSkill(id: string): asserts id is AllowedSkill {
   if (!(ALLOWED_SKILLS as readonly string[]).includes(id)) {
@@ -77,15 +86,138 @@ function removeTree(dir: string): void {
 }
 
 /**
- * Copy packaged runtime skill(s) into a consumer product `{skillsRoot}`.
+ * Resolve global install roots.
+ * - Always include `$HOME/.agents/skills` (created on write).
+ * - Include `$HOME/.gemini/config/skills` only when Antigravity/Gemini config tree exists.
+ */
+export function resolveGlobalSkillTargets(homeDir = os.homedir()): {
+  targets: GlobalSkillTarget[];
+  skipped: Array<{ kind: GlobalSkillTargetKind; path: string; reason: string }>;
+} {
+  const home = path.resolve(homeDir);
+  const agentsRoot = path.join(home, '.agents', 'skills');
+  const geminiConfig = path.join(home, '.gemini', 'config');
+  const antigravityRoot = path.join(geminiConfig, 'skills');
+
+  const targets: GlobalSkillTarget[] = [{ kind: 'agents', root: agentsRoot }];
+  const skipped: Array<{ kind: GlobalSkillTargetKind; path: string; reason: string }> = [];
+
+  if (fs.existsSync(antigravityRoot) || fs.existsSync(geminiConfig)) {
+    targets.push({ kind: 'antigravity', root: antigravityRoot });
+  } else {
+    skipped.push({
+      kind: 'antigravity',
+      path: antigravityRoot,
+      reason: 'Antigravity/Gemini config root not found; skipped'
+    });
+  }
+
+  return { targets, skipped };
+}
+
+function installOneSkill(options: {
+  skillId: AllowedSkill;
+  srcDir: string;
+  destDir: string;
+  force: boolean;
+  destinationLabel: string;
+  target?: GlobalSkillTargetKind | 'local';
+}): InstallSkillsInstalledRow {
+  const { skillId, srcDir, destDir, force, destinationLabel, target } = options;
+
+  if (fs.existsSync(destDir)) {
+    if (treesIdentical(srcDir, destDir)) {
+      return {
+        skill: skillId,
+        destination: destinationLabel,
+        identical: true,
+        bytesWritten: 0,
+        ...(target ? { target } : {})
+      };
+    }
+    if (!force) {
+      throw new Error(
+        `Destination skill already exists and differs: ${destinationLabel}. Pass force: true to overwrite.`
+      );
+    }
+    removeTree(destDir);
+  }
+
+  fs.mkdirSync(destDir, { recursive: true });
+  const bytesWritten = copyTree(srcDir, destDir);
+  return {
+    skill: skillId,
+    destination: destinationLabel,
+    identical: false,
+    bytesWritten,
+    ...(target ? { target } : {})
+  };
+}
+
+/**
+ * Copy packaged runtime skill(s) into a consumer product `{skillsRoot}`,
+ * or with `global: true` into `$HOME/.agents/skills` (+ Antigravity if present).
  */
 export async function installSkills(options: InstallSkillsOptions): Promise<InstallSkillsResult> {
   const vaultRoot = path.resolve(options.vaultRoot || getVaultRoot());
+  const skills = options.skills?.length ? options.skills : ['ws-memo', 'ws-session-tracking'];
+  const force = options.force === true;
+  const packageRoot = options.packageRoot || getPackageRoot();
+  const global = options.global === true;
+
+  for (const skillId of skills) {
+    assertAllowedSkill(skillId);
+    const srcDir = packagedSkillDir(skillId, packageRoot);
+    if (!fs.existsSync(srcDir) || !fs.existsSync(path.join(srcDir, 'SKILL.md'))) {
+      throw new Error(
+        `Packaged skill "${skillId}" not found under ${srcDir}. Reinstall spec-memo or use a source checkout.`
+      );
+    }
+  }
+
+  if (global) {
+    const homeDir = options.homeDir?.trim() || os.homedir();
+    const { targets, skipped } = resolveGlobalSkillTargets(homeDir);
+    const installed: InstallSkillsInstalledRow[] = [];
+
+    for (const target of targets) {
+      if (target.root === vaultRoot || isPathInside(target.root, vaultRoot)) {
+        throw new Error(
+          `Safety violation (Default Deny): global skills root must not be the vault root or inside the vault (${vaultRoot}).`
+        );
+      }
+
+      for (const skillId of skills) {
+        assertAllowedSkill(skillId);
+        const srcDir = packagedSkillDir(skillId, packageRoot);
+        const destDir = path.join(target.root, skillId);
+        installed.push(
+          installOneSkill({
+            skillId,
+            srcDir,
+            destDir,
+            force,
+            destinationLabel: destDir.replace(/\\/g, '/'),
+            target: target.kind
+          })
+        );
+      }
+    }
+
+    return {
+      mode: 'global',
+      productRoot: path.resolve(homeDir),
+      skillsRoot: 'global',
+      installed,
+      skippedTargets: skipped.length ? skipped : undefined
+    };
+  }
+
   const explicitRoot = options.productRoot?.trim();
   const cwdFallback = options.cwd?.trim();
   if (!explicitRoot && !cwdFallback) {
     throw new Error(
-      'productRoot (or cwd) is required to install skills into a consumer product repository.'
+      'productRoot (or cwd) is required to install skills into a consumer product repository. Pass global: true for $HOME/.agents/skills.'
     );
   }
 
@@ -104,20 +236,11 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
     throw new Error('skillsRoot must be a relative path without ".." segments.');
   }
 
-  const skills = options.skills?.length ? options.skills : ['ws-memo', 'ws-session-tracking'];
-  const force = options.force === true;
-  const packageRoot = options.packageRoot || getPackageRoot();
-  const installed: InstallSkillsResult['installed'] = [];
+  const installed: InstallSkillsInstalledRow[] = [];
 
   for (const skillId of skills) {
     assertAllowedSkill(skillId);
     const srcDir = packagedSkillDir(skillId, packageRoot);
-    if (!fs.existsSync(srcDir) || !fs.existsSync(path.join(srcDir, 'SKILL.md'))) {
-      throw new Error(
-        `Packaged skill "${skillId}" not found under ${srcDir}. Reinstall spec-memo or use a source checkout.`
-      );
-    }
-
     const destDir = path.resolve(productRoot, skillsRootSeg, skillId);
     if (!isPathInside(destDir, productRoot)) {
       throw new Error(
@@ -131,38 +254,22 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
       );
     }
 
-    if (fs.existsSync(destDir)) {
-      if (treesIdentical(srcDir, destDir)) {
-        installed.push({
-          skill: skillId,
-          destination: path.relative(productRoot, destDir).replace(/\\/g, '/'),
-          identical: true,
-          bytesWritten: 0
-        });
-        continue;
-      }
-      if (!force) {
-        throw new Error(
-          `Destination skill already exists and differs: ${path.relative(productRoot, destDir).replace(/\\/g, '/')}. Pass force: true to overwrite.`
-        );
-      }
-      removeTree(destDir);
-    }
-
-    fs.mkdirSync(destDir, { recursive: true });
-    const bytesWritten = copyTree(srcDir, destDir);
-    installed.push({
-      skill: skillId,
-      destination: path.relative(productRoot, destDir).replace(/\\/g, '/'),
-      identical: false,
-      bytesWritten
-    });
+    const destinationLabel = path.relative(productRoot, destDir).replace(/\\/g, '/');
+    installed.push(
+      installOneSkill({
+        skillId,
+        srcDir,
+        destDir,
+        force,
+        destinationLabel,
+        target: 'local'
+      })
+    );
   }
 
   return {
-    productRoot: path.relative(process.cwd(), productRoot) === ''
-      ? productRoot
-      : productRoot,
+    mode: 'local',
+    productRoot,
     skillsRoot: skillsRootSeg,
     installed
   };

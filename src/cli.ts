@@ -104,7 +104,7 @@ Core Memory Commands:
   gc              Apply TTL, compact shipped plans, compact logs, rebuild FTS
   promote         Copy one record into the product repository
   check_version   Compare running version to npm latest (alias: check-version)
-  install_skills  Install ws-memo skill into a consumer repo (alias: install-skills)
+  install_skills  Install ws-memo / ws-session-tracking into a consumer repo or --global (alias: install-skills)
   prompt          Ingest, query, export prompt turns, stories, and derive rules
   session         Start, complete, export, or inspect session lifecycles
   activity        Generate timesheet activity and invoicing report
@@ -1290,11 +1290,14 @@ async function runCliInner(
       } else if (typeof payload.skills === 'string') {
         payload.skills = (payload.skills as string).split(',').map((s) => s.trim());
       }
-      if (parsed.positionals.length > 0 && !payload.productRoot) {
+      if (parsed.positionals.length > 0 && !payload.productRoot && !payload.global) {
         payload.productRoot = parsed.positionals[0];
       }
       if (payload.force === true || payload.force === 'true') {
         payload.force = true;
+      }
+      if (payload.global === true || payload.global === 'true') {
+        payload.global = true;
       }
     }
 
@@ -1545,10 +1548,21 @@ async function runCliInner(
         console.log(`  Source:           ${v.source}`);
       } else if (parsed.command === 'install_skills' && response.data) {
         const i = response.data as import('./types.js').InstallSkillsResult;
-        console.log(`spec-memo — Installed skills into ${i.productRoot}\n`);
+        const where =
+          i.mode === 'global'
+            ? `global skills roots (home ${i.productRoot})`
+            : i.productRoot;
+        console.log(`spec-memo — Installed skills into ${where}\n`);
         for (const row of i.installed) {
           const note = row.identical ? ' (already identical)' : ` (${row.bytesWritten} bytes)`;
-          console.log(`  - ${row.skill} → ${row.destination}${note}`);
+          const target = row.target ? ` [${row.target}]` : '';
+          console.log(`  - ${row.skill} → ${row.destination}${target}${note}`);
+        }
+        if (i.skippedTargets?.length) {
+          console.log('');
+          for (const s of i.skippedTargets) {
+            console.log(`  (skipped ${s.kind}: ${s.reason})`);
+          }
         }
       } else if (parsed.command === 'prompt' && response.data) {
         const data = response.data as any;

@@ -11,9 +11,11 @@
   "files": [
     "dist",
     ".agents/skills/ws-memo",
+    ".agents/skills/ws-session-tracking",
     "README.md"
   ],
   "scripts": {
+    "prebuild": "node scripts/sync-skill-versions.mjs",
     "build": "tsc",
     "watch": "tsc -w",
     "prepare": "npm run build",
@@ -21,6 +23,7 @@
     "test": "node --test dist/**/*.test.js",
     "build:site": "node scripts/build-site.js",
     "check:site": "node scripts/build-site.js --check",
+    "sync:skill-versions": "node scripts/sync-skill-versions.mjs",
     "start": "node dist/mcp.js"
   },
   "keywords": [

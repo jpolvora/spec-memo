@@ -190,7 +190,9 @@ Day-to-day vault ops (all **10** MCP tools + CLI extras) are documented as a pro
 
 ```bash
 memo install-skills --product-root /path/to/consumer
+memo install-skills --global --force
 # or MCP tool: install_skills { "productRoot": "/path/to/consumer" }
+#            install_skills { "global": true, "force": true }
 ```
 
 Manual copy/symlink of `.agents/skills/ws-memo/` remains a fallback. **Setup** of `specMemo.enabled` in workflow-skills consumers remains [`ws-spec-memo`](https://github.com/jpolvora/workflow-skills) — do not duplicate that bridge here.
@@ -642,7 +644,7 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `gc` | Apply TTL retention and compact plans | `--dry-run`, `--project` |
 | `promote` | Safe export of record to product repo | `--id`, `--to`, `--format` (`raw`/`adr`/`madr`/`skill`), `--force`, `--limit` |
 | `check_version` / `check-version` | Compare running version to npm latest | `--json` |
-| `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into a consumer repo | `--product-root`, `--skill`, `--force`, `--json` |
+| `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into a consumer repo or global skills roots | `--product-root`, `--global`, `--skill`, `--force`, `--json` |
 | `prompt` / `prompts` | Ingest & query prompt history; derive rules; export stories | `record`/`list`/`search`/`show`/`session`/`export`/`derive-rules` |
 | `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`show`/`export`, `--summary`, `--pr` |
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
@@ -669,9 +671,11 @@ Compare `current` to `latest`. When the registry is unreachable, `updateAvailabl
 
 ```bash
 memo install-skills --product-root /path/to/consumer
+# Global (Cursor/agents + Antigravity if ~/.gemini/config exists):
+memo install-skills --global --force
 ```
 
-Use `--force` only when overwriting a diverged destination. MCP hosts can call `install_skills` with the same arguments.
+Use `--force` only when overwriting a diverged destination. MCP hosts can call `install_skills` with the same arguments (`global: true` for global roots).
 
 **How do I make the `memo` command available on my PATH (Windows / Linux / macOS)?**
 

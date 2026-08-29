@@ -382,29 +382,45 @@ export interface CheckVersionResult {
 }
 
 export interface InstallSkillsOptions {
-  /** Product repository root (preferred). */
+  /** Product repository root (preferred for local install). */
   productRoot?: string;
   /** Fallback when productRoot omitted — resolved via project identity. */
   cwd?: string;
   vaultRoot?: string;
-  /** Skill ids to install (default `["ws-memo"]`). */
+  /** Skill ids to install (default `["ws-memo", "ws-session-tracking"]`). */
   skills?: string[];
-  /** Relative skills directory under product root (default `.agents/skills`). */
+  /** Relative skills directory under product root (default `.agents/skills`). Ignored when `global`. */
   skillsRoot?: string;
   force?: boolean;
+  /**
+   * Install into global skills roots instead of a product repo:
+   * `$HOME/.agents/skills` always; `$HOME/.gemini/config/skills` when Antigravity/Gemini config exists.
+   */
+  global?: boolean;
   /** Test hook: override packaged skill source root. */
   packageRoot?: string;
+  /** Test hook: override `$HOME` for `--global` installs. */
+  homeDir?: string;
+}
+
+export interface InstallSkillsInstalledRow {
+  skill: string;
+  destination: string;
+  identical: boolean;
+  bytesWritten: number;
+  /** Destination kind: local product, Cursor/agents global, or Antigravity. */
+  target?: 'local' | 'agents' | 'antigravity';
 }
 
 export interface InstallSkillsResult {
+  mode: 'local' | 'global';
+  /** Local: product root. Global: resolved home directory. */
   productRoot: string;
+  /** Local: relative skillsRoot. Global: `"global"`. */
   skillsRoot: string;
-  installed: Array<{
-    skill: string;
-    destination: string;
-    identical: boolean;
-    bytesWritten: number;
-  }>;
+  installed: InstallSkillsInstalledRow[];
+  /** Global-only: Antigravity (or other) roots that were skipped because missing. */
+  skippedTargets?: Array<{ kind: string; path: string; reason: string }>;
 }
 
 export interface ExportVaultOptions {
