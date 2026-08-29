@@ -44,6 +44,15 @@ export function wrapSqliteOpenError(err: unknown): Error {
   return new Error(`${SQLITE_ABI_REBUILD_HINT} (${inner})`);
 }
 
+export function sqlitePrebuildFileName(): string {
+  const linuxMusl =
+    process.platform === 'linux' &&
+    !(process.report.getReport() as { header?: { glibcVersionRuntime?: string } }).header
+      ?.glibcVersionRuntime;
+  const platform = linuxMusl ? 'linuxmusl' : process.platform;
+  return `${platform}-${process.arch}.node`;
+}
+
 /**
  * Resolve better-sqlite3.node from the installed package directory.
  * Do not use the `bindings` stack-trace walker: ESM + a client-injected cwd
@@ -52,8 +61,7 @@ export function wrapSqliteOpenError(err: unknown): Error {
 export function resolveSqliteNativeBinding(): string {
   const pkgDir = path.dirname(require.resolve('better-sqlite3/package.json'));
   const candidates = [
-    path.join(pkgDir, 'prebuilds', `${process.platform}-${process.arch}.node`),
-    path.join(pkgDir, 'prebuilds', `linuxmusl-${process.arch}.node`),
+    path.join(pkgDir, 'prebuilds', sqlitePrebuildFileName()),
     path.join(pkgDir, 'build', 'Release', 'better_sqlite3.node'),
     path.join(pkgDir, 'build', 'Debug', 'better_sqlite3.node')
   ];

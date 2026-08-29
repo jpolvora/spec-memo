@@ -8,7 +8,8 @@ import {
   createSqliteDatabase,
   isSqliteAbiMismatch,
   resolveSqliteNativeBinding,
-  wrapSqliteOpenError
+  wrapSqliteOpenError,
+  sqlitePrebuildFileName
 } from './sqlite.js';
 
 describe('SQLite native binding loader', () => {
@@ -21,6 +22,17 @@ describe('SQLite native binding loader', () => {
       normalized.includes('node_modules/better-sqlite3/'),
       `expected package-relative binding, got ${binding}`
     );
+    assert.ok(
+      normalized.endsWith(`/prebuilds/${sqlitePrebuildFileName()}`) ||
+        normalized.includes('/build/Release/better_sqlite3.node') ||
+        normalized.includes('/build/Debug/better_sqlite3.node')
+    );
+    if (process.platform === 'linux') {
+      const report = process.report.getReport() as { header?: { glibcVersionRuntime?: string } };
+      if (report.header?.glibcVersionRuntime) {
+        assert.equal(sqlitePrebuildFileName().startsWith('linuxmusl-'), false);
+      }
+    }
   });
 
   it('opens a database after chdir to a directory with no node_modules', () => {
