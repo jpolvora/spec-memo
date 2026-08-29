@@ -1,5 +1,11 @@
 # Changelog
 
+### [2026-08-28 20:12] Agent: Cursor Grok 4.6
+- **Prompt**: /ws-goal-fix-pr PR 21 login next open-redirect
+- **Done**: `safeStatusNextPath` rejects `//host`; login + 401 bounce use same rule; tests for protocol-relative next
+- **Result**: `npm test` 316 pass. Learning: Status login `next` must reject protocol-relative URLs
+
+
 ### [2026-08-28 19:55] Agent: Cursor Composer
 - **Prompt**: Status UI :3001 login page (token only, password-manager friendly)
 - **Done**: `/login` + cookie session (`spec_memo_status_token`); unauthenticated `/` redirects; `apiFetch` sends credentials and bounces on 401; tests for redirect/login/cookie

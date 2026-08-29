@@ -112,6 +112,15 @@ function parseAfterSeq(raw: string | null): number {
 
 const STATUS_AUTH_COOKIE = "spec_memo_status_token";
 
+/** Same-origin path only. Rejects protocol-relative `//host` and backslash tricks. */
+export function safeStatusNextPath(raw: string | null | undefined): string {
+  const next = String(raw ?? "").trim() || "/";
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) {
+    return "/";
+  }
+  return next;
+}
+
 function parseCookies(header: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!header) return out;
@@ -349,7 +358,11 @@ export function generateLoginHtml(version = getPackageVersion()): string {
             return;
           }
           const next = params.get("next") || "/";
-          window.location.href = next.startsWith("/") ? next : "/";
+          const safeNext =
+            next.startsWith("/") && !next.startsWith("//") && next.indexOf("\\\\") === -1
+              ? next
+              : "/";
+          window.location.href = safeNext;
         } catch (_) {
           err.classList.add("show");
           submit.disabled = false;
@@ -1313,7 +1326,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }));
       if (res.status === 401) {
         const next = window.location.pathname + window.location.search;
-        window.location.href = "/login?next=" + encodeURIComponent(next || "/");
+        const safeNext =
+          next.startsWith("/") && !next.startsWith("//") && next.indexOf("\\\\") === -1
+            ? next
+            : "/";
+        window.location.href = "/login?next=" + encodeURIComponent(safeNext);
         throw new Error("Unauthorized");
       }
       return res;
@@ -2375,7 +2392,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {
         if (authToken && !isAuthorized(req, url, authToken)) {
           const next = pathname === "/index.html" ? "/index.html" : "/";
-          res.writeHead(302, { Location: "/login?next=" + encodeURIComponent(next) });
+          res.writeHead(302, { Location: "/login?next=" + encodeURIComponent(safeStatusNextPath(next)) });
           res.end();
           return;
         }

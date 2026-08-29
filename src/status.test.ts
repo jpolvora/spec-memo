@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createActivityBus } from "./activity.js";
-import { generateStatusHtml, generateLoginHtml, startStatusServer } from "./status.js";
+import { generateStatusHtml, generateLoginHtml, startStatusServer, safeStatusNextPath } from "./status.js";
 import { getPackageVersion } from "./version.js";
 import { ensureProjectVault } from "./vault.js";
 import { closeIndex } from "./indexer.js";
@@ -381,6 +381,14 @@ test("MCP status monitor", async (t) => {
     assert.ok(loginHtml.includes('autocomplete="username"'));
     assert.ok(loginHtml.includes('name="password"'));
     assert.ok(generateStatusHtml("0.0.0-test").includes("apiFetch"));
+    assert.ok(loginHtml.includes('!next.startsWith("//")'), "login HTML must reject protocol-relative next");
+
+    assert.equal(safeStatusNextPath("/"), "/");
+    assert.equal(safeStatusNextPath("/index.html"), "/index.html");
+    assert.equal(safeStatusNextPath("//evil.example"), "/");
+    assert.equal(safeStatusNextPath("https://evil.example"), "/");
+    assert.equal(safeStatusNextPath("\\evil"), "/");
+    assert.equal(safeStatusNextPath(null), "/");
 
     const authBus = createActivityBus();
     const authServer = await startStatusServer({
