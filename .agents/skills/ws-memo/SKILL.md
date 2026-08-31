@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.13.0
+version: 0.14.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -509,6 +509,7 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 
 | CLI Command | Description & Flags |
 |---|---|
+| `memo status` | **Operational status & config inspector:** Read-only dashboard, live daemon probes (SSE `:3123`, Status companion `:3124`, Canvas `:3125`, remote `/health`), active project record breakdown, and storage metrics. Aliases: `info`, `state`, `setup --check`. Flags: `--check`, `--json`, `--cwd`, `--vaultRoot`. |
 | `memo setup` | **Host/deployment only:** mode (`local`, `hybrid`, `remote`) & host MCP wiring (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). Does **not** write workflow-skills `{sharedDir}/config.json` / `specMemo.*` — use `ws-spec-memo` for that. Flags: `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo doctor` | Vault health, project identity, FTS5 integrity, and in-repo pollution scan. Flags: `--rebuild` (re-index FTS), `--fix` (delete forbidden in-repo files), `--json`. |
 | `memo rank` | Recurrence-ranked traps report by occurrence count. Flags: `--layer <name>`, `--limit <n>`, `--backfill`, `--json`. |
@@ -546,6 +547,7 @@ Match user intent to the correct action:
 | Find / read memory records | **recall** | MCP `search` → MCP `get` |
 | Record trap, decision, spec, plan | **remember** | MCP `upsert` (strict trap format) |
 | Task-done / audit log | **log** | MCP `append` (`event: "..."`) |
+| Operational status & daemon check | **status** | CLI `memo status` (`--check`, `--json`) |
 | Vault health & pollution check | **diagnose** | CLI `memo doctor` (`--fix` to clean residue) |
 | TTL cleanup & compaction | **maintain** | MCP `gc` (`dryRun: true` first) |
 | Export documentation / skill | **publish** | MCP `promote` (`destination: "..."`) |

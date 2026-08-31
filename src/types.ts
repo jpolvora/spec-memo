@@ -557,6 +557,102 @@ export interface SetupResult {
   message?: string;
 }
 
+export interface StatusOptions {
+  cwd?: string;
+  vaultRoot?: string;
+  json?: boolean;
+  check?: boolean;
+  verbose?: boolean;
+  timeoutMs?: number;
+}
+
+export interface DaemonServiceStatus {
+  name: string;
+  port: number;
+  configuredPort: number;
+  status: 'RUNNING' | 'STOPPED';
+  url: string;
+  endpoint: string;
+  statusCode?: number;
+  latencyMs?: number;
+  error?: string;
+}
+
+export interface RemoteDaemonStatus {
+  configured: boolean;
+  url: string | null;
+  tokenConfigured: boolean;
+  status: 'REACHABLE' | 'UNREACHABLE' | 'NOT_CONFIGURED';
+  statusCode?: number;
+  latencyMs?: number;
+  error?: string;
+}
+
+export interface ProjectStorageStatus {
+  projectId: string;
+  path: string;
+  remoteOrigin: string | null;
+  isFallback: boolean;
+  counts: {
+    traps: number;
+    decisions: number;
+    specs: number;
+    plans: number;
+    prompts: number;
+    sessions: number;
+    logs: number;
+    reviews: number;
+    scratch: number;
+    total: number;
+  };
+}
+
+export interface VaultStorageStatus {
+  vaultRoot: string;
+  configFile: string;
+  configValid: boolean;
+  totalProjects: number;
+  ftsDbExists: boolean;
+  ftsDbSize: number;
+  ftsRecordCount: number;
+  backupCount: number;
+  backupTotalSize: number;
+  latestBackup?: string;
+}
+
+export interface OperationalStatus {
+  telemetry: {
+    enabled: boolean;
+    logFile?: string;
+    maxFileSizeMb?: number;
+  };
+  ttl: {
+    scratchDays: number;
+    reviewDays: number;
+    logCompactMonths: number;
+  };
+  vaultGit: {
+    enabled: boolean;
+    remoteUrl?: string;
+  };
+}
+
+export interface StatusResult {
+  ok: boolean;
+  mode: DeploymentMode;
+  role: TopologyRole;
+  vault: VaultStorageStatus;
+  project?: ProjectStorageStatus;
+  daemons: {
+    sse: DaemonServiceStatus;
+    status: DaemonServiceStatus;
+    canvas: DaemonServiceStatus;
+    remote: RemoteDaemonStatus;
+  };
+  operational: OperationalStatus;
+  issues: string[];
+}
+
 export interface DoctorResult {
   healthy: boolean;
   vaultRoot: string;

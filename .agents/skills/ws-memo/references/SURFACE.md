@@ -231,6 +231,7 @@ memo install-skills --global [--force] [--json]
 
 | Command | Job |
 |---|---|
+| `memo status` | Query read-only operational dashboard, daemon reachability probes, configuration, and storage statistics (aliases: `info`, `state`, `setup --check`). `--json`, `--check`. |
 | `memo setup` | Configure deployment mode (`local`, `hybrid`, `remote`) and host MCP snippets (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo serve` | Stdio MCP (default). In remote mode, proxies over stdio to remote daemon. `--sse` HTTP SSE on `--port` (default 3123, configurable via `config.json` `ports.sse`). `--status-port` (default 3124, configurable via `config.json` `ports.status`). `--no-status`. `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
 | `memo canvas` | Graph UI default port 3125 (configurable via `config.json` `ports.canvas`). `--project`, `--host`, `--json`. (Not available in remote mode). |
