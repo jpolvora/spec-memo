@@ -11,7 +11,7 @@ import {
   BackupFileInfo,
   VaultConfig
 } from './types.js';
-import { getVaultRoot, ensureVaultStructure, withVaultLock, commitVaultChange } from './vault.js';
+import { getVaultRoot, ensureVaultStructure, withVaultLock, commitVaultChange, RECORD_SUBDIRS } from './vault.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { rebuildIndex } from './indexer.js';
 import { isPathInside, assertNoSecrets, assertValidProjectId } from './safety.js';
@@ -152,9 +152,8 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
         }
 
         const records: RawVaultRecord[] = [];
-        const recordDirs = ['traps', 'decisions', 'specs', 'plans', 'logs', 'reviews', 'scratch'];
 
-        for (const dirName of recordDirs) {
+        for (const dirName of RECORD_SUBDIRS) {
           const subDir = path.join(projPath, dirName);
           if (fs.existsSync(subDir)) {
             const files = fs.readdirSync(subDir);
@@ -430,8 +429,7 @@ export async function resetVault(options: ResetVaultOptions = {}): Promise<Reset
       // Single project reset
       const projDir = path.join(vaultRoot, 'projects', options.projectId);
       if (fs.existsSync(projDir)) {
-        const recordDirs = ['traps', 'decisions', 'specs', 'plans', 'logs', 'reviews', 'scratch'];
-        for (const dir of recordDirs) {
+        for (const dir of RECORD_SUBDIRS) {
           const sub = path.join(projDir, dir);
           if (fs.existsSync(sub)) {
             const files = fs.readdirSync(sub).filter((f) => f.endsWith('.md'));
@@ -451,8 +449,7 @@ export async function resetVault(options: ResetVaultOptions = {}): Promise<Reset
           try {
             if (fs.statSync(pDir).isDirectory()) {
               wipedProjectsCount++;
-              const recordDirs = ['traps', 'decisions', 'specs', 'plans', 'logs', 'reviews', 'scratch'];
-              for (const dir of recordDirs) {
+              for (const dir of RECORD_SUBDIRS) {
                 const sub = path.join(pDir, dir);
                 if (fs.existsSync(sub)) {
                   const files = fs.readdirSync(sub).filter((f) => f.endsWith('.md'));

@@ -196,3 +196,45 @@ test('resetVault with password creates encrypted backup archive', async () => {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('resetVault and restoreVault preserve prompts and sessions records', async () => {
+  const tmpRoot = createTempDir('reset-prompts');
+  try {
+    ensureVaultStructure(tmpRoot);
+
+    await upsertRecord({
+      vaultRoot: tmpRoot,
+      projectId: 'proj-prompt-history',
+      kind: 'prompt',
+      slug: 'prompt-one',
+      frontmatter: { id: 'prompt-proj-prompt-history-prompt-one', kind: 'prompt', title: 'Test Prompt Record' },
+      body: 'Always check RECORD_SUBDIRS during vault backup'
+    });
+
+    await upsertRecord({
+      vaultRoot: tmpRoot,
+      projectId: 'proj-prompt-history',
+      kind: 'session',
+      slug: 'session-one',
+      frontmatter: { id: 'session-proj-prompt-history-session-one', kind: 'session', title: 'Test Session Record' },
+      body: 'Session for vault reset and restore validation'
+    });
+
+    const resetRes = await resetVault({ vaultRoot: tmpRoot, all: true });
+    assert.equal(resetRes.ok, true);
+    assert.equal(resetRes.wipedRecordsCount, 2);
+
+    const restoreRes = await restoreVault({
+      vaultRoot: tmpRoot,
+      archivePath: resetRes.backupPath
+    });
+    assert.equal(restoreRes.restoredRecordsCount, 2);
+
+    const restoredSearch = searchIndex({ query: 'RECORD_SUBDIRS', vaultRoot: tmpRoot, crossProject: true });
+    assert.equal(restoredSearch.length, 1);
+    assert.equal(restoredSearch[0].id, 'prompt-proj-prompt-history-prompt-one');
+  } finally {
+    closeIndex(tmpRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
