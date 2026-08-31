@@ -137,8 +137,9 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
 
   // 2. Probe Local Daemons
   const timeoutMs = options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
+  const authToken = getResolvedAuthToken();
 
-  const sseProbe = await probeHttpService(`http://127.0.0.1:${ssePort}/health`, timeoutMs);
+  const sseProbe = await probeHttpService(`http://127.0.0.1:${ssePort}/health`, timeoutMs, authToken);
   const sseStatus: DaemonServiceStatus = {
     name: 'MCP SSE Server',
     port: ssePort,
@@ -151,7 +152,7 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
     error: sseProbe.error
   };
 
-  const statusProbe = await probeHttpService(`http://127.0.0.1:${statusPort}/api/status`, timeoutMs);
+  const statusProbe = await probeHttpService(`http://127.0.0.1:${statusPort}/api/status`, timeoutMs, authToken);
   const statusCompanionStatus: DaemonServiceStatus = {
     name: 'Status Monitor Companion',
     port: statusPort,
@@ -164,7 +165,7 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
     error: statusProbe.error
   };
 
-  const canvasProbe = await probeHttpService(`http://127.0.0.1:${canvasPort}/api/graph`, timeoutMs);
+  const canvasProbe = await probeHttpService(`http://127.0.0.1:${canvasPort}/api/graph`, timeoutMs, authToken);
   const canvasStatus: DaemonServiceStatus = {
     name: 'Canvas Visualizer',
     port: canvasPort,
@@ -180,7 +181,6 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
   // 3. Probe Remote Daemon (if configured)
   const remoteUrl = config.remote?.url || null;
   const tokenPresent = isTokenConfigured();
-  const authToken = getResolvedAuthToken();
 
   let remoteStatus: RemoteDaemonStatus = {
     configured: Boolean(remoteUrl),

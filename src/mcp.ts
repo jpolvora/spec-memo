@@ -241,7 +241,7 @@ export async function startMcpServer(
   const bus = createActivityBus();
   let statusServer: StatusServerInstance | undefined;
 
-  if (options.enableStatus !== false) {
+  if (options.enableStatus === true) {
     const configuredPorts = resolveConfiguredPorts(vaultRoot, config);
     const statusPort = options.statusPort ?? configuredPorts.status;
     const statusHost = options.statusHost || '127.0.0.1';

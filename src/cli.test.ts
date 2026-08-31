@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { isCliMainEntry, runCli } from './cli.js';
+import { isCliMainEntry, runCli, stdioServeEnablesStatus } from './cli.js';
 import { TOOL_NAMES } from './types.js';
 
 describe('CLI entry gate (npm-link shim)', () => {
@@ -25,6 +25,15 @@ describe('CLI entry gate (npm-link shim)', () => {
     assert.equal(isCliMainEntry(undefined), false);
     assert.equal(isCliMainEntry('/opt/spec-memo/dist/cli.test.js'), false);
     assert.equal(isCliMainEntry('/usr/bin/node'), false);
+  });
+
+  it('does not start stdio status companion unless --status or --status-port', () => {
+    assert.equal(stdioServeEnablesStatus({}), false);
+    assert.equal(stdioServeEnablesStatus({ sse: true }), false);
+    assert.equal(stdioServeEnablesStatus({ status: true }), true);
+    assert.equal(stdioServeEnablesStatus({ 'status-port': '3124' }), true);
+    assert.equal(stdioServeEnablesStatus({ statusPort: 3124 }), true);
+    assert.equal(stdioServeEnablesStatus({ status: true, 'no-status': true }), false);
   });
 
   it('returns exit 1 with stderr when Node runtime guard throws', async () => {
@@ -591,6 +600,7 @@ describe('CLI Integration', () => {
       assert.equal(serveCode, 0);
       assert.ok(capturedLogs.includes('Usage: memo serve'));
       assert.ok(capturedLogs.includes('--sse'));
+      assert.ok(capturedLogs.includes('--status'));
     } finally {
       console.log = origLog;
     }

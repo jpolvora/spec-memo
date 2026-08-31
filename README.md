@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.14.1**.
+**Local working memory for coding agents outside the product repository.** Version **0.14.2**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -708,7 +708,7 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `backups` | List available timestamped backups in `$SPEC_MEMO_ROOT/backups/` | `--vaultRoot`, `--json` |
 | `reset` | Reset vault database and clear files with mandatory pre-wipe backup | `--all`, `--project`, `--force`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
-| `serve` | Run stdio or SSE MCP server for agent hosts (and status companion on :3124) | `--sse`, `--port`, `--status-port`, `--no-status`, `--auth-token` |
+| `serve` | Run stdio or SSE MCP server for agent hosts (SSE co-starts status on :3124; stdio opt-in via `--status`) | `--sse`, `--port`, `--status`, `--status-port`, `--no-status`, `--auth-token` |
 
 ### Operator Q&A
 
