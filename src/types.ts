@@ -462,6 +462,46 @@ export interface ImportVaultResult {
   rebuiltFts: boolean;
 }
 
+export interface ResetVaultOptions {
+  vaultRoot?: string;
+  projectId?: string;
+  all?: boolean;
+  password?: string;
+  backupDir?: string;
+}
+
+export interface ResetVaultResult {
+  ok: boolean;
+  vaultRoot: string;
+  projectId?: string;
+  backupFilename: string;
+  backupPath: string;
+  wipedProjectsCount: number;
+  wipedRecordsCount: number;
+  rebuiltFts: boolean;
+}
+
+export interface BackupFileInfo {
+  filename: string;
+  path: string;
+  size: number;
+  createdAt: string;
+  isZip: boolean;
+}
+
+export type TopologyRole = 'local-vault' | 'intermediary-proxy' | 'final-remote';
+
+export interface TopologyInfo {
+  mode: 'local' | 'hybrid' | 'remote';
+  role: TopologyRole;
+  roleLabel: string;
+  upstreamRemoteUrl: string | null;
+  isProxy: boolean;
+  isRemoteDaemon: boolean;
+  syncSummary?: string;
+  description: string;
+}
+
 export interface DoctorPollutionItem {
   path: string;
   absolutePath: string;

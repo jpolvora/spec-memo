@@ -210,7 +210,7 @@ memo rank [--json]       # CLI-only trap recurrence
    - `GET /api/status`, `/api/vaults`, `/api/events` on status port (`3001`)
    - Live: `GET /api/events/stream` (SSE)
 4. With a token: `Authorization: Bearer <token>` (EventSource may use `?token=`).
-5. Status diagnostic surface is read-only; dedicated HTTP endpoints (`POST /api/vaults/export` and `POST /api/vaults/import`) provide a UI-only backup export and import affordance (no new MCP tools or CLI commands).
+5. Status diagnostic surface is read-only for records; dedicated HTTP endpoints (`POST /api/vaults/export`, `POST /api/vaults/import`, `POST /api/vaults/reset`, `POST /api/vaults/restore`, `GET /api/vaults/backups`) provide UI backup export, import, reset, and restore affordances (no new MCP tools).
 
 ### Autoboot service (document / verify; do not invent tokens)
 

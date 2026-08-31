@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.11.2**.
+**Local working memory for coding agents outside the product repository.** Version **0.12.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -598,16 +598,28 @@ One-shot migration of existing `.agents/specs/`, `memory/*.md`, `MEMORY.md`, `.a
 memo import --from /path/to/legacy-repo
 ```
 
-### 3. Encrypted Vault Backup & Restore (`export-vault` / `import-vault`)
+### 3. Full Vault Backup, Restore & Reset (`backups`, `restore`, `reset`)
 
-Export portable, optionally encrypted JSON archives using AES-256-GCM and PBKDF2 key derivation:
+Manage backups, restore full ZIP archives, or reset the memory store with automatic safety snapshots:
 
 ```bash
+# List available timestamped backups
+memo backups
+
+# Restore the most recent backup
+memo restore --latest
+
+# Restore from a specific backup archive (.zip or .json)
+memo restore --backup ~/.spec-memo/backups/2026-08-31-14-30-45-backup.zip
+
+# Reset vault records and SQLite databases with a mandatory pre-wipe backup
+memo reset --all --force
+
 # Export encrypted vault archive
 memo export-vault --password "my-secure-password" -o ~/spec-memo-backup.json
 
-# Restore vault archive on another machine
-memo import-vault ~/spec-memo-backup.json --password "my-secure-password"
+# Restore encrypted vault archive on another machine
+memo restore ~/spec-memo-backup.json --password "my-secure-password"
 ```
 
 ### 4. Optional Private Git Remote Sync (`vault-git`)
@@ -664,9 +676,11 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `sync` | Synchronize vault records (hybrid mode or vault-git) | `--all`, `--dry-run`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |
 | `export-vault` | Export encrypted portable archive | `--password`, `--output`, `--project` |
-| `import-vault` | Restore portable archive into vault | `<file>`, `--password` |
+| `import-vault` / `restore` | Restore portable archive (.zip or .json) into vault | `<file>`, `--backup`, `--latest`, `--password` |
+| `backups` | List available timestamped backups in `$SPEC_MEMO_ROOT/backups/` | `--vaultRoot`, `--json` |
+| `reset` | Reset vault database and clear files with mandatory pre-wipe backup | `--all`, `--project`, `--force`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
-| `serve` | Run stdio MCP server for agent hosts | `--sse`, `--port`, `--status-port`, `--no-status`, `--auth-token` *(stdio stream)* |
+| `serve` | Run stdio or SSE MCP server for agent hosts (and status companion on :3001) | `--sse`, `--port`, `--status-port`, `--no-status`, `--auth-token` |
 
 ### Operator Q&A
 

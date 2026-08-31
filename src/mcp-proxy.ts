@@ -10,12 +10,19 @@ import { getResolvedAuthToken, normalizeRemoteUrl } from './setup.js';
 import { sanitizeToolOutput } from './safety.js';
 import { logErrorReport } from './error-logger.js';
 import { getPackageVersion } from './version.js';
+import { ActivityBus, createActivityBus } from './activity.js';
+import { startStatusServer, StatusServerInstance } from './status.js';
 
 export interface RemoteProxyOptions {
   vaultRoot?: string;
   remoteUrl?: string;
   authToken?: string;
   errorLogPath?: string;
+  enableStatus?: boolean;
+  statusPort?: number;
+  statusHost?: string;
+  statusAuthToken?: string;
+  activityBus?: ActivityBus;
 }
 
 /**
@@ -112,6 +119,7 @@ export async function callRemoteTool(
   args: Record<string, unknown>,
   options: RemoteProxyOptions = {}
 ): Promise<ToolResponse> {
+  const startTime = Date.now();
   let connection: { client: Client; transport: SSEClientTransport; close: () => Promise<void> } | undefined;
   try {
     connection = await createRemoteClient(options);
@@ -119,6 +127,8 @@ export async function callRemoteTool(
       name,
       arguments: args
     });
+
+    const durationMs = Date.now() - startTime;
 
     if (result.isError) {
       let errText = 'Remote tool execution error';
@@ -135,6 +145,21 @@ export async function callRemoteTool(
           error: errResp.error || errText,
           context: { tool: name, args }
         }, { vaultRoot: options.vaultRoot, logPath: options.errorLogPath });
+
+        if (options.activityBus) {
+          options.activityBus.capture({
+            type: 'tool',
+            tool: name as ToolName,
+            kind: (TOOL_DEFINITIONS as any)[name]?.kind || 'read',
+            ok: false,
+            durationMs,
+            summary: `proxied ${name} (error: ${errResp.error || errText})`,
+            operation: `proxied ${name}`,
+            clientName: 'spec-memo-remote-proxy',
+            clientType: 'proxy'
+          });
+        }
+
         return errResp;
       } catch {
         logErrorReport({
@@ -144,8 +169,37 @@ export async function callRemoteTool(
           error: errText,
           context: { tool: name, args }
         }, { vaultRoot: options.vaultRoot, logPath: options.errorLogPath });
+
+        if (options.activityBus) {
+          options.activityBus.capture({
+            type: 'tool',
+            tool: name as ToolName,
+            kind: (TOOL_DEFINITIONS as any)[name]?.kind || 'read',
+            ok: false,
+            durationMs,
+            summary: `proxied ${name} (error: ${errText})`,
+            operation: `proxied ${name}`,
+            clientName: 'spec-memo-remote-proxy',
+            clientType: 'proxy'
+          });
+        }
+
         return { isError: true, error: errText, code: 'REMOTE_TOOL_ERROR' };
       }
+    }
+
+    if (options.activityBus) {
+      options.activityBus.capture({
+        type: 'tool',
+        tool: name as ToolName,
+        kind: (TOOL_DEFINITIONS as any)[name]?.kind || 'read',
+        ok: true,
+        durationMs,
+        summary: `proxied ${name}`,
+        operation: `proxied ${name}`,
+        clientName: 'spec-memo-remote-proxy',
+        clientType: 'proxy'
+      });
     }
 
     if (Array.isArray(result.content) && result.content[0] && 'text' in result.content[0]) {
@@ -160,6 +214,7 @@ export async function callRemoteTool(
 
     return { isError: false, data: sanitizeToolOutput(result) };
   } catch (err: unknown) {
+    const durationMs = Date.now() - startTime;
     const msg = err instanceof Error ? err.message : String(err);
     logErrorReport({
       subsystem: 'remote-proxy',
@@ -168,6 +223,21 @@ export async function callRemoteTool(
       error: `Remote daemon communication failed: ${msg}`,
       context: { tool: name, args }
     }, { vaultRoot: options.vaultRoot, logPath: options.errorLogPath });
+
+    if (options.activityBus) {
+      options.activityBus.capture({
+        type: 'tool',
+        tool: name as ToolName,
+        kind: (TOOL_DEFINITIONS as any)[name]?.kind || 'read',
+        ok: false,
+        durationMs,
+        summary: `proxied ${name} (remote unreachable: ${msg})`,
+        operation: `proxied ${name}`,
+        clientName: 'spec-memo-remote-proxy',
+        clientType: 'proxy'
+      });
+    }
+
     return {
       isError: true,
       error: `Remote daemon communication failed: ${msg}`,
@@ -263,8 +333,60 @@ export function createRemoteMcpProxyServer(options: RemoteProxyOptions = {}): Se
   return server;
 }
 
-export async function startRemoteMcpProxyServer(options: RemoteProxyOptions = {}): Promise<void> {
-  const server = createRemoteMcpProxyServer(options);
+export async function startRemoteMcpProxyServer(options: RemoteProxyOptions = {}): Promise<{
+  server: Server;
+  statusServer?: StatusServerInstance;
+  activityBus: ActivityBus;
+  close: () => Promise<void>;
+}> {
+  const vaultRoot = getVaultRoot(options.vaultRoot);
+  const bus = options.activityBus || createActivityBus();
+  const mergedOptions: RemoteProxyOptions = {
+    ...options,
+    vaultRoot,
+    activityBus: bus
+  };
+
+  let statusServer: StatusServerInstance | undefined;
+
+  if (options.enableStatus !== false) {
+    const statusPort = options.statusPort ?? 3001;
+    const statusHost = options.statusHost || '127.0.0.1';
+    const authToken = options.statusAuthToken || options.authToken || process.env.SPEC_MEMO_AUTH_TOKEN;
+
+    try {
+      statusServer = await startStatusServer({
+        port: statusPort,
+        host: statusHost,
+        vaultRoot,
+        authToken,
+        activityBus: bus,
+        errorLogPath: options.errorLogPath,
+        isProxy: true
+      });
+    } catch (err) {
+      logErrorReport({
+        subsystem: 'remote-proxy',
+        mode: 'remote',
+        error: `Failed to start proxy status companion on port ${statusPort}: ${err instanceof Error ? err.message : String(err)}`,
+        level: 'WARN'
+      }, { vaultRoot, logPath: options.errorLogPath });
+    }
+  }
+
+  const server = createRemoteMcpProxyServer(mergedOptions);
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  return {
+    server,
+    statusServer,
+    activityBus: bus,
+    close: async () => {
+      if (statusServer) {
+        await statusServer.close();
+      }
+      bus.close();
+    }
+  };
 }

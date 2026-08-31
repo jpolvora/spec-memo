@@ -1,15 +1,17 @@
 import http from "node:http";
-import { getVaultRoot, getProjectMetadata } from "./vault.js";
+import path from "node:path";
+import { getVaultRoot, getProjectMetadata, ensureVaultStructure } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
 import { getPackageVersion } from "./version.js";
-import { exportVault, importVault } from "./backup.js";
+import { exportVault, importVault, resetVault, listBackups } from "./backup.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { logErrorReport } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
 import { sanitizeToolOutput } from "./safety.js";
 import { scheduleHybridPush } from "./hybrid-sync.js";
+import { TopologyInfo, TopologyRole, BackupFileInfo } from "./types.js";
 import {
   listPrompts,
   searchPrompts,
@@ -94,6 +96,8 @@ export interface StatusServerOptions {
   activityBus: ActivityBus;
   errorLogPath?: string;
   getMcp?: () => McpStatusSummary;
+  isProxy?: boolean;
+  isDaemon?: boolean;
 }
 
 export interface StatusServerInstance {
@@ -468,7 +472,52 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     .badge-direct-remote { background: #0c2d48; border-color: #38bdf8; color: #7dd3fc; }
     .badge-cli { background: #064e3b; border-color: #34d399; color: #6ee7b7; }
     .badge-web { background: #451a03; border-color: #f59e0b; color: #fcd34d; }
+    .badge-emerald { background: #064e3b; border-color: #10b981; color: #a7f3d0; }
+    .badge-amber { background: #451a03; border-color: #f59e0b; color: #fde68a; }
+    .badge-indigo { background: #1e1b4b; border-color: #6366f1; color: #c7d2fe; }
+    .badge-cyan { background: #083344; border-color: #06b6d4; color: #a5f3fc; }
+    .badge-danger { background: #450a0a; border-color: #ef4444; color: #fecaca; }
     .badge-unknown { background: var(--card); border-color: var(--border); color: var(--muted); }
+
+    .topology-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .topology-tier {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      margin-bottom: 4px;
+      border: 1px solid transparent;
+      opacity: 0.5;
+      transition: opacity 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .topology-tier.active {
+      opacity: 1;
+      background: rgba(88, 166, 255, 0.08);
+      border-color: var(--accent);
+    }
+    .topology-tier .tier-name { font-weight: 600; color: var(--bright); }
+    .topology-tier .tier-desc { font-size: 0.68rem; color: var(--muted); }
+    .backup-item {
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      margin-bottom: 4px;
+      font-size: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+    .backup-item .backup-fn { font-family: monospace; color: var(--bright); word-break: break-all; }
+    .backup-item .backup-meta { font-size: 0.68rem; color: var(--muted); }
 
     .client-list { list-style: none; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
     .client-card {
@@ -976,6 +1025,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
   <header>
     <h1>spec-memo <span>Status Monitor <span class="version-tag">(status monitor ${versionLabel})</span></span></h1>
     <div class="badges">
+      <span id="topology-badge" class="badge badge-emerald">LOCAL VAULT (Standalone)</span>
       <span id="stream-badge" class="badge offline">Offline</span>
       <span id="server-badge" class="badge">Checking…</span>
     </div>
@@ -994,10 +1044,30 @@ export function generateStatusHtml(version = getPackageVersion()): string {
   <main id="tab-activity" class="tab-content active">
     <aside>
       <div class="panel">
+        <h2>Architecture & Topology</h2>
+        <div class="topology-card" id="topology-card">
+          <div class="topology-tier active" id="tier-local">
+            <span class="badge badge-emerald" style="padding:1px 6px;font-size:0.62rem;">Mode 1</span>
+            <div><div class="tier-name">Local Vault</div><div class="tier-desc">Only local files (~/.spec-memo/)</div></div>
+          </div>
+          <div class="topology-tier" id="tier-proxy">
+            <span class="badge badge-amber" style="padding:1px 6px;font-size:0.62rem;">Mode 2</span>
+            <div><div class="tier-name">Intermediary Proxy / Hybrid</div><div class="tier-desc">Caches locally, syncs to remote</div></div>
+          </div>
+          <div class="topology-tier" id="tier-remote">
+            <span class="badge badge-indigo" style="padding:1px 6px;font-size:0.62rem;">Mode 3</span>
+            <div><div class="tier-name">Final Remote Master</div><div class="tier-desc">Authoritative memory source & backup</div></div>
+          </div>
+          <div class="helper-text" id="topology-summary" style="margin-top:6px;">Self-contained local filesystem store with local FTS5 indexing.</div>
+        </div>
+      </div>
+
+      <div class="panel">
         <h2>Server</h2>
         <div class="stat-grid">
           <div class="stat"><label>Status</label><div class="value" id="stat-status">—</div></div>
           <div class="stat"><label>Version</label><div class="value" id="stat-version">${versionLabel}</div></div>
+          <div class="stat"><label>Topology Role</label><div class="value" id="stat-role">—</div></div>
           <div class="stat"><label>MCP SSE</label><div class="value" id="stat-mcp">—</div></div>
           <div class="stat"><label>Active Clients</label><div class="value" id="stat-clients">—</div></div>
           <div class="stat"><label>Vaults</label><div class="value" id="stat-vaults">—</div></div>
@@ -1017,17 +1087,36 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         <div class="filter-context" id="filter-context"></div>
       </div>
       <div class="panel">
-        <h2>Vault backup</h2>
-        <button type="button" id="btn-export" disabled>Export vault</button>
+        <h2>Vault Backup & Restore</h2>
+        <button type="button" id="btn-export" disabled>Export selected vault</button>
         <div class="helper-text" id="export-helper">Select a vault above to export</div>
 
-        <div class="import-section" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);">
-          <input type="file" id="input-import-file" accept=".zip,application/zip" style="display: none;">
-          <button type="button" id="btn-choose-file" class="btn-secondary">Choose backup zip…</button>
+        <div class="import-section" style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);">
+          <input type="file" id="input-import-file" accept=".zip,application/zip,.json,application/json" style="display: none;">
+          <button type="button" id="btn-choose-file" class="btn-secondary">Upload & Restore Archive…</button>
           <div id="import-filename" class="helper-text" style="display: none; word-break: break-all;"></div>
-          <button type="button" id="btn-run-import" class="btn-primary" style="display: none;" disabled>Run import</button>
+          <button type="button" id="btn-run-import" class="btn-primary" style="display: none;" disabled>Run restore</button>
+        </div>
+
+        <div class="backups-section" style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="font-size:0.75rem; color:var(--muted); text-transform:uppercase; font-weight:600;">Saved Backups</label>
+            <button type="button" id="btn-refresh-backups" class="btn-secondary" style="width:auto; margin:0; padding:2px 8px; font-size:0.7rem;">Refresh</button>
+          </div>
+          <div id="backups-list" style="max-height:160px; overflow-y:auto;">
+            <div class="helper-text">Loading backups…</div>
+          </div>
         </div>
       </div>
+
+      <div class="panel" style="border: 1px solid rgba(248, 81, 73, 0.35); border-radius: 8px; padding: 12px; background: rgba(248, 81, 73, 0.04);">
+        <h2 style="color: var(--err);">Danger Zone</h2>
+        <button type="button" id="btn-open-reset" class="btn-secondary" style="border-color: var(--err); color: #ffb4b0; margin-top:4px;">Reset Database / Clear Files…</button>
+        <div class="helper-text" style="color: var(--muted); font-size: 0.72rem; margin-top: 6px;">
+          Wipes records and SQLite DB after generating a mandatory pre-wipe backup snapshot.
+        </div>
+      </div>
+
       <div class="panel">
         <h2>Vault projects</h2>
         <ul class="vault-list" id="vault-list"></ul>
@@ -1275,6 +1364,41 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div class="modal-actions">
         <button type="button" id="btn-import-cancel" class="btn-secondary">Cancel</button>
         <button type="button" id="btn-import-confirm" class="btn-primary">Confirm & Restore</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset Modal -->
+  <div id="modal-reset" class="modal-overlay">
+    <div class="modal-card" style="border-color: var(--err);">
+      <h3 style="color: var(--err);">Confirm Vault Reset</h3>
+      <p style="font-size: 0.85rem; color: var(--text); line-height: 1.4; margin-bottom: 10px;">
+        This action will <strong>completely wipe all memory records and SQLite search databases</strong>.
+      </p>
+      <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; font-size: 0.78rem; color: #a7f3d0;">
+        <strong>Safety Guarantee:</strong> An automatic pre-wipe backup snapshot (<code>YYYY-MM-DD-HH-mm-ss-backup.zip</code>) will be created in <code>$SPEC_MEMO_ROOT/backups/</code> before wiping.
+      </div>
+      <label for="reset-password">Archive Encryption Password (optional):</label>
+      <input type="password" id="reset-password" placeholder="Leave empty for unencrypted backup" autocomplete="new-password">
+      <div class="modal-actions">
+        <button type="button" id="btn-reset-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-reset-confirm" class="btn-primary" style="background: #da3633; border-color: #f85149;">Confirm & Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Restore Named Backup Modal -->
+  <div id="modal-restore-named" class="modal-overlay">
+    <div class="modal-card">
+      <h3 id="modal-restore-named-title">Restore Backup</h3>
+      <p id="modal-restore-named-desc" style="font-size: 0.85rem; color: var(--text); line-height: 1.4; margin-bottom: 10px;">
+        Restore this backup archive into the local vault?
+      </p>
+      <label for="restore-named-password">Decryption Password (if encrypted):</label>
+      <input type="password" id="restore-named-password" placeholder="Password (if encrypted)" autocomplete="current-password">
+      <div class="modal-actions">
+        <button type="button" id="btn-restore-named-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-restore-named-confirm" class="btn-primary">Restore</button>
       </div>
     </div>
   </div>
@@ -1599,6 +1723,37 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         document.getElementById("stat-buffered").textContent = String(st.eventsBuffered || 0);
         document.getElementById("stat-clients").textContent = String(st.activeClientsCount || 0);
         renderClients(st.clients || []);
+
+        if (st.topology) {
+          const t = st.topology;
+          const topBadge = document.getElementById("topology-badge");
+          if (topBadge) {
+            topBadge.className = "badge " + (
+              t.role === 'final-remote' ? 'badge-indigo' :
+              t.role === 'intermediary-proxy' ? 'badge-amber' :
+              'badge-emerald'
+            );
+            if (t.role === 'intermediary-proxy' && t.upstreamRemoteUrl) {
+              topBadge.textContent = "INTERMEDIARY PROXY → " + t.upstreamRemoteUrl.replace("https://", "").replace("http://", "");
+            } else if (t.role === 'final-remote') {
+              topBadge.textContent = "FINAL REMOTE MASTER VAULT";
+            } else {
+              topBadge.textContent = "LOCAL VAULT (Standalone)";
+            }
+          }
+
+          const tierLocal = document.getElementById("tier-local");
+          const tierProxy = document.getElementById("tier-proxy");
+          const tierRemote = document.getElementById("tier-remote");
+          const topSummary = document.getElementById("topology-summary");
+
+          if (tierLocal) tierLocal.classList.toggle("active", t.role === 'local-vault');
+          if (tierProxy) tierProxy.classList.toggle("active", t.role === 'intermediary-proxy');
+          if (tierRemote) tierRemote.classList.toggle("active", t.role === 'final-remote');
+          if (topSummary) topSummary.textContent = t.description + (t.syncSummary ? " (" + t.syncSummary + ")" : "");
+          const statRole = document.getElementById("stat-role");
+          if (statRole) statRole.textContent = t.roleLabel || t.role;
+        }
       } catch {
         document.getElementById("server-badge").textContent = "Offline";
         document.getElementById("server-badge").className = "badge offline";
@@ -2200,6 +2355,165 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     });
 
+    let savedBackups = [];
+    let selectedRestoreBackup = null;
+
+    async function loadBackups() {
+      const listEl = document.getElementById("backups-list");
+      if (!listEl) return;
+      try {
+        const res = await apiFetch("/api/vaults/backups", { headers: apiHeaders() });
+        if (!res.ok) {
+          listEl.innerHTML = '<div class="helper-text">Failed to load backups</div>';
+          return;
+        }
+        const data = await res.json();
+        savedBackups = data.backups || [];
+        if (savedBackups.length === 0) {
+          listEl.innerHTML = '<div class="helper-text">No backups created yet</div>';
+          return;
+        }
+        listEl.innerHTML = "";
+        for (const b of savedBackups) {
+          const item = document.createElement("div");
+          item.className = "backup-item";
+          const sizeKb = Math.max(1, Math.round(b.size / 1024));
+          const dateStr = b.createdAt ? (b.createdAt.length >= 19 ? b.createdAt.slice(0, 19).replace('T', ' ') : b.createdAt) : "";
+          item.innerHTML =
+            '<div style="min-width:0; flex:1;">' +
+              '<div class="backup-fn" title="' + escapeHtml(b.filename) + '">' + escapeHtml(b.filename) + '</div>' +
+              '<div class="backup-meta">' + escapeHtml(dateStr) + ' · ' + sizeKb + ' KB</div>' +
+            '</div>' +
+            '<button type="button" class="btn-secondary btn-restore-item" data-fn="' + escapeHtml(b.filename) + '" style="width:auto; margin:0; padding:2px 8px; font-size:0.7rem;">Restore</button>';
+          listEl.appendChild(item);
+        }
+
+        listEl.querySelectorAll(".btn-restore-item").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const fn = btn.getAttribute("data-fn");
+            selectedRestoreBackup = fn;
+            const modal = document.getElementById("modal-restore-named");
+            document.getElementById("modal-restore-named-title").textContent = "Restore " + fn;
+            document.getElementById("modal-restore-named-desc").textContent =
+              "Restore backup archive " + fn + " into the local vault? Records will be updated.";
+            document.getElementById("restore-named-password").value = "";
+            modal.classList.add("open");
+            document.getElementById("restore-named-password").focus();
+          });
+        });
+      } catch (err) {
+        listEl.innerHTML = '<div class="helper-text">Error loading backups</div>';
+      }
+    }
+
+    const btnRefreshBackups = document.getElementById("btn-refresh-backups");
+    if (btnRefreshBackups) {
+      btnRefreshBackups.addEventListener("click", () => loadBackups());
+    }
+
+    // Reset Vault Modal & Confirmation
+    const modalReset = document.getElementById("modal-reset");
+    const btnOpenReset = document.getElementById("btn-open-reset");
+    const btnResetCancel = document.getElementById("btn-reset-cancel");
+    const btnResetConfirm = document.getElementById("btn-reset-confirm");
+    const resetPasswordInput = document.getElementById("reset-password");
+
+    if (btnOpenReset) {
+      btnOpenReset.addEventListener("click", () => {
+        resetPasswordInput.value = "";
+        modalReset.classList.add("open");
+        resetPasswordInput.focus();
+      });
+    }
+    if (btnResetCancel) {
+      btnResetCancel.addEventListener("click", () => {
+        modalReset.classList.remove("open");
+      });
+    }
+    if (btnResetConfirm) {
+      btnResetConfirm.addEventListener("click", async () => {
+        btnResetConfirm.disabled = true;
+        btnResetConfirm.textContent = "Resetting…";
+        modalReset.classList.remove("open");
+        try {
+          const res = await apiFetch("/api/vaults/reset", {
+            method: "POST",
+            headers: { ...apiHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({
+              confirm: true,
+              password: resetPasswordInput.value || undefined
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            showBanner(data.error || "Vault reset failed", "error");
+            return;
+          }
+          showBanner(
+            "Vault reset complete: pre-wipe backup saved as " + data.backupFilename + " (wiped " + data.wipedRecordsCount + " records across " + data.wipedProjectsCount + " projects)",
+            "success"
+          );
+          await loadVaults();
+          await loadBackups();
+          await refreshStatus();
+        } catch (err) {
+          showBanner("Reset failed: " + (err.message || String(err)), "error");
+        } finally {
+          btnResetConfirm.disabled = false;
+          btnResetConfirm.textContent = "Confirm & Reset";
+        }
+      });
+    }
+
+    // Restore Named Backup Modal Handlers
+    const modalRestoreNamed = document.getElementById("modal-restore-named");
+    const btnRestoreNamedCancel = document.getElementById("btn-restore-named-cancel");
+    const btnRestoreNamedConfirm = document.getElementById("btn-restore-named-confirm");
+    const restoreNamedPassword = document.getElementById("restore-named-password");
+
+    if (btnRestoreNamedCancel) {
+      btnRestoreNamedCancel.addEventListener("click", () => {
+        modalRestoreNamed.classList.remove("open");
+        selectedRestoreBackup = null;
+      });
+    }
+    if (btnRestoreNamedConfirm) {
+      btnRestoreNamedConfirm.addEventListener("click", async () => {
+        if (!selectedRestoreBackup) return;
+        btnRestoreNamedConfirm.disabled = true;
+        btnRestoreNamedConfirm.textContent = "Restoring…";
+        modalRestoreNamed.classList.remove("open");
+        try {
+          const res = await apiFetch("/api/vaults/restore", {
+            method: "POST",
+            headers: { ...apiHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({
+              backupFilename: selectedRestoreBackup,
+              password: restoreNamedPassword.value || undefined
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            showBanner(data.error || "Restore failed", "error");
+            return;
+          }
+          showBanner(
+            "Restore successful: restored " + data.restoredRecordsCount + " records across " + data.restoredProjectsCount + " project(s)",
+            "success"
+          );
+          await loadVaults();
+          await loadBackups();
+          await refreshStatus();
+        } catch (err) {
+          showBanner("Restore failed: " + (err.message || String(err)), "error");
+        } finally {
+          btnRestoreNamedConfirm.disabled = false;
+          btnRestoreNamedConfirm.textContent = "Restore";
+          selectedRestoreBackup = null;
+        }
+      });
+    }
+
     document.getElementById("vault-filter").addEventListener("change", (e) => {
       setProjectFilter(e.target.value);
     });
@@ -2216,6 +2530,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     });
 
     loadVaults().then(() => {
+      loadBackups();
       reconnectStream(true);
       refreshStatus();
       setInterval(refreshStatus, 3000);
@@ -2424,12 +2739,61 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const projects = getVaultProjectList(vaultRoot);
         const mcp = options.getMcp?.();
         const clients = bus.listClients();
+        const config = ensureVaultStructure(vaultRoot);
+        const mode = (config.mode as 'local' | 'hybrid' | 'remote') || 'local';
+        const isProxy = Boolean(options.isProxy || mode === 'remote');
+        const isRemoteDaemon = Boolean(options.isDaemon || (mode === 'local' && mcp?.available));
+
+        let role: TopologyRole;
+        let roleLabel: string;
+        let description: string;
+        let upstreamRemoteUrl: string | null = null;
+        let syncSummary: string | undefined;
+
+        if (mode === 'remote' || isProxy) {
+          role = 'intermediary-proxy';
+          roleLabel = 'Intermediary Proxy / Client Node';
+          upstreamRemoteUrl = config.remote?.url || null;
+          description = 'Intermediary proxy node forwarding MCP requests to upstream master daemon.';
+          syncSummary = upstreamRemoteUrl ? `Forwarding to ${upstreamRemoteUrl}` : 'Upstream remote not configured';
+        } else if (mode === 'hybrid') {
+          role = 'intermediary-proxy';
+          roleLabel = 'Intermediary Proxy / Sync Node';
+          upstreamRemoteUrl = config.remote?.url || null;
+          description = 'Hybrid node caching memory locally and synchronizing deltas with remote master daemon.';
+          syncSummary = upstreamRemoteUrl ? `Syncing with ${upstreamRemoteUrl}` : 'Upstream sync origin not configured';
+        } else {
+          if (options.isDaemon) {
+            role = 'final-remote';
+            roleLabel = 'Final Remote Master Vault';
+            description = 'Authoritative central master repository and ultimate backup source of memory.';
+          } else {
+            role = 'local-vault';
+            roleLabel = 'Local Vault (Standalone)';
+            description = 'Self-contained local filesystem store with local FTS5 indexing.';
+          }
+        }
+
+        const topology: TopologyInfo = {
+          mode,
+          role,
+          roleLabel,
+          upstreamRemoteUrl,
+          isProxy,
+          isRemoteDaemon,
+          syncSummary,
+          description
+        };
+
         writeJson(res, 200, {
           status: "ok",
           service: "spec-memo-status-monitor",
           version: packageVersion,
           host,
           port: (server.address() as { port: number } | null)?.port ?? port,
+          mode,
+          role,
+          topology,
           mcp: mcp?.available
             ? {
                 host: mcp.host,
@@ -2688,6 +3052,198 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             ok: false,
             durationMs: Date.now() - startTime,
             summary: `import vault failed: ${msg}`
+          });
+
+          writeJson(res, statusCode, { ok: false, error: msg });
+        }
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/vaults/backups") {
+        try {
+          const backups = listBackups(vaultRoot);
+          writeJson(res, 200, { ok: true, backups });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, 500, { ok: false, error: msg });
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/reset") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 1024 * 1024);
+          let parsed: { projectId?: string; password?: string; confirm?: boolean; all?: boolean } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, { ok: false, error: "Invalid JSON body" });
+              return;
+            }
+          }
+
+          if (parsed.confirm !== true) {
+            writeJson(res, 400, { ok: false, error: "Reset confirmation required (confirm: true)." });
+            return;
+          }
+
+          const resetResult = await resetVault({
+            vaultRoot,
+            projectId: parsed.projectId || undefined,
+            all: parsed.all ?? (!parsed.projectId),
+            password: parsed.password || undefined
+          });
+
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `vault reset: created backup ${resetResult.backupFilename}, wiped ${resetResult.wipedRecordsCount} records across ${resetResult.wipedProjectsCount} projects`,
+            projectId: resetResult.projectId
+          });
+
+          writeJson(res, 200, {
+            ok: true,
+            vaultRoot: resetResult.vaultRoot,
+            projectId: resetResult.projectId,
+            backupFilename: resetResult.backupFilename,
+            backupPath: resetResult.backupPath,
+            wipedProjectsCount: resetResult.wipedProjectsCount,
+            wipedRecordsCount: resetResult.wipedRecordsCount,
+            rebuiltFts: resetResult.rebuiltFts
+          });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/reset",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: false,
+            durationMs: Date.now() - startTime,
+            summary: `vault reset failed: ${msg}`
+          });
+
+          writeJson(res, 500, { ok: false, error: msg });
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/restore") {
+        const startTime = Date.now();
+        try {
+          const ct = String(req.headers["content-type"] || "");
+          let archivePath: string | undefined;
+          let payload: string | undefined;
+          let password: string | undefined;
+          let overwrite = true;
+
+          if (ct.includes("multipart/form-data")) {
+            const boundaryMatch = ct.match(/boundary=([^;]+)/i);
+            if (!boundaryMatch) {
+              writeJson(res, 400, { ok: false, error: "Missing multipart boundary" });
+              return;
+            }
+            const bodyBuf = await readBodyBuffer(req, 50 * 1024 * 1024);
+            const parsed = parseMultipartFormData(bodyBuf, boundaryMatch[1]);
+            const fileEntry = parsed.files["archive"] || parsed.files["file"] || Object.values(parsed.files)[0];
+            if (!fileEntry) {
+              writeJson(res, 400, { ok: false, error: "Missing archive file in multipart form" });
+              return;
+            }
+            const fileBuf = fileEntry.data;
+            if (
+              (fileBuf.length >= 4 && fileBuf[0] === 0x50 && fileBuf[1] === 0x4b && fileBuf[2] === 0x03 && fileBuf[3] === 0x04) ||
+              (fileEntry.filename && fileEntry.filename.toLowerCase().endsWith(".zip"))
+            ) {
+              payload = unpackVaultZip(fileBuf);
+            } else {
+              payload = fileBuf.toString("utf8");
+            }
+            password = parsed.fields["password"] || undefined;
+            if (parsed.fields["overwrite"] !== undefined) {
+              overwrite = parsed.fields["overwrite"] !== "false";
+            }
+          } else {
+            const rawBody = await readBodyBuffer(req, 1024 * 1024);
+            let parsed: { backupFilename?: string; archivePath?: string; password?: string; overwrite?: boolean } = {};
+            if (rawBody.length > 0) {
+              try {
+                parsed = JSON.parse(rawBody.toString("utf8"));
+              } catch {
+                writeJson(res, 400, { ok: false, error: "Invalid JSON body" });
+                return;
+              }
+            }
+
+            if (parsed.backupFilename) {
+              const safeFn = path.basename(parsed.backupFilename);
+              const backupsDir = path.join(vaultRoot, "backups");
+              archivePath = path.join(backupsDir, safeFn);
+            } else if (parsed.archivePath) {
+              archivePath = parsed.archivePath;
+            } else {
+              writeJson(res, 400, { ok: false, error: "Either backupFilename, archivePath, or multipart file must be provided." });
+              return;
+            }
+            password = parsed.password || undefined;
+            if (parsed.overwrite !== undefined) {
+              overwrite = parsed.overwrite;
+            }
+          }
+
+          const importResult = await importVault({
+            vaultRoot,
+            archivePath,
+            payload,
+            password,
+            overwrite
+          });
+
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `restore vault (${importResult.restoredRecordsCount} records across ${importResult.restoredProjectsCount} projects)`
+          });
+
+          writeJson(res, 200, {
+            ok: true,
+            restoredProjectsCount: importResult.restoredProjectsCount,
+            restoredRecordsCount: importResult.restoredRecordsCount,
+            restoredProjects: importResult.restoredProjects,
+            rebuiltFts: importResult.rebuiltFts
+          });
+        } catch (err: unknown) {
+          const statusCode = (err as any)?.statusCode === 413 ? 413 : 400;
+          const msg = err instanceof Error ? err.message : String(err);
+
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/restore",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: false,
+            durationMs: Date.now() - startTime,
+            summary: `restore vault failed: ${msg}`
           });
 
           writeJson(res, statusCode, { ok: false, error: msg });

@@ -947,6 +947,126 @@ describe('CLI Integration', () => {
       } catch {}
     }
   });
+
+  it('should support memo reset, backups, and restore CLI commands', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-reset-'));
+    const tempVault = path.join(tempDir, 'vault');
+    const tempRepo = path.join(tempDir, 'repo');
+    fs.mkdirSync(tempVault, { recursive: true });
+    fs.mkdirSync(tempRepo, { recursive: true });
+
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+
+    try {
+      // 1. Verify help outputs
+      capturedLogs = '';
+      const resetHelp = await runCli(['reset', '--help']);
+      assert.equal(resetHelp, 0);
+      assert.ok(capturedLogs.includes('Usage: memo reset'));
+
+      capturedLogs = '';
+      const restoreHelp = await runCli(['restore', '--help']);
+      assert.equal(restoreHelp, 0);
+      assert.ok(capturedLogs.includes('Usage: memo restore'));
+
+      capturedLogs = '';
+      const backupsHelp = await runCli(['backups', '--help']);
+      assert.equal(backupsHelp, 0);
+      assert.ok(capturedLogs.includes('Usage: memo backups'));
+
+      // 2. Upsert a trap record
+      capturedLogs = '';
+      const upCode = await runCli([
+        'upsert',
+        '--kind',
+        'trap',
+        '--title',
+        'CLI Reset Trap',
+        '--severity',
+        'high',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json',
+        'Body of CLI trap'
+      ]);
+      assert.equal(upCode, 0);
+
+      // 3. Reset vault with --force
+      capturedLogs = '';
+      const resetCode = await runCli([
+        'reset',
+        '--all',
+        '--force',
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(resetCode, 0);
+      const resetRes = JSON.parse(capturedLogs.trim());
+      assert.equal(resetRes.ok, true);
+      assert.ok(resetRes.backupFilename.endsWith('.zip'));
+      assert.equal(resetRes.wipedRecordsCount, 1);
+
+      // 4. List backups via CLI
+      capturedLogs = '';
+      const backupsCode = await runCli([
+        'backups',
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(backupsCode, 0);
+      const backupsRes = JSON.parse(capturedLogs.trim());
+      assert.equal(backupsRes.ok, true);
+      assert.ok(backupsRes.backups.length >= 1);
+      assert.equal(backupsRes.backups[0].filename, resetRes.backupFilename);
+
+      // 5. Restore from latest backup via CLI
+      capturedLogs = '';
+      const restoreCode = await runCli([
+        'restore',
+        '--latest',
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(restoreCode, 0);
+      const restoreRes = JSON.parse(capturedLogs.trim());
+      assert.equal(restoreRes.restoredRecordsCount, 1);
+
+      // Verify search finds the restored trap
+      capturedLogs = '';
+      const searchCode = await runCli([
+        'search',
+        'Reset Trap',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(searchCode, 0);
+      const searchRes = JSON.parse(capturedLogs.trim());
+      assert.ok(Array.isArray(searchRes));
+      assert.equal(searchRes.length, 1);
+    } finally {
+      console.log = origLog;
+      try {
+        const { closeIndex } = await import('./indexer.js');
+        closeIndex(tempVault);
+      } catch {}
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+    }
+  });
 });
+
 
 

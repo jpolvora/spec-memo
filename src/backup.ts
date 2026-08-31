@@ -6,6 +6,9 @@ import {
   ExportVaultResult,
   ImportVaultOptions,
   ImportVaultResult,
+  ResetVaultOptions,
+  ResetVaultResult,
+  BackupFileInfo,
   VaultConfig
 } from './types.js';
 import { getVaultRoot, ensureVaultStructure, withVaultLock, commitVaultChange } from './vault.js';
@@ -14,6 +17,7 @@ import { rebuildIndex } from './indexer.js';
 import { isPathInside, assertNoSecrets, assertValidProjectId } from './safety.js';
 import { parseRecord, validateFrontmatter } from './schema.js';
 import { upsertRecord } from './store.js';
+import { packVaultZip, unpackVaultZip } from './status-backup.js';
 
 interface RawVaultRecord {
   relativePath: string;
@@ -96,6 +100,20 @@ function decryptPayload(archive: EncryptedVaultArchive, password: string): strin
   } catch {
     throw new Error('Decryption failed: Incorrect password or corrupted backup archive.');
   }
+}
+
+/**
+ * Format timestamped backup filename adhering to pattern YYYY-MM-DD-HH-mm-ss-backup.zip
+ */
+export function formatBackupFilename(date: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  const mm = pad(date.getMonth() + 1);
+  const dd = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const min = pad(date.getMinutes());
+  const ss = pad(date.getSeconds());
+  return `${yyyy}-${mm}-${dd}-${hh}-${min}-${ss}-backup.zip`;
 }
 
 /**
@@ -226,7 +244,7 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
 }
 
 /**
- * Import a vault archive bundle (plaintext or encrypted) into the local vault.
+ * Import a vault archive bundle (plaintext or encrypted, ZIP or JSON) into the local vault.
  */
 export async function importVault(options: ImportVaultOptions = {}): Promise<ImportVaultResult> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
@@ -239,7 +257,19 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
       if (!fs.existsSync(resolvedPath)) {
         throw new Error(`Vault archive file not found: ${resolvedPath}`);
       }
-      rawData = fs.readFileSync(resolvedPath, 'utf8');
+      const fileBuf = fs.readFileSync(resolvedPath);
+      if (
+        (fileBuf.length >= 4 &&
+          fileBuf[0] === 0x50 &&
+          fileBuf[1] === 0x4b &&
+          fileBuf[2] === 0x03 &&
+          fileBuf[3] === 0x04) ||
+        resolvedPath.toLowerCase().endsWith('.zip')
+      ) {
+        rawData = unpackVaultZip(fileBuf);
+      } else {
+        rawData = fileBuf.toString('utf8');
+      }
     } else if (options.payload) {
       rawData = options.payload;
     } else {
@@ -349,4 +379,174 @@ export async function importVault(options: ImportVaultOptions = {}): Promise<Imp
       rebuiltFts: true
     };
   });
+}
+
+/**
+ * Alias for importVault for semantic restoration operations.
+ */
+export const restoreVault = importVault;
+
+/**
+ * Complete database reset and file clear with mandatory pre-wipe timestamped backup.
+ */
+export async function resetVault(options: ResetVaultOptions = {}): Promise<ResetVaultResult> {
+  const vaultRoot = options.vaultRoot || getVaultRoot();
+  return withVaultLock(vaultRoot, async () => {
+    ensureVaultStructure(vaultRoot);
+
+    const backupsDir = options.backupDir || path.join(vaultRoot, 'backups');
+    if (!fs.existsSync(backupsDir)) {
+      fs.mkdirSync(backupsDir, { recursive: true });
+    }
+
+    const backupFilename = formatBackupFilename();
+    const backupPath = path.join(backupsDir, backupFilename);
+
+    // 1. Mandatory Pre-Wipe Backup
+    // Perform full export of the entire vault or target project before any modifications
+    const exportRes = await exportVault({
+      vaultRoot,
+      projectId: options.all ? undefined : options.projectId,
+      password: options.password
+    });
+
+    if (!exportRes.payload) {
+      throw new Error('Pre-wipe backup failed: Export payload was empty.');
+    }
+
+    // Pack into ZIP archive
+    const zipBuf = packVaultZip(exportRes.payload);
+    fs.writeFileSync(backupPath, zipBuf);
+
+    // Verify backup on disk
+    if (!fs.existsSync(backupPath) || fs.statSync(backupPath).size === 0) {
+      throw new Error('Pre-wipe backup failed: Backup archive was not created on disk.');
+    }
+
+    let wipedProjectsCount = 0;
+    let wipedRecordsCount = 0;
+
+    if (options.projectId && !options.all) {
+      // Single project reset
+      const projDir = path.join(vaultRoot, 'projects', options.projectId);
+      if (fs.existsSync(projDir)) {
+        const recordDirs = ['traps', 'decisions', 'specs', 'plans', 'logs', 'reviews', 'scratch'];
+        for (const dir of recordDirs) {
+          const sub = path.join(projDir, dir);
+          if (fs.existsSync(sub)) {
+            const files = fs.readdirSync(sub).filter((f) => f.endsWith('.md'));
+            wipedRecordsCount += files.length;
+          }
+        }
+        fs.rmSync(projDir, { recursive: true, force: true });
+        wipedProjectsCount = 1;
+      }
+    } else {
+      // Full vault reset: wipe all projects
+      const projectsDir = path.join(vaultRoot, 'projects');
+      if (fs.existsSync(projectsDir)) {
+        const projs = fs.readdirSync(projectsDir);
+        for (const p of projs) {
+          const pDir = path.join(projectsDir, p);
+          try {
+            if (fs.statSync(pDir).isDirectory()) {
+              wipedProjectsCount++;
+              const recordDirs = ['traps', 'decisions', 'specs', 'plans', 'logs', 'reviews', 'scratch'];
+              for (const dir of recordDirs) {
+                const sub = path.join(pDir, dir);
+                if (fs.existsSync(sub)) {
+                  const files = fs.readdirSync(sub).filter((f) => f.endsWith('.md'));
+                  wipedRecordsCount += files.length;
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+        fs.rmSync(projectsDir, { recursive: true, force: true });
+      }
+
+      // Drop SQLite database files
+      try {
+        const filesInVault = fs.readdirSync(vaultRoot);
+        for (const f of filesInVault) {
+          if (f.startsWith('memo.sqlite')) {
+            try {
+              fs.rmSync(path.join(vaultRoot, f), { force: true });
+            } catch {
+              // ignore
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // Clear hybrid sync cursors / state if any
+      const syncDir = path.join(vaultRoot, '.sync');
+      if (fs.existsSync(syncDir)) {
+        fs.rmSync(syncDir, { recursive: true, force: true });
+      }
+      const hybridState = path.join(vaultRoot, 'hybrid-state.json');
+      if (fs.existsSync(hybridState)) {
+        fs.rmSync(hybridState, { force: true });
+      }
+    }
+
+    // Reinitialize empty vault structure and empty SQLite FTS5 database
+    ensureVaultStructure(vaultRoot);
+    await rebuildIndex(vaultRoot);
+
+    commitVaultChange('reset vault', vaultRoot, ['projects']);
+
+    return {
+      ok: true,
+      vaultRoot,
+      projectId: options.all ? undefined : options.projectId,
+      backupFilename,
+      backupPath,
+      wipedProjectsCount,
+      wipedRecordsCount,
+      rebuiltFts: true
+    };
+  });
+}
+
+/**
+ * List all backup archives available in the vault's backups/ directory.
+ */
+export function listBackups(vaultRoot?: string): BackupFileInfo[] {
+  const root = vaultRoot || getVaultRoot();
+  const backupsDir = path.join(root, 'backups');
+  if (!fs.existsSync(backupsDir)) {
+    return [];
+  }
+
+  const entries = fs.readdirSync(backupsDir);
+  const results: BackupFileInfo[] = [];
+
+  for (const entry of entries) {
+    if (entry.endsWith('.zip') || entry.endsWith('.json')) {
+      const fullPath = path.join(backupsDir, entry);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile()) {
+          results.push({
+            filename: entry,
+            path: fullPath,
+            size: stat.size,
+            createdAt: stat.mtime.toISOString(),
+            isZip: entry.endsWith('.zip')
+          });
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  // Sort chronologically descending (newest first)
+  results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return results;
 }

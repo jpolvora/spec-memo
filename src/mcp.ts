@@ -215,7 +215,16 @@ export function createMcpServer(opts: {
   return server;
 }
 
-export async function startMcpServer(options: { vaultRoot?: string; errorLogPath?: string } = {}): Promise<void> {
+export async function startMcpServer(
+  options: {
+    vaultRoot?: string;
+    errorLogPath?: string;
+    enableStatus?: boolean;
+    statusPort?: number;
+    statusHost?: string;
+    statusAuthToken?: string;
+  } = {}
+): Promise<void> {
   const vaultRoot = getVaultRoot(options.vaultRoot);
   const config = ensureVaultStructure(vaultRoot);
 

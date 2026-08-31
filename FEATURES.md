@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.10.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.12.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -133,6 +133,9 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] **MCP status monitor.** Companion HTTP page (default `:3001`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream).
 - [x] **Status monitor vault backup UI.** Zero-friction export (.zip with `vault-backup.json`, optional AES-256-GCM) and restore (multipart .zip upload with confirmation and overwrite) from the `:3001` status page.
 - [x] **Status monitor client tracking & request visibility.** Real-time tracking of active and recent vault clients (proxy vs direct-remote badges, client IP, client name, bound vault, active status, request count) with rich display of all HTTP endpoints and MCP commands in the live activity log (`GET /api/clients`, `GET /api/status`).
+- [x] **Complete Vault Database Reset with Mandatory Pre-Wipe Backup.** Complete database reset and disk clean (`memo reset`, `POST /api/vaults/reset`) with automatic pre-wipe backup snapshots stored as `{YYYY-MM-DD-HH-mm-ss-backup}.zip` in `$SPEC_MEMO_ROOT/backups/`, unlinking records, compiled views, and SQLite databases while strictly preserving `config.json` and `backups/`.
+- [x] **Full Backup Restoration Engine & Management.** Seamless restoration from ZIP archives and raw payloads (`memo restore`, `memo backups`, `GET /api/vaults/backups`, `POST /api/vaults/restore`) supporting one-click restoration from saved backups and `--latest` restore flag.
+- [x] **Proxy Instance Status Monitor & 3-Mode Architecture Topology.** `memo serve` in remote proxy mode co-hosts the `:3001` status monitor companion with local activity bus recording and visualizes the active deployment topology (Local Vault, Intermediary Proxy, Final Remote Master Vault) across dashboard cards and badges.
 
 ---
 

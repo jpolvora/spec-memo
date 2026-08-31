@@ -600,6 +600,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             authToken: statusAuth,
             activityBus: bus,
             errorLogPath,
+            isDaemon: true,
             getMcp: () => ({
               host,
               port: actualPort,
