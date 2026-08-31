@@ -3,6 +3,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import net from "node:net";
 import { ensureProjectVault } from "./vault.js";
 import { upsertRecord } from "./store.js";
 import { rebuildIndex, closeIndex } from "./indexer.js";
@@ -248,12 +249,24 @@ test("Canvas Engine & Graph Visualization", async (t) => {
     const customVault = path.join(tempDir, "canvas-custom-ports-vault");
     fs.mkdirSync(customVault, { recursive: true });
     const configPath = path.join(customVault, "config.json");
+
+    const getFreePort = (): Promise<number> =>
+      new Promise((resolve, reject) => {
+        const srv = net.createServer();
+        srv.listen(0, "127.0.0.1", () => {
+          const port = (srv.address() as net.AddressInfo).port;
+          srv.close((err) => (err ? reject(err) : resolve(port)));
+        });
+      });
+
+    const customCanvasPort = await getFreePort();
+
     fs.writeFileSync(
       configPath,
       JSON.stringify(
         {
           ports: {
-            canvas: 0
+            canvas: customCanvasPort
           }
         },
         null,
@@ -267,8 +280,8 @@ test("Canvas Engine & Graph Visualization", async (t) => {
     });
 
     try {
-      assert.ok(inst.port > 0);
-      assert.ok(inst.url.includes(`:${inst.port}`));
+      assert.strictEqual(inst.port, customCanvasPort);
+      assert.ok(inst.url.includes(`:${customCanvasPort}`));
     } finally {
       await inst.close();
     }

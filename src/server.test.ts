@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
+import net from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { ensureProjectVault } from "./vault.js";
@@ -435,13 +436,26 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     const customVault = path.join(tempDir, "custom-ports-vault");
     fs.mkdirSync(customVault, { recursive: true });
     const configPath = path.join(customVault, "config.json");
+
+    const getFreePort = (): Promise<number> =>
+      new Promise((resolve, reject) => {
+        const srv = net.createServer();
+        srv.listen(0, "127.0.0.1", () => {
+          const port = (srv.address() as net.AddressInfo).port;
+          srv.close((err) => (err ? reject(err) : resolve(port)));
+        });
+      });
+
+    const customSsePort = await getFreePort();
+    const customStatusPort = await getFreePort();
+
     fs.writeFileSync(
       configPath,
       JSON.stringify(
         {
           ports: {
-            sse: 0,
-            status: 0
+            sse: customSsePort,
+            status: customStatusPort
           }
         },
         null,
@@ -456,8 +470,8 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     });
 
     try {
-      assert.ok(sseInst.port > 0);
-      assert.ok(sseInst.statusPort && sseInst.statusPort > 0);
+      assert.strictEqual(sseInst.port, customSsePort);
+      assert.strictEqual(sseInst.statusPort, customStatusPort);
     } finally {
       await sseInst.close();
     }
