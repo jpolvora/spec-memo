@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-31 18:40] Agent: Cursor Grok 4.6
+- **Prompt**: Fix PR #30 review issues (closed without comments addressed), ship a new PR, converge threads
+- **Done**: `readVaultConfig` read-only loader for `memo status`; remote `/health` requires 2xx; `StatusResult.code=CONFIG_ERROR`; AC10 non-mutation tests; PRODUCT.PRD Done log row-index cleanup; bump 0.14.1
+- **Result**: Targeted status/vault tests 22 pass. Full suite pending ship gate.
+
 ### [2026-08-28 22:50] Agent: Cursor Grok 4.6
 - **Prompt**: Fix empty vaults/projects list on status monitor after 0.9.0/0.10.0
 - **Done**: `loadVaults` treats GET `/api/vaults` JSON array as the list (`Array.isArray(data) ? data : (data.vaults || [])`); HTML regression test

@@ -202,6 +202,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset with pre-wipe backup (`memo reset`), ZIP restore (`memo restore`), proxy status monitor on :3124, 3-mode topology | 0.12.0 |
 | 2026-08-31 | configurable-daemon-ports | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas) and CLI fallback | 0.13.0 |
 | 2026-08-31 | memo-status | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard | 0.14.0 |
+| 2026-08-31 | memo-status-pr30-review | Read-only status loader, remote `/health` 2xx, `CONFIG_ERROR`, AC10 tests | 0.14.1 |
+| 2026-08-31 | release-0.14.1 | PR #30 review fixes for memo status | 0.14.1 |
 
 ## Archive
 
