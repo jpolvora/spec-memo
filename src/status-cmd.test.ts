@@ -212,6 +212,55 @@ describe('status-cmd & CLI memo status', () => {
     }
   });
 
+  it('passes SPEC_MEMO_AUTH_TOKEN when probing the local status companion', async () => {
+    const token = 'status-probe-token';
+    const server = http.createServer((req, res) => {
+      const authorized = req.headers.authorization === `Bearer ${token}`;
+      if (req.url?.startsWith('/api/status')) {
+        if (authorized) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+        } else {
+          res.writeHead(401);
+          res.end('unauthorized');
+        }
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as { port: number }).port;
+    const prevAuth = process.env.SPEC_MEMO_AUTH_TOKEN;
+    const prevSse = process.env.SPEC_MEMO_SSE_TOKEN;
+
+    try {
+      process.env.SPEC_MEMO_AUTH_TOKEN = token;
+      delete process.env.SPEC_MEMO_SSE_TOKEN;
+      ensureVaultStructure(vaultRoot);
+      fs.writeFileSync(
+        path.join(vaultRoot, 'config.json'),
+        JSON.stringify({
+          version: '1.0',
+          mode: 'local',
+          ports: { sse: 59123, status: port, canvas: 59125 }
+        }),
+        'utf8'
+      );
+
+      const status = await runStatusCheck({ vaultRoot, cwd: repoDir });
+      assert.strictEqual(status.daemons.status.status, 'RUNNING');
+      assert.strictEqual(status.daemons.status.statusCode, 200);
+    } finally {
+      if (prevAuth !== undefined) process.env.SPEC_MEMO_AUTH_TOKEN = prevAuth;
+      else delete process.env.SPEC_MEMO_AUTH_TOKEN;
+      if (prevSse !== undefined) process.env.SPEC_MEMO_SSE_TOKEN = prevSse;
+      else delete process.env.SPEC_MEMO_SSE_TOKEN;
+      server.close();
+    }
+  });
+
   it('should treat local 401/404 as RUNNING liveness but requireOk as not running', async () => {
     const server = http.createServer((_req, res) => {
       res.writeHead(401);

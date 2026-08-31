@@ -112,6 +112,31 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   return result;
 }
 
+function isNoStatusOption(options: Record<string, unknown>): boolean {
+  return (
+    options['no-status'] === true ||
+    options['no-status'] === 'true' ||
+    options.noStatus === true
+  );
+}
+
+/** Stdio `memo serve` starts the status companion only when explicitly requested. */
+export function stdioServeEnablesStatus(options: Record<string, unknown>): boolean {
+  if (isNoStatusOption(options)) {
+    return false;
+  }
+  if (options.status === true || options.status === 'true') {
+    return true;
+  }
+  if (options['status-port'] != null && options['status-port'] !== false) {
+    return true;
+  }
+  if (options.statusPort != null && options.statusPort !== false) {
+    return true;
+  }
+  return false;
+}
+
 function printGeneralHelp(): void {
   console.log(`spec-memo — Local working memory for coding agents
 
@@ -212,8 +237,9 @@ Options:
   --sse           Run as HTTP / Server-Sent Events (SSE) server
   --port          Port to listen on (default 3123 for SSE, configurable via config.json)
   --host          Host address to bind (default 127.0.0.1)
+  --status        Start the status monitor companion (stdio serve; off by default)
   --status-port   Status monitor companion port (default 3124, configurable via config.json)
-  --no-status     Do not start the status monitor companion
+  --no-status     Do not start the status monitor companion (--sse default-on)
   --auth-token    Bearer token for SSE/status when binding beyond loopback
   --vaultRoot     Override vault root directory
   --json          Output server URL metadata as JSON
@@ -640,10 +666,7 @@ async function runCliInner(
       const authToken =
         (parsed.options['auth-token'] as string | undefined) ||
         (parsed.options.authToken as string | undefined);
-      const noStatus =
-        parsed.options['no-status'] === true ||
-        parsed.options['no-status'] === 'true' ||
-        parsed.options.noStatus === true;
+      const noStatus = isNoStatusOption(parsed.options);
       const statusPort = parsed.options['status-port']
         ? parseInt(String(parsed.options['status-port']), 10)
         : parsed.options.statusPort
@@ -705,10 +728,6 @@ async function runCliInner(
     }
 
     const vaultRoot = parsed.options.vaultRoot as string | undefined;
-    const noStatus =
-      parsed.options['no-status'] === true ||
-      parsed.options['no-status'] === 'true' ||
-      parsed.options.noStatus === true;
     const statusPort = parsed.options['status-port']
       ? parseInt(String(parsed.options['status-port']), 10)
       : parsed.options.statusPort
@@ -721,7 +740,7 @@ async function runCliInner(
 
     await startMcpServer({
       vaultRoot,
-      enableStatus: !noStatus,
+      enableStatus: stdioServeEnablesStatus(parsed.options),
       statusPort,
       statusHost,
       statusAuthToken

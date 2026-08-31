@@ -1,5 +1,20 @@
 # Changelog
 
+### [2026-08-31 19:22] Agent: Cursor Grok 4.6
+- **Prompt**: /ws-ship-pr
+- **Done**: Bump 0.14.1 → 0.14.2; ship stdio status companion opt-in and local probe auth
+- **Result**: See PR after create-pr
+
+### [2026-08-31 18:53] Agent: Cursor Grok 4.6
+- **Prompt**: Check SSE status UI errors, plan, and fix; restart local spec-memo SSE server UI
+- **Done**: Stdio `memo serve` no longer binds :3124 unless `--status`/`--status-port`; `memo status` sends Bearer on local probes; killed PID on :3124; started `memo serve --sse`
+- **Result**: :3123 `/health` and :3124 companion RUNNING (HTTP 200 with token). Login UI at http://127.0.0.1:3124/. Trap `stdio-serve-status-port-conflict`. Targeted cli+status-cmd 36 pass.
+
+### [2026-08-31 18:38] Agent: Cursor Grok 4.6
+- **Prompt**: Verify and fix missing `prompt-history-and-query` row 31 in PRODUCT.PRD Next specs (subsequent rows off by one)
+- **Done**: Inserted row 31 `prompt-history-and-query`; renumbered `vault-reset-and-proxy-monitor` to 32; rows 33–34 unchanged
+- **Result**: PRODUCT.PRD Next specs 0–34 now match `.agents/specs/index.PRD` row numbers and slugs
+
 ### [2026-08-31 18:45] Agent: Cursor Grok 4.6
 - **Prompt**: PR #31 review: CLI still scaffolded vault before status; invalid config types missed CONFIG_ERROR
 - **Done**: Status/info/state/setup --check run before `ensureVaultStructure`; skip CLI telemetry on those commands; validate mode/ports types in `readVaultConfig`; CLI AC10 + invalid-type tests

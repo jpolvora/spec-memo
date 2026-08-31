@@ -204,6 +204,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-31 | memo-status | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard | 0.14.0 |
 | 2026-08-31 | memo-status-pr30-review | Read-only status loader, remote `/health` 2xx, `CONFIG_ERROR`, AC10 tests | 0.14.1 |
 | 2026-08-31 | release-0.14.1 | PR #30 review fixes for memo status | 0.14.1 |
+| 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` opt-in status companion; local status probes send Bearer | 0.14.2 |
+| 2026-08-31 | release-0.14.2 | Stop stdio serve from binding status `:3124` by default | 0.14.2 |
 
 ## Archive
 

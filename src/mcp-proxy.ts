@@ -349,7 +349,7 @@ export async function startRemoteMcpProxyServer(options: RemoteProxyOptions = {}
 
   let statusServer: StatusServerInstance | undefined;
 
-  if (options.enableStatus !== false) {
+  if (options.enableStatus === true) {
     const configuredPorts = resolveConfiguredPorts(vaultRoot);
     const statusPort = options.statusPort ?? configuredPorts.status;
     const statusHost = options.statusHost || '127.0.0.1';

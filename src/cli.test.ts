@@ -3,8 +3,13 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { isCliMainEntry, runCli } from './cli.js';
+import * as net from 'node:net';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { isCliMainEntry, runCli, stdioServeEnablesStatus } from './cli.js';
 import { TOOL_NAMES } from './types.js';
+import { probeHttpService } from './status-cmd.js';
+import { closeIndex } from './indexer.js';
 
 describe('CLI entry gate (npm-link shim)', () => {
   it('treats compiled and source cli paths as main', () => {
@@ -25,6 +30,15 @@ describe('CLI entry gate (npm-link shim)', () => {
     assert.equal(isCliMainEntry(undefined), false);
     assert.equal(isCliMainEntry('/opt/spec-memo/dist/cli.test.js'), false);
     assert.equal(isCliMainEntry('/usr/bin/node'), false);
+  });
+
+  it('does not start stdio status companion unless --status or --status-port', () => {
+    assert.equal(stdioServeEnablesStatus({}), false);
+    assert.equal(stdioServeEnablesStatus({ sse: true }), false);
+    assert.equal(stdioServeEnablesStatus({ status: true }), true);
+    assert.equal(stdioServeEnablesStatus({ 'status-port': '3124' }), true);
+    assert.equal(stdioServeEnablesStatus({ statusPort: 3124 }), true);
+    assert.equal(stdioServeEnablesStatus({ status: true, 'no-status': true }), false);
   });
 
   it('returns exit 1 with stderr when Node runtime guard throws', async () => {
@@ -50,7 +64,68 @@ describe('CLI entry gate (npm-link shim)', () => {
   });
 });
 
+async function allocateLoopbackPort(): Promise<number> {
+  const server = net.createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+  const port = (server.address() as net.AddressInfo).port;
+  await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  return port;
+}
+
 describe('CLI Integration', () => {
+  it('stdio memo serve does not bind status port unless --status', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-stdio-status-bind-'));
+    const vaultRoot = path.join(tempDir, 'vault');
+    fs.mkdirSync(vaultRoot, { recursive: true });
+    const statusPort = await allocateLoopbackPort();
+    fs.writeFileSync(
+      path.join(vaultRoot, 'config.json'),
+      JSON.stringify({
+        version: '1.0',
+        mode: 'local',
+        ports: { sse: statusPort + 1, status: statusPort, canvas: statusPort + 2 }
+      }),
+      'utf8'
+    );
+    const cliJs = path.join(path.dirname(fileURLToPath(import.meta.url)), 'cli.js');
+    const spawnServe = (args: string[]) =>
+      spawn(process.execPath, [cliJs, 'serve', '--vaultRoot', vaultRoot, ...args], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, SPEC_MEMO_ROOT: vaultRoot }
+      });
+    const stop = async (child: ReturnType<typeof spawn>) => {
+      if (!child.killed && child.exitCode === null) {
+        child.kill();
+        await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+      }
+    };
+
+    let off: ReturnType<typeof spawn> | undefined;
+    let on: ReturnType<typeof spawn> | undefined;
+    try {
+      off = spawnServe([]);
+      await new Promise((r) => setTimeout(r, 600));
+      const idle = await probeHttpService(`http://127.0.0.1:${statusPort}/api/status`, 400);
+      assert.equal(idle.running, false, `stdio serve without --status must not bind :${statusPort}`);
+      await stop(off);
+
+      on = spawnServe(['--status', '--status-port', String(statusPort)]);
+      await new Promise((r) => setTimeout(r, 800));
+      const live = await probeHttpService(`http://127.0.0.1:${statusPort}/api/status`, 800);
+      assert.equal(live.running, true);
+      assert.ok(live.statusCode === 200 || live.statusCode === 401);
+    } finally {
+      if (off) await stop(off);
+      if (on) await stop(on);
+      closeIndex(vaultRoot);
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Windows may briefly lock sqlite after kill
+      }
+    }
+  });
+
   it('should print general help with 0 exit code', async () => {
     let capturedLogs = '';
     const origLog = console.log;
@@ -591,6 +666,7 @@ describe('CLI Integration', () => {
       assert.equal(serveCode, 0);
       assert.ok(capturedLogs.includes('Usage: memo serve'));
       assert.ok(capturedLogs.includes('--sse'));
+      assert.ok(capturedLogs.includes('--status'));
     } finally {
       console.log = origLog;
     }

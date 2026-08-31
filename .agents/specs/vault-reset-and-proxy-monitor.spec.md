@@ -82,7 +82,7 @@ Architecture touchpoints:
 
 ### Group 3 — Proxy Instance Status Monitor (:3001)
 
-- AC18: In `remote` proxy mode or `hybrid` mode, `memo serve` accepts `--status` (or default companion launch unless `--no-status`) and `--status-port <n>` (default `3001`) to start the companion HTTP status monitor on the proxy host.
+- AC18: In `remote` proxy mode or `hybrid` mode, `memo serve --sse` starts the companion by default unless `--no-status`. Stdio `memo serve` starts the companion only with `--status` or `--status-port` (default port `3001` / config `ports.status`).
 - AC19: The proxy status companion instantiates an in-process Activity Bus and hooks into `callRemoteTool` / `createRemoteMcpProxyServer` to capture proxied tool dispatches, execution durations, upstream status, and error states.
 - AC20: When the remote daemon is unreachable from the proxy, the proxy status monitor remains alive, serves the `:3001` UI, and marks the upstream daemon connection status as `Disconnected / Unreachable` with clear diagnostic logs.
 - AC21: Proxy status monitor enforces the same loopback and authentication rules as the daemon status monitor (refusing non-loopback bindings without an auth token).

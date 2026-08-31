@@ -228,7 +228,8 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 28 | `status-vault-backup-ui` | `[x]` | UI | Status monitor vault export and import UI |
 | 29 | `virtual-file-system-over-mcp` | `[ ]` | Phase 7 | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
 | 30 | `operational-telemetry` | `[x]` | Phase 7 | Operational telemetry & rolling JSONL usage logging |
-| 31 | `vault-reset-and-proxy-monitor` | `[x]` | Ops/UI | Database reset with pre-wipe backup, full restore, proxy monitor, 3-mode topology |
+| 31 | `prompt-history-and-query` | `[x]` | Phase 7 | Prompt, session, activity ingestion, rule derivation, and web UI explorer |
+| 32 | `vault-reset-and-proxy-monitor` | `[x]` | Ops/UI | Database reset with pre-wipe backup, full restore, proxy monitor, 3-mode topology |
 | 33 | `configurable-daemon-ports` | `[x]` | Phase 7 | Configurable daemon ports via config.json and new default ports |
 | 34 | `memo-status` | `[x]` | Phase 7 | Operational status & configuration inspector (memo status) |
 
@@ -294,6 +295,8 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-31 | release-0.14.0 | Operational status & configuration inspector (memo status) | 0.14.0 |
 | 2026-08-31 | memo-status-pr30-review | Read-only `memo status` (no vault scaffold), remote `/health` require 2xx, `CONFIG_ERROR` on malformed config, AC10 tests | npm test 361 pass |
 | 2026-08-31 | release-0.14.1 | PR #30 review fixes for memo status AC10/AC11 and remote probe auth | 0.14.1 |
+| 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` opt-in status companion; local `memo status` probes send Bearer | npm test |
+| 2026-08-31 | release-0.14.2 | Stop stdio serve from binding status `:3124` by default | 0.14.2 |
 
 ## 12. Related docs
 
