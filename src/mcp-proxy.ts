@@ -383,10 +383,12 @@ export async function startRemoteMcpProxyServer(options: RemoteProxyOptions = {}
     statusServer,
     activityBus: bus,
     close: async () => {
+      await server.close();
       if (statusServer) {
         await statusServer.close();
       }
       bus.close();
+      process.stdin.pause();
     }
   };
 }

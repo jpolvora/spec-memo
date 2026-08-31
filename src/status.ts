@@ -9,7 +9,7 @@ import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-b
 import { logErrorReport } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
-import { sanitizeToolOutput } from "./safety.js";
+import { sanitizeToolOutput, isPathInside } from "./safety.js";
 import { scheduleHybridPush } from "./hybrid-sync.js";
 import { TopologyInfo, TopologyRole, BackupFileInfo } from "./types.js";
 import {
@@ -3062,7 +3062,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       if (req.method === "GET" && pathname === "/api/vaults/backups") {
         try {
           const backups = listBackups(vaultRoot);
-          writeJson(res, 200, { ok: true, backups });
+          writeJson(res, 200, sanitizeToolOutput({ ok: true, backups }));
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           writeJson(res, 500, { ok: false, error: msg });
@@ -3105,16 +3105,15 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             projectId: resetResult.projectId
           });
 
-          writeJson(res, 200, {
+          writeJson(res, 200, sanitizeToolOutput({
             ok: true,
-            vaultRoot: resetResult.vaultRoot,
             projectId: resetResult.projectId,
             backupFilename: resetResult.backupFilename,
             backupPath: resetResult.backupPath,
             wipedProjectsCount: resetResult.wipedProjectsCount,
             wipedRecordsCount: resetResult.wipedRecordsCount,
             rebuiltFts: resetResult.rebuiltFts
-          });
+          }));
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           logErrorReport({
@@ -3191,7 +3190,16 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
               const backupsDir = path.join(vaultRoot, "backups");
               archivePath = path.join(backupsDir, safeFn);
             } else if (parsed.archivePath) {
-              archivePath = parsed.archivePath;
+              const resolved = path.resolve(parsed.archivePath);
+              const allowedRoots = [
+                path.join(vaultRoot, "backups"),
+                vaultRoot
+              ];
+              if (!allowedRoots.some((root) => isPathInside(resolved, root))) {
+                writeJson(res, 400, { ok: false, error: "archivePath must be inside the vault or backups directory" });
+                return;
+              }
+              archivePath = resolved;
             } else {
               writeJson(res, 400, { ok: false, error: "Either backupFilename, archivePath, or multipart file must be provided." });
               return;

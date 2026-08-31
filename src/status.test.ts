@@ -956,4 +956,28 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
     assert.ok(data.restoredProjectsCount >= 1);
     assert.ok(data.restoredRecordsCount >= 1);
   });
+
+  await t.test("POST /api/vaults/restore rejects archivePath outside vault/backups", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/restore`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ archivePath: path.resolve(os.tmpdir(), "../arbitrary-traversal.json") })
+    });
+    assert.strictEqual(res.status, 400);
+    const data = await res.json() as any;
+    assert.strictEqual(data.ok, false);
+    assert.match(data.error, /inside the vault or backups/);
+  });
+
+  await t.test("GET /api/vaults/backups and POST /api/vaults/reset sanitize host filesystem paths", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      headers: authHeaders
+    });
+    assert.strictEqual(res.status, 200);
+    const data = await res.json() as any;
+    assert.strictEqual(data.ok, true);
+    for (const b of data.backups) {
+      assert.strictEqual(b.path, undefined, "backup.path must be sanitized from HTTP response");
+    }
+  });
 });
