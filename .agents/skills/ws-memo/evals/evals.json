@@ -31,9 +31,9 @@
     {
       "id": 4,
       "prompt": "Watch MCP server status live on another port",
-      "expected_output": "memo serve --sse; status companion :3001 unless --no-status",
+      "expected_output": "memo serve --sse; status companion :3124 unless --no-status",
       "assertions": [
-        "Does not put the status HTML on canvas :4100",
+        "Does not put the status HTML on canvas :3125",
         "Does not bind non-loopback without auth token"
       ]
     },

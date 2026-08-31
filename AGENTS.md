@@ -130,14 +130,14 @@ node --test dist/canvas.test.js
 # HTTP / SSE Server Transport
 node --test dist/server.test.js
 
-# MCP status monitor (activity bus + :3001 companion)
+# MCP status monitor (activity bus + :3124 companion)
 node --test dist/activity.test.js
 node --test dist/status.test.js
 ```
 
 ### HTTP / SSE transport & status monitor
 
-`memo serve --sse` starts the MCP SSE listener (default `http://127.0.0.1:3000`) and, unless `--no-status` is set, a read-only **status monitor** companion at `http://127.0.0.1:3001/` with vault list, health cards, and a live activity log (tool + HTTP events via SSE `/api/events/stream`). Override the companion port with `--status-port`. Canvas graph UI remains separate on port `4100` (`memo canvas`).
+`memo serve --sse` starts the MCP SSE listener (default `http://127.0.0.1:3123`, configurable via `config.json` `ports.sse`) and, unless `--no-status` is set, a read-only **status monitor** companion at `http://127.0.0.1:3124/` (configurable via `config.json` `ports.status`) with vault list, health cards, and a live activity log (tool + HTTP events via SSE `/api/events/stream`). Override the companion port with `--status-port`. Canvas graph UI remains separate on port `3125` (`memo canvas`, configurable via `config.json` `ports.canvas`).
 
 Human-facing ops (autoboot systemd / Windows Task Scheduler, remote MCP URL): [`README.md`](README.md) § Run, serve, status monitor & autoboot.
 
@@ -204,10 +204,10 @@ memo rank [--json]       # CLI-only trap recurrence
 ### Check SSE status monitor
 
 1. Ensure `memo serve --sse` is running (companion on unless `--no-status`).
-2. Operator UI: `http://127.0.0.1:3001/` (optional `?project=<projectId>`).
+2. Operator UI: `http://127.0.0.1:3124/` (optional `?project=<projectId>`).
 3. Machine checks:
-   - `GET /health` on MCP port (`3000`)
-   - `GET /api/status`, `/api/vaults`, `/api/events` on status port (`3001`)
+   - `GET /health` on MCP port (`3123`)
+   - `GET /api/status`, `/api/vaults`, `/api/events` on status port (`3124`)
    - Live: `GET /api/events/stream` (SSE)
 4. With a token: `Authorization: Bearer <token>` (EventSource may use `?token=`).
 5. Status diagnostic surface is read-only for records; dedicated HTTP endpoints (`POST /api/vaults/export`, `POST /api/vaults/import`, `POST /api/vaults/reset`, `POST /api/vaults/restore`, `GET /api/vaults/backups`) provide UI backup export, import, reset, and restore affordances (no new MCP tools).
@@ -218,7 +218,7 @@ When the user asks to install a boot service for the SSE daemon:
 
 1. Point them at [`README.md`](README.md) § Autoboot (systemd unit or Windows Task Scheduler / NSSM).
 2. Require durable `SPEC_MEMO_ROOT` and a bearer token for non-loopback binds.
-3. After install, verify with `systemctl status` / Task Scheduler history and `curl` `/health` + open `:3001/`.
+3. After install, verify with `systemctl status` / Task Scheduler history and `curl` `/health` + open `:3124/`.
 4. Shared lab: pass stable `projectId` or server-side `cwd` — do not assume laptop path identity on the daemon host.
 5. Never commit tokens, unit files with secrets, or vault contents into product git.
 

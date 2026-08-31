@@ -194,9 +194,9 @@ Starts the spec-memo MCP server for AI agent host integration.
 
 Options:
   --sse           Run as HTTP / Server-Sent Events (SSE) server
-  --port          Port to listen on (default 3000 for SSE)
+  --port          Port to listen on (default 3123 for SSE, configurable via config.json)
   --host          Host address to bind (default 127.0.0.1)
-  --status-port   Status monitor companion port (default 3001)
+  --status-port   Status monitor companion port (default 3124, configurable via config.json)
   --no-status     Do not start the status monitor companion
   --auth-token    Bearer token for SSE/status when binding beyond loopback
   --vaultRoot     Override vault root directory
@@ -211,7 +211,7 @@ Options:
 Starts the embedded interactive Canvas visualizer and graph web application.
 
 Options:
-  --port          Port to listen on (default 4100)
+  --port          Port to listen on (default 3125, configurable via config.json)
   --host          Host address to bind (default 127.0.0.1)
   --project       Pre-select a specific project ID
   --vaultRoot     Override vault root directory
@@ -564,7 +564,7 @@ async function runCliInner(
   if (parsed.command === 'serve') {
     if (parsed.options.sse) {
       try {
-      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : 3000;
+      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : undefined;
       const host = (parsed.options.host as string) || '127.0.0.1';
       const vaultRoot = parsed.options.vaultRoot as string | undefined;
       const authToken =
@@ -578,7 +578,7 @@ async function runCliInner(
         ? parseInt(String(parsed.options['status-port']), 10)
         : parsed.options.statusPort
           ? parseInt(String(parsed.options.statusPort), 10)
-          : 3001;
+          : undefined;
 
       const instance = await startSseServer({
         port,
@@ -643,7 +643,7 @@ async function runCliInner(
       ? parseInt(String(parsed.options['status-port']), 10)
       : parsed.options.statusPort
         ? parseInt(String(parsed.options.statusPort), 10)
-        : 3001;
+        : undefined;
     const statusHost = (parsed.options['status-host'] as string) || (parsed.options.host as string) || '127.0.0.1';
     const statusAuthToken =
       (parsed.options['auth-token'] as string | undefined) ||
@@ -662,7 +662,7 @@ async function runCliInner(
   // Handle memo canvas command
   if (parsed.command === 'canvas' || parsed.command === 'serve-canvas') {
     try {
-      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : 4100;
+      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : undefined;
       const host = (parsed.options.host as string) || '127.0.0.1';
       const vaultRoot = parsed.options.vaultRoot as string | undefined;
       const project = (parsed.options.project as string) || undefined;

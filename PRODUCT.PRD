@@ -284,8 +284,10 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-28 | release-0.4.7 | Datetime resolution across logging/queries/views, error log diagnostics & frontmatter casing normalization, cross-project getRecord fallback | 0.4.7 |
 | 2026-08-28 | prompt-history-and-query | Prompt/session vault, MCP prompt tool, FTS, rules, status UI, CLI, skills | npm test 307 pass |
 | 2026-08-28 | release-0.10.0 | Prompt history & session tracking; bump package to 0.10.0 | 0.10.0 |
-| 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset & file clear with mandatory pre-wipe backup (`memo reset`), full ZIP restoration (`memo restore`), proxy status monitor on :3001, 3-mode topology | npm test 340 pass |
+| 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset & file clear with mandatory pre-wipe backup (`memo reset`), full ZIP restoration (`memo restore`), proxy status monitor on :3124, 3-mode topology | npm test 340 pass |
 | 2026-08-31 | release-0.12.0 | Release 0.12.0 with vault reset, ZIP restoration, proxy monitor, 3-mode topology | 0.12.0 |
+| 2026-08-31 | configurable-daemon-ports | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas), aliases mcp/ui, and CLI fallback | npm test 349 pass |
+| 2026-08-31 | release-0.13.0 | Configurable daemon ports via config.json and new default ports | 0.13.0 |
 
 ## 12. Related docs
 

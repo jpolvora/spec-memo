@@ -13,7 +13,9 @@ import {
   initVaultGit,
   commitVaultChange,
   syncVault,
-  RECORD_SUBDIRS
+  RECORD_SUBDIRS,
+  resolveConfiguredPorts,
+  DEFAULT_VAULT_CONFIG
 } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getPackageVersion } from './version.js';
@@ -171,6 +173,60 @@ describe('Vault Management & Project Binding', () => {
 
     const syncRes = syncVault(tempVaultRoot);
     assert.ok(syncRes.message.includes('Sync complete'));
+  });
+
+  it('should initialize config.json with default ports (sse: 3123, status: 3124, canvas: 3125)', () => {
+    const config = ensureVaultStructure(tempVaultRoot);
+    assert.deepEqual(config.ports, {
+      sse: 3123,
+      status: 3124,
+      canvas: 3125
+    });
+
+    const resolved = resolveConfiguredPorts(tempVaultRoot);
+    assert.equal(resolved.sse, 3123);
+    assert.equal(resolved.status, 3124);
+    assert.equal(resolved.canvas, 3125);
+  });
+
+  it('should honor custom daemon ports configured in config.json', () => {
+    ensureVaultStructure(tempVaultRoot);
+    const configPath = path.join(tempVaultRoot, 'config.json');
+    const customConfig = {
+      ports: {
+        sse: 4000,
+        status: 4001,
+        canvas: 4002
+      }
+    };
+    fs.writeFileSync(configPath, JSON.stringify(customConfig, null, 2), 'utf8');
+
+    const loaded = ensureVaultStructure(tempVaultRoot);
+    assert.equal(loaded.ports?.sse, 4000);
+    assert.equal(loaded.ports?.status, 4001);
+    assert.equal(loaded.ports?.canvas, 4002);
+
+    const resolved = resolveConfiguredPorts(tempVaultRoot);
+    assert.equal(resolved.sse, 4000);
+    assert.equal(resolved.status, 4001);
+    assert.equal(resolved.canvas, 4002);
+  });
+
+  it('should support daemon port aliases in config.json (mcp for sse, ui for status)', () => {
+    ensureVaultStructure(tempVaultRoot);
+    const configPath = path.join(tempVaultRoot, 'config.json');
+    const customConfig = {
+      ports: {
+        mcp: 8888,
+        ui: 8889
+      }
+    };
+    fs.writeFileSync(configPath, JSON.stringify(customConfig, null, 2), 'utf8');
+
+    const resolved = resolveConfiguredPorts(tempVaultRoot);
+    assert.equal(resolved.sse, 8888);
+    assert.equal(resolved.status, 8889);
+    assert.equal(resolved.canvas, 3125);
   });
 });
 

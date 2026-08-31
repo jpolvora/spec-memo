@@ -191,12 +191,21 @@ export interface TelemetryEventInput {
   eventId?: string;
 }
 
+export interface PortsConfig {
+  sse?: number;
+  mcp?: number;
+  status?: number;
+  ui?: number;
+  canvas?: number;
+}
+
 export interface VaultConfig {
   version: string;
   defaultRemote: string;
   enableTelemetry?: boolean;
   telemetry?: TelemetryConfig;
   mode?: DeploymentMode;
+  ports?: PortsConfig;
   remote?: {
     url: string;
   };

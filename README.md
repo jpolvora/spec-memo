@@ -213,13 +213,25 @@ Manual copy/symlink of `.agents/skills/ws-memo/` remains a fallback. **Setup** o
 
 **Audience:** operators and humans. Agents: see [`AGENTS.md`](AGENTS.md).
 
-### Default ports
+### Default ports & Configuration
+
+All daemon ports are fully configurable via `~/.spec-memo/config.json` under the `"ports"` section (with aliases `mcp` for `sse`, `ui` for `status`):
+
+```json
+{
+  "ports": {
+    "sse": 3123,
+    "status": 3124,
+    "canvas": 3125
+  }
+}
+```
 
 | Service | Default URL | Start |
 |---------|-------------|--------|
-| MCP SSE transport | `http://127.0.0.1:3000` (`/sse`, `/message`, `/health`) | `memo serve --sse` |
-| Status monitor | `http://127.0.0.1:3001/` | co-starts with `--sse` (disable: `--no-status`; override: `--status-port`) |
-| Canvas graph viewer | `http://127.0.0.1:4100` | `memo canvas` |
+| MCP SSE transport | `http://127.0.0.1:3123` (`/sse`, `/message`, `/health`) | `memo serve --sse` |
+| Status monitor | `http://127.0.0.1:3124/` | co-starts with `--sse` (disable: `--no-status`; override: `--status-port`) |
+| Canvas graph viewer | `http://127.0.0.1:3125` | `memo canvas` |
 
 ### How to run (local CLI)
 
@@ -251,11 +263,11 @@ Vault root defaults to `~/.spec-memo/` (`$SPEC_MEMO_ROOT` to override).
 ```bash
 # Loopback SSE + status monitor
 memo serve --sse
-# → MCP SSE:     http://127.0.0.1:3000/sse
-# → Health:      http://127.0.0.1:3000/health
-# → Status UI:   http://127.0.0.1:3001/
+# → MCP SSE:     http://127.0.0.1:3123/sse
+# → Health:      http://127.0.0.1:3123/health
+# → Status UI:   http://127.0.0.1:3124/
 
-memo serve --sse --port 3000 --status-port 3001
+memo serve --sse --port 3123 --status-port 3124
 memo serve --sse --no-status          # MCP only
 memo serve --sse --json               # machine metadata (includes statusUrl)
 ```
@@ -310,7 +322,7 @@ If connecting your IDE (Cursor, VS Code, Claude Desktop, Antigravity) directly t
 {
   "mcpServers": {
     "spec-memo": {
-      "url": "http://daemon.internal:3000/sse",
+      "url": "http://daemon.internal:3123/sse",
       "headers": {
         "Authorization": "Bearer your_generated_token_here"
       }
@@ -321,14 +333,14 @@ If connecting your IDE (Cursor, VS Code, Claude Desktop, Antigravity) directly t
 
 #### 5. Status Monitor & API Health Checks
 
-* **Status Monitor Web UI (Port 3001):** Open `http://daemon.internal:3001/` — when a token is configured, the UI redirects to `/login` (password-manager-friendly token field). The session is an HttpOnly cookie; the browser does not put the token in the address bar or API URLs.
+* **Status Monitor Web UI (Port 3124):** Open `http://daemon.internal:3124/` — when a token is configured, the UI redirects to `/login` (password-manager-friendly token field). The session is an HttpOnly cookie; the browser does not put the token in the address bar or API URLs.
 * **Health & API Verification:**
   ```bash
-  # Check MCP daemon health (port 3000)
-  curl -s -H "Authorization: Bearer your_generated_token_here" http://daemon.internal:3000/health
+  # Check MCP daemon health (port 3123)
+  curl -s -H "Authorization: Bearer your_generated_token_here" http://daemon.internal:3123/health
 
-  # Check status monitor API (port 3001)
-  curl -s -H "Authorization: Bearer your_generated_token_here" http://daemon.internal:3001/api/status
+  # Check status monitor API (port 3124)
+  curl -s -H "Authorization: Bearer your_generated_token_here" http://daemon.internal:3124/api/status
   ```
 
 #### 6. Diagnose Token Setup
@@ -340,18 +352,18 @@ memo doctor
 ### How to check the SSE status monitor
 
 1. Start `memo serve --sse` (status companion on by default).
-2. Open **http://127.0.0.1:3001/** in a browser (favorite that URL).
+2. Open **http://127.0.0.1:3124/** in a browser (favorite that URL).
 3. Confirm health cards (MCP host/port, vault count, uptime) and the **live activity log** (tool + HTTP events).
 4. Filter by vault/project via the page control or `?project=<projectId>`.
 
 Quick machine checks:
 
 ```bash
-curl -s http://127.0.0.1:3000/health
-curl -s http://127.0.0.1:3001/api/status
-curl -s http://127.0.0.1:3001/api/vaults
+curl -s http://127.0.0.1:3123/health
+curl -s http://127.0.0.1:3124/api/status
+curl -s http://127.0.0.1:3124/api/vaults
 # JSON array of `{ id, displayName }` — the monitor sidebar and vault selectors use this array (not `{ vaults: [...] }`).
-# Live stream (SSE): GET http://127.0.0.1:3001/api/events/stream
+# Live stream (SSE): GET http://127.0.0.1:3124/api/events/stream
 ```
 
 When a token is set, send `Authorization: Bearer <token>` (or a session cookie from `/login`). All diagnostic status routes remain read-only; only the dedicated backup routes (`POST /api/vaults/export` and `POST /api/vaults/import`) mutate the vault. Canvas (`:4100`) remains a separate graph UI.

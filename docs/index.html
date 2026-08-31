@@ -34,7 +34,7 @@
           </svg>
         </div>
         <span>spec-memo</span>
-        <span class="version-badge brand-badge">v0.12.0</span>
+        <span class="version-badge brand-badge">v0.13.0</span>
       </a>
 
       <ul class="nav-links">
@@ -65,7 +65,7 @@
       <div class="hero-pill">
         <span class="hero-pill-dot"></span>
         <span>Local Working Memory for AI Coding Agents</span>
-        <span class="version-badge">v0.12.0</span>
+        <span class="version-badge">v0.13.0</span>
       </div>
 
       <h1 class="hero-title">
@@ -297,8 +297,8 @@
               <pre><code># Run session bootstrap brief in any repository
 memo bootstrap
 
-# Start HTTP / SSE server on :3000 + Status Monitor on :3001
-memo serve --sse --port 3000 --status-port 3001
+# Start HTTP / SSE server on :3123 + Status Monitor on :3124
+memo serve --sse --port 3123 --status-port 3124
 
 # Run repository pollution diagnostic & cleanup
 memo doctor --fix</code></pre>
@@ -644,10 +644,10 @@ memo doctor --fix</code></pre>
             <span class="kind-badge plan">Transport</span>
           </div>
           <p class="tool-desc">
-            Runs the MCP server in stdio mode (default) or HTTP/SSE mode on port :3000 with a live status companion UI on port :3001.
+            Runs the MCP server in stdio mode (default) or HTTP/SSE mode on port :3123 with a live status companion UI on port :3124.
           </p>
           <div class="tool-example-box">
-            <code>memo serve --sse --port 3000 --status-port 3001</code>
+            <code>memo serve --sse --port 3123 --status-port 3124</code>
           </div>
         </div>
 
@@ -825,17 +825,17 @@ memo doctor --fix</code></pre>
         <div>
           <div class="status-badge">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
-            <span>Live Companion Companion (:3001)</span>
+            <span>Live Companion Companion (:3124)</span>
           </div>
           <h3 class="status-title">Real-Time Status Monitor &amp; Live Activity Log</h3>
           <p class="status-desc">
-            When running <code>memo serve --sse</code>, a read-only web companion starts automatically on <code>http://127.0.0.1:3001/</code>.
+            When running <code>memo serve --sse</code>, a read-only web companion starts automatically on <code>http://127.0.0.1:3124/</code>.
             View vault health cards, active projects, and watch tool executions and HTTP events stream live via SSE.
           </p>
           <div class="hero-cta-group" style="justify-content: flex-start; margin-bottom: 0;">
             <div class="quick-install-code" style="background: rgba(0,0,0,0.5); padding: 0.5rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-card);">
               <span class="prompt-sym">$</span>
-              <code>memo serve --sse --port 3000 --status-port 3001</code>
+              <code>memo serve --sse --port 3123 --status-port 3124</code>
             </div>
           </div>
         </div>
@@ -951,6 +951,33 @@ memo doctor --fix</code></pre>
             </ol>
           </div>
         </div>
+
+        <!-- Card 5: Daemon Ports & Configuration -->
+        <div class="faq-card">
+          <div class="faq-card-header">
+            <div class="faq-icon-badge">🌐</div>
+            <h3 class="faq-card-title">What are the default ports, and how do I customize them?</h3>
+          </div>
+          <div class="faq-card-body">
+            <p><code>spec-memo</code> services use the following default ports:</p>
+            <ul>
+              <li><strong>MCP SSE Daemon (<code>memo serve --sse</code>):</strong> <code>3123</code></li>
+              <li><strong>Status Monitor UI (companion / <code>/status</code>):</strong> <code>3124</code></li>
+              <li><strong>Canvas Graph Viewer (<code>memo canvas</code>):</strong> <code>3125</code></li>
+            </ul>
+            <p>You can override ports via CLI flags (e.g. <code>--port 8080 --status-port 8081</code>) or persist them globally in <code>~/.spec-memo/config.json</code> under the <code>"ports"</code> key:</p>
+            <div class="faq-code-box">
+              {<br>
+              &nbsp;&nbsp;"ports": {<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;"sse": 3123,<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;"status": 3124,<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;"canvas": 3125<br>
+              &nbsp;&nbsp;}<br>
+              }
+            </div>
+            <p>Aliases <code>mcp</code> (for <code>sse</code>) and <code>ui</code> (for <code>status</code>) are also automatically recognized.</p>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -1011,7 +1038,7 @@ memo doctor --fix</code></pre>
       </ul>
 
       <p class="footer-copy">
-        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.12.0</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
+        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.13.0</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
       </p>
     </div>
   </footer>

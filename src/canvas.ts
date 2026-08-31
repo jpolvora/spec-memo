@@ -1,7 +1,7 @@
 import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
-import { getVaultRoot, RECORD_SUBDIRS, getProjectMetadata } from "./vault.js";
+import { getVaultRoot, RECORD_SUBDIRS, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
 import { getRecord } from "./store.js";
 import { parseRecord } from "./schema.js";
 import { searchIndex } from "./indexer.js";
@@ -548,8 +548,10 @@ export interface CanvasServerInstance {
 
 export function startCanvasServer(options: CanvasServerOptions = {}): Promise<CanvasServerInstance> {
   const vaultRoot = getVaultRoot(options.vaultRoot);
+  const config = ensureVaultStructure(vaultRoot);
+  const configuredPorts = resolveConfiguredPorts(vaultRoot, config);
   const host = options.host || "127.0.0.1";
-  const port = options.port ?? 4100;
+  const port = options.port ?? configuredPorts.canvas;
   const authToken = options.authToken || process.env.SPEC_MEMO_AUTH_TOKEN || process.env.SPEC_MEMO_CANVAS_TOKEN;
 
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !authToken) {

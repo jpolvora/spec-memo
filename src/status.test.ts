@@ -3,6 +3,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import net from "node:net";
 import { createActivityBus } from "./activity.js";
 import { generateStatusHtml, generateLoginHtml, startStatusServer, safeStatusNextPath } from "./status.js";
 import { getPackageVersion } from "./version.js";
@@ -978,6 +979,49 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
     assert.strictEqual(data.ok, true);
     for (const b of data.backups) {
       assert.strictEqual(b.path, undefined, "backup.path must be sanitized from HTTP response");
+    }
+  });
+
+  await t.test("startStatusServer honors custom ports defined in config.json", async () => {
+    const customVault = path.join(tempDir, "status-custom-ports-vault");
+    fs.mkdirSync(customVault, { recursive: true });
+    const configPath = path.join(customVault, "config.json");
+
+    const getFreePort = (): Promise<number> =>
+      new Promise((resolve, reject) => {
+        const srv = net.createServer();
+        srv.listen(0, "127.0.0.1", () => {
+          const port = (srv.address() as net.AddressInfo).port;
+          srv.close((err) => (err ? reject(err) : resolve(port)));
+        });
+      });
+
+    const customStatusPort = await getFreePort();
+
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          ports: {
+            status: customStatusPort
+          }
+        },
+        null,
+        2
+      )
+    );
+
+    const inst = await startStatusServer({
+      vaultRoot: customVault,
+      host: "127.0.0.1",
+      activityBus: bus
+    });
+
+    try {
+      assert.strictEqual(inst.port, customStatusPort);
+      assert.ok(inst.url.includes(`:${customStatusPort}`));
+    } finally {
+      await inst.close();
     }
   });
 });

@@ -147,6 +147,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 30 | [`operational-telemetry`](operational-telemetry.spec.md) | `[x] done` | Phase 7 | Operational Telemetry & Structured Rolling Usage Logging |
 | 31 | [`prompt-history-and-query`](prompt-history-and-query.spec.md) | `[x]` done | Phase 7 | Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer |
 | 32 | [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md) | `[x]` done | Phase 7: Deployment modes | Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI |
+| 33 | `configurable-daemon-ports` | `[x]` done | Phase 7: Deployment modes | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas) and CLI fallback |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -197,7 +198,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-27 | release-0.4.6 | MCP tool pre-validation, error crash protection & logging, ws-memo skill refresh, single source of truth versioning in package.json | 0.4.6 |
 | 2026-08-28 | release-0.4.7 | Datetime resolution across logging/queries/views, error log diagnostics & frontmatter casing normalization, cross-project getRecord fallback | 0.4.7 |
 | 2026-08-28 | prompt-history-and-query | Prompt/session vault, MCP prompt tool, UI explorer, CLI, skills | 0.10.0 |
-| 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset with pre-wipe backup (`memo reset`), ZIP restore (`memo restore`), proxy status monitor on :3001, 3-mode topology | 0.12.0 |
+| 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset with pre-wipe backup (`memo reset`), ZIP restore (`memo restore`), proxy status monitor on :3124, 3-mode topology | 0.12.0 |
+| 2026-08-31 | configurable-daemon-ports | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas) and CLI fallback | 0.13.0 |
 
 ## Archive
 

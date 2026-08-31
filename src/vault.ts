@@ -24,8 +24,21 @@ export const DEFAULT_VAULT_CONFIG: VaultConfig = {
   bootstrap: {
     maxBytes: 8192,
     maxTraps: 10
+  },
+  ports: {
+    sse: 3123,
+    status: 3124,
+    canvas: 3125
   }
 };
+
+export function resolveConfiguredPorts(vaultRoot?: string, config?: VaultConfig): { sse: number; status: number; canvas: number } {
+  const cfg = config || ensureVaultStructure(vaultRoot);
+  const sse = cfg.ports?.sse ?? cfg.ports?.mcp ?? DEFAULT_VAULT_CONFIG.ports?.sse ?? 3123;
+  const status = cfg.ports?.status ?? cfg.ports?.ui ?? DEFAULT_VAULT_CONFIG.ports?.status ?? 3124;
+  const canvas = cfg.ports?.canvas ?? DEFAULT_VAULT_CONFIG.ports?.canvas ?? 3125;
+  return { sse, status, canvas };
+}
 
 export function resolveVaultRoot(overridePath?: string): string {
   return getVaultRoot(overridePath);
@@ -211,13 +224,25 @@ export function ensureVaultStructure(vaultRoot: string = getVaultRoot()): VaultC
   if (fs.existsSync(configPath)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const rawPorts = parsed.ports && typeof parsed.ports === 'object' ? parsed.ports : {};
+      const parsedSse = rawPorts.sse ?? rawPorts.mcp;
+      const parsedStatus = rawPorts.status ?? rawPorts.ui;
+      const parsedCanvas = rawPorts.canvas;
+
       config = {
         ...DEFAULT_VAULT_CONFIG,
         ...parsed,
         enableTelemetry: parsed.enableTelemetry !== undefined ? Boolean(parsed.enableTelemetry) : DEFAULT_VAULT_CONFIG.enableTelemetry,
         telemetry: { ...DEFAULT_VAULT_CONFIG.telemetry, ...(parsed.telemetry || {}) },
         ttl: { ...DEFAULT_VAULT_CONFIG.ttl, ...(parsed.ttl || {}) },
-        bootstrap: { ...DEFAULT_VAULT_CONFIG.bootstrap, ...(parsed.bootstrap || {}) }
+        bootstrap: { ...DEFAULT_VAULT_CONFIG.bootstrap, ...(parsed.bootstrap || {}) },
+        ports: {
+          sse: parsedSse ?? DEFAULT_VAULT_CONFIG.ports?.sse ?? 3123,
+          status: parsedStatus ?? DEFAULT_VAULT_CONFIG.ports?.status ?? 3124,
+          canvas: parsedCanvas ?? DEFAULT_VAULT_CONFIG.ports?.canvas ?? 3125,
+          ...(rawPorts.mcp !== undefined ? { mcp: rawPorts.mcp } : {}),
+          ...(rawPorts.ui !== undefined ? { ui: rawPorts.ui } : {})
+        }
       };
     } catch {
       // If config corrupted, keep defaults

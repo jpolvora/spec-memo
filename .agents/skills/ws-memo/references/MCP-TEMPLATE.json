@@ -1,5 +1,5 @@
 {
-  "_comment": "Canonical stdio MCP snippet (server key must be spec-memo to match specMemo.mcpServerName). Primary npx: npm package. Fallback: github:jpolvora/spec-memo. For HTTP/SSE use memo serve --sse → http://127.0.0.1:3000/sse; status UI http://127.0.0.1:3001/ (not MCP).",
+  "_comment": "Canonical stdio MCP snippet (server key must be spec-memo to match specMemo.mcpServerName). Primary npx: npm package. Fallback: github:jpolvora/spec-memo. For HTTP/SSE use memo serve --sse → http://127.0.0.1:3123/sse; status UI http://127.0.0.1:3124/ (not MCP).",
   "mcpServers": {
     "spec-memo": {
       "command": "memo",
