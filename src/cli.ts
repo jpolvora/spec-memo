@@ -7,7 +7,7 @@ import { runDoctor } from './doctor.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
 import { syncVault, ensureVaultStructure, getVaultRoot } from './vault.js';
-import { exportVault, importVault } from './backup.js';
+import { exportVault, importVault, resetVault, restoreVault, listBackups } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { sanitizeToolOutput } from './safety.js';
 import { startCanvasServer } from './canvas.js';
@@ -23,6 +23,21 @@ import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
 import { getPackageVersion } from './version.js';
 import { assertSupportedNodeRuntime } from './sqlite.js';
 import * as path from 'node:path';
+import * as readline from 'node:readline';
+
+async function confirmPrompt(message: string): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  return new Promise((resolve) => {
+    rl.question(message, (answer) => {
+      rl.close();
+      const normalized = answer.trim().toLowerCase();
+      resolve(normalized === 'y' || normalized === 'yes');
+    });
+  });
+}
 
 /** True when this process is a CLI invocation (dist/cli.js, src/cli.ts, or npm bin shim named memo). */
 export function isCliMainEntry(argv1: string | undefined = process.argv[1]): boolean {
@@ -126,6 +141,9 @@ Utility Commands:
   import        Import legacy .agents tree into external vault
   export-vault  Export vault records into portable archive (optional AES-256-GCM)
   import-vault  Import vault archive into local vault
+  restore       Restore a vault backup archive (aliases: restore-vault, import-vault)
+  backups       List available timestamped backups in $SPEC_MEMO_ROOT/backups/
+  reset         Reset vault database and clear records with mandatory pre-wipe backup
   canvas        Start interactive Canvas visualizer and graph UI server
   sync-vault    Synchronize delta changesets directly between vault instances
   serve         Run the stdio or SSE MCP server for agent integration
@@ -178,7 +196,7 @@ Options:
   --sse           Run as HTTP / Server-Sent Events (SSE) server
   --port          Port to listen on (default 3000 for SSE)
   --host          Host address to bind (default 127.0.0.1)
-  --status-port   Status monitor companion port (default 3001; requires --sse)
+  --status-port   Status monitor companion port (default 3001)
   --no-status     Do not start the status monitor companion
   --auth-token    Bearer token for SSE/status when binding beyond loopback
   --vaultRoot     Override vault root directory
@@ -231,13 +249,43 @@ Options:
     return;
   }
 
-  if (cmd === 'import-vault') {
-    console.log(`Usage: memo import-vault <archiveFile> [options]
+  if (cmd === 'import-vault' || cmd === 'restore' || cmd === 'restore-vault') {
+    console.log(`Usage: memo restore [archiveFile] [options]
 
 Restores a vault archive into the local vault with automatic index rebuilding.
 
 Options:
+  --backup        Path or filename of backup archive to restore
+  --latest        Restore the most recent backup from $SPEC_MEMO_ROOT/backups/
   --password      Decryption password (required if archive is encrypted)
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'backups') {
+    console.log(`Usage: memo backups [options]
+
+Lists all saved backup archives stored in $SPEC_MEMO_ROOT/backups/.
+
+Options:
+  --vaultRoot     Override vault root directory
+  --json          Output list as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'reset' || cmd === 'reset-vault') {
+    console.log(`Usage: memo reset [options]
+
+Completely wipes vault records and SQLite databases after generating a mandatory pre-wipe backup snapshot.
+
+Options:
+  --all           Wipe all projects in the vault (default when no project is specified)
+  --project       Specific project ID to wipe
+  --force         Bypass interactive confirmation prompt
+  --password      Optional encryption password for pre-wipe backup
   --vaultRoot     Override vault root directory
   --json          Output result as JSON
   -h, --help      Show this help message`);
@@ -586,7 +634,28 @@ async function runCliInner(
       }
     }
 
-    await startMcpServer();
+    const vaultRoot = parsed.options.vaultRoot as string | undefined;
+    const noStatus =
+      parsed.options['no-status'] === true ||
+      parsed.options['no-status'] === 'true' ||
+      parsed.options.noStatus === true;
+    const statusPort = parsed.options['status-port']
+      ? parseInt(String(parsed.options['status-port']), 10)
+      : parsed.options.statusPort
+        ? parseInt(String(parsed.options.statusPort), 10)
+        : 3001;
+    const statusHost = (parsed.options['status-host'] as string) || (parsed.options.host as string) || '127.0.0.1';
+    const statusAuthToken =
+      (parsed.options['auth-token'] as string | undefined) ||
+      (parsed.options.authToken as string | undefined);
+
+    await startMcpServer({
+      vaultRoot,
+      enableStatus: !noStatus,
+      statusPort,
+      statusHost,
+      statusAuthToken
+    });
     return 0;
   }
 
@@ -1071,16 +1140,27 @@ async function runCliInner(
     }
   }
 
-  // Handle memo import-vault command
-  if (parsed.command === 'import-vault') {
+  // Handle memo restore / import-vault command
+  if (parsed.command === 'restore' || parsed.command === 'restore-vault' || parsed.command === 'import-vault') {
     try {
-      const archivePath =
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const isLatest = parsed.options.latest === true || parsed.options.latest === 'true';
+      let archivePath =
+        (parsed.options.backup as string) ||
         (parsed.options.file as string) ||
         (parsed.options.archive as string) ||
         parsed.positionals[0];
 
+      if (isLatest) {
+        const backups = listBackups(vaultRoot);
+        if (backups.length === 0) {
+          throw new Error('No backup archives found in vault backups/ directory.');
+        }
+        archivePath = backups[0].path;
+      }
+
       if (!archivePath) {
-        throw new Error('Archive file path is required to import vault.');
+        throw new Error('Archive file path or --latest flag is required to restore vault.');
       }
 
       if (parsed.options.password) {
@@ -1090,18 +1170,20 @@ async function runCliInner(
         process.env.SPEC_MEMO_VAULT_PASSWORD ||
         (parsed.options.password as string | undefined) ||
         undefined;
-      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const overwrite = parsed.options.overwrite !== false && parsed.options.overwrite !== 'false';
 
-      const result = await importVault({
+      const result = await restoreVault({
         vaultRoot,
         archivePath,
-        password
+        password,
+        overwrite
       });
 
       if (parsed.isJson) {
         printJson(result);
       } else {
         console.log(`spec-memo — Restored Vault Archive\n`);
+        console.log(`  Source archive:    ${archivePath}`);
         console.log(`  Projects restored: ${result.restoredProjectsCount} (${result.restoredProjects.join(', ')})`);
         console.log(`  Records restored:  ${result.restoredRecordsCount}`);
         console.log(`  Rebuilt FTS index: ${result.rebuiltFts}`);
@@ -1110,9 +1192,96 @@ async function runCliInner(
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (parsed.isJson) {
-        printJson({ isError: true, error: msg, code: 'IMPORT_VAULT_ERROR' });
+        printJson({ isError: true, error: msg, code: 'RESTORE_VAULT_ERROR' });
       } else {
-        console.error(`Import vault failed: ${msg}`);
+        console.error(`Restore vault failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo backups command
+  if (parsed.command === 'backups' || parsed.command === 'list-backups') {
+    try {
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const backups = listBackups(vaultRoot);
+
+      if (parsed.isJson) {
+        printJson({ ok: true, backups });
+      } else {
+        const root = vaultRoot || getVaultRoot();
+        console.log(`spec-memo — Vault Backups (${path.join(root, 'backups')})\n`);
+        if (backups.length === 0) {
+          console.log('  (No backups found)');
+        } else {
+          for (const b of backups) {
+            const sizeKb = Math.max(1, Math.round(b.size / 1024));
+            const dateStr = b.createdAt ? b.createdAt.slice(0, 19).replace('T', ' ') : '';
+            console.log(`  - ${b.filename} (${sizeKb} KB, ${dateStr})`);
+          }
+        }
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'BACKUPS_ERROR' });
+      } else {
+        console.error(`List backups failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo reset command
+  if (parsed.command === 'reset' || parsed.command === 'reset-vault') {
+    try {
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const projectId = (parsed.options.project as string) || undefined;
+      const all = parsed.options.all === true || parsed.options.all === 'true' || !projectId;
+      const force = parsed.options.force === true || parsed.options.force === 'true' || parsed.options.y === true;
+      const password =
+        process.env.SPEC_MEMO_VAULT_PASSWORD ||
+        (parsed.options.password as string | undefined) ||
+        undefined;
+
+      if (!force) {
+        if (!process.stdin.isTTY) {
+          throw new Error('Vault reset requires explicit confirmation (--force) in non-interactive environments.');
+        }
+        const targetDesc = projectId && !all ? `project '${projectId}'` : 'ALL projects and databases in the entire vault';
+        console.log(`\n[WARNING] You are about to reset ${targetDesc}.`);
+        console.log(`A mandatory timestamped pre-wipe backup snapshot will be saved in $SPEC_MEMO_ROOT/backups/ before deletion.`);
+        const confirmed = await confirmPrompt('Are you sure you want to proceed? (y/N): ');
+        if (!confirmed) {
+          console.log('Vault reset aborted.');
+          return 0;
+        }
+      }
+
+      const result = await resetVault({
+        vaultRoot,
+        projectId,
+        all,
+        password
+      });
+
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(`spec-memo — Vault Reset Complete\n`);
+        console.log(`  Pre-wipe backup:  ${result.backupPath}`);
+        console.log(`  Projects wiped:   ${result.wipedProjectsCount}`);
+        console.log(`  Records wiped:    ${result.wipedRecordsCount}`);
+        console.log(`  Rebuilt FTS DB:   ${result.rebuiltFts}`);
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'RESET_VAULT_ERROR' });
+      } else {
+        console.error(`Vault reset failed: ${msg}`);
       }
       return 1;
     }

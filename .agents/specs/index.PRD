@@ -108,6 +108,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`operational-telemetry`](operational-telemetry.spec.md): Operational Telemetry & Structured Rolling Usage Logging
 - [ ] Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) (`spec: virtual-file-system-over-mcp.spec.md`)
 - [x] [`prompt-history-and-query`](prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
+- [x] [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md): Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI
 
 ## 8. Next specs
 
@@ -145,6 +146,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 29 | `virtual-file-system-over-mcp` | `[ ]` todo | Phase 7: Deployment modes | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
 | 30 | [`operational-telemetry`](operational-telemetry.spec.md) | `[x] done` | Phase 7 | Operational Telemetry & Structured Rolling Usage Logging |
 | 31 | [`prompt-history-and-query`](prompt-history-and-query.spec.md) | `[x]` done | Phase 7 | Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer |
+| 32 | [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md) | `[x]` done | Phase 7: Deployment modes | Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -174,7 +176,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-25 | slice-17-cli-doctor | Interactive CLI doctor health inspector with --rebuild and --fix options | Slice 17 delivery |
 | 2026-08-25 | slice-18-viewer | Passive Markdown & Obsidian wikilink viewer compatibility | Slice 18 delivery |
 | 2026-08-25 | slice-19-log-compaction | Monthly log roll-up compaction and FTS5 indexing | Slice 19 delivery |
-| 2026-08-25 | slice-20-promote-adr | Promote-to-ADR formatting templates and directory destination resolution | Slice 20 delivery |
+| 2026-08-25 | slice-20-promote-adr | Promote-to-ADR formatting templates and directory resolution | Slice 20 delivery |
 | 2026-08-25 | slice-21-vault-backup | Encrypted vault backup, export, and restoration engine (AES-256-GCM) | Slice 21 delivery |
 | 2026-08-25 | slice-22-canvas-viewer | Interactive Canvas UI and Visual Graph Viewer | Slice 22 delivery |
 | 2026-08-25 | slice-23-multi-machine-sync | Multi-Machine Vault Synchronization and Delta Engine | Slice 23 delivery |
@@ -194,8 +196,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-27 | release-0.4.5 | Operational telemetry & status monitor client tracking; bump package/MCP/vault to 0.4.5; PR #15 merged | 0.4.5 |
 | 2026-08-27 | release-0.4.6 | MCP tool pre-validation, error crash protection & logging, ws-memo skill refresh, single source of truth versioning in package.json | 0.4.6 |
 | 2026-08-28 | release-0.4.7 | Datetime resolution across logging/queries/views, error log diagnostics & frontmatter casing normalization, cross-project getRecord fallback | 0.4.7 |
-
-- 2026-08-28: prompt-history-and-query — Prompt/session vault, MCP prompt tool, UI explorer, CLI, skills (v0.10.0)
+| 2026-08-28 | prompt-history-and-query | Prompt/session vault, MCP prompt tool, UI explorer, CLI, skills | 0.10.0 |
+| 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset with pre-wipe backup (`memo reset`), ZIP restore (`memo restore`), proxy status monitor on :3001, 3-mode topology | 0.12.0 |
 
 ## Archive
 
@@ -209,8 +211,8 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 
 - [x] All completed features logged in Done log.
 - [x] Linked `*.spec.md` files exist for all Next specs.
-- [x] All 28 canonical specifications validated against schema.
-- [x] Phase 7 complete — all scheduled specs delivered.
+- [x] All 29 canonical specifications validated against schema.
+- [x] Phase 7 in progress — vault-reset-and-proxy-monitor shipped.
 
 ## 12. Related docs
 

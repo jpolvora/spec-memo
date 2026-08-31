@@ -838,3 +838,146 @@ test("MCP tool activity capture helpers", async (t) => {
     assert.ok(Array.isArray(res.data));
   });
 });
+
+test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-status-top-"));
+  const vaultRoot = path.join(tempDir, "vault");
+  const bus = createActivityBus();
+
+  t.after(async () => {
+    bus.close();
+    closeIndex(vaultRoot);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  const projectId = "top-proj";
+  ensureProjectVault({
+    projectId,
+    normalizedRemote: null,
+    rootPath: tempDir,
+    isGit: false,
+    isFallback: true,
+    vaultProjectPath: path.join(vaultRoot, "projects", projectId)
+  }, vaultRoot);
+
+  await upsertRecord({
+    vaultRoot,
+    projectId,
+    kind: "trap",
+    slug: "top-trap",
+    frontmatter: { id: "trap-top-proj-top-trap", kind: "trap", severity: "high", title: "Top Trap" },
+    body: "Topology trap details"
+  });
+
+  const testToken = "test-top-token";
+  const server = await startStatusServer({
+    port: 0,
+    vaultRoot,
+    authToken: testToken,
+    activityBus: bus
+  });
+
+  t.after(async () => {
+    await server.close();
+  });
+
+  const authHeaders = { "Authorization": `Bearer ${testToken}` };
+
+  await t.test("GET /api/status includes 3-mode topology info", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/status`, {
+      headers: authHeaders
+    });
+    assert.strictEqual(res.status, 200);
+    const data = await res.json() as any;
+    assert.strictEqual(data.status, "ok");
+    assert.ok(data.topology);
+    assert.strictEqual(data.topology.mode, "local");
+    assert.strictEqual(data.topology.role, "local-vault");
+    assert.strictEqual(data.topology.isProxy, false);
+    assert.ok(data.topology.roleLabel.includes("Local Vault"));
+  });
+
+  await t.test("GET /api/vaults/backups initially returns empty or lists files", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      headers: authHeaders
+    });
+    assert.strictEqual(res.status, 200);
+    const data = await res.json() as any;
+    assert.strictEqual(data.ok, true);
+    assert.ok(Array.isArray(data.backups));
+  });
+
+  let createdBackupFilename = "";
+
+  await t.test("POST /api/vaults/reset fails without confirm: true", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/reset`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: false })
+    });
+    assert.strictEqual(res.status, 400);
+  });
+
+  await t.test("POST /api/vaults/reset creates pre-wipe backup and wipes records", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/reset`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true })
+    });
+    assert.strictEqual(res.status, 200);
+    const data = await res.json() as any;
+    assert.strictEqual(data.ok, true);
+    assert.ok(data.backupFilename.endsWith(".zip"));
+    assert.ok(data.wipedProjectsCount >= 1);
+    assert.ok(data.wipedRecordsCount >= 1);
+    assert.strictEqual(data.rebuiltFts, true);
+    createdBackupFilename = data.backupFilename;
+
+    // Verify backups list now includes this backup
+    const listRes = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      headers: authHeaders
+    });
+    const listData = await listRes.json() as any;
+    assert.strictEqual(listData.ok, true);
+    assert.ok(listData.backups.length >= 1);
+    assert.strictEqual(listData.backups[0].filename, createdBackupFilename);
+  });
+
+  await t.test("POST /api/vaults/restore restores from pre-wipe backup", async () => {
+    assert.ok(createdBackupFilename);
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/restore`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ backupFilename: createdBackupFilename })
+    });
+    assert.strictEqual(res.status, 200);
+    const data = await res.json() as any;
+    assert.strictEqual(data.ok, true);
+    assert.ok(data.restoredProjectsCount >= 1);
+    assert.ok(data.restoredRecordsCount >= 1);
+  });
+
+  await t.test("POST /api/vaults/restore rejects archivePath outside vault/backups", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/restore`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ archivePath: path.resolve(os.tmpdir(), "../arbitrary-traversal.json") })
+    });
+    assert.strictEqual(res.status, 400);
+    const data = await res.json() as any;
+    assert.strictEqual(data.ok, false);
+    assert.match(data.error, /inside the vault or backups/);
+  });
+
+  await t.test("GET /api/vaults/backups and POST /api/vaults/reset sanitize host filesystem paths", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      headers: authHeaders
+    });
+    assert.strictEqual(res.status, 200);
+    const data = await res.json() as any;
+    assert.strictEqual(data.ok, true);
+    for (const b of data.backups) {
+      assert.strictEqual(b.path, undefined, "backup.path must be sanitized from HTTP response");
+    }
+  });
+});

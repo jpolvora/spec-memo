@@ -118,7 +118,8 @@ const VAULT_PATH_KEYS = new Set([
   'vaultPath',
   'vaultRoot',
   'dbPath',
-  'absolutePath'
+  'absolutePath',
+  'backupPath'
 ]);
 
 /**

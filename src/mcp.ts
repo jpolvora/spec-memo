@@ -2,13 +2,14 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { TOOL_DEFINITIONS, executeTool } from './tools.js';
-import { ActivityBus } from './activity.js';
+import { ActivityBus, createActivityBus } from './activity.js';
 import { resolveProjectIdentity } from './identity.js';
 import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { ToolName, ToolResponse, ClientType } from './types.js';
 import { startRemoteMcpProxyServer } from './mcp-proxy.js';
 import { logErrorReport } from './error-logger.js';
 import { getPackageVersion } from './version.js';
+import { startStatusServer, StatusServerInstance } from './status.js';
 
 const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get', 'check_version']);
 const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote', 'install_skills', 'prompt']);
@@ -215,18 +216,76 @@ export function createMcpServer(opts: {
   return server;
 }
 
-export async function startMcpServer(options: { vaultRoot?: string; errorLogPath?: string } = {}): Promise<void> {
+export async function startMcpServer(
+  options: {
+    vaultRoot?: string;
+    errorLogPath?: string;
+    enableStatus?: boolean;
+    statusPort?: number;
+    statusHost?: string;
+    statusAuthToken?: string;
+  } = {}
+): Promise<{
+  server: Server;
+  statusServer?: StatusServerInstance;
+  activityBus?: ActivityBus;
+  close: () => Promise<void>;
+}> {
   const vaultRoot = getVaultRoot(options.vaultRoot);
   const config = ensureVaultStructure(vaultRoot);
 
   if (config.mode === 'remote') {
-    await startRemoteMcpProxyServer(options);
-    return;
+    return await startRemoteMcpProxyServer(options);
   }
 
-  const server = createMcpServer({ defaultVaultRoot: vaultRoot, errorLogPath: options.errorLogPath });
+  const bus = createActivityBus();
+  let statusServer: StatusServerInstance | undefined;
+
+  if (options.enableStatus !== false) {
+    const statusPort = options.statusPort ?? 3001;
+    const statusHost = options.statusHost || '127.0.0.1';
+    const authToken = options.statusAuthToken || process.env.SPEC_MEMO_AUTH_TOKEN;
+
+    try {
+      statusServer = await startStatusServer({
+        port: statusPort,
+        host: statusHost,
+        vaultRoot,
+        authToken,
+        activityBus: bus,
+        errorLogPath: options.errorLogPath,
+        isDaemon: false
+      });
+    } catch (err) {
+      logErrorReport({
+        subsystem: 'mcp-server',
+        error: `Failed to start stdio status companion on port ${statusPort}: ${err instanceof Error ? err.message : String(err)}`,
+        level: 'WARN'
+      }, { vaultRoot, logPath: options.errorLogPath });
+    }
+  }
+
+  const server = createMcpServer({
+    defaultVaultRoot: vaultRoot,
+    activityBus: bus,
+    errorLogPath: options.errorLogPath
+  });
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  return {
+    server,
+    statusServer,
+    activityBus: bus,
+    close: async () => {
+      await server.close();
+      if (statusServer) {
+        await statusServer.close();
+      }
+      bus.close();
+      process.stdin.pause();
+    }
+  };
 }
 
 if (process.argv[1] && (process.argv[1].endsWith('mcp.js') || process.argv[1].endsWith('mcp.ts'))) {
