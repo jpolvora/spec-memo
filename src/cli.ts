@@ -20,6 +20,7 @@ import { runSetup } from './setup.js';
 import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
 import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
+import { runStatusCheck, formatStatusDashboard } from './status-cmd.js';
 import { getPackageVersion } from './version.js';
 import { assertSupportedNodeRuntime } from './sqlite.js';
 import * as path from 'node:path';
@@ -134,6 +135,7 @@ Core Memory Commands:
   activity        Generate timesheet activity and invoicing report
 
 Utility Commands:
+  status        Display read-only operational status, daemon probes, and configuration (aliases: info, state)
   setup         Configure deployment mode (local, hybrid, remote) and host MCP wiring
   doctor        Diagnose vault integrity and check product tree pollution
   sync          Synchronize vault records (hybrid mode or vault-git)
@@ -155,6 +157,20 @@ Global Options:
 }
 
 function printCommandHelp(cmd: string): void {
+  if (cmd === 'status' || cmd === 'info' || cmd === 'state') {
+    console.log(`Usage: memo status [options]
+
+Display comprehensive read-only operational status, running daemon probes, configuration, and storage statistics.
+
+Options:
+  --check         Validate health and exit with non-zero code if issues exist
+  --cwd           Target working directory (default: current directory)
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
   if (cmd === 'setup' || cmd === 'config') {
     console.log(`Usage: memo setup [options]
 
@@ -492,6 +508,53 @@ async function runCliInner(
       console.error(msg);
     }
     return 1;
+  }
+
+  // Handle memo status / info / state / setup --check command
+  if (
+    parsed.command === 'status' ||
+    parsed.command === 'info' ||
+    parsed.command === 'state' ||
+    ((parsed.command === 'setup' || parsed.command === 'config') &&
+      (parsed.options.check === true ||
+        parsed.options.check === 'true' ||
+        parsed.options.status === true ||
+        parsed.options.status === 'true' ||
+        parsed.options.info === true ||
+        parsed.options.info === 'true'))
+  ) {
+    try {
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const check = parsed.options.check === true || parsed.options.check === 'true';
+      const verbose =
+        parsed.options.verbose === true ||
+        parsed.options.verbose === 'true' ||
+        parsed.options.v === true;
+
+      const result = await runStatusCheck({
+        vaultRoot,
+        cwd,
+        check,
+        verbose
+      });
+
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(formatStatusDashboard(result, { verbose }));
+      }
+
+      return check ? (result.ok ? 0 : 1) : 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'STATUS_ERROR' });
+      } else {
+        console.error(`Status check failed: ${msg}`);
+      }
+      return 1;
+    }
   }
 
   // Handle memo setup / memo config command

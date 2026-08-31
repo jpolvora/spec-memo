@@ -1,4 +1,4 @@
-# spec-memo v0.13.0
+# spec-memo v0.14.0
 > Local working memory for coding agents outside the product repository.
 
 ## Summary
@@ -8,7 +8,7 @@ spec-memo gives AI coding agents a curated working memory outside the product gi
 - Default 8 KB bootstrap brief (raise via ~/.spec-memo/config.json bootstrap.maxBytes): Delivers ranked anti-regression traps, open decisions, and SHA drift alerts.
 - SQLite FTS5 Disposable Index: Fast local search with Porter stemming.
 - 11 MCP Tools: bootstrap, search, get, upsert, append, forget, gc, promote, check_version, install_skills, prompt.
-- Server Transports: Stdio for local agent hosts, HTTP/SSE on port 3123 (configurable via config.json), and status monitor UI on port 3124.
+- Server Transports & CLI: Stdio, HTTP/SSE on port 3123 (configurable), status monitor UI on port 3124, canvas graph UI on port 3125, and memo status diagnostic inspector.
 
 ## Installation
 npm install -g github:jpolvora/spec-memo

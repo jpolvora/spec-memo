@@ -83,7 +83,7 @@ npm run watch
 
 ### 2. Run the Full Test Suite
 ```bash
-# Runs full pretest build and all 26 test suites (196 tests)
+# Runs full pretest build and all 34 test suites (357 tests)
 npm test
 ```
 
@@ -91,6 +91,9 @@ npm test
 Execute specific test files directly for faster iteration:
 
 ```bash
+# Operational Status, Live Daemon Probes & Config Inspection
+node --test dist/status-cmd.test.js
+
 # Doctor & Repository Pollution Diagnostics
 node --test dist/doctor.test.js
 

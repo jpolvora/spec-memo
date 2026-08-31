@@ -587,7 +587,22 @@ All memory is stored in `$SPEC_MEMO_ROOT` (defaults to `~/.spec-memo/`):
 
 ## 🛠️ Advanced Workflows & Utility Commands
 
-### 1. Health Diagnostics & Repository Cleaning (`doctor`)
+### 1. Operational Status & Configuration Inspection (`status`)
+
+Inspect running daemons, deployment mode, socket reachability, project bindings, and storage metrics with a single read-only command:
+
+```bash
+# Display colorized status dashboard (aliases: memo info, memo state)
+memo status
+
+# Health check mode for CI/CD or scripts (exits 0 if healthy, 1 if issues exist)
+memo status --check
+
+# Machine-readable JSON output
+memo status --json
+```
+
+### 2. Health Diagnostics & Repository Cleaning (`doctor`)
 
 Inspect vault integrity, SQLite FTS index status, and detect leftover in-repo workflow pollution. (Also see [Run, serve, status monitor & autoboot](#️-run-serve-status-monitor--autoboot) for live SSE status checks.)
 
@@ -602,7 +617,7 @@ memo doctor --fix
 memo doctor --rebuild
 ```
 
-### 2. Import Legacy Workflow Trees (`import`)
+### 3. Import Legacy Workflow Trees (`import`)
 
 One-shot migration of existing `.agents/specs/`, `memory/*.md`, `MEMORY.md`, `.agents/plans/`, and `CHANGELOG.md` files into the external vault:
 
@@ -669,6 +684,7 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 
 | Command / Tool | Role | Key Options |
 |---|---|---|
+| `status` | Query read-only operational dashboard, daemon reachability, configuration, and storage statistics (aliases: `info`, `state`, `setup --check`) | `--check`, `--cwd`, `--vaultRoot`, `--json` |
 | `setup` | Configure deployment mode & agent host MCP wiring | `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json` |
 | `bootstrap` | Compile token-budgeted session brief | `--maxBytes` (overrides `config.json` `bootstrap.maxBytes`, default 8192), `--query`, `--path`, `--slug` |
 | `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` |
@@ -692,7 +708,7 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `backups` | List available timestamped backups in `$SPEC_MEMO_ROOT/backups/` | `--vaultRoot`, `--json` |
 | `reset` | Reset vault database and clear files with mandatory pre-wipe backup | `--all`, `--project`, `--force`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
-| `serve` | Run stdio or SSE MCP server for agent hosts (and status companion on :3001) | `--sse`, `--port`, `--status-port`, `--no-status`, `--auth-token` |
+| `serve` | Run stdio or SSE MCP server for agent hosts (and status companion on :3124) | `--sse`, `--port`, `--status-port`, `--no-status`, `--auth-token` |
 
 ### Operator Q&A
 
