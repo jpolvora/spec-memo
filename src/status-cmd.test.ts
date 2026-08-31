@@ -303,6 +303,36 @@ describe('status-cmd & CLI memo status', () => {
     assert.strictEqual(fs.existsSync(missingRoot), false);
   });
 
+  it('AC10: memo status CLI does not scaffold a pristine vault root', () => {
+    const pristineRoot = path.join(tempDir, 'cli-pristine-vault');
+    fs.mkdirSync(pristineRoot, { recursive: true });
+    const before = fs.readdirSync(pristineRoot);
+    const cliPath = path.resolve('dist/cli.js');
+
+    execFileSync(process.execPath, [cliPath, 'status', '--json', '--vaultRoot', pristineRoot, '--cwd', repoDir], {
+      encoding: 'utf8'
+    });
+
+    assert.deepStrictEqual(fs.readdirSync(pristineRoot).sort(), before.sort());
+    assert.strictEqual(fs.existsSync(path.join(pristineRoot, 'config.json')), false);
+    assert.strictEqual(fs.existsSync(path.join(pristineRoot, 'telemetry')), false);
+  });
+
+  it('should surface CONFIG_ERROR for invalid config.json types', async () => {
+    ensureVaultStructure(vaultRoot);
+    fs.writeFileSync(
+      path.join(vaultRoot, 'config.json'),
+      JSON.stringify({ version: '1.0', mode: 123, ports: '3123' }),
+      'utf8'
+    );
+
+    const status = await runStatusCheck({ vaultRoot, cwd: repoDir });
+    assert.strictEqual(status.vault.configValid, false);
+    assert.strictEqual(status.code, 'CONFIG_ERROR');
+    assert.strictEqual(status.ok, false);
+    assert.strictEqual(status.issues.some((i) => i.includes('Invalid config.json')), true);
+  });
+
   it('should format clean human-readable dashboard string', async () => {
     ensureVaultStructure(vaultRoot);
     const status = await runStatusCheck({ vaultRoot, cwd: repoDir });

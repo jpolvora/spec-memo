@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-31 18:45] Agent: Cursor Grok 4.6
+- **Prompt**: PR #31 review: CLI still scaffolded vault before status; invalid config types missed CONFIG_ERROR
+- **Done**: Status/info/state/setup --check run before `ensureVaultStructure`; skip CLI telemetry on those commands; validate mode/ports types in `readVaultConfig`; CLI AC10 + invalid-type tests
+- **Result**: Targeted status/cli/vault 44 pass. Learning: memo status CLI path must not call ensureVaultStructure
+
 ### [2026-08-31 18:40] Agent: Cursor Grok 4.6
 - **Prompt**: Fix PR #30 review issues (closed without comments addressed), ship a new PR, converge threads
 - **Done**: `readVaultConfig` read-only loader for `memo status`; remote `/health` requires 2xx; `StatusResult.code=CONFIG_ERROR`; AC10 non-mutation tests; PRODUCT.PRD Done log row-index cleanup; bump 0.14.1

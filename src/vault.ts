@@ -227,6 +227,26 @@ function mergeParsedVaultConfig(parsed: Record<string, any>): VaultConfig {
   };
 }
 
+function validateParsedVaultConfig(parsed: Record<string, any>): string | null {
+  if (parsed.mode !== undefined) {
+    const modes = ['local', 'hybrid', 'remote'];
+    if (typeof parsed.mode !== 'string' || !modes.includes(parsed.mode)) {
+      return `Invalid config.json: mode must be local|hybrid|remote (got ${JSON.stringify(parsed.mode)})`;
+    }
+  }
+  if (parsed.ports !== undefined) {
+    if (typeof parsed.ports !== 'object' || parsed.ports === null || Array.isArray(parsed.ports)) {
+      return 'Invalid config.json: ports must be an object';
+    }
+    for (const [key, value] of Object.entries(parsed.ports)) {
+      if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+        return `Invalid config.json: ports.${key} must be a positive integer`;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Read-only vault config loader. Never creates directories or writes files.
  */
@@ -244,7 +264,13 @@ export function readVaultConfig(vaultRoot: string = getVaultRoot()): {
   if (fs.existsSync(configPath)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, any>;
-      config = mergeParsedVaultConfig(parsed);
+      const typeError = validateParsedVaultConfig(parsed);
+      if (typeError) {
+        configValid = false;
+        issues.push(typeError);
+      } else {
+        config = mergeParsedVaultConfig(parsed);
+      }
     } catch (err: unknown) {
       configValid = false;
       issues.push(`Malformed config.json: ${err instanceof Error ? err.message : String(err)}`);
