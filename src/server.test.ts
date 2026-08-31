@@ -430,4 +430,36 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
       await trackingServer.close();
     }
   });
+
+  await t.test("should honor custom ports defined in config.json when port is not explicitly passed", async () => {
+    const customVault = path.join(tempDir, "custom-ports-vault");
+    fs.mkdirSync(customVault, { recursive: true });
+    const configPath = path.join(customVault, "config.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          ports: {
+            sse: 0,
+            status: 0
+          }
+        },
+        null,
+        2
+      )
+    );
+
+    const sseInst = await startSseServer({
+      vaultRoot: customVault,
+      host: "127.0.0.1",
+      enableStatus: true
+    });
+
+    try {
+      assert.ok(sseInst.port > 0);
+      assert.ok(sseInst.statusPort && sseInst.statusPort > 0);
+    } finally {
+      await sseInst.close();
+    }
+  });
 });

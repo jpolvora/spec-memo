@@ -243,4 +243,34 @@ test("Canvas Engine & Graph Visualization", async (t) => {
       await authCanvas.close();
     }
   });
+
+  await t.test("should honor custom canvas port configured in config.json", async () => {
+    const customVault = path.join(tempDir, "canvas-custom-ports-vault");
+    fs.mkdirSync(customVault, { recursive: true });
+    const configPath = path.join(customVault, "config.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          ports: {
+            canvas: 0
+          }
+        },
+        null,
+        2
+      )
+    );
+
+    const inst = await startCanvasServer({
+      vaultRoot: customVault,
+      host: "127.0.0.1"
+    });
+
+    try {
+      assert.ok(inst.port > 0);
+      assert.ok(inst.url.includes(`:${inst.port}`));
+    } finally {
+      await inst.close();
+    }
+  });
 });

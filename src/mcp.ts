@@ -4,7 +4,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 import { ActivityBus, createActivityBus } from './activity.js';
 import { resolveProjectIdentity } from './identity.js';
-import { ensureVaultStructure, getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot, resolveConfiguredPorts } from './vault.js';
 import { ToolName, ToolResponse, ClientType } from './types.js';
 import { startRemoteMcpProxyServer } from './mcp-proxy.js';
 import { logErrorReport } from './error-logger.js';
@@ -242,7 +242,8 @@ export async function startMcpServer(
   let statusServer: StatusServerInstance | undefined;
 
   if (options.enableStatus !== false) {
-    const statusPort = options.statusPort ?? 3001;
+    const configuredPorts = resolveConfiguredPorts(vaultRoot, config);
+    const statusPort = options.statusPort ?? configuredPorts.status;
     const statusHost = options.statusHost || '127.0.0.1';
     const authToken = options.statusAuthToken || process.env.SPEC_MEMO_AUTH_TOKEN;
 

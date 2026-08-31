@@ -980,4 +980,35 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
       assert.strictEqual(b.path, undefined, "backup.path must be sanitized from HTTP response");
     }
   });
+
+  await t.test("startStatusServer honors custom ports defined in config.json", async () => {
+    const customVault = path.join(tempDir, "status-custom-ports-vault");
+    fs.mkdirSync(customVault, { recursive: true });
+    const configPath = path.join(customVault, "config.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          ports: {
+            status: 0
+          }
+        },
+        null,
+        2
+      )
+    );
+
+    const inst = await startStatusServer({
+      vaultRoot: customVault,
+      host: "127.0.0.1",
+      activityBus: bus
+    });
+
+    try {
+      assert.ok(inst.port > 0);
+      assert.ok(inst.url.includes(`:${inst.port}`));
+    } finally {
+      await inst.close();
+    }
+  });
 });

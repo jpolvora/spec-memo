@@ -232,8 +232,8 @@ memo install-skills --global [--force] [--json]
 | Command | Job |
 |---|---|
 | `memo setup` | Configure deployment mode (`local`, `hybrid`, `remote`) and host MCP snippets (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
-| `memo serve` | Stdio MCP (default). In remote mode, proxies over stdio to remote daemon. `--sse` HTTP SSE on `--port` (default 3000). `--status-port` (default 3001). `--no-status`. `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
-| `memo canvas` | Graph UI default port 4100. `--project`, `--host`, `--json`. (Not available in remote mode). |
+| `memo serve` | Stdio MCP (default). In remote mode, proxies over stdio to remote daemon. `--sse` HTTP SSE on `--port` (default 3123, configurable via `config.json` `ports.sse`). `--status-port` (default 3124, configurable via `config.json` `ports.status`). `--no-status`. `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
+| `memo canvas` | Graph UI default port 3125 (configurable via `config.json` `ports.canvas`). `--project`, `--host`, `--json`. (Not available in remote mode). |
 | `memo doctor [productRoot]` | Vault + FTS + pollution + mode + remote health + hybrid state. `--rebuild` FTS. `--fix` delete leftover in-repo residue. `--json`. |
 | `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Proxies in remote mode. |
 | `memo import` | Legacy `.agents` / `memory/` / plans → vault. `--from`. |
@@ -248,15 +248,17 @@ memo install-skills --global [--force] [--json]
 
 - **`local` (default):** Everything stored and queried directly on the local machine under `~/.spec-memo/`. Zero network requirements.
 - **`hybrid`:** Local vault is authoritative; transparently pulls deltas on `bootstrap` and debounces pushes on mutating operations. Manual sync via `memo sync`. Fails open if remote daemon is unreachable.
-- **`remote`:** Local agent hosts connect to local `memo serve` stdio proxy, which forwards all 10 tools to a shared remote daemon. Local disk stores no memory records. Fails closed if remote daemon is unreachable.
+- **`remote`:** Local agent hosts connect to local `memo serve` stdio proxy, which forwards all 11 tools to a shared remote daemon. Local disk stores no memory records. Fails closed if remote daemon is unreachable.
 
-### Default Ports
+### Default Ports & Configurable Values
+
+All ports can be customized in `~/.spec-memo/config.json` under `"ports"` (`sse`, `status`, `canvas`, with aliases `mcp`, `ui`):
 
 | Service | Port | Start |
 |---|---|---|
-| MCP SSE | 3000 | `memo serve --sse` |
-| Status monitor | 3001 | co-starts with `--sse` unless `--no-status` |
-| Canvas | 4100 | `memo canvas` |
+| MCP SSE | 3123 | `memo serve --sse` |
+| Status monitor | 3124 | co-starts with `--sse` unless `--no-status` |
+| Canvas | 3125 | `memo canvas` |
 
 ---
 

@@ -130,12 +130,12 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 ## 10. Recurrence learning & ops visibility (Phase 6)
 
 - [x] **Trap recurrence ranking.** `memo rank` lists active traps by `occurrences`; optional `--layer`, `--backfill`; `memo promote --format skill` exports owner skill from ranked traps.
-- [x] **MCP status monitor.** Companion HTTP page (default `:3001`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream).
-- [x] **Status monitor vault backup UI.** Zero-friction export (.zip with `vault-backup.json`, optional AES-256-GCM) and restore (multipart .zip upload with confirmation and overwrite) from the `:3001` status page.
+- [x] **MCP status monitor.** Companion HTTP page (default `:3124`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream).
+- [x] **Status monitor vault backup UI.** Zero-friction export (.zip with `vault-backup.json`, optional AES-256-GCM) and restore (multipart .zip upload with confirmation and overwrite) from the `:3124` status page.
 - [x] **Status monitor client tracking & request visibility.** Real-time tracking of active and recent vault clients (proxy vs direct-remote badges, client IP, client name, bound vault, active status, request count) with rich display of all HTTP endpoints and MCP commands in the live activity log (`GET /api/clients`, `GET /api/status`).
 - [x] **Complete Vault Database Reset with Mandatory Pre-Wipe Backup.** Complete database reset and disk clean (`memo reset`, `POST /api/vaults/reset`) with automatic pre-wipe backup snapshots stored as `{YYYY-MM-DD-HH-mm-ss-backup}.zip` in `$SPEC_MEMO_ROOT/backups/`, unlinking records, compiled views, and SQLite databases while strictly preserving `config.json` and `backups/`.
 - [x] **Full Backup Restoration Engine & Management.** Seamless restoration from ZIP archives and raw payloads (`memo restore`, `memo backups`, `GET /api/vaults/backups`, `POST /api/vaults/restore`) supporting one-click restoration from saved backups and `--latest` restore flag.
-- [x] **Proxy Instance Status Monitor & 3-Mode Architecture Topology.** `memo serve` in remote proxy mode co-hosts the `:3001` status monitor companion with local activity bus recording and visualizes the active deployment topology (Local Vault, Intermediary Proxy, Final Remote Master Vault) across dashboard cards and badges.
+- [x] **Proxy Instance Status Monitor & 3-Mode Architecture Topology.** `memo serve` in remote proxy mode co-hosts the `:3124` status monitor companion with local activity bus recording and visualizes the active deployment topology (Local Vault, Intermediary Proxy, Final Remote Master Vault) across dashboard cards and badges.
 
 ---
 
@@ -143,6 +143,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 
 - [x] **Local, Hybrid, and Remote Deployment Modes.** Configured via `mode` in `config.json` (`memo setup --mode local|hybrid|remote`).
 - [x] **Uniform Stdio MCP Wiring.** All agent hosts (Cursor, VS Code, OpenCode, Antigravity, Claude Desktop) spawn `memo serve` locally. Mode switching is managed entirely inside the vault.
+- [x] **Configurable Daemon Ports via `config.json`.** Global configurable port assignments (`ports.sse`, `ports.status`, `ports.canvas`, with `mcp`/`ui` aliases) in `config.json` defaulting to `:3123` (SSE), `:3124` (Status monitor), and `:3125` (Canvas viewer), cleanly overridden by CLI arguments.
 - [x] **Setup & Host Wiring Helper (`memo setup`).** Configures mode, remote URL, checks environment bearer tokens without persisting them to disk, and prints/writes editor MCP configs (`--host`, `--print-mcp`, `--write-mcp`).
 - [x] **Daemon HTTP Sync Routes.** `/api/sync/pull`, `/api/sync/push`, and `/api/sync` on the SSE daemon origin with bearer token authentication.
 - [x] **Hybrid Bidirectional Sync & Debounced Push.** Low-latency local cache with automatic remote delta pulls on `bootstrap` (fail open) and debounced push scheduling after mutating operations (`upsert`, `append`, `forget`, `gc`).

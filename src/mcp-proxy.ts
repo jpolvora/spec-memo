@@ -5,7 +5,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { TOOL_DEFINITIONS } from './tools.js';
 import { ToolName, ToolResponse } from './types.js';
-import { ensureVaultStructure, getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot, resolveConfiguredPorts } from './vault.js';
 import { getResolvedAuthToken, normalizeRemoteUrl } from './setup.js';
 import { sanitizeToolOutput } from './safety.js';
 import { logErrorReport } from './error-logger.js';
@@ -350,7 +350,8 @@ export async function startRemoteMcpProxyServer(options: RemoteProxyOptions = {}
   let statusServer: StatusServerInstance | undefined;
 
   if (options.enableStatus !== false) {
-    const statusPort = options.statusPort ?? 3001;
+    const configuredPorts = resolveConfiguredPorts(vaultRoot);
+    const statusPort = options.statusPort ?? configuredPorts.status;
     const statusHost = options.statusHost || '127.0.0.1';
     const authToken = options.statusAuthToken || options.authToken || process.env.SPEC_MEMO_AUTH_TOKEN;
 

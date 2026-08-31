@@ -1,7 +1,7 @@
 import http from "node:http";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createMcpServer } from "./mcp.js";
-import { getVaultRoot, withVaultLockSync } from "./vault.js";
+import { getVaultRoot, withVaultLockSync, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, createActivityBus } from "./activity.js";
 import { startStatusServer, StatusServerInstance } from "./status.js";
@@ -182,9 +182,11 @@ function setCorsHeaders(res: http.ServerResponse): void {
 }
 
 export function startSseServer(options: SseServerOptions = {}): Promise<SseServerInstance> {
-  const port = options.port ?? 3000;
-  const host = options.host || "127.0.0.1";
   const vaultRoot = getVaultRoot(options.vaultRoot);
+  const config = ensureVaultStructure(vaultRoot);
+  const configuredPorts = resolveConfiguredPorts(vaultRoot, config);
+  const port = options.port ?? configuredPorts.sse;
+  const host = options.host || "127.0.0.1";
   const authToken = options.authToken || process.env.SPEC_MEMO_AUTH_TOKEN || process.env.SPEC_MEMO_SSE_TOKEN;
   const enableStatus = options.enableStatus !== false;
   const bus = options.activityBus ?? createActivityBus({ capacity: 200 });
@@ -594,7 +596,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         const statusAuth = options.statusAuthToken || authToken;
         try {
           statusInstance = await startStatusServer({
-            port: options.statusPort ?? 3001,
+            port: options.statusPort ?? configuredPorts.status,
             host: statusHost,
             vaultRoot,
             authToken: statusAuth,
@@ -620,7 +622,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         } catch (err) {
           logErrorReport({
             subsystem: "status-server",
-            port: options.statusPort ?? 3001,
+            port: options.statusPort ?? configuredPorts.status,
             host: statusHost,
             error: err,
             level: "FATAL",

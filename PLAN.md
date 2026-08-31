@@ -214,8 +214,10 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-28 | release-0.4.7 | Datetime resolution across logging/queries/views, error log diagnostics & frontmatter casing normalization, cross-project getRecord fallback; npm test 286 pass |
 | 2026-08-28 | prompt-history-and-query | Prompt/session vault kinds, 11th MCP `prompt` tool, FTS search, rule derivation, status explorer, CLI, ws-session-tracking; npm test 307 pass |
 | 2026-08-28 | release-0.10.0 | Prompt history & session tracking feature; bump package to 0.10.0 |
-| 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset & file clear with mandatory pre-wipe backup (`memo reset`), ZIP backup/restore engines (`memo restore`, `memo backups`), proxy status monitor companion on :3001, 3-mode architecture topology dashboard card/badges; npm test 340 pass |
+| 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset & file clear with mandatory pre-wipe backup (`memo reset`), ZIP backup/restore engines (`memo restore`, `memo backups`), proxy status monitor companion on :3124, 3-mode architecture topology dashboard card/badges; npm test 340 pass |
 | 2026-08-31 | release-0.12.0 | Vault reset, full backup restore, proxy monitor, and 3-mode topology; bump package to 0.12.0 |
+| 2026-08-31 | configurable-daemon-ports | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas), aliases mcp/ui, and CLI fallback; npm test 349 pass |
+| 2026-08-31 | release-0.13.0 | Configurable daemon ports via config.json and new default ports; bump package to 0.13.0 |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

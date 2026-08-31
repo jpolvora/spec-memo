@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.12.0
+version: 0.13.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -512,8 +512,8 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 | `memo setup` | **Host/deployment only:** mode (`local`, `hybrid`, `remote`) & host MCP wiring (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). Does **not** write workflow-skills `{sharedDir}/config.json` / `specMemo.*` — use `ws-spec-memo` for that. Flags: `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo doctor` | Vault health, project identity, FTS5 integrity, and in-repo pollution scan. Flags: `--rebuild` (re-index FTS), `--fix` (delete forbidden in-repo files), `--json`. |
 | `memo rank` | Recurrence-ranked traps report by occurrence count. Flags: `--layer <name>`, `--limit <n>`, `--backfill`, `--json`. |
-| `memo canvas` | Launch graph visualizer dashboard (default port `4100`). Flags: `--port`, `--host`, `--project`. |
-| `memo serve` | Start MCP transport. Stdio (default) or HTTP/SSE (`--sse` port `3000`, status companion `:3001`). Off-loopback requires `--auth-token` or `SPEC_MEMO_AUTH_TOKEN`. |
+| `memo canvas` | Launch graph visualizer dashboard (default port `3125`, configurable via `config.json` `ports.canvas`). Flags: `--port`, `--host`, `--project`. |
+| `memo serve` | Start MCP transport. Stdio (default) or HTTP/SSE (`--sse` port `3123`, status companion `:3124`, configurable via `config.json` `ports.sse` / `ports.status`). Off-loopback requires `--auth-token` or `SPEC_MEMO_AUTH_TOKEN`. |
 | `memo hook install` | Install Git pre-commit write-block hook to block `.agents/plans/`, `MEMORY.md`, `.state.md`. Bypass: `SKIP_MEMO_HOOK=1`. |
 | `memo sync` | Hybrid bidirectional HTTP delta sync with remote daemon (`--all`, `--dry-run`), or vault Git push/pull. |
 | `memo sync-vault` | Peer-to-peer vault directory delta sync (`memo sync-vault <target> [--two-way] [--dry-run]`). |
@@ -552,5 +552,5 @@ Match user intent to the correct action:
 | Package version check | **version** | MCP `check_version` |
 | Install runtime skill in consumer | **install** | MCP `install_skills` (`productRoot: "."`) or `global: true` / CLI `--global` |
 | Visual graph UI | **observe** | CLI `memo canvas` |
-| Start SSE daemon + status UI | **serve** | CLI `memo serve --sse --status-port 3001` |
+| Start SSE daemon + status UI | **serve** | CLI `memo serve --sse --status-port 3124` |
 | Pre-commit write guard | **guard** | CLI `memo hook install` |

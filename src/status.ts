@@ -1,6 +1,6 @@
 import http from "node:http";
 import path from "node:path";
-import { getVaultRoot, getProjectMetadata, ensureVaultStructure } from "./vault.js";
+import { getVaultRoot, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
 import { getPackageVersion } from "./version.js";
@@ -2541,9 +2541,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 }
 
 export function startStatusServer(options: StatusServerOptions): Promise<StatusServerInstance> {
-  const port = options.port ?? 3001;
-  const host = options.host || "127.0.0.1";
   const vaultRoot = getVaultRoot(options.vaultRoot);
+  const config = ensureVaultStructure(vaultRoot);
+  const configuredPorts = resolveConfiguredPorts(vaultRoot, config);
+  const port = options.port ?? configuredPorts.status;
+  const host = options.host || "127.0.0.1";
   const authToken =
     options.authToken ||
     process.env.SPEC_MEMO_AUTH_TOKEN ||
