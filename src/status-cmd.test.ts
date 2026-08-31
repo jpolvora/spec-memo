@@ -237,6 +237,9 @@ describe('status-cmd & CLI memo status', () => {
     assert.strictEqual(formatted.includes('Topology & Mode:'), true);
     assert.strictEqual(formatted.includes('Daemon Services (Configured Ports):'), true);
     assert.strictEqual(formatted.includes('Active Project Binding:'), true);
+    assert.strictEqual(formatted.includes('Records Breakdown:'), true);
+    assert.strictEqual(formatted.includes('reviews'), true);
+    assert.strictEqual(formatted.includes('scratch'), true);
     assert.strictEqual(formatted.includes('Vault Storage & Backups:'), true);
   });
 

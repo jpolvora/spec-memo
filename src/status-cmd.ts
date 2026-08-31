@@ -357,7 +357,7 @@ export function formatStatusDashboard(result: StatusResult, options: StatusOptio
     lines.push(`  Project Path:       ${result.project.path}`);
     const c = result.project.counts;
     lines.push(
-      `  Records Breakdown:  ${c.total} total (${c.traps} traps, ${c.decisions} decisions, ${c.specs} specs, ${c.plans} plans, ${c.prompts} prompts, ${c.sessions} sessions, ${c.logs} logs)`
+      `  Records Breakdown:  ${c.total} total (${c.traps} traps, ${c.decisions} decisions, ${c.specs} specs, ${c.plans} plans, ${c.prompts} prompts, ${c.sessions} sessions, ${c.logs} logs, ${c.reviews} reviews, ${c.scratch} scratch)`
     );
   }
 
