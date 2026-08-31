@@ -276,8 +276,8 @@
               <pre><code>{
   "mcpServers": {
     "spec-memo": {
-      "command": "node",
-      "args": ["/path/to/spec-memo/dist/mcp.js"]
+      "command": "memo",
+      "args": ["serve"]
     }
   }
 }</code></pre>
@@ -686,7 +686,7 @@ memo doctor --fix</code></pre>
         </div>
 
         <!-- CLI Extra: canvas -->
-        <div class="tool-card" data-name="canvas" data-desc="interactive visual graph viewer on port 4100" data-category="vault" data-tags="cli canvas graph ui visual">
+        <div class="tool-card" data-name="canvas" data-desc="interactive visual graph viewer on port 3125" data-category="vault" data-tags="cli canvas graph ui visual">
           <div class="tool-card-top">
             <div class="tool-name-wrap">
               <span class="tool-name">memo canvas</span>
@@ -695,10 +695,61 @@ memo doctor --fix</code></pre>
             <span class="kind-badge spec">Visual Graph</span>
           </div>
           <p class="tool-desc">
-            Starts an interactive visual node graph viewer and REST API on port :4100 for browsing memory relationships.
+            Starts an interactive visual node graph viewer and REST API on port :3125 (configurable in config.json) for browsing memory relationships.
           </p>
           <div class="tool-example-box">
-            <code>memo canvas --port 4100</code>
+            <code>memo canvas --port 3125</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: setup -->
+        <div class="tool-card" data-name="setup" data-desc="configure local hybrid remote mode and host mcp config" data-category="vault" data-tags="cli setup config mode host mcp">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo setup</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge plan">Setup</span>
+          </div>
+          <p class="tool-desc">
+            Configures vault deployment mode (local, hybrid, remote) and automatically writes or prints host MCP configuration snippets.
+          </p>
+          <div class="tool-example-box">
+            <code>memo setup --mode hybrid --url http://127.0.0.1:3123 --write-mcp</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: reset -->
+        <div class="tool-card" data-name="reset" data-desc="complete vault database wipe with mandatory pre-wipe backup snapshot" data-category="vault" data-tags="cli reset wipe clear backup snapshot">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo reset</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge trap">Disaster Recovery</span>
+          </div>
+          <p class="tool-desc">
+            Safely wipes memory databases and unlinks compiled markdown while creating an automatic timestamped backup snapshot in <code>backups/</code>.
+          </p>
+          <div class="tool-example-box">
+            <code>memo reset --force</code>
+          </div>
+        </div>
+
+        <!-- CLI Extra: restore & backups -->
+        <div class="tool-card" data-name="restore" data-desc="restore vault from zip backup snapshots or list saved backups" data-category="sync" data-tags="cli restore backups zip disaster recovery">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo restore</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge scratch">Restore</span>
+          </div>
+          <p class="tool-desc">
+            Restores full vault state from timestamped pre-wipe ZIP backups or raw archives. Use <code>memo backups</code> to list saved snapshots.
+          </p>
+          <div class="tool-example-box">
+            <code>memo restore --latest --overwrite</code>
           </div>
         </div>
 
@@ -763,7 +814,7 @@ memo doctor --fix</code></pre>
 │             (Cursor, Claude Desktop, Antigravity, VS Code)             │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Model Context Protocol (MCP)
-                                    ▼ Stdio / SSE Transport (:3000)
+                                    ▼ Stdio / SSE Transport (:3123)
 ┌────────────────────────────────────────────────────────────────────────┐
 │                          SPEC-MEMO ENGINE                              │
 │  ┌─────────────────────────┐  ┌─────────────────────────────────────┐  │
@@ -825,7 +876,7 @@ memo doctor --fix</code></pre>
         <div>
           <div class="status-badge">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
-            <span>Live Companion Companion (:3124)</span>
+            <span>Live Web Companion (:3124)</span>
           </div>
           <h3 class="status-title">Real-Time Status Monitor &amp; Live Activity Log</h3>
           <p class="status-desc">

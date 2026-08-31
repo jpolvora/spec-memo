@@ -33,7 +33,7 @@ flowchart TD
         StdioServer -->|mode: remote| McpProxy[MCP Proxy Client]
     end
 
-    subgraph Remote Daemon [memo serve --sse :3000]
+    subgraph Remote Daemon [memo serve --sse :3123]
         SyncClient -->|POST /api/sync/* Bearer Token| DaemonSync[Daemon Sync Endpoints]
         McpProxy -->|SSE /sse + POST /message Bearer Token| DaemonMCP[Daemon MCP Server]
         DaemonSync --> RemoteVault[Remote Vault Store]
