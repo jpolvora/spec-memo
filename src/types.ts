@@ -639,6 +639,7 @@ export interface OperationalStatus {
 
 export interface StatusResult {
   ok: boolean;
+  code?: 'CONFIG_ERROR' | 'STATUS_ERROR';
   mode: DeploymentMode;
   role: TopologyRole;
   vault: VaultStorageStatus;

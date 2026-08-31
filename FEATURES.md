@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.12.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.14.1** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|

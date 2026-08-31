@@ -203,6 +203,83 @@ export function getVaultRoot(overridePath?: string): string {
   return path.join(os.homedir(), '.spec-memo');
 }
 
+function mergeParsedVaultConfig(parsed: Record<string, any>): VaultConfig {
+  const rawPorts = parsed.ports && typeof parsed.ports === 'object' ? parsed.ports : {};
+  const parsedSse = rawPorts.sse ?? rawPorts.mcp;
+  const parsedStatus = rawPorts.status ?? rawPorts.ui;
+  const parsedCanvas = rawPorts.canvas;
+
+  return {
+    ...DEFAULT_VAULT_CONFIG,
+    ...parsed,
+    enableTelemetry:
+      parsed.enableTelemetry !== undefined ? Boolean(parsed.enableTelemetry) : DEFAULT_VAULT_CONFIG.enableTelemetry,
+    telemetry: { ...DEFAULT_VAULT_CONFIG.telemetry, ...(parsed.telemetry || {}) },
+    ttl: { ...DEFAULT_VAULT_CONFIG.ttl, ...(parsed.ttl || {}) },
+    bootstrap: { ...DEFAULT_VAULT_CONFIG.bootstrap, ...(parsed.bootstrap || {}) },
+    ports: {
+      sse: parsedSse ?? DEFAULT_VAULT_CONFIG.ports?.sse ?? 3123,
+      status: parsedStatus ?? DEFAULT_VAULT_CONFIG.ports?.status ?? 3124,
+      canvas: parsedCanvas ?? DEFAULT_VAULT_CONFIG.ports?.canvas ?? 3125,
+      ...(rawPorts.mcp !== undefined ? { mcp: rawPorts.mcp } : {}),
+      ...(rawPorts.ui !== undefined ? { ui: rawPorts.ui } : {})
+    }
+  };
+}
+
+function validateParsedVaultConfig(parsed: Record<string, any>): string | null {
+  if (parsed.mode !== undefined) {
+    const modes = ['local', 'hybrid', 'remote'];
+    if (typeof parsed.mode !== 'string' || !modes.includes(parsed.mode)) {
+      return `Invalid config.json: mode must be local|hybrid|remote (got ${JSON.stringify(parsed.mode)})`;
+    }
+  }
+  if (parsed.ports !== undefined) {
+    if (typeof parsed.ports !== 'object' || parsed.ports === null || Array.isArray(parsed.ports)) {
+      return 'Invalid config.json: ports must be an object';
+    }
+    for (const [key, value] of Object.entries(parsed.ports)) {
+      if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+        return `Invalid config.json: ports.${key} must be a positive integer`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Read-only vault config loader. Never creates directories or writes files.
+ */
+export function readVaultConfig(vaultRoot: string = getVaultRoot()): {
+  config: VaultConfig;
+  configValid: boolean;
+  issues: string[];
+} {
+  const root = path.resolve(vaultRoot);
+  const configPath = path.join(root, 'config.json');
+  const issues: string[] = [];
+  let configValid = true;
+  let config: VaultConfig = { ...DEFAULT_VAULT_CONFIG };
+
+  if (fs.existsSync(configPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, any>;
+      const typeError = validateParsedVaultConfig(parsed);
+      if (typeError) {
+        configValid = false;
+        issues.push(typeError);
+      } else {
+        config = mergeParsedVaultConfig(parsed);
+      }
+    } catch (err: unknown) {
+      configValid = false;
+      issues.push(`Malformed config.json: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return { config, configValid, issues };
+}
+
 /**
  * Initializes the global vault structure (~/.spec-memo/) and returns active config.
  */
@@ -223,27 +300,8 @@ export function ensureVaultStructure(vaultRoot: string = getVaultRoot()): VaultC
 
   if (fs.existsSync(configPath)) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      const rawPorts = parsed.ports && typeof parsed.ports === 'object' ? parsed.ports : {};
-      const parsedSse = rawPorts.sse ?? rawPorts.mcp;
-      const parsedStatus = rawPorts.status ?? rawPorts.ui;
-      const parsedCanvas = rawPorts.canvas;
-
-      config = {
-        ...DEFAULT_VAULT_CONFIG,
-        ...parsed,
-        enableTelemetry: parsed.enableTelemetry !== undefined ? Boolean(parsed.enableTelemetry) : DEFAULT_VAULT_CONFIG.enableTelemetry,
-        telemetry: { ...DEFAULT_VAULT_CONFIG.telemetry, ...(parsed.telemetry || {}) },
-        ttl: { ...DEFAULT_VAULT_CONFIG.ttl, ...(parsed.ttl || {}) },
-        bootstrap: { ...DEFAULT_VAULT_CONFIG.bootstrap, ...(parsed.bootstrap || {}) },
-        ports: {
-          sse: parsedSse ?? DEFAULT_VAULT_CONFIG.ports?.sse ?? 3123,
-          status: parsedStatus ?? DEFAULT_VAULT_CONFIG.ports?.status ?? 3124,
-          canvas: parsedCanvas ?? DEFAULT_VAULT_CONFIG.ports?.canvas ?? 3125,
-          ...(rawPorts.mcp !== undefined ? { mcp: rawPorts.mcp } : {}),
-          ...(rawPorts.ui !== undefined ? { ui: rawPorts.ui } : {})
-        }
-      };
+      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, any>;
+      config = mergeParsedVaultConfig(parsed);
     } catch {
       // If config corrupted, keep defaults
     }

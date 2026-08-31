@@ -425,6 +425,21 @@ function resolveCliCommand(command: string | undefined): string | undefined {
   return CLI_TOOL_ALIASES[command] || command;
 }
 
+function isReadOnlyStatusCommand(parsed: ParsedCliArgs): boolean {
+  return (
+    parsed.command === 'status' ||
+    parsed.command === 'info' ||
+    parsed.command === 'state' ||
+    ((parsed.command === 'setup' || parsed.command === 'config') &&
+      (parsed.options.check === true ||
+        parsed.options.check === 'true' ||
+        parsed.options.status === true ||
+        parsed.options.status === 'true' ||
+        parsed.options.info === true ||
+        parsed.options.info === 'true'))
+  );
+}
+
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   const started = performance.now();
   const parsed = parseCliArgs(argv);
@@ -436,20 +451,22 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     exitCode = await runCliInner(argv, parsed, command, vaultRootArg);
     return exitCode;
   } finally {
-    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
-    recordTelemetry({
-      category: 'cli_command',
-      operation: command || (parsed.options.help ? 'help' : 'unknown'),
-      durationMs,
-      success: exitCode === 0,
-      errorCode: exitCode !== 0 ? `EXIT_${exitCode}` : undefined,
-      vaultRoot: vaultRootArg,
-      metadata: {
-        isJson: parsed.isJson,
-        subcommandHelp: parsed.subcommandHelp
-      }
-    });
-    flushTelemetrySync(vaultRootArg);
+    if (!isReadOnlyStatusCommand({ ...parsed, command })) {
+      const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+      recordTelemetry({
+        category: 'cli_command',
+        operation: command || (parsed.options.help ? 'help' : 'unknown'),
+        durationMs,
+        success: exitCode === 0,
+        errorCode: exitCode !== 0 ? `EXIT_${exitCode}` : undefined,
+        vaultRoot: vaultRootArg,
+        metadata: {
+          isJson: parsed.isJson,
+          subcommandHelp: parsed.subcommandHelp
+        }
+      });
+      flushTelemetrySync(vaultRootArg);
+    }
   }
 }
 
@@ -493,36 +510,9 @@ async function runCliInner(
   }
 
   vaultRootArg = (parsed.options.vaultRoot as string) || vaultRootArg;
-  const activeVaultConfig = ensureVaultStructure(getVaultRoot(vaultRootArg));
-  const isRemoteMode = activeVaultConfig.mode === 'remote';
 
-  // Remote mode command restrictions (AC29)
-  if (
-    isRemoteMode &&
-    ['canvas', 'serve-canvas', 'sync-vault', 'export-vault', 'import-vault', 'hook'].includes(parsed.command || '')
-  ) {
-    const msg = `Command '${parsed.command}' is not available in remote mode (data resides on remote daemon).`;
-    if (parsed.isJson) {
-      printJson({ isError: true, error: msg, code: 'REMOTE_MODE_RESTRICTION' });
-    } else {
-      console.error(msg);
-    }
-    return 1;
-  }
-
-  // Handle memo status / info / state / setup --check command
-  if (
-    parsed.command === 'status' ||
-    parsed.command === 'info' ||
-    parsed.command === 'state' ||
-    ((parsed.command === 'setup' || parsed.command === 'config') &&
-      (parsed.options.check === true ||
-        parsed.options.check === 'true' ||
-        parsed.options.status === true ||
-        parsed.options.status === 'true' ||
-        parsed.options.info === true ||
-        parsed.options.info === 'true'))
-  ) {
+  // Read-only status must run before ensureVaultStructure (AC10).
+  if (isReadOnlyStatusCommand(parsed)) {
     try {
       const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
       const cwd = (parsed.options.cwd as string) || process.cwd();
@@ -555,6 +545,23 @@ async function runCliInner(
       }
       return 1;
     }
+  }
+
+  const activeVaultConfig = ensureVaultStructure(getVaultRoot(vaultRootArg));
+  const isRemoteMode = activeVaultConfig.mode === 'remote';
+
+  // Remote mode command restrictions (AC29)
+  if (
+    isRemoteMode &&
+    ['canvas', 'serve-canvas', 'sync-vault', 'export-vault', 'import-vault', 'hook'].includes(parsed.command || '')
+  ) {
+    const msg = `Command '${parsed.command}' is not available in remote mode (data resides on remote daemon).`;
+    if (parsed.isJson) {
+      printJson({ isError: true, error: msg, code: 'REMOTE_MODE_RESTRICTION' });
+    } else {
+      console.error(msg);
+    }
+    return 1;
   }
 
   // Handle memo setup / memo config command

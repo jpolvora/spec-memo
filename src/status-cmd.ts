@@ -9,14 +9,9 @@ import {
   StatusOptions,
   StatusResult,
   TopologyRole,
-  VaultConfig,
   VaultStorageStatus
 } from './types.js';
-import {
-  ensureVaultStructure,
-  getVaultRoot,
-  DEFAULT_VAULT_CONFIG
-} from './vault.js';
+import { getVaultRoot, readVaultConfig } from './vault.js';
 import { listBackups } from './backup.js';
 import { resolveProjectIdentity } from './identity.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
@@ -28,7 +23,8 @@ export const DEFAULT_REMOTE_PROBE_TIMEOUT_MS = 3000;
 export async function probeHttpService(
   url: string,
   timeoutMs: number = DEFAULT_PROBE_TIMEOUT_MS,
-  authToken?: string
+  authToken?: string,
+  opts?: { requireOk?: boolean }
 ): Promise<{ running: boolean; statusCode?: number; latencyMs?: number; error?: string }> {
   const start = Date.now();
   const controller = new AbortController();
@@ -47,6 +43,22 @@ export async function probeHttpService(
     });
 
     const latencyMs = Date.now() - start;
+
+    if (opts?.requireOk) {
+      if (res.ok) {
+        return { running: true, statusCode: res.status, latencyMs };
+      }
+      return {
+        running: false,
+        statusCode: res.status,
+        latencyMs,
+        error:
+          res.status === 401 || res.status === 403
+            ? 'Unauthorized (check SPEC_MEMO_AUTH_TOKEN)'
+            : `HTTP ${res.status}`
+      };
+    }
+
     if (res.ok || res.status === 401 || res.status === 403 || res.status === 404) {
       return { running: true, statusCode: res.status, latencyMs };
     }
@@ -109,23 +121,7 @@ export function countProjectRecords(projectDir: string): ProjectStorageStatus['c
 export async function runStatusCheck(options: StatusOptions = {}): Promise<StatusResult> {
   const root = getVaultRoot(options.vaultRoot);
   const configPath = path.join(root, 'config.json');
-  const issues: string[] = [];
-
-  let configValid = true;
-  let rawConfig: VaultConfig = { ...DEFAULT_VAULT_CONFIG };
-
-  if (fs.existsSync(configPath)) {
-    try {
-      const content = fs.readFileSync(configPath, 'utf8');
-      rawConfig = JSON.parse(content);
-    } catch (err: unknown) {
-      configValid = false;
-      const msg = err instanceof Error ? err.message : String(err);
-      issues.push(`Malformed config.json: ${msg}`);
-    }
-  }
-
-  const config = ensureVaultStructure(root);
+  const { config, configValid, issues } = readVaultConfig(root);
   const mode: DeploymentMode = config.mode || 'local';
   const ssePort = config.ports?.sse ?? config.ports?.mcp ?? 3123;
   const statusPort = config.ports?.status ?? config.ports?.ui ?? 3124;
@@ -195,7 +191,12 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
 
   if (remoteUrl) {
     const remoteTimeout = options.timeoutMs ?? DEFAULT_REMOTE_PROBE_TIMEOUT_MS;
-    const probe = await probeHttpService(`${remoteUrl.replace(/\/+$/, '')}/health`, remoteTimeout, authToken);
+    const probe = await probeHttpService(
+      `${remoteUrl.replace(/\/+$/, '')}/health`,
+      remoteTimeout,
+      authToken,
+      { requireOk: true }
+    );
     remoteStatus = {
       configured: true,
       url: remoteUrl,
@@ -303,6 +304,7 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
 
   return {
     ok: isHealthy,
+    code: configValid ? undefined : 'CONFIG_ERROR',
     mode,
     role,
     vault: vaultStorage,
@@ -391,7 +393,8 @@ export function formatStatusDashboard(result: StatusResult, options: StatusOptio
   }
 
   lines.push(`───────────────────────────────────────────────────────`);
-  lines.push(`Overall Health: ${result.ok ? 'OK (Healthy)' : 'ISSUES DETECTED'}`);
+  const healthLabel = result.ok ? 'OK (Healthy)' : 'ISSUES DETECTED';
+  lines.push(`Overall Health: ${result.code ? `${healthLabel} [${result.code}]` : healthLabel}`);
 
   return lines.join('\n');
 }

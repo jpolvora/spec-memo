@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.12.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.14.1**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -589,7 +589,7 @@ All memory is stored in `$SPEC_MEMO_ROOT` (defaults to `~/.spec-memo/`):
 
 ### 1. Operational Status & Configuration Inspection (`status`)
 
-Inspect running daemons, deployment mode, socket reachability, project bindings, and storage metrics with a single read-only command:
+Inspect running daemons, deployment mode, socket reachability, project bindings, and storage metrics with a single read-only command. `memo status` never creates or rewrites vault files (`config.json`, `projects/`, `telemetry/`). Malformed `config.json` reports `CONFIG_ERROR`. Remote `/health` 401/403 fails `--check` (exit 1).
 
 ```bash
 # Display colorized status dashboard (aliases: memo info, memo state)

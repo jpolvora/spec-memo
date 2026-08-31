@@ -180,6 +180,60 @@ describe('status-cmd & CLI memo status', () => {
     assert.strictEqual(status.issues.length > 0, true);
   });
 
+  it('should treat remote /health 401 as UNREACHABLE and fail health check', async () => {
+    const remoteServer = http.createServer((_req, res) => {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+    });
+
+    await new Promise<void>((resolve) => remoteServer.listen(0, '127.0.0.1', () => resolve()));
+    const remotePort = (remoteServer.address() as { port: number }).port;
+    const remoteUrl = `http://127.0.0.1:${remotePort}`;
+
+    try {
+      ensureVaultStructure(vaultRoot);
+      fs.writeFileSync(
+        path.join(vaultRoot, 'config.json'),
+        JSON.stringify({
+          version: '1.0',
+          mode: 'remote',
+          remote: { url: remoteUrl }
+        }),
+        'utf8'
+      );
+
+      const status = await runStatusCheck({ vaultRoot, cwd: repoDir });
+      assert.strictEqual(status.daemons.remote.status, 'UNREACHABLE');
+      assert.strictEqual(status.daemons.remote.statusCode, 401);
+      assert.strictEqual(status.ok, false);
+      assert.strictEqual(status.issues.length > 0, true);
+    } finally {
+      remoteServer.close();
+    }
+  });
+
+  it('should treat local 401/404 as RUNNING liveness but requireOk as not running', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(401);
+      res.end('unauthorized');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const live = await probeHttpService(`http://127.0.0.1:${port}/health`, 1000);
+      assert.strictEqual(live.running, true);
+      assert.strictEqual(live.statusCode, 401);
+
+      const strict = await probeHttpService(`http://127.0.0.1:${port}/health`, 1000, undefined, {
+        requireOk: true
+      });
+      assert.strictEqual(strict.running, false);
+      assert.strictEqual(strict.statusCode, 401);
+    } finally {
+      server.close();
+    }
+  });
+
   it('should accurately count records across kinds in project storage', () => {
     ensureVaultStructure(vaultRoot);
 
@@ -223,8 +277,60 @@ describe('status-cmd & CLI memo status', () => {
 
     const status = await runStatusCheck({ vaultRoot, cwd: repoDir });
     assert.strictEqual(status.vault.configValid, false);
+    assert.strictEqual(status.code, 'CONFIG_ERROR');
+    assert.strictEqual(status.ok, false);
     assert.strictEqual(status.issues.length > 0, true);
     assert.strictEqual(status.issues[0].includes('Malformed config.json'), true);
+  });
+
+  it('AC10: memo status does not mutate an uninitialized vault root', async () => {
+    const pristineRoot = path.join(tempDir, 'pristine-vault');
+    fs.mkdirSync(pristineRoot, { recursive: true });
+    const before = fs.readdirSync(pristineRoot);
+
+    await runStatusCheck({ vaultRoot: pristineRoot, cwd: repoDir });
+
+    const after = fs.readdirSync(pristineRoot);
+    assert.deepStrictEqual(after.sort(), before.sort());
+    assert.strictEqual(fs.existsSync(path.join(pristineRoot, 'config.json')), false);
+    assert.strictEqual(fs.existsSync(path.join(pristineRoot, 'projects')), false);
+    assert.strictEqual(fs.existsSync(path.join(pristineRoot, 'telemetry')), false);
+  });
+
+  it('AC10: memo status does not create a missing vault root', async () => {
+    const missingRoot = path.join(tempDir, 'missing-vault');
+    await runStatusCheck({ vaultRoot: missingRoot, cwd: repoDir });
+    assert.strictEqual(fs.existsSync(missingRoot), false);
+  });
+
+  it('AC10: memo status CLI does not scaffold a pristine vault root', () => {
+    const pristineRoot = path.join(tempDir, 'cli-pristine-vault');
+    fs.mkdirSync(pristineRoot, { recursive: true });
+    const before = fs.readdirSync(pristineRoot);
+    const cliPath = path.resolve('dist/cli.js');
+
+    execFileSync(process.execPath, [cliPath, 'status', '--json', '--vaultRoot', pristineRoot, '--cwd', repoDir], {
+      encoding: 'utf8'
+    });
+
+    assert.deepStrictEqual(fs.readdirSync(pristineRoot).sort(), before.sort());
+    assert.strictEqual(fs.existsSync(path.join(pristineRoot, 'config.json')), false);
+    assert.strictEqual(fs.existsSync(path.join(pristineRoot, 'telemetry')), false);
+  });
+
+  it('should surface CONFIG_ERROR for invalid config.json types', async () => {
+    ensureVaultStructure(vaultRoot);
+    fs.writeFileSync(
+      path.join(vaultRoot, 'config.json'),
+      JSON.stringify({ version: '1.0', mode: 123, ports: '3123' }),
+      'utf8'
+    );
+
+    const status = await runStatusCheck({ vaultRoot, cwd: repoDir });
+    assert.strictEqual(status.vault.configValid, false);
+    assert.strictEqual(status.code, 'CONFIG_ERROR');
+    assert.strictEqual(status.ok, false);
+    assert.strictEqual(status.issues.some((i) => i.includes('Invalid config.json')), true);
   });
 
   it('should format clean human-readable dashboard string', async () => {

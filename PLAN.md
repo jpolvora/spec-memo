@@ -220,6 +220,8 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-31 | release-0.13.0 | Configurable daemon ports via config.json and new default ports; bump package to 0.13.0 |
 | 2026-08-31 | memo-status | Dedicated read-only CLI status query, live daemon reachability probes, config inspector, and storage inventory dashboard; npm test 357 pass |
 | 2026-08-31 | release-0.14.0 | Operational status & configuration inspector (memo status); bump package to 0.14.0 |
+| 2026-08-31 | memo-status-pr30-review | Honor AC10 read-only (no `ensureVaultStructure`), remote 401/403 UNREACHABLE, `CONFIG_ERROR` on malformed JSON; AC10 tests | npm test 361 pass |
+| 2026-08-31 | release-0.14.1 | PR #30 review fixes; bump package to 0.14.1 |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

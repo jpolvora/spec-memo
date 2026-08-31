@@ -288,10 +288,12 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-28 | release-0.10.0 | Prompt history & session tracking; bump package to 0.10.0 | 0.10.0 |
 | 2026-08-31 | vault-reset-and-proxy-monitor | Complete database reset & file clear with mandatory pre-wipe backup (`memo reset`), full ZIP restoration (`memo restore`), proxy status monitor on :3124, 3-mode topology | npm test 340 pass |
 | 2026-08-31 | release-0.12.0 | Release 0.12.0 with vault reset, ZIP restoration, proxy monitor, 3-mode topology | 0.12.0 |
-| 289 | 2026-08-31 | configurable-daemon-ports | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas), aliases mcp/ui, and CLI fallback | npm test 349 pass |
-| 290 | 2026-08-31 | release-0.13.0 | Configurable daemon ports via config.json and new default ports | 0.13.0 |
+| 2026-08-31 | configurable-daemon-ports | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas), aliases mcp/ui, and CLI fallback | npm test 349 pass |
+| 2026-08-31 | release-0.13.0 | Configurable daemon ports via config.json and new default ports | 0.13.0 |
 | 2026-08-31 | memo-status | Dedicated read-only CLI status query, live daemon reachability probes, config inspector, and storage inventory dashboard | npm test 357 pass |
 | 2026-08-31 | release-0.14.0 | Operational status & configuration inspector (memo status) | 0.14.0 |
+| 2026-08-31 | memo-status-pr30-review | Read-only `memo status` (no vault scaffold), remote `/health` require 2xx, `CONFIG_ERROR` on malformed config, AC10 tests | npm test 361 pass |
+| 2026-08-31 | release-0.14.1 | PR #30 review fixes for memo status AC10/AC11 and remote probe auth | 0.14.1 |
 
 ## 12. Related docs
 
