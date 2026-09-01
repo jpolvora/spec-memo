@@ -596,6 +596,12 @@ export function getGitTimeoutMs(): number {
   return envVal > 0 ? envVal : 30000;
 }
 
+/** AC24: graceful shutdown flush cap (default 8000 ms, override SPEC_MEMO_SYNC_TIMEOUT_MS). */
+export function getShutdownFlushMs(): number {
+  const envVal = Number(process.env.SPEC_MEMO_SYNC_TIMEOUT_MS);
+  return envVal > 0 ? envVal : 8000;
+}
+
 export function resolveVaultGitAtomic(config: VaultConfig): boolean {
   const vg = config.vaultGit;
   if (!vg || vg.enabled !== true) return false;
@@ -843,13 +849,18 @@ export async function flushScheduledVaultGit(): Promise<void> {
   }
 }
 
-function vaultGitPorcelain(vaultRoot: string): string {
+function vaultGitPorcelain(
+  vaultRoot: string
+): { ok: true; porcelain: string } | { ok: false; error: string } {
   const res = gitExec(
     vaultRoot,
     ['status', '--porcelain', '--untracked-files=normal', '--', 'projects', 'config.json', '.gitignore'],
     'flush'
   );
-  return (res.stdout || '').trim();
+  if (!res.ok) {
+    return { ok: false, error: res.error || 'git status failed' };
+  }
+  return { ok: true, porcelain: (res.stdout || '').trim() };
 }
 
 async function syncVaultRemote(vaultRoot: string): Promise<void> {
@@ -887,7 +898,19 @@ export async function flushVaultGit(
 
   try {
     initVaultGit(vaultRoot);
-    const porcelain = vaultGitPorcelain(vaultRoot);
+    const statusRes = vaultGitPorcelain(vaultRoot);
+    if (!statusRes.ok) {
+      writeVaultGitState(vaultRoot, { dirty: true, lastError: statusRes.error });
+      return {
+        ok: false,
+        committed: false,
+        pulled: false,
+        pushed: false,
+        message: `Sync failed: ${statusRes.error}`,
+        error: statusRes.error
+      };
+    }
+    const porcelain = statusRes.porcelain;
     const wouldCommit = porcelain
       ? porcelain
           .split('\n')
@@ -925,13 +948,16 @@ export async function flushVaultGit(
       const branch = resolveVaultGitBranch(config, vaultRoot);
       const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', 'origin', branch], 'pull');
       pulled = pullRes.ok;
-      if (!pullRes.ok) remoteError = pullRes.error;
-      const pushRes = await gitExecAsync(vaultRoot, ['push', '-u', 'origin', branch], 'push');
-      pushed = pushRes.ok;
-      if (!pushRes.ok) remoteError = remoteError || pushRes.error;
+      if (!pullRes.ok) {
+        remoteError = pullRes.error;
+      } else {
+        const pushRes = await gitExecAsync(vaultRoot, ['push', '-u', 'origin', branch], 'push');
+        pushed = pushRes.ok;
+        if (!pushRes.ok) remoteError = pushRes.error;
+      }
     }
 
-    const channelOk = config.vaultGit.remoteUrl ? Boolean(pulled || pushed) : true;
+    const channelOk = config.vaultGit.remoteUrl ? pulled && pushed && !remoteError : true;
     writeVaultGitState(vaultRoot, {
       dirty: Boolean(remoteError),
       lastError: remoteError || null,

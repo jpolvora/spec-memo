@@ -1,6 +1,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getVaultRoot, withVaultLockSync } from './vault.js';
+import { redactSecretsInPayload } from './safety.js';
+
+/** Redact credentials in persisted/exposed vault-git error strings. */
+export function redactVaultGitError(msg: string | null | undefined): string | null {
+  if (msg == null || msg === '') return null;
+  let s = String(redactSecretsInPayload(msg));
+  s = s.replace(/\/\/([^/@:\s]+):([^@/]+)@/g, '//***:***@');
+  return s;
+}
 
 export interface VaultGitState {
   dirty: boolean;
@@ -28,7 +37,8 @@ export function readVaultGitState(vaultRootInput?: string): VaultGitState {
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<VaultGitState>;
     return {
       dirty: Boolean(parsed.dirty),
-      lastError: typeof parsed.lastError === 'string' ? parsed.lastError : null,
+      lastError:
+        typeof parsed.lastError === 'string' ? redactVaultGitError(parsed.lastError) : null,
       lastSyncAt: typeof parsed.lastSyncAt === 'string' ? parsed.lastSyncAt : null
     };
   } catch {
@@ -50,7 +60,10 @@ export function writeVaultGitState(
     const current = readVaultGitState(vaultRoot);
     const merged: VaultGitState = {
       dirty: updates.dirty !== undefined ? updates.dirty : current.dirty,
-      lastError: updates.lastError !== undefined ? updates.lastError : current.lastError,
+      lastError:
+        updates.lastError !== undefined
+          ? redactVaultGitError(updates.lastError)
+          : current.lastError,
       lastSyncAt: updates.lastSyncAt !== undefined ? updates.lastSyncAt : current.lastSyncAt
     };
     fs.writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf8');

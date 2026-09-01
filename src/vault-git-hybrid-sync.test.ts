@@ -18,11 +18,11 @@ import {
 import { upsertRecord, appendEvent, forgetRecord } from './store.js';
 import { closeIndex } from './indexer.js';
 import { startSessionRecord, endSessionRecord } from './prompt.js';
-import { syncDual } from './dual-sync.js';
+import { syncDual, flushOnShutdown } from './dual-sync.js';
 import { runCli } from './cli.js';
 import { runDoctor } from './doctor.js';
 import { runStatusCheck, formatStatusDashboard } from './status-cmd.js';
-import { readVaultGitState } from './vault-git-state.js';
+import { readVaultGitState, redactVaultGitError } from './vault-git-state.js';
 
 function gitLog(root: string): string {
   try {
@@ -361,6 +361,53 @@ describe('vault-git-hybrid-sync', () => {
     assert.equal(
       redactVaultGitRemoteUrl('http://alice:pw@host/repo.git'),
       'http://***:***@host/repo.git'
+    );
+  });
+
+  it('AC24: flushOnShutdown completes within shutdown cap (SPEC_MEMO_SYNC_TIMEOUT_MS)', async () => {
+    const prev = process.env.SPEC_MEMO_SYNC_TIMEOUT_MS;
+    process.env.SPEC_MEMO_SYNC_TIMEOUT_MS = '150';
+    try {
+      enableVaultGit(tempVault, { remoteUrl: 'http://127.0.0.1:9/unreachable.git' });
+      const configPath = path.join(tempVault, 'config.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      config.mode = 'hybrid';
+      config.remote = { url: 'http://127.0.0.1:9' };
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+      initVaultGit(tempVault);
+      const started = Date.now();
+      await flushOnShutdown(tempVault);
+      const elapsed = Date.now() - started;
+      assert.ok(elapsed < 3000, `shutdown flush took ${elapsed}ms`);
+    } finally {
+      if (prev === undefined) delete process.env.SPEC_MEMO_SYNC_TIMEOUT_MS;
+      else process.env.SPEC_MEMO_SYNC_TIMEOUT_MS = prev;
+    }
+  });
+
+  it('AC44: git status failure does not treat vault as clean', async () => {
+    enableVaultGit(tempVault);
+    initVaultGit(tempVault);
+    const gitDir = path.join(tempVault, '.git');
+    fs.rmSync(gitDir, { recursive: true, force: true });
+    fs.writeFileSync(path.join(tempVault, '.git'), 'corrupt-not-a-repo');
+    const result = await flushVaultGit(tempVault, { trigger: 'sync' });
+    assert.equal(result.ok, false);
+    assert.ok(result.error);
+  });
+
+  it('lastError redacts user:pass embedded in git failure messages', async () => {
+    enableVaultGit(tempVault, { remoteUrl: 'http://alice:secret@example.com/vault.git' });
+    initVaultGit(tempVault);
+    await flushVaultGit(tempVault, { trigger: 'sync' });
+    const state = readVaultGitState(tempVault);
+    if (state.lastError) {
+      assert.equal(state.lastError.includes('secret'), false);
+      assert.equal(state.lastError.includes('alice'), false);
+    }
+    assert.equal(
+      redactVaultGitError('fatal: http://bob:token@host/repo.git denied'),
+      'fatal: http://***:***@host/repo.git denied'
     );
   });
 });

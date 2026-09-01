@@ -1,4 +1,10 @@
-import { ensureVaultStructure, getVaultRoot, flushVaultGit, type VaultGitChannelResult } from './vault.js';
+import {
+  ensureVaultStructure,
+  getVaultRoot,
+  flushVaultGit,
+  getShutdownFlushMs,
+  type VaultGitChannelResult
+} from './vault.js';
 import { flushDebouncedPushes, syncHybrid, type HybridSyncReport } from './hybrid-sync.js';
 import { logErrorReport } from './error-logger.js';
 import { recordTelemetry } from './telemetry.js';
@@ -34,11 +40,6 @@ const EMPTY_HYBRID: HybridSyncReport = {
   pushed: { applied: 0, skipped: 0, conflicts: 0, dryRun: false, recordsApplied: [] },
   timestamp: new Date(0).toISOString()
 };
-
-function shutdownFlushMs(): number {
-  const envVal = Number(process.env.SPEC_MEMO_SHUTDOWN_FLUSH_MS);
-  return envVal > 0 ? envVal : 8000;
-}
 
 /**
  * Dual-mode orchestrator: hybrid HTTP and vault-git run concurrently when both are enabled.
@@ -144,10 +145,10 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
 }
 
 /**
- * Best-effort flush on process shutdown. Never throws. Caps wait at 8s (override SPEC_MEMO_SHUTDOWN_FLUSH_MS).
+ * Best-effort flush on process shutdown. Never throws. Caps wait at 8s (override SPEC_MEMO_SYNC_TIMEOUT_MS).
  */
 export async function flushOnShutdown(vaultRoot?: string): Promise<void> {
-  const cap = shutdownFlushMs();
+  const cap = getShutdownFlushMs();
   let timedOut = false;
   const timeout = new Promise<void>((resolve) => {
     const t = setTimeout(() => {
