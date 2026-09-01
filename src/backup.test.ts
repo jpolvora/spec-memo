@@ -406,6 +406,7 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
     assert.ok(item!.recordCount != null && item!.recordCount >= 1);
     // Full-vault persist with a single project must still report scope "full" (manifest intent).
     assert.equal(item!.scope, 'full');
+    assert.ok(item!.recordsByKind && (item!.recordsByKind.trap || 0) >= 1);
   });
 
   it('should label project-scoped persist as scope project', async () => {
@@ -425,6 +426,62 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
     const item = listBackups(sourceVault).find((b) => b.filename === result.filename);
     assert.ok(item);
     assert.equal(item!.scope, 'project');
+    assert.ok(item!.recordsByKind && (item!.recordsByKind.trap || 0) >= 1);
+  });
+
+  it('should not infer scope project for legacy single-project archives missing manifest.scope', async () => {
+    const backupsDir = path.join(sourceVault, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    const legacy = {
+      format: 'spec-memo-vault-v1',
+      manifest: {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        projects: ['only-one'],
+        recordCount: 1
+      },
+      projects: [
+        {
+          projectId: 'only-one',
+          records: [
+            {
+              relativePath: 'traps/legacy.md',
+              content:
+                '---\nid: trap-legacy-scope\nkind: trap\nproject: only-one\nstatus: active\nsource: agent\ncreated: 2026-08-01T00:00:00.000Z\nupdated: 2026-08-01T00:00:00.000Z\n---\nLegacy trap'
+            }
+          ]
+        }
+      ]
+    };
+    fs.writeFileSync(path.join(backupsDir, 'legacy-one-project.json'), JSON.stringify(legacy), 'utf8');
+    const listed = listBackups(sourceVault);
+    const item = listed.find((b) => b.filename === 'legacy-one-project.json');
+    assert.ok(item);
+    assert.equal(item!.scope, undefined);
+    const fullOnly = listBackups(sourceVault, { scope: 'full' });
+    assert.equal(fullOnly.some((b) => b.filename === 'legacy-one-project.json'), false);
+  });
+
+  it('should infer scope full for legacy multi-project archives missing manifest.scope', async () => {
+    const backupsDir = path.join(sourceVault, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    const legacy = {
+      format: 'spec-memo-vault-v1',
+      manifest: {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        projects: ['a', 'b'],
+        recordCount: 0
+      },
+      projects: [
+        { projectId: 'a', records: [] },
+        { projectId: 'b', records: [] }
+      ]
+    };
+    fs.writeFileSync(path.join(backupsDir, 'legacy-two-project.json'), JSON.stringify(legacy), 'utf8');
+    const item = listBackups(sourceVault).find((b) => b.filename === 'legacy-two-project.json');
+    assert.ok(item);
+    assert.equal(item!.scope, 'full');
   });
 
   it('should require existing file for deleteBackup and reject traversal in resolveBackupPath', async () => {

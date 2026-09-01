@@ -52,25 +52,32 @@ function kindFromRecord(relativePath: string, content: string): string {
 }
 
 function summarizePlainArchive(plain: PlainVaultArchive): Partial<BackupFileInfo> {
-  const recordsByKind: Record<string, number> = {};
-  let recordCount = 0;
-  for (const project of plain.projects || []) {
-    for (const record of project.records || []) {
-      const kind = kindFromRecord(record.relativePath, record.content);
-      recordsByKind[kind] = (recordsByKind[kind] || 0) + 1;
-      recordCount++;
+  const projectIds = (plain.manifest?.projects || plain.projects.map((p) => p.projectId)).filter(Boolean);
+  // Legacy archives without manifest.scope: infer full only when multiple projects; never guess "project".
+  const scope: 'full' | 'project' | undefined =
+    plain.manifest?.scope ?? (projectIds.length > 1 ? 'full' : undefined);
+
+  const manifestKinds = plain.manifest?.recordsByKind;
+  const hasKindCounts = Boolean(manifestKinds && typeof manifestKinds === 'object');
+  let recordsByKind: Record<string, number> = hasKindCounts ? { ...manifestKinds } : {};
+  let walkedCount = 0;
+  if (!hasKindCounts) {
+    for (const project of plain.projects || []) {
+      for (const record of project.records || []) {
+        const kind = kindFromRecord(record.relativePath, record.content);
+        recordsByKind[kind] = (recordsByKind[kind] || 0) + 1;
+        walkedCount++;
+      }
     }
   }
-  const projectIds = (plain.manifest?.projects || plain.projects.map((p) => p.projectId)).filter(Boolean);
-  const scope: 'full' | 'project' =
-    plain.manifest?.scope ?? (projectIds.length > 1 ? 'full' : 'project');
+
   return {
     encrypted: false,
     inspectable: true,
     format: plain.format,
     scope,
     projectIds,
-    recordCount: plain.manifest?.recordCount ?? recordCount,
+    recordCount: plain.manifest?.recordCount ?? walkedCount,
     recordsByKind
   };
 }
@@ -180,6 +187,7 @@ interface VaultArchiveManifest {
   recordCount: number;
   /** Export intent: all projects vs a single projectId (not inferred from project count). */
   scope?: 'full' | 'project';
+  recordsByKind?: Record<string, number>;
 }
 
 interface PlainVaultArchive {
@@ -273,6 +281,7 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
     const exportedProjects: ExportedProject[] = [];
     const projectNames: string[] = [];
     let totalRecords = 0;
+    const recordsByKind: Record<string, number> = {};
 
     const targetProject = options.projectId;
 
@@ -310,6 +319,8 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
                   const content = fs.readFileSync(filePath, 'utf8');
                   assertNoSecrets(content, `export record ${relPath}`);
                   records.push({ relativePath: relPath, content });
+                  const kind = kindFromRecord(relPath, content);
+                  recordsByKind[kind] = (recordsByKind[kind] || 0) + 1;
                   totalRecords++;
                 } catch (err: unknown) {
                   if (err instanceof Error && err.message.includes('Safety violation')) {
@@ -335,7 +346,8 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
       exportedAt: new Date().toISOString(),
       projects: projectNames,
       recordCount: totalRecords,
-      scope: targetProject ? 'project' : 'full'
+      scope: targetProject ? 'project' : 'full',
+      recordsByKind
     };
 
     let vaultConfig: VaultConfig | undefined;
