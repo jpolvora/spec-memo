@@ -190,17 +190,151 @@ function resolveVaultGitBranch(config: VaultConfig, vaultRoot: string): string {
 }
 
 /**
+ * Default vault location when no override, env, or bootstrap pointer is usable.
+ */
+export function getDefaultVaultRoot(): string {
+  return path.join(os.homedir(), '.spec-memo');
+}
+
+/**
+ * True when `target` exists as a writable directory, or can be created (writable ancestor).
+ */
+export function isUsableVaultRoot(target: string): boolean {
+  if (!target || target.trim().length === 0) {
+    return false;
+  }
+  const resolved = path.resolve(target.trim());
+  try {
+    if (fs.existsSync(resolved)) {
+      const st = fs.statSync(resolved);
+      if (!st.isDirectory()) {
+        return false;
+      }
+      fs.accessSync(resolved, fs.constants.R_OK | fs.constants.W_OK);
+      return true;
+    }
+
+    let current = resolved;
+    while (true) {
+      const parent = path.dirname(current);
+      if (parent === current) {
+        try {
+          fs.accessSync(current, fs.constants.W_OK);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+      if (fs.existsSync(parent)) {
+        const st = fs.statSync(parent);
+        if (!st.isDirectory()) {
+          return false;
+        }
+        fs.accessSync(parent, fs.constants.W_OK);
+        return true;
+      }
+      current = parent;
+    }
+  } catch {
+    return false;
+  }
+}
+
+function firstUsableVaultRoot(candidates: Array<string | undefined>): string | undefined {
+  for (const candidate of candidates) {
+    if (!candidate || candidate.trim().length === 0) {
+      continue;
+    }
+    const resolved = path.resolve(candidate.trim());
+    if (isUsableVaultRoot(resolved)) {
+      return resolved;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Path to bootstrap config.json in the user home (may point at a non-home vault via vaultRoot).
+ */
+export function getBootstrapConfigPath(): string {
+  return path.join(os.homedir(), '.spec-memo', 'config.json');
+}
+
+/**
+ * Read vaultRoot pointer from bootstrap config without resolving getVaultRoot (avoids recursion).
+ */
+export function readBootstrapVaultRootPointer(
+  bootstrapConfigPath: string = getBootstrapConfigPath()
+): string | undefined {
+  if (!fs.existsSync(bootstrapConfigPath)) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(bootstrapConfigPath, 'utf8')) as Record<string, unknown>;
+    const root = parsed.vaultRoot;
+    if (typeof root === 'string' && root.trim().length > 0) {
+      return path.resolve(root.trim());
+    }
+  } catch {
+    // Ignore malformed bootstrap config; fall through to defaults.
+  }
+  return undefined;
+}
+
+/**
+ * When cwd looks like a vault root (config.json + projects/), use it as an implicit vault root.
+ */
+export function probeVaultRootFromCwd(cwd: string = process.cwd()): string | undefined {
+  const configPath = path.join(cwd, 'config.json');
+  const projectsDir = path.join(cwd, 'projects');
+  if (fs.existsSync(configPath) && fs.existsSync(projectsDir)) {
+    return path.resolve(cwd);
+  }
+  return undefined;
+}
+
+/**
+ * Persist default vault root in bootstrap ~/.spec-memo/config.json.
+ */
+export function writeBootstrapVaultRoot(
+  vaultRoot: string,
+  bootstrapConfigPath: string = getBootstrapConfigPath()
+): string {
+  const resolved = path.resolve(vaultRoot);
+  const bootstrapDir = path.dirname(bootstrapConfigPath);
+  if (!fs.existsSync(bootstrapDir)) {
+    fs.mkdirSync(bootstrapDir, { recursive: true });
+  }
+
+  let existing: Record<string, unknown> = {};
+  if (fs.existsSync(bootstrapConfigPath)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(bootstrapConfigPath, 'utf8')) as Record<string, unknown>;
+    } catch {
+      existing = {};
+    }
+  }
+
+  existing.vaultRoot = resolved;
+  fs.writeFileSync(bootstrapConfigPath, JSON.stringify(existing, null, 2), 'utf8');
+  return bootstrapConfigPath;
+}
+
+/**
  * Resolves the root directory of the spec-memo vault.
- * Priority: override argument > SPEC_MEMO_ROOT env var > ~/.spec-memo
+ * Priority: override argument > SPEC_MEMO_ROOT env > bootstrap config vaultRoot >
+ *           cwd vault probe > ~/.spec-memo
+ * Unusable candidates (missing permissions, not a directory, not creatable) are skipped.
+ * Always returns a path; last resort is getDefaultVaultRoot() even if currently inaccessible.
  */
 export function getVaultRoot(overridePath?: string): string {
-  if (overridePath && overridePath.trim().length > 0) {
-    return path.resolve(overridePath);
-  }
-  if (process.env.SPEC_MEMO_ROOT && process.env.SPEC_MEMO_ROOT.trim().length > 0) {
-    return path.resolve(process.env.SPEC_MEMO_ROOT);
-  }
-  return path.join(os.homedir(), '.spec-memo');
+  const resolved = firstUsableVaultRoot([
+    overridePath,
+    process.env.SPEC_MEMO_ROOT,
+    readBootstrapVaultRootPointer(),
+    probeVaultRootFromCwd()
+  ]);
+  return resolved ?? getDefaultVaultRoot();
 }
 
 function mergeParsedVaultConfig(parsed: Record<string, any>): VaultConfig {
@@ -242,6 +376,11 @@ function validateParsedVaultConfig(parsed: Record<string, any>): string | null {
       if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
         return `Invalid config.json: ports.${key} must be a positive integer`;
       }
+    }
+  }
+  if (parsed.vaultRoot !== undefined) {
+    if (typeof parsed.vaultRoot !== 'string' || parsed.vaultRoot.trim().length === 0) {
+      return 'Invalid config.json: vaultRoot must be a non-empty string path';
     }
   }
   return null;

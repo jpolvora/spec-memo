@@ -202,6 +202,8 @@ export interface PortsConfig {
 export interface VaultConfig {
   version: string;
   defaultRemote: string;
+  /** Persistent vault root pointer (bootstrap ~/.spec-memo/config.json or in-vault config.json). */
+  vaultRoot?: string;
   enableTelemetry?: boolean;
   telemetry?: TelemetryConfig;
   mode?: DeploymentMode;
@@ -336,6 +338,8 @@ export interface GcOptions {
   projectId?: string;
   vaultRoot?: string;
   dryRun?: boolean;
+  /** Test/clock override for deterministic TTL and log roll-up boundaries. */
+  now?: number;
 }
 
 export interface GcResult {
@@ -540,7 +544,10 @@ export interface SetupOptions {
   host?: HostName | string;
   printMcp?: boolean;
   writeMcp?: boolean;
+  /** One-shot override for this command (same as --vaultRoot). */
   vaultRoot?: string;
+  /** Persist default vault root in bootstrap config.json (same as --vault-root). */
+  defaultVaultRoot?: string;
   interactive?: boolean;
   urlPrompt?: () => string;
   authToken?: string;
@@ -551,6 +558,8 @@ export interface SetupResult {
   remoteUrl?: string;
   tokenConfigured: boolean;
   configPath: string;
+  bootstrapConfigPath?: string;
+  defaultVaultRoot?: string;
   hostSnippet?: Record<string, unknown> | string;
   hostConfigPath?: string;
   writtenMcp?: boolean;

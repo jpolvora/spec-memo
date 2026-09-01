@@ -271,7 +271,7 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
   let compactedPlansCount = 0;
 
   const db = openIndex(vaultRoot);
-  const now = Date.now();
+  const now = options.now ?? Date.now();
 
   // 1. Clean scratch directory
   const scratchDir = path.join(projectDir, 'scratch');

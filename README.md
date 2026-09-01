@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.14.2**.
+**Local working memory for coding agents outside the product repository.** Version **0.14.3**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -251,7 +251,23 @@ node dist/cli.js bootstrap
 # or: npm link  →  memo …
 ```
 
-Vault root defaults to `~/.spec-memo/` (`$SPEC_MEMO_ROOT` to override).
+Vault root defaults to `~/.spec-memo/` (`$SPEC_MEMO_ROOT` to override). You can also persist a default vault path in bootstrap `~/.spec-memo/config.json`:
+
+```json
+{
+  "vaultRoot": "/var/lib/spec-memo"
+}
+```
+
+Resolution order: `--vaultRoot` flag → `$SPEC_MEMO_ROOT` → bootstrap `config.json` `vaultRoot` → current directory when it contains `config.json` + `projects/` → `~/.spec-memo/`.
+
+Unusable candidates (not a directory, missing read/write permission, or not creatable) are skipped. Export, import/restore, backups, and reset always resolve through this same path and print the vault root they used.
+
+One-time setup:
+
+```bash
+memo setup --vault-root /var/lib/spec-memo
+```
 
 ### How to serve (MCP)
 

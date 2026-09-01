@@ -223,6 +223,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-31 | memo-status-pr30-review | Honor AC10 read-only (no `ensureVaultStructure`), remote 401/403 UNREACHABLE, `CONFIG_ERROR` on malformed JSON; AC10 tests | npm test 361 pass |
 | 2026-08-31 | release-0.14.1 | PR #30 review fixes; bump package to 0.14.1 |
 | 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` no longer binds `:3124` unless `--status`/`--status-port`; `memo status` sends Bearer on local probes | npm test |
+| 2026-08-31 | release-0.14.3 | Configurable bootstrap vaultRoot pointer and cwd probe; fix GC log roll-up test clock; bump to 0.14.3 |
 | 2026-08-31 | release-0.14.2 | Stop stdio serve from stealing status `:3124`; bump package to 0.14.2 |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.

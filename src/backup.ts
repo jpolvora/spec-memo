@@ -120,7 +120,7 @@ export function formatBackupFilename(date: Date = new Date()): string {
  * Export vault projects and records into a portable archive bundle (optionally encrypted).
  */
 export async function exportVault(options: ExportVaultOptions = {}): Promise<ExportVaultResult> {
-  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const vaultRoot = getVaultRoot(options.vaultRoot);
   return withVaultLock(vaultRoot, async () => {
     ensureVaultStructure(vaultRoot);
 
@@ -246,7 +246,7 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
  * Import a vault archive bundle (plaintext or encrypted, ZIP or JSON) into the local vault.
  */
 export async function importVault(options: ImportVaultOptions = {}): Promise<ImportVaultResult> {
-  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const vaultRoot = getVaultRoot(options.vaultRoot);
   return withVaultLock(vaultRoot, async () => {
     ensureVaultStructure(vaultRoot);
 
@@ -389,7 +389,7 @@ export const restoreVault = importVault;
  * Complete database reset and file clear with mandatory pre-wipe timestamped backup.
  */
 export async function resetVault(options: ResetVaultOptions = {}): Promise<ResetVaultResult> {
-  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const vaultRoot = getVaultRoot(options.vaultRoot);
   return withVaultLock(vaultRoot, async () => {
     ensureVaultStructure(vaultRoot);
 
@@ -514,7 +514,7 @@ export async function resetVault(options: ResetVaultOptions = {}): Promise<Reset
  * List all backup archives available in the vault's backups/ directory.
  */
 export function listBackups(vaultRoot?: string): BackupFileInfo[] {
-  const root = vaultRoot || getVaultRoot();
+  const root = getVaultRoot(vaultRoot);
   const backupsDir = path.join(root, 'backups');
   if (!fs.existsSync(backupsDir)) {
     return [];

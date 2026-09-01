@@ -208,7 +208,8 @@ Options:
   --print-mcp     Print host MCP configuration snippet to stdout
   --write-mcp     Write/merge host MCP configuration to host config file
   --auth-token    Bearer authentication token override
-  --vaultRoot     Override vault root directory
+  --vault-root    Persist default vault root in ~/.spec-memo/config.json (alternative to SPEC_MEMO_ROOT)
+  --vaultRoot     Override vault root directory for this command only
   --json          Output result as JSON
   -h, --help      Show this help message`);
     return;
@@ -605,6 +606,7 @@ async function runCliInner(
         parsed.options['write-mcp'] === 'true' ||
         parsed.options.writeMcp === true;
       const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const defaultVaultRoot = (parsed.options['vault-root'] as string) || undefined;
       const authToken =
         (parsed.options['auth-token'] as string) ||
         (parsed.options.authToken as string) ||
@@ -617,6 +619,7 @@ async function runCliInner(
         printMcp,
         writeMcp,
         vaultRoot,
+        defaultVaultRoot,
         authToken,
         interactive: process.stdin.isTTY && process.stdout.isTTY
       });
@@ -631,6 +634,10 @@ async function runCliInner(
         }
         console.log(`  Token Configured: ${result.tokenConfigured ? 'Yes' : 'No (set SPEC_MEMO_AUTH_TOKEN)'}`);
         console.log(`  Vault Config:     ${result.configPath}`);
+        if (result.defaultVaultRoot) {
+          console.log(`  Default Vault:    ${result.defaultVaultRoot}`);
+          console.log(`  Bootstrap Config: ${result.bootstrapConfigPath}`);
+        }
         if (result.hostSnippet) {
           console.log(`\nHost MCP Configuration (${parsed.options.host}):`);
           if (result.writtenMcp && result.hostConfigPath) {
@@ -914,7 +921,7 @@ async function runCliInner(
         backfillTrapRecurrence({ cwd, vaultRoot });
       }
 
-      const root = vaultRoot || getVaultRoot();
+      const root = getVaultRoot(vaultRoot);
       const identity = resolveProjectIdentity(cwd, { vaultRoot: root });
       const ranked = rankActiveTraps(listProjectRecords(root, identity.projectId), {
         layer,
@@ -1209,6 +1216,7 @@ async function runCliInner(
       } else {
         const encStr = result.encrypted ? ' (AES-256-GCM Encrypted)' : ' (Plaintext)';
         console.log(`spec-memo — Exported Vault Archive${encStr}\n`);
+        console.log(`  Vault Root:        ${result.vaultRoot}`);
         console.log(`  Projects exported: ${result.projectsCount}`);
         console.log(`  Records exported:  ${result.recordsCount}`);
         if (result.outputPath) {
@@ -1272,6 +1280,7 @@ async function runCliInner(
         printJson(result);
       } else {
         console.log(`spec-memo — Restored Vault Archive\n`);
+        console.log(`  Vault Root:        ${result.vaultRoot}`);
         console.log(`  Source archive:    ${archivePath}`);
         console.log(`  Projects restored: ${result.restoredProjectsCount} (${result.restoredProjects.join(', ')})`);
         console.log(`  Records restored:  ${result.restoredRecordsCount}`);
@@ -1298,7 +1307,7 @@ async function runCliInner(
       if (parsed.isJson) {
         printJson({ ok: true, backups });
       } else {
-        const root = vaultRoot || getVaultRoot();
+        const root = getVaultRoot(vaultRoot);
         console.log(`spec-memo — Vault Backups (${path.join(root, 'backups')})\n`);
         if (backups.length === 0) {
           console.log('  (No backups found)');
@@ -1338,9 +1347,11 @@ async function runCliInner(
         if (!process.stdin.isTTY) {
           throw new Error('Vault reset requires explicit confirmation (--force) in non-interactive environments.');
         }
+        const resolvedRoot = getVaultRoot(vaultRoot);
         const targetDesc = projectId && !all ? `project '${projectId}'` : 'ALL projects and databases in the entire vault';
         console.log(`\n[WARNING] You are about to reset ${targetDesc}.`);
-        console.log(`A mandatory timestamped pre-wipe backup snapshot will be saved in $SPEC_MEMO_ROOT/backups/ before deletion.`);
+        console.log(`Vault root: ${resolvedRoot}`);
+        console.log(`A mandatory timestamped pre-wipe backup snapshot will be saved in ${path.join(resolvedRoot, 'backups')} before deletion.`);
         const confirmed = await confirmPrompt('Are you sure you want to proceed? (y/N): ');
         if (!confirmed) {
           console.log('Vault reset aborted.');
@@ -1359,6 +1370,7 @@ async function runCliInner(
         printJson(result);
       } else {
         console.log(`spec-memo — Vault Reset Complete\n`);
+        console.log(`  Vault Root:        ${result.vaultRoot}`);
         console.log(`  Pre-wipe backup:  ${result.backupPath}`);
         console.log(`  Projects wiped:   ${result.wipedProjectsCount}`);
         console.log(`  Records wiped:    ${result.wipedRecordsCount}`);

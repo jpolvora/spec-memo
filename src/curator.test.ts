@@ -304,11 +304,12 @@ Created artifacts...
       assert.strictEqual(fs.existsSync(log2.path), true);
       assert.strictEqual(fs.existsSync(log3.path), true);
 
-      // Run GC
+      // Run GC with fixed clock so month boundaries stay deterministic across timezones
       const gcRes = await runGc({
         vaultRoot,
         cwd: productRepo,
-        dryRun: false
+        dryRun: false,
+        now
       });
 
       assert.strictEqual(gcRes.compactedLogsCount, 2);
