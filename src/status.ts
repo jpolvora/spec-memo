@@ -2407,6 +2407,15 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       return (n / (1024 * 1024)).toFixed(1) + " MB";
     }
 
+    function localDateStartIso(ymd) {
+      const parts = ymd.split("-").map(Number);
+      return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0).toISOString();
+    }
+    function localDateEndIso(ymd) {
+      const parts = ymd.split("-").map(Number);
+      return new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999).toISOString();
+    }
+
     function backupFilterParams() {
       const params = new URLSearchParams();
       const q = document.getElementById("backup-q-input").value.trim();
@@ -2418,9 +2427,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       const enc = document.getElementById("backup-encrypted-select").value;
       if (enc) params.set("encrypted", enc);
       const since = document.getElementById("backup-since-input").value;
-      if (since) params.set("since", since + "T00:00:00.000Z");
+      if (since) params.set("since", localDateStartIso(since));
       const until = document.getElementById("backup-until-input").value;
-      if (until) params.set("until", until + "T23:59:59.999Z");
+      if (until) params.set("until", localDateEndIso(until));
       document.querySelectorAll(".backup-kind-cb:checked").forEach((cb) => {
         params.append("kind", cb.value);
       });

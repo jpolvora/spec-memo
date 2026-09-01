@@ -62,7 +62,8 @@ function summarizePlainArchive(plain: PlainVaultArchive): Partial<BackupFileInfo
     }
   }
   const projectIds = (plain.manifest?.projects || plain.projects.map((p) => p.projectId)).filter(Boolean);
-  const scope: 'full' | 'project' = projectIds.length > 1 ? 'full' : 'project';
+  const scope: 'full' | 'project' =
+    plain.manifest?.scope ?? (projectIds.length > 1 ? 'full' : 'project');
   return {
     encrypted: false,
     inspectable: true,
@@ -177,6 +178,8 @@ interface VaultArchiveManifest {
   exportedAt: string;
   projects: string[];
   recordCount: number;
+  /** Export intent: all projects vs a single projectId (not inferred from project count). */
+  scope?: 'full' | 'project';
 }
 
 interface PlainVaultArchive {
@@ -331,7 +334,8 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
       version: '1.0',
       exportedAt: new Date().toISOString(),
       projects: projectNames,
-      recordCount: totalRecords
+      recordCount: totalRecords,
+      scope: targetProject ? 'project' : 'full'
     };
 
     let vaultConfig: VaultConfig | undefined;

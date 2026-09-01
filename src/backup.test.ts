@@ -404,6 +404,27 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
     const item = listed.find((b) => b.filename === result.filename);
     assert.ok(item);
     assert.ok(item!.recordCount != null && item!.recordCount >= 1);
+    // Full-vault persist with a single project must still report scope "full" (manifest intent).
+    assert.equal(item!.scope, 'full');
+  });
+
+  it('should label project-scoped persist as scope project', async () => {
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      kind: 'trap',
+      slug: 'scoped-persist-trap',
+      frontmatter: { id: 'trap-scoped-persist', title: 'Scoped', severity: 'low' },
+      body: 'Project-scoped persist scope test'
+    });
+    const projects = fs.readdirSync(path.join(sourceVault, 'projects')).filter((n) =>
+      fs.statSync(path.join(sourceVault, 'projects', n)).isDirectory()
+    );
+    assert.ok(projects.length >= 1);
+    const result = await persistVaultBackup({ vaultRoot: sourceVault, projectId: projects[0] });
+    const item = listBackups(sourceVault).find((b) => b.filename === result.filename);
+    assert.ok(item);
+    assert.equal(item!.scope, 'project');
   });
 
   it('should require existing file for deleteBackup and reject traversal in resolveBackupPath', async () => {
