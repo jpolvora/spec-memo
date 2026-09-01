@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-08-31 22:55] Agent: Cursor Composer
+- **Prompt**: /ws-fable-method implement status-backup-page.spec.md
+- **Done**: Dedicated Backups tab; persist/list/inspect/download/delete APIs; full-backup confirm; enriched listBackups; prompt/session round-trip; docs + tracking
+- **Result**: npm test 380 pass; AC44 coverage in backup/status suites
+
 ### [2026-08-31 19:22] Agent: Cursor Grok 4.6
 - **Prompt**: /ws-ship-pr
 - **Done**: Bump 0.14.1 → 0.14.2; ship stdio status companion opt-in and local probe auth

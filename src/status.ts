@@ -1,17 +1,27 @@
+import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { getVaultRoot, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
 import { getPackageVersion } from "./version.js";
-import { exportVault, importVault, resetVault, listBackups } from "./backup.js";
+import {
+  exportVault,
+  importVault,
+  resetVault,
+  listBackups,
+  persistVaultBackup,
+  deleteBackup,
+  inspectBackup,
+  resolveBackupPath
+} from "./backup.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { logErrorReport } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
 import { scheduleHybridPush } from "./hybrid-sync.js";
-import { TopologyInfo, TopologyRole, BackupFileInfo } from "./types.js";
+import { TopologyInfo, TopologyRole, BackupFileInfo, BackupListFilters } from "./types.js";
 import {
   listPrompts,
   searchPrompts,
@@ -180,6 +190,52 @@ function setCorsHeaders(res: http.ServerResponse): void {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, X-Requested-With");
   res.setHeader("Access-Control-Expose-Headers", "*");
+}
+
+function parseBackupListFilters(url: URL): BackupListFilters | { error: string } {
+  const filters: BackupListFilters = {};
+  const q = url.searchParams.get("q");
+  if (q) filters.q = q;
+  const scope = url.searchParams.get("scope");
+  if (scope === "all" || scope === "full" || scope === "project") {
+    filters.scope = scope;
+  } else if (scope) {
+    return { error: "Invalid scope" };
+  }
+  const projectId = url.searchParams.get("projectId");
+  if (projectId) filters.projectId = projectId;
+  const enc = url.searchParams.get("encrypted");
+  if (enc !== null && enc !== "") {
+    if (enc !== "true" && enc !== "false") {
+      return { error: "encrypted must be true or false" };
+    }
+    filters.encrypted = enc === "true";
+  }
+  const since = url.searchParams.get("since");
+  if (since) filters.since = since;
+  const until = url.searchParams.get("until");
+  if (until) filters.until = until;
+  const kinds = url.searchParams.getAll("kind").filter(Boolean);
+  if (kinds.length > 0) filters.kinds = kinds;
+  const minSize = url.searchParams.get("minSize");
+  if (minSize) {
+    const n = Number(minSize);
+    if (!Number.isFinite(n)) return { error: "Invalid minSize" };
+    filters.minSize = n;
+  }
+  const maxSize = url.searchParams.get("maxSize");
+  if (maxSize) {
+    const n = Number(maxSize);
+    if (!Number.isFinite(n)) return { error: "Invalid maxSize" };
+    filters.maxSize = n;
+  }
+  return filters;
+}
+
+function backupTimestampSuffix(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
 function writeJson(res: http.ServerResponse, statusCode: number, body: unknown): void {
@@ -1036,6 +1092,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     <button class="tab-btn" data-tab="tab-prompts">Prompts & Intent Stories</button>
     <button class="tab-btn" data-tab="tab-invoicing">Activity & Invoicing</button>
     <button class="tab-btn" data-tab="tab-rules">Derived Rules</button>
+    <button class="tab-btn" data-tab="tab-backups">Backups</button>
   </nav>
 
   <div class="banner-container" id="banner-container"></div>
@@ -1085,28 +1142,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         <h2>Vault filter</h2>
         <select id="vault-filter"><option value="">All vaults</option></select>
         <div class="filter-context" id="filter-context"></div>
-      </div>
-      <div class="panel">
-        <h2>Vault Backup & Restore</h2>
-        <button type="button" id="btn-export" disabled>Export selected vault</button>
-        <div class="helper-text" id="export-helper">Select a vault above to export</div>
-
-        <div class="import-section" style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);">
-          <input type="file" id="input-import-file" accept=".zip,application/zip,.json,application/json" style="display: none;">
-          <button type="button" id="btn-choose-file" class="btn-secondary">Upload & Restore Archive…</button>
-          <div id="import-filename" class="helper-text" style="display: none; word-break: break-all;"></div>
-          <button type="button" id="btn-run-import" class="btn-primary" style="display: none;" disabled>Run restore</button>
-        </div>
-
-        <div class="backups-section" style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <label style="font-size:0.75rem; color:var(--muted); text-transform:uppercase; font-weight:600;">Saved Backups</label>
-            <button type="button" id="btn-refresh-backups" class="btn-secondary" style="width:auto; margin:0; padding:2px 8px; font-size:0.7rem;">Refresh</button>
-          </div>
-          <div id="backups-list" style="max-height:160px; overflow-y:auto;">
-            <div class="helper-text">Loading backups…</div>
-          </div>
-        </div>
       </div>
 
       <div class="panel" style="border: 1px solid rgba(248, 81, 73, 0.35); border-radius: 8px; padding: 12px; background: rgba(248, 81, 73, 0.04);">
@@ -1317,6 +1352,90 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     </div>
   </section>
 
+  <!-- TAB 5: Backups -->
+  <section id="tab-backups" class="tab-content">
+    <div class="prompts-container">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <div class="filter-group" style="max-width: 220px;">
+            <label for="backup-vault-select">Vault:</label>
+            <select id="backup-vault-select"><option value="">All vaults</option></select>
+          </div>
+          <button type="button" id="btn-create-backup" class="btn-primary" style="width:auto; margin-top:0; padding:6px 16px;">Create Backup</button>
+          <button type="button" id="btn-backups-refresh" class="btn-secondary" style="width:auto; margin-top:0; padding:6px 14px;">Refresh</button>
+          <div class="filter-group" style="max-width: 160px;">
+            <label for="backup-q-input">Filename:</label>
+            <input type="text" id="backup-q-input" placeholder="Search filename…">
+          </div>
+          <div class="filter-group" style="max-width: 130px;">
+            <label for="backup-scope-select">Scope:</label>
+            <select id="backup-scope-select">
+              <option value="all">All</option>
+              <option value="full">Full</option>
+              <option value="project">Project</option>
+            </select>
+          </div>
+          <div class="filter-group" style="max-width: 120px;">
+            <label for="backup-encrypted-select">Encrypted:</label>
+            <select id="backup-encrypted-select">
+              <option value="">Any</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="filter-row">
+          <div class="filter-group" style="max-width: 140px;">
+            <label for="backup-since-input">Since:</label>
+            <input type="date" id="backup-since-input">
+          </div>
+          <div class="filter-group" style="max-width: 140px;">
+            <label for="backup-until-input">Until:</label>
+            <input type="date" id="backup-until-input">
+          </div>
+          <div class="filter-chips" id="backup-kind-chips" style="flex-wrap:wrap;">
+            <span style="font-size:0.72rem; color:var(--muted); margin-right:4px;">Kinds:</span>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="trap" style="margin-right:4px;">trap</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="decision" style="margin-right:4px;">decision</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="spec" style="margin-right:4px;">spec</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="plan" style="margin-right:4px;">plan</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="state" style="margin-right:4px;">state</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="log" style="margin-right:4px;">log</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="scratch" style="margin-right:4px;">scratch</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="review" style="margin-right:4px;">review</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="prompt" style="margin-right:4px;">prompt</label>
+            <label class="chip" style="cursor:pointer;"><input type="checkbox" class="backup-kind-cb" value="session" style="margin-right:4px;">session</label>
+          </div>
+          <button type="button" id="btn-backups-filter" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Apply Filters</button>
+        </div>
+      </div>
+
+      <div class="helper-text" id="backup-helper" style="margin-bottom:8px;">Create Backup is enabled for all vaults or a single project — full vault snapshots require confirmation.</div>
+
+      <div class="data-table-container">
+        <table class="data-table" id="backups-table">
+          <thead>
+            <tr>
+              <th>Filename</th>
+              <th style="width:150px;">Created</th>
+              <th style="width:80px;">Size</th>
+              <th style="width:70px;">Entries</th>
+              <th style="width:80px;">Scope</th>
+              <th style="width:70px;">Enc</th>
+              <th style="width:200px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="backups-tbody">
+            <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--muted);">Loading backups…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="backups-empty" class="helper-text" style="display:none; text-align:center; padding:20px;">
+        No backups match the current filters. Click <strong>Create Backup</strong> to persist a snapshot under <code>$SPEC_MEMO_ROOT/backups/</code>.
+      </div>
+    </div>
+  </section>
+
   <!-- Slide-out Side Details Drawer -->
   <div class="drawer-overlay" id="drawer-overlay"></div>
   <div class="drawer" id="prompt-drawer">
@@ -1338,6 +1457,36 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     </div>
   </div>
 
+  <!-- Backup Details Drawer -->
+  <div class="drawer-overlay" id="backup-drawer-overlay"></div>
+  <div class="drawer" id="backup-drawer">
+    <div class="drawer-header">
+      <h3 id="backup-drawer-title">Backup Details</h3>
+      <button type="button" class="drawer-close" id="backup-drawer-close">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="metadata-card" id="backup-drawer-metadata"></div>
+      <div class="drawer-actions">
+        <button type="button" id="btn-backup-drawer-restore" class="btn-primary">Restore</button>
+        <button type="button" id="btn-backup-drawer-download" class="btn-secondary">Download</button>
+        <button type="button" id="btn-backup-drawer-delete" class="btn-secondary" style="border-color:var(--err); color:#ffb4b0;">Delete</button>
+      </div>
+      <div id="backup-drawer-password-row" style="display:none; margin-bottom:10px;">
+        <label for="backup-inspect-password">Inspect password (encrypted archives):</label>
+        <input type="password" id="backup-inspect-password" placeholder="Password" autocomplete="current-password" style="width:100%; margin-top:4px;">
+        <button type="button" id="btn-backup-inspect-unlock" class="btn-secondary" style="width:auto; margin-top:6px;">Unlock details</button>
+      </div>
+      <div>
+        <h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Records by kind</h4>
+        <div id="backup-drawer-kinds" class="helper-text">—</div>
+      </div>
+      <div style="margin-top:12px;">
+        <h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Manifest</h4>
+        <pre id="backup-drawer-manifest" style="font-size:0.72rem; background:var(--code-bg); padding:10px; border-radius:6px; overflow:auto; max-height:240px;">—</pre>
+      </div>
+    </div>
+  </div>
+
   <!-- Export Password Modal -->
   <div id="modal-export" class="modal-overlay">
     <div class="modal-card">
@@ -1349,6 +1498,51 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div class="modal-actions">
         <button type="button" id="btn-export-cancel" class="btn-secondary">Cancel</button>
         <button type="button" id="btn-export-confirm" class="btn-primary">Download Backup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Backup Confirmation Modal -->
+  <div id="modal-full-backup" class="modal-overlay">
+    <div class="modal-card">
+      <h3>Confirm Full Vault Backup</h3>
+      <p id="modal-full-backup-desc" style="font-size: 0.85rem; color: var(--text); line-height: 1.4; margin-bottom: 10px;">
+        This will snapshot <strong>all</strong> project vaults under the vault root.
+      </p>
+      <label for="full-backup-password">Optional encryption password:</label>
+      <input type="password" id="full-backup-password" placeholder="Leave empty for unencrypted" autocomplete="new-password">
+      <div class="modal-actions">
+        <button type="button" id="btn-full-backup-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-full-backup-confirm" class="btn-primary">Create Full Backup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project Backup Password Modal -->
+  <div id="modal-create-backup" class="modal-overlay">
+    <div class="modal-card">
+      <h3 id="modal-create-backup-title">Create Project Backup</h3>
+      <p id="modal-create-backup-desc" style="font-size: 0.85rem; color: var(--text); line-height: 1.4; margin-bottom: 10px;"></p>
+      <label for="create-backup-password">Optional encryption password:</label>
+      <input type="password" id="create-backup-password" placeholder="Leave empty for unencrypted" autocomplete="new-password">
+      <div class="modal-actions">
+        <button type="button" id="btn-create-backup-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-create-backup-confirm" class="btn-primary">Create Backup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Backup Modal -->
+  <div id="modal-delete-backup" class="modal-overlay">
+    <div class="modal-card" style="border-color: var(--err);">
+      <h3 style="color: var(--err);">Delete Backup</h3>
+      <p style="font-size: 0.85rem; margin-bottom: 10px;">Type the exact filename to confirm deletion. This only removes the archive file — live vault records are not affected.</p>
+      <p id="modal-delete-backup-fn" style="font-family:monospace; font-size:0.8rem; color:var(--bright); word-break:break-all; margin-bottom:8px;"></p>
+      <label for="delete-backup-confirm-input">Filename:</label>
+      <input type="text" id="delete-backup-confirm-input" placeholder="YYYY-MM-DD-HH-mm-ss-backup.zip" autocomplete="off">
+      <div class="modal-actions">
+        <button type="button" id="btn-delete-backup-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-delete-backup-confirm" class="btn-primary" style="background:#da3633; border-color:#f85149;" disabled>Delete</button>
       </div>
     </div>
   </div>
@@ -1412,7 +1606,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     let eventSource = null;
     let pauseScroll = false;
     let reconnectTimer = null;
-    let selectedImportFile = null;
 
     // Prompts Explorer State
     let promptOffset = 0;
@@ -1588,18 +1781,19 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     function updateFilterContext() {
       const el = document.getElementById("filter-context");
-      const exportBtn = document.getElementById("btn-export");
-      const exportHelper = document.getElementById("export-helper");
+      const backupHelper = document.getElementById("backup-helper");
       if (!selectedProject) {
         el.textContent = "";
-        if(exportBtn) exportBtn.disabled = true;
-        if(exportHelper) exportHelper.textContent = "Select a vault above to export";
+        if (backupHelper) {
+          backupHelper.textContent = "All vaults — Create Backup includes every project (confirmation required). Select a vault to snapshot one project only.";
+        }
         return;
       }
       const dName = displayNameForProject(selectedProject);
       el.textContent = "Showing: " + dName;
-      if(exportBtn) exportBtn.disabled = false;
-      if(exportHelper) exportHelper.textContent = "Exporting: " + dName;
+      if (backupHelper) {
+        backupHelper.textContent = "Vault filter: " + dName + " — Create Backup on the Backups tab snapshots the selected vault only.";
+      }
     }
 
     function renderVaultList() {
@@ -1620,7 +1814,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         document.getElementById("vault-filter"),
         document.getElementById("prompt-vault-select"),
         document.getElementById("invoicing-vault-select"),
-        document.getElementById("rules-vault-select")
+        document.getElementById("rules-vault-select"),
+        document.getElementById("backup-vault-select")
       ];
       for (const sel of selectors) {
         if (!sel) continue;
@@ -1760,21 +1955,27 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     }
 
+    function activateTab(tabId) {
+      document.querySelectorAll(".tab-btn").forEach((b) => {
+        b.classList.toggle("active", b.getAttribute("data-tab") === tabId);
+      });
+      document.querySelectorAll(".tab-content").forEach((c) => {
+        c.classList.toggle("active", c.id === tabId);
+      });
+      if (tabId === "tab-prompts") {
+        loadPrompts();
+      } else if (tabId === "tab-invoicing") {
+        loadActivityReport();
+      } else if (tabId === "tab-backups") {
+        loadBackups();
+      }
+    }
+
     // Tab Switching
     document.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-        document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
-        btn.classList.add("active");
         const targetId = btn.getAttribute("data-tab");
-        const targetTab = document.getElementById(targetId);
-        if (targetTab) targetTab.classList.add("active");
-
-        if (targetId === "tab-prompts") {
-          loadPrompts();
-        } else if (targetId === "tab-invoicing") {
-          loadActivityReport();
-        }
+        if (targetId) activateTab(targetId);
       });
     });
 
@@ -2194,222 +2395,325 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     });
 
-    // Vault Backup / Import Modals & Events
-    const modalExport = document.getElementById("modal-export");
-    const exportPasswordInput = document.getElementById("export-password");
-    const btnExport = document.getElementById("btn-export");
-    const btnExportCancel = document.getElementById("btn-export-cancel");
-    const btnExportConfirm = document.getElementById("btn-export-confirm");
+    // --- BACKUPS TAB ---
+    let backupInventory = [];
+    let activeBackupFilename = null;
+    let pendingDeleteFilename = null;
 
-    btnExport.addEventListener("click", () => {
-      if (!selectedProject) return;
-      document.getElementById("modal-export-title").textContent = "Export " + displayNameForProject(selectedProject);
-      exportPasswordInput.value = "";
-      modalExport.classList.add("open");
-      exportPasswordInput.focus();
-    });
+    function formatBytes(n) {
+      if (n == null || n < 0) return "—";
+      if (n < 1024) return n + " B";
+      if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+      return (n / (1024 * 1024)).toFixed(1) + " MB";
+    }
 
-    btnExportCancel.addEventListener("click", () => {
-      modalExport.classList.remove("open");
-    });
-
-    btnExportConfirm.addEventListener("click", async () => {
-      if (!selectedProject) return;
-      btnExportConfirm.disabled = true;
-      btnExportConfirm.textContent = "Exporting…";
-      modalExport.classList.remove("open");
-
-      try {
-        const payload = {
-          projectId: selectedProject,
-          password: exportPasswordInput.value || undefined
-        };
-
-        let exportUrl = "/api/vaults/export";
-
-        const res = await apiFetch(exportUrl, {
-          method: "POST",
-          headers: {
-            ...apiHeaders(),
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          showBanner(errData.error || ("Export failed (" + res.status + ")"), "error");
-          return;
-        }
-
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.style.display = "none";
-        a.href = url;
-        const disp = res.headers.get("content-disposition");
-        let fname = "spec-memo-vault-" + selectedProject + ".zip";
-        if (disp && disp.includes("filename=")) {
-          const match = disp.match(/filename="?([^"]+)"?/);
-          if (match && match[1]) fname = match[1];
-        }
-        a.download = fname;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        a.remove();
-        showBanner("Export completed: downloaded " + fname, "success");
-      } catch (err) {
-        showBanner("Export failed: " + (err.message || String(err)), "error");
-      } finally {
-        btnExportConfirm.disabled = false;
-        btnExportConfirm.textContent = "Download Backup";
-      }
-    });
-
-    const fileInput = document.getElementById("input-import-file");
-    const btnChooseFile = document.getElementById("btn-choose-file");
-    const filenameDisplay = document.getElementById("import-filename");
-    const btnRunImport = document.getElementById("btn-run-import");
-    const modalImport = document.getElementById("modal-import");
-    const importPasswordInput = document.getElementById("import-password");
-    const btnImportCancel = document.getElementById("btn-import-cancel");
-    const btnImportConfirm = document.getElementById("btn-import-confirm");
-
-    btnChooseFile.addEventListener("click", () => {
-      fileInput.click();
-    });
-
-    fileInput.addEventListener("change", () => {
-      if (fileInput.files && fileInput.files[0]) {
-        selectedImportFile = fileInput.files[0];
-        filenameDisplay.textContent = selectedImportFile.name + " (" + Math.round(selectedImportFile.size / 1024) + " KB)";
-        filenameDisplay.style.display = "block";
-        btnRunImport.style.display = "block";
-        btnRunImport.disabled = false;
-      } else {
-        selectedImportFile = null;
-        filenameDisplay.style.display = "none";
-        btnRunImport.style.display = "none";
-        btnRunImport.disabled = true;
-      }
-    });
-
-    btnRunImport.addEventListener("click", () => {
-      if (!selectedImportFile) return;
-      importPasswordInput.value = "";
-      modalImport.classList.add("open");
-      importPasswordInput.focus();
-    });
-
-    btnImportCancel.addEventListener("click", () => {
-      modalImport.classList.remove("open");
-    });
-
-    btnImportConfirm.addEventListener("click", async () => {
-      if (!selectedImportFile) return;
-      btnImportConfirm.disabled = true;
-      btnImportConfirm.textContent = "Importing…";
-      btnRunImport.disabled = true;
-      btnRunImport.textContent = "Importing…";
-      modalImport.classList.remove("open");
-
-      try {
-        const formData = new FormData();
-        formData.append("archive", selectedImportFile);
-        const pass = importPasswordInput.value;
-        if (pass) formData.append("password", pass);
-
-        let importUrl = "/api/vaults/import";
-
-        const res = await apiFetch(importUrl, {
-          method: "POST",
-          headers: apiHeaders(),
-          body: formData
-        });
-
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) {
-          const errText = data.error || ("Import failed (" + res.status + ")");
-          showBanner(errText, "error");
-          return;
-        }
-
-        showBanner(
-          "Import successful: restored " + data.restoredRecordsCount + " records across " + data.restoredProjectsCount + " project(s)",
-          "success"
-        );
-        fileInput.value = "";
-        selectedImportFile = null;
-        filenameDisplay.style.display = "none";
-        btnRunImport.style.display = "none";
-        await loadVaults();
-        await refreshStatus();
-      } catch (err) {
-        showBanner("Import failed: " + (err.message || String(err)), "error");
-      } finally {
-        btnImportConfirm.disabled = false;
-        btnImportConfirm.textContent = "Confirm & Restore";
-        btnRunImport.disabled = false;
-        btnRunImport.textContent = "Run import";
-      }
-    });
-
-    let savedBackups = [];
-    let selectedRestoreBackup = null;
+    function backupFilterParams() {
+      const params = new URLSearchParams();
+      const q = document.getElementById("backup-q-input").value.trim();
+      if (q) params.set("q", q);
+      const scope = document.getElementById("backup-scope-select").value;
+      if (scope && scope !== "all") params.set("scope", scope);
+      const vaultSel = document.getElementById("backup-vault-select");
+      if (vaultSel && vaultSel.value) params.set("projectId", vaultSel.value);
+      const enc = document.getElementById("backup-encrypted-select").value;
+      if (enc) params.set("encrypted", enc);
+      const since = document.getElementById("backup-since-input").value;
+      if (since) params.set("since", since + "T00:00:00.000Z");
+      const until = document.getElementById("backup-until-input").value;
+      if (until) params.set("until", until + "T23:59:59.999Z");
+      document.querySelectorAll(".backup-kind-cb:checked").forEach((cb) => {
+        params.append("kind", cb.value);
+      });
+      return params;
+    }
 
     async function loadBackups() {
-      const listEl = document.getElementById("backups-list");
-      if (!listEl) return;
+      const tbody = document.getElementById("backups-tbody");
+      const emptyEl = document.getElementById("backups-empty");
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--muted);">Loading backups…</td></tr>';
+      if (emptyEl) emptyEl.style.display = "none";
       try {
-        const res = await apiFetch("/api/vaults/backups", { headers: apiHeaders() });
+        const params = backupFilterParams();
+        const qs = params.toString();
+        const res = await apiFetch("/api/vaults/backups" + (qs ? "?" + qs : ""), { headers: apiHeaders() });
         if (!res.ok) {
-          listEl.innerHTML = '<div class="helper-text">Failed to load backups</div>';
+          const err = await res.json().catch(() => ({}));
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--err);">' + escapeHtml(err.error || "Failed to load backups") + '</td></tr>';
           return;
         }
         const data = await res.json();
-        savedBackups = data.backups || [];
-        if (savedBackups.length === 0) {
-          listEl.innerHTML = '<div class="helper-text">No backups created yet</div>';
+        backupInventory = data.backups || [];
+        if (backupInventory.length === 0) {
+          tbody.innerHTML = "";
+          if (emptyEl) emptyEl.style.display = "block";
           return;
         }
-        listEl.innerHTML = "";
-        for (const b of savedBackups) {
-          const item = document.createElement("div");
-          item.className = "backup-item";
-          const sizeKb = Math.max(1, Math.round(b.size / 1024));
-          const dateStr = b.createdAt ? (b.createdAt.length >= 19 ? b.createdAt.slice(0, 19).replace('T', ' ') : b.createdAt) : "";
-          item.innerHTML =
-            '<div style="min-width:0; flex:1;">' +
-              '<div class="backup-fn" title="' + escapeHtml(b.filename) + '">' + escapeHtml(b.filename) + '</div>' +
-              '<div class="backup-meta">' + escapeHtml(dateStr) + ' · ' + sizeKb + ' KB</div>' +
-            '</div>' +
-            '<button type="button" class="btn-secondary btn-restore-item" data-fn="' + escapeHtml(b.filename) + '" style="width:auto; margin:0; padding:2px 8px; font-size:0.7rem;">Restore</button>';
-          listEl.appendChild(item);
+        if (emptyEl) emptyEl.style.display = "none";
+        tbody.innerHTML = "";
+        for (const b of backupInventory) {
+          const tr = document.createElement("tr");
+          tr.className = "backup-row";
+          tr.setAttribute("data-fn", b.filename);
+          const dateStr = b.createdAt ? (b.createdAt.length >= 19 ? b.createdAt.slice(0, 19).replace("T", " ") : b.createdAt) : "—";
+          const entries = b.recordCount != null ? String(b.recordCount) : "—";
+          const scope = b.scope || "—";
+          const enc = b.encrypted ? "yes" : "no";
+          tr.innerHTML =
+            '<td style="font-family:monospace; font-size:0.78rem; word-break:break-all;">' + escapeHtml(b.filename) + '</td>' +
+            '<td>' + escapeHtml(dateStr) + '</td>' +
+            '<td>' + escapeHtml(formatBytes(b.size)) + '</td>' +
+            '<td>' + escapeHtml(entries) + '</td>' +
+            '<td>' + escapeHtml(scope) + '</td>' +
+            '<td>' + escapeHtml(enc) + '</td>' +
+            '<td class="backup-actions">' +
+              '<button type="button" class="btn-secondary btn-backup-restore" data-fn="' + escapeHtml(b.filename) + '" style="width:auto; margin:0 4px 0 0; padding:2px 8px; font-size:0.7rem;">Restore</button>' +
+              '<button type="button" class="btn-secondary btn-backup-delete" data-fn="' + escapeHtml(b.filename) + '" style="width:auto; margin:0 4px 0 0; padding:2px 8px; font-size:0.7rem;">Delete</button>' +
+              '<button type="button" class="btn-secondary btn-backup-download" data-fn="' + escapeHtml(b.filename) + '" style="width:auto; margin:0; padding:2px 8px; font-size:0.7rem;">Download</button>' +
+            '</td>';
+          tr.addEventListener("click", (e) => {
+            if (e.target.closest(".backup-actions")) return;
+            openBackupDrawer(b.filename);
+          });
+          tbody.appendChild(tr);
         }
-
-        listEl.querySelectorAll(".btn-restore-item").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const fn = btn.getAttribute("data-fn");
-            selectedRestoreBackup = fn;
-            const modal = document.getElementById("modal-restore-named");
-            document.getElementById("modal-restore-named-title").textContent = "Restore " + fn;
-            document.getElementById("modal-restore-named-desc").textContent =
-              "Restore backup archive " + fn + " into the local vault? Records will be updated.";
-            document.getElementById("restore-named-password").value = "";
-            modal.classList.add("open");
-            document.getElementById("restore-named-password").focus();
+        tbody.querySelectorAll(".btn-backup-restore").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openRestoreModal(btn.getAttribute("data-fn"));
+          });
+        });
+        tbody.querySelectorAll(".btn-backup-delete").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openDeleteBackupModal(btn.getAttribute("data-fn"));
+          });
+        });
+        tbody.querySelectorAll(".btn-backup-download").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            downloadBackupFile(btn.getAttribute("data-fn"));
           });
         });
       } catch (err) {
-        listEl.innerHTML = '<div class="helper-text">Error loading backups</div>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--err);">Error loading backups</td></tr>';
       }
     }
 
-    const btnRefreshBackups = document.getElementById("btn-refresh-backups");
-    if (btnRefreshBackups) {
-      btnRefreshBackups.addEventListener("click", () => loadBackups());
+    function closeBackupDrawer() {
+      document.getElementById("backup-drawer").classList.remove("open");
+      document.getElementById("backup-drawer-overlay").classList.remove("open");
+      activeBackupFilename = null;
     }
+
+    async function openBackupDrawer(filename, password) {
+      if (!filename) return;
+      activeBackupFilename = filename;
+      const titleEl = document.getElementById("backup-drawer-title");
+      const metaEl = document.getElementById("backup-drawer-metadata");
+      const kindsEl = document.getElementById("backup-drawer-kinds");
+      const manifestEl = document.getElementById("backup-drawer-manifest");
+      const pwRow = document.getElementById("backup-drawer-password-row");
+      titleEl.textContent = filename;
+      metaEl.innerHTML = '<div class="helper-text">Loading…</div>';
+      kindsEl.textContent = "—";
+      manifestEl.textContent = "—";
+      document.getElementById("backup-drawer").classList.add("open");
+      document.getElementById("backup-drawer-overlay").classList.add("open");
+      try {
+        let url = "/api/vaults/backups/" + encodeURIComponent(filename) + "/inspect";
+        if (password) url += "?password=" + encodeURIComponent(password);
+        const res = await apiFetch(url, { headers: apiHeaders() });
+        const data = await res.json();
+        if (!res.ok) {
+          showBanner(data.error || "Inspect failed", "error");
+          if (res.status === 401 && pwRow) pwRow.style.display = "block";
+          return;
+        }
+        if (data.encrypted && data.inspectable === false) {
+          if (pwRow) pwRow.style.display = "block";
+          metaEl.innerHTML =
+            '<div><strong>Encrypted:</strong> yes</div>' +
+            '<div><strong>Size:</strong> ' + escapeHtml(formatBytes(data.size)) + '</div>' +
+            '<div class="helper-text" style="margin-top:6px;">Enter password to view record counts and manifest.</div>';
+          return;
+        }
+        if (pwRow) pwRow.style.display = "none";
+        metaEl.innerHTML =
+          '<div><strong>Created:</strong> ' + escapeHtml(data.createdAt || "—") + '</div>' +
+          '<div><strong>Size:</strong> ' + escapeHtml(formatBytes(data.size)) + '</div>' +
+          '<div><strong>Entries:</strong> ' + escapeHtml(data.recordCount != null ? String(data.recordCount) : "—") + '</div>' +
+          '<div><strong>Scope:</strong> ' + escapeHtml(data.scope || "—") + '</div>' +
+          '<div><strong>Encrypted:</strong> ' + (data.encrypted ? "yes" : "no") + '</div>' +
+          '<div><strong>Projects:</strong> ' + escapeHtml((data.projectIds || []).join(", ") || "—") + '</div>';
+        const byKind = data.recordsByKind || {};
+        const kindLines = Object.keys(byKind).sort().map((k) => k + ": " + byKind[k]).join(", ");
+        kindsEl.textContent = kindLines || "—";
+        manifestEl.textContent = JSON.stringify(data.manifest || { projects: data.projectIds, recordCount: data.recordCount }, null, 2);
+      } catch (err) {
+        showBanner("Inspect failed: " + (err.message || String(err)), "error");
+      }
+    }
+
+    function downloadBackupFile(filename) {
+      if (!filename) return;
+      window.location.href = "/api/vaults/backups/" + encodeURIComponent(filename);
+    }
+
+    function openRestoreModal(filename) {
+      if (!filename) return;
+      selectedRestoreBackup = filename;
+      const modal = document.getElementById("modal-restore-named");
+      document.getElementById("modal-restore-named-title").textContent = "Restore " + filename;
+      document.getElementById("modal-restore-named-desc").textContent =
+        "Restore backup archive " + filename + " into the local vault? Records with matching paths will be overwritten.";
+      document.getElementById("restore-named-password").value = "";
+      modal.classList.add("open");
+      document.getElementById("restore-named-password").focus();
+    }
+
+    function openDeleteBackupModal(filename) {
+      pendingDeleteFilename = filename;
+      document.getElementById("modal-delete-backup-fn").textContent = filename;
+      const input = document.getElementById("delete-backup-confirm-input");
+      input.value = "";
+      document.getElementById("btn-delete-backup-confirm").disabled = true;
+      document.getElementById("modal-delete-backup").classList.add("open");
+      input.focus();
+    }
+
+    async function persistBackup(payload, btn) {
+      const origText = btn ? btn.textContent : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Creating…";
+      }
+      try {
+        const res = await apiFetch("/api/vaults/backups", {
+          method: "POST",
+          headers: { ...apiHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          showBanner(data.error || "Backup failed", "error");
+          return;
+        }
+        showBanner("Backup created: " + data.filename + " (" + data.recordCount + " records)", "success");
+        await loadBackups();
+      } catch (err) {
+        showBanner("Backup failed: " + (err.message || String(err)), "error");
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = origText;
+        }
+      }
+    }
+
+    document.getElementById("btn-create-backup").addEventListener("click", () => {
+      const vaultSel = document.getElementById("backup-vault-select");
+      const projectId = vaultSel ? vaultSel.value : "";
+      if (!projectId) {
+        document.getElementById("modal-full-backup-desc").innerHTML =
+          "This will snapshot <strong>all " + vaults.length + " project vault(s)</strong> under the vault root into <code>$SPEC_MEMO_ROOT/backups/</code>.";
+        document.getElementById("full-backup-password").value = "";
+        document.getElementById("modal-full-backup").classList.add("open");
+        return;
+      }
+      const dName = displayNameForProject(projectId);
+      document.getElementById("modal-create-backup-title").textContent = "Create Backup — " + dName;
+      document.getElementById("modal-create-backup-desc").textContent = "Persist a complete snapshot for project " + projectId + ".";
+      document.getElementById("create-backup-password").value = "";
+      document.getElementById("modal-create-backup").classList.add("open");
+    });
+
+    document.getElementById("btn-full-backup-cancel").addEventListener("click", () => {
+      document.getElementById("modal-full-backup").classList.remove("open");
+    });
+    document.getElementById("btn-full-backup-confirm").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-full-backup-confirm");
+      document.getElementById("modal-full-backup").classList.remove("open");
+      const password = document.getElementById("full-backup-password").value || undefined;
+      await persistBackup({ confirmFullBackup: true, password }, btn);
+    });
+
+    document.getElementById("btn-create-backup-cancel").addEventListener("click", () => {
+      document.getElementById("modal-create-backup").classList.remove("open");
+    });
+    document.getElementById("btn-create-backup-confirm").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-create-backup-confirm");
+      const vaultSel = document.getElementById("backup-vault-select");
+      const projectId = vaultSel ? vaultSel.value : "";
+      document.getElementById("modal-create-backup").classList.remove("open");
+      if (!projectId) return;
+      const password = document.getElementById("create-backup-password").value || undefined;
+      await persistBackup({ projectId, password }, btn);
+    });
+
+    document.getElementById("btn-backups-refresh").addEventListener("click", () => loadBackups());
+    document.getElementById("btn-backups-filter").addEventListener("click", () => loadBackups());
+
+    document.getElementById("backup-drawer-close").addEventListener("click", closeBackupDrawer);
+    document.getElementById("backup-drawer-overlay").addEventListener("click", closeBackupDrawer);
+    document.getElementById("btn-backup-drawer-restore").addEventListener("click", () => {
+      if (activeBackupFilename) openRestoreModal(activeBackupFilename);
+    });
+    document.getElementById("btn-backup-drawer-download").addEventListener("click", () => {
+      if (activeBackupFilename) downloadBackupFile(activeBackupFilename);
+    });
+    document.getElementById("btn-backup-drawer-delete").addEventListener("click", () => {
+      if (activeBackupFilename) openDeleteBackupModal(activeBackupFilename);
+    });
+    document.getElementById("btn-backup-inspect-unlock").addEventListener("click", () => {
+      const pw = document.getElementById("backup-inspect-password").value;
+      if (activeBackupFilename) openBackupDrawer(activeBackupFilename, pw);
+    });
+
+    document.getElementById("delete-backup-confirm-input").addEventListener("input", (e) => {
+      const match = e.target.value === pendingDeleteFilename;
+      document.getElementById("btn-delete-backup-confirm").disabled = !match;
+    });
+    document.getElementById("btn-delete-backup-cancel").addEventListener("click", () => {
+      document.getElementById("modal-delete-backup").classList.remove("open");
+      pendingDeleteFilename = null;
+    });
+    document.getElementById("btn-delete-backup-confirm").addEventListener("click", async () => {
+      if (!pendingDeleteFilename) return;
+      const btn = document.getElementById("btn-delete-backup-confirm");
+      btn.disabled = true;
+      btn.textContent = "Deleting…";
+      document.getElementById("modal-delete-backup").classList.remove("open");
+      try {
+        const res = await apiFetch("/api/vaults/backups/" + encodeURIComponent(pendingDeleteFilename), {
+          method: "DELETE",
+          headers: { ...apiHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm: true })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          showBanner(data.error || "Delete failed", "error");
+          return;
+        }
+        showBanner("Deleted backup " + pendingDeleteFilename, "success");
+        if (activeBackupFilename === pendingDeleteFilename) closeBackupDrawer();
+        await loadBackups();
+      } catch (err) {
+        showBanner("Delete failed: " + (err.message || String(err)), "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Delete";
+        pendingDeleteFilename = null;
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && document.getElementById("backup-drawer").classList.contains("open")) {
+        closeBackupDrawer();
+      }
+    });
+
+    let selectedRestoreBackup = null;
 
     // Reset Vault Modal & Confirmation
     const modalReset = document.getElementById("modal-reset");
@@ -2530,7 +2834,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     });
 
     loadVaults().then(() => {
-      loadBackups();
+      const tabParam = urlParams.get("tab");
+      const hashTab = (window.location.hash || "").replace("#", "");
+      if (tabParam === "backups" || hashTab === "tab-backups") {
+        activateTab("tab-backups");
+      }
       reconnectStream(true);
       refreshStatus();
       setInterval(refreshStatus, 3000);
@@ -2830,7 +3138,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         let targetProjectId = "";
         try {
           const rawBody = await readBodyBuffer(req, 1024 * 1024);
-          let parsed: { projectId?: string; password?: string } = {};
+          let parsed: { projectId?: string; password?: string; confirmFullBackup?: boolean } = {};
           if (rawBody.length > 0) {
             try {
               parsed = JSON.parse(rawBody.toString("utf8"));
@@ -2849,15 +3157,39 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           }
 
           targetProjectId = parsed.projectId || "";
-          if (!targetProjectId || typeof targetProjectId !== "string") {
-            logErrorReport({
-              subsystem: "status-server",
-              port,
-              host,
-              method: "POST",
-              endpoint: "/api/vaults/export",
-              error: `Unknown projectId (missing or not a string)`
-            }, { vaultRoot, logPath: errorLogPath });
+          if (!targetProjectId) {
+            if (parsed.confirmFullBackup !== true) {
+              writeJson(res, 400, { error: "confirmFullBackup required for full backup" });
+              return;
+            }
+            const exportResult = await exportVault({
+              vaultRoot,
+              password: parsed.password || undefined
+            });
+            if (!exportResult.payload) {
+              throw new Error("Export yielded empty payload");
+            }
+            const zipBuffer = packVaultZip(exportResult.payload);
+            const timestamp = backupTimestampSuffix();
+            const filename = `spec-memo-vault-full-${timestamp}.zip`;
+            bus.capture({
+              type: "system",
+              kind: "write",
+              ok: true,
+              durationMs: Date.now() - startTime,
+              summary: `export full vault (${exportResult.recordsCount} records, ${exportResult.projectsCount} projects)`
+            });
+            setCorsHeaders(res);
+            res.writeHead(200, {
+              "Content-Type": "application/zip",
+              "Content-Disposition": `attachment; filename="${filename}"`,
+              "Content-Length": zipBuffer.length
+            });
+            res.end(zipBuffer);
+            return;
+          }
+
+          if (typeof targetProjectId !== "string") {
             writeJson(res, 400, { error: "Unknown projectId" });
             return;
           }
@@ -2888,9 +3220,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           }
 
           const zipBuffer = packVaultZip(exportResult.payload);
-          const now = new Date();
-          const pad = (n: number) => String(n).padStart(2, "0");
-          const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+          const timestamp = backupTimestampSuffix();
           const filename = `spec-memo-vault-${targetProjectId}-${timestamp}.zip`;
 
           bus.capture({
@@ -3063,10 +3393,180 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
       if (req.method === "GET" && pathname === "/api/vaults/backups") {
         try {
-          const backups = listBackups(vaultRoot);
+          const parsedFilters = parseBackupListFilters(url);
+          if ("error" in parsedFilters) {
+            writeJson(res, 400, { ok: false, error: parsedFilters.error });
+            return;
+          }
+          const backups = listBackups(vaultRoot, parsedFilters);
           writeJson(res, 200, sanitizeToolOutput({ ok: true, backups }));
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, 500, { ok: false, error: msg });
+        }
+        return;
+      }
+
+      const backupFileMatch = pathname.match(/^\/api\/vaults\/backups\/([^/]+)(\/inspect)?$/);
+      if (backupFileMatch) {
+        const rawFilename = decodeURIComponent(backupFileMatch[1]);
+        const isInspect = backupFileMatch[2] === "/inspect";
+
+        if (req.method === "GET" && isInspect) {
+          try {
+            const password = url.searchParams.get("password") || undefined;
+            const result = inspectBackup(rawFilename, { vaultRoot, password });
+            writeJson(res, 200, sanitizeToolOutput(result));
+          } catch (err: unknown) {
+            const code = (err as Error & { code?: string }).code;
+            const msg = err instanceof Error ? err.message : String(err);
+            if (code === "BACKUP_DECRYPT_FAILED") {
+              writeJson(res, 401, { ok: false, error: msg });
+              return;
+            }
+            if (code === "BACKUP_NOT_FOUND") {
+              writeJson(res, 404, { ok: false, error: msg });
+              return;
+            }
+            if (msg.includes("Invalid backup filename") || msg.includes("escapes")) {
+              writeJson(res, 400, { ok: false, error: msg });
+              return;
+            }
+            writeJson(res, 400, { ok: false, error: msg });
+          }
+          return;
+        }
+
+        if (req.method === "GET" && !isInspect) {
+          try {
+            const fullPath = resolveBackupPath(vaultRoot, rawFilename);
+            if (!fs.existsSync(fullPath)) {
+              writeJson(res, 404, { ok: false, error: "Backup not found" });
+              return;
+            }
+            const safeName = path.basename(fullPath);
+            const contentType = safeName.endsWith(".json")
+              ? "application/json"
+              : "application/zip";
+            setCorsHeaders(res);
+            res.writeHead(200, {
+              "Content-Type": contentType,
+              "Content-Disposition": `attachment; filename="${safeName}"`
+            });
+            fs.createReadStream(fullPath).pipe(res);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            writeJson(res, 400, { ok: false, error: msg });
+          }
+          return;
+        }
+
+        if (req.method === "DELETE" && !isInspect) {
+          const startTime = Date.now();
+          try {
+            const rawBody = await readBodyBuffer(req, 64 * 1024);
+            let parsed: { confirm?: boolean } = {};
+            if (rawBody.length > 0) {
+              try {
+                parsed = JSON.parse(rawBody.toString("utf8"));
+              } catch {
+                writeJson(res, 400, { ok: false, error: "Invalid JSON body" });
+                return;
+              }
+            }
+            if (parsed.confirm !== true) {
+              writeJson(res, 400, { ok: false, error: "Delete confirmation required (confirm: true)." });
+              return;
+            }
+            const result = await deleteBackup(rawFilename, vaultRoot);
+            bus.capture({
+              type: "system",
+              kind: "write",
+              ok: true,
+              durationMs: Date.now() - startTime,
+              summary: `backup deleted ${result.filename}`
+            });
+            writeJson(res, 200, sanitizeToolOutput({ ok: true, filename: result.filename }));
+          } catch (err: unknown) {
+            const code = (err as Error & { code?: string }).code;
+            const msg = err instanceof Error ? err.message : String(err);
+            if (code === "BACKUP_NOT_FOUND") {
+              writeJson(res, 404, { ok: false, error: msg });
+              return;
+            }
+            writeJson(res, 400, { ok: false, error: msg });
+          }
+          return;
+        }
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/backups") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 1024 * 1024);
+          let parsed: { projectId?: string; password?: string; confirmFullBackup?: boolean } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, { ok: false, error: "Invalid JSON body" });
+              return;
+            }
+          }
+
+          const targetProjectId = parsed.projectId || "";
+          if (!targetProjectId) {
+            if (parsed.confirmFullBackup !== true) {
+              writeJson(res, 400, { error: "confirmFullBackup required for full backup" });
+              return;
+            }
+          } else {
+            const projects = getVaultProjectList(vaultRoot);
+            if (!projects.some((p) => p.id === targetProjectId)) {
+              writeJson(res, 400, { error: "Unknown projectId" });
+              return;
+            }
+          }
+
+          const result = await persistVaultBackup({
+            vaultRoot,
+            projectId: targetProjectId || undefined,
+            password: parsed.password || undefined
+          });
+
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `backup created ${result.filename} (${result.recordCount} records, ${result.projectIds.length} projects)`
+          });
+
+          writeJson(res, 200, sanitizeToolOutput({
+            ok: true,
+            filename: result.filename,
+            size: result.size,
+            recordCount: result.recordCount,
+            projectIds: result.projectIds,
+            encrypted: result.encrypted
+          }));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: "POST",
+            endpoint: "/api/vaults/backups",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: false,
+            durationMs: Date.now() - startTime,
+            summary: `backup create failed: ${msg}`
+          });
           writeJson(res, 500, { ok: false, error: msg });
         }
         return;

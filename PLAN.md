@@ -225,6 +225,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` no longer binds `:3124` unless `--status`/`--status-port`; `memo status` sends Bearer on local probes | npm test |
 | 2026-08-31 | release-0.14.3 | Configurable bootstrap vaultRoot pointer and cwd probe; fix GC log roll-up test clock; bump to 0.14.3 |
 | 2026-08-31 | release-0.14.2 | Stop stdio serve from stealing status `:3124`; bump package to 0.14.2 |
+| 2026-08-31 | status-backup-page | Dedicated Backups tab with full-backup confirm, complete archives, inventory filters, restore/delete/download; npm test 380 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

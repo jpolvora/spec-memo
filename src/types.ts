@@ -496,10 +496,66 @@ export interface ResetVaultResult {
 
 export interface BackupFileInfo {
   filename: string;
+  /** Absolute path on disk; stripped by sanitizeToolOutput for HTTP/CLI JSON. */
   path: string;
   size: number;
   createdAt: string;
   isZip: boolean;
+  encrypted?: boolean;
+  /** `full` = all projects; `project` = one or more named projects; omitted when unknown (encrypted unread). */
+  scope?: 'full' | 'project';
+  projectIds?: string[];
+  recordCount?: number | null;
+  recordsByKind?: Record<string, number>;
+  inspectable?: boolean;
+  format?: string;
+}
+
+export interface BackupListFilters {
+  q?: string;
+  scope?: 'all' | 'full' | 'project';
+  projectId?: string;
+  encrypted?: boolean;
+  since?: string;
+  until?: string;
+  kinds?: string[];
+  minSize?: number;
+  maxSize?: number;
+}
+
+export interface PersistBackupOptions {
+  vaultRoot?: string;
+  projectId?: string;
+  password?: string;
+}
+
+export interface PersistBackupResult {
+  filename: string;
+  size: number;
+  recordCount: number;
+  projectIds: string[];
+  encrypted: boolean;
+}
+
+export interface InspectBackupResult {
+  ok: true;
+  filename: string;
+  size: number;
+  createdAt: string;
+  isZip: boolean;
+  encrypted: boolean;
+  inspectable: boolean;
+  scope?: 'full' | 'project';
+  projectIds?: string[];
+  recordCount?: number | null;
+  recordsByKind?: Record<string, number>;
+  format?: string;
+  manifest?: {
+    version?: string;
+    exportedAt?: string;
+    projects?: string[];
+    recordCount?: number;
+  };
 }
 
 export type TopologyRole = 'local-vault' | 'intermediary-proxy' | 'final-remote';

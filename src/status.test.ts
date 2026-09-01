@@ -157,9 +157,9 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('id="stat-clients"'));
     assert.ok(html.includes('id="client-list"'));
     assert.ok(html.includes('Vault Clients'));
-    assert.ok(html.includes('id="btn-export"'));
-    assert.ok(html.includes('id="btn-choose-file"'));
-    assert.ok(html.includes('id="btn-run-import"'));
+    assert.ok(html.includes('data-tab="tab-backups"'));
+    assert.ok(html.includes('id="tab-backups"'));
+    assert.ok(!html.includes('id="btn-export"'));
     assert.ok(html.includes('id="modal-export"'));
     assert.ok(html.includes('id="modal-import"'));
     assert.ok(!html.includes("cdn.jsdelivr"));
@@ -167,6 +167,13 @@ test("MCP status monitor", async (t) => {
     assert.ok(!html.includes("?token="));
     assert.ok(html.includes("withCredentials: true"));
     assert.ok(html.includes('credentials: "same-origin"'));
+  });
+
+  await t.test("generateStatusHtml supports ?tab=backups deep link", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('urlParams.get("tab")'));
+    assert.ok(html.includes('tabParam === "backups"'));
+    assert.ok(html.includes('activateTab("tab-backups")'));
   });
 
   await t.test("generateStatusHtml loadVaults accepts GET /api/vaults array payload", () => {
@@ -505,6 +512,8 @@ test("MCP status monitor", async (t) => {
       body: JSON.stringify({})
     });
     assert.strictEqual(resEmpty.status, 400);
+    const emptyBody = await resEmpty.json() as { error: string };
+    assert.strictEqual(emptyBody.error, "confirmFullBackup required for full backup");
   });
 
   await t.test("POST /api/vaults/export returns valid zip archive with vault-backup.json", async () => {
@@ -968,6 +977,76 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
     const data = await res.json() as any;
     assert.strictEqual(data.ok, false);
     assert.match(data.error, /inside the vault or backups/);
+  });
+
+  await t.test("POST /api/vaults/backups without confirmFullBackup returns 400 and creates no zip", async () => {
+    const before = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      headers: authHeaders
+    });
+    const beforeData = await before.json() as { backups: Array<{ filename: string }> };
+    const beforeCount = beforeData.backups.length;
+
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    assert.strictEqual(res.status, 400);
+    const body = await res.json() as { error: string };
+    assert.strictEqual(body.error, "confirmFullBackup required for full backup");
+
+    const after = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      headers: authHeaders
+    });
+    const afterData = await after.json() as { backups: Array<{ filename: string }> };
+    assert.strictEqual(afterData.backups.length, beforeCount);
+  });
+
+  await t.test("POST /api/vaults/backups with confirmFullBackup persists zip with recordCount", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmFullBackup: true })
+    });
+    assert.strictEqual(res.status, 200);
+    const data = await res.json() as { ok: boolean; filename: string; recordCount: number };
+    assert.strictEqual(data.ok, true);
+    assert.ok(data.filename.endsWith(".zip"));
+    assert.ok(typeof data.recordCount === "number");
+
+    const backupPath = path.join(vaultRoot, "backups", data.filename);
+    assert.ok(fs.existsSync(backupPath));
+
+    const listRes = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      headers: authHeaders
+    });
+    const listData = await listRes.json() as { backups: Array<{ filename: string; recordCount: number | null }> };
+    const item = listData.backups.find((b) => b.filename === data.filename);
+    assert.ok(item);
+    assert.ok(item!.recordCount != null);
+  });
+
+  await t.test("DELETE /api/vaults/backups without confirm returns 400", async () => {
+    const listRes = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      headers: authHeaders
+    });
+    const listData = await listRes.json() as { backups: Array<{ filename: string }> };
+    if (listData.backups.length === 0) return;
+    const fn = listData.backups[0].filename;
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups/${encodeURIComponent(fn)}`, {
+      method: "DELETE",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: false })
+    });
+    assert.strictEqual(res.status, 400);
+    assert.ok(fs.existsSync(path.join(vaultRoot, "backups", fn)));
+  });
+
+  await t.test("GET /api/vaults/backups inspect rejects path traversal", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups/${encodeURIComponent("../config.json")}/inspect`, {
+      headers: authHeaders
+    });
+    assert.strictEqual(res.status, 400);
   });
 
   await t.test("GET /api/vaults/backups and POST /api/vaults/reset sanitize host filesystem paths", async () => {

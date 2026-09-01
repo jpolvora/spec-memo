@@ -109,7 +109,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [ ] Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) (`spec: virtual-file-system-over-mcp.spec.md`)
 - [x] [`prompt-history-and-query`](prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
 - [x] [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md): Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI
-- [ ] Dedicated status-monitor backup page with complete archives and inventory management (`spec: status-backup-page.spec.md`)
+- [x] [`status-backup-page`](status-backup-page.spec.md): Dedicated status-monitor backup page with complete archives and inventory management
 
 
 ## 8. Next specs
@@ -151,7 +151,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 32 | [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md) | `[x]` done | Phase 7: Deployment modes | Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI |
 | 33 | `configurable-daemon-ports` | `[x]` done | Phase 7: Deployment modes | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas) and CLI fallback |
 | 34 | [`memo-status`](memo-status.spec.md) | `[x]` done | Phase 7: Deployment modes | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard |
-| 35 | [`status-backup-page`](status-backup-page.spec.md) | `[ ]` todo | Phase 7 | Dedicated status-monitor backup page with complete archives and inventory management |
+| 35 | [`status-backup-page`](status-backup-page.spec.md) | `[x]` done | Phase 7 | Dedicated status-monitor backup page with complete archives and inventory management |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -209,6 +209,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-31 | release-0.14.1 | PR #30 review fixes for memo status | 0.14.1 |
 | 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` opt-in status companion; local status probes send Bearer | 0.14.2 |
 | 2026-08-31 | release-0.14.2 | Stop stdio serve from binding status `:3124` by default | 0.14.2 |
+| 2026-08-31 | status-backup-page | Dedicated Backups tab: full-backup confirm, complete kinds, inventory filters, restore/delete/download | npm test 380 pass |
 
 ## Archive
 
