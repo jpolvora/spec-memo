@@ -709,17 +709,28 @@ export function listBackups(vaultRoot?: string, filters?: BackupListFilters): Ba
   const results: BackupFileInfo[] = [];
 
   for (const entry of entries) {
+    if (entry.endsWith('.meta.json')) continue;
     if (entry.endsWith('.zip') || entry.endsWith('.json')) {
       const fullPath = path.join(backupsDir, entry);
       try {
         const stat = fs.statSync(fullPath);
         if (!stat.isFile()) continue;
 
-        let meta: Partial<BackupFileInfo>;
+        let meta: Partial<BackupFileInfo> | undefined;
+        const metaPath = `${fullPath}.meta.json`;
         try {
-          meta = cachedPeekBackupMetadata(fullPath);
+          if (fs.existsSync(metaPath) && fs.statSync(metaPath).mtimeMs >= stat.mtimeMs) {
+            meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as Partial<BackupFileInfo>;
+          }
         } catch {
-          meta = { encrypted: false, inspectable: false, recordCount: null, recordsByKind: {} };
+          meta = undefined;
+        }
+        if (!meta) {
+          try {
+            meta = cachedPeekBackupMetadata(fullPath);
+          } catch {
+            meta = { encrypted: false, inspectable: false, recordCount: null, recordsByKind: {} };
+          }
         }
 
         results.push({
@@ -814,6 +825,17 @@ export async function persistVaultBackup(options: PersistBackupOptions = {}): Pr
       throw new Error('Persist backup failed: Backup archive was not created on disk.');
     }
 
+    const sidecarMeta: Partial<BackupFileInfo> = {
+      scope: exportRes.manifest.scope,
+      recordCount: exportRes.recordsCount,
+      recordsByKind: exportRes.manifest.recordsByKind,
+      projectIds: exportRes.manifest.projects.slice(),
+      encrypted: exportRes.encrypted,
+      inspectable: true,
+      format: exportRes.encrypted ? 'spec-memo-encrypted-vault-v1' : 'spec-memo-vault-v1'
+    };
+    fs.writeFileSync(`${backupPath}.meta.json`, JSON.stringify(sidecarMeta), 'utf8');
+
     invalidateBackupMetaCache(backupPath);
 
     return {
@@ -842,6 +864,10 @@ export async function deleteBackup(
       throw err;
     }
     fs.unlinkSync(fullPath);
+    const metaPath = `${fullPath}.meta.json`;
+    if (fs.existsSync(metaPath)) {
+      fs.unlinkSync(metaPath);
+    }
     invalidateBackupMetaCache(fullPath);
     return { ok: true as const, filename: path.basename(fullPath) };
   });

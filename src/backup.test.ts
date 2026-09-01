@@ -498,4 +498,39 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
       /Backup not found/
     );
   });
+
+  it('should write sidecar metadata on persist, list without unpacking, and remove sidecar on delete', async () => {
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      kind: 'trap',
+      slug: 'sidecar-trap',
+      frontmatter: { id: 'trap-sidecar', title: 'Sidecar', severity: 'low' },
+      body: 'Sidecar metadata test'
+    });
+
+    const result = await persistVaultBackup({ vaultRoot: sourceVault });
+    const backupPath = path.join(sourceVault, 'backups', result.filename);
+    const metaPath = `${backupPath}.meta.json`;
+    assert.ok(fs.existsSync(metaPath));
+    const sidecar = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as {
+      recordCount?: number;
+      scope?: string;
+      recordsByKind?: Record<string, number>;
+    };
+    assert.equal(sidecar.recordCount, result.recordCount);
+    assert.equal(sidecar.scope, 'full');
+    assert.ok(sidecar.recordsByKind && (sidecar.recordsByKind.trap || 0) >= 1);
+
+    const listed = listBackups(sourceVault);
+    assert.ok(!listed.some((b) => b.filename.endsWith('.meta.json')));
+    const item = listed.find((b) => b.filename === result.filename);
+    assert.ok(item);
+    assert.equal(item!.recordCount, result.recordCount);
+    assert.equal(item!.scope, 'full');
+
+    await deleteBackup(result.filename, sourceVault);
+    assert.ok(!fs.existsSync(backupPath));
+    assert.ok(!fs.existsSync(metaPath));
+  });
 });

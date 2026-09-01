@@ -455,6 +455,8 @@ export interface ExportVaultResult {
     exportedAt: string;
     projects: string[];
     recordCount: number;
+    scope?: 'full' | 'project';
+    recordsByKind?: Record<string, number>;
   };
   payload?: string;
 }

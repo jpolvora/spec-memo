@@ -2540,9 +2540,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       document.getElementById("backup-drawer").classList.add("open");
       document.getElementById("backup-drawer-overlay").classList.add("open");
       try {
-        let url = "/api/vaults/backups/" + encodeURIComponent(filename) + "/inspect";
-        if (password) url += "?password=" + encodeURIComponent(password);
-        const res = await apiFetch(url, { headers: apiHeaders() });
+        const res = await apiFetch("/api/vaults/backups/" + encodeURIComponent(filename) + "/inspect", {
+          method: "POST",
+          headers: Object.assign({}, apiHeaders(), { "Content-Type": "application/json" }),
+          body: JSON.stringify(password ? { password: password } : {})
+        });
         const data = await res.json();
         if (!res.ok) {
           showBanner(data.error || "Inspect failed", "error");
@@ -3431,9 +3433,24 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const rawFilename = decodeURIComponent(backupFileMatch[1]);
         const isInspect = backupFileMatch[2] === "/inspect";
 
-        if (req.method === "GET" && isInspect) {
+        if ((req.method === "GET" || req.method === "POST") && isInspect) {
           try {
-            const password = url.searchParams.get("password") || undefined;
+            let password = url.searchParams.get("password") || undefined;
+            if (req.method === "POST") {
+              const rawBody = await readBodyBuffer(req, 64 * 1024);
+              if (rawBody.length > 0) {
+                let parsed: { password?: unknown };
+                try {
+                  parsed = JSON.parse(rawBody.toString("utf8"));
+                } catch {
+                  writeJson(res, 400, { ok: false, error: "Invalid JSON body" });
+                  return;
+                }
+                if (typeof parsed.password === "string" && parsed.password) {
+                  password = parsed.password;
+                }
+              }
+            }
             const result = inspectBackup(rawFilename, { vaultRoot, password });
             writeJson(res, 200, sanitizeToolOutput(result));
           } catch (err: unknown) {

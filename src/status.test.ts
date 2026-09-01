@@ -169,6 +169,7 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('credentials: "same-origin"'));
     assert.ok(html.includes('decryption failed'));
     assert.ok(html.includes('incorrect password'));
+    assert.ok(!html.includes('url += "?password="'), "inspect password must not be appended to the request URL");
   });
 
   await t.test("generateStatusHtml supports ?tab=backups deep link", () => {
@@ -1069,7 +1070,7 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
     assert.strictEqual(res.status, 400);
   });
 
-  await t.test("GET inspect wrong password returns 401 decrypt error not Unauthorized", async () => {
+  await t.test("POST inspect wrong password returns 401 decrypt error not Unauthorized", async () => {
     const persistRes = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
       method: "POST",
       headers: { ...authHeaders, "Content-Type": "application/json" },
@@ -1078,13 +1079,23 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
     assert.strictEqual(persistRes.status, 200);
     const persisted = await persistRes.json() as { filename: string };
     const res = await fetch(
-      `http://127.0.0.1:${server.port}/api/vaults/backups/${encodeURIComponent(persisted.filename)}/inspect?password=wrong-pass`,
-      { headers: authHeaders }
+      `http://127.0.0.1:${server.port}/api/vaults/backups/${encodeURIComponent(persisted.filename)}/inspect`,
+      {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ password: "wrong-pass" })
+      }
     );
     assert.strictEqual(res.status, 401);
     const data = await res.json() as { error?: string };
     assert.ok(/decryption failed|incorrect password/i.test(String(data.error || "")));
     assert.notEqual(data.error, "Unauthorized");
+
+    const resGet = await fetch(
+      `http://127.0.0.1:${server.port}/api/vaults/backups/${encodeURIComponent(persisted.filename)}/inspect?password=wrong-pass`,
+      { headers: authHeaders }
+    );
+    assert.strictEqual(resGet.status, 401);
   });
 
   await t.test("GET /api/vaults/backups and POST /api/vaults/reset sanitize host filesystem paths", async () => {
