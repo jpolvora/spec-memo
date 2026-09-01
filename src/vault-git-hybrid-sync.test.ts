@@ -364,6 +364,16 @@ describe('vault-git-hybrid-sync', () => {
     );
   });
 
+  it('AC24: flushOnShutdown is no-op in default local mode', async () => {
+    const configPath = path.join(tempVault, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.mode = 'local';
+    delete config.vaultGit;
+    delete config.remote;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    await flushOnShutdown(tempVault);
+  });
+
   it('AC24: flushOnShutdown completes within shutdown cap (SPEC_MEMO_SYNC_TIMEOUT_MS)', async () => {
     const prev = process.env.SPEC_MEMO_SYNC_TIMEOUT_MS;
     process.env.SPEC_MEMO_SYNC_TIMEOUT_MS = '150';

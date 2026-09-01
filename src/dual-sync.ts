@@ -153,6 +153,13 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
  * Best-effort flush on process shutdown. Never throws. Caps wait at 8s (override SPEC_MEMO_SYNC_TIMEOUT_MS).
  */
 export async function flushOnShutdown(vaultRoot?: string): Promise<void> {
+  const root = getVaultRoot(vaultRoot);
+  const config = ensureVaultStructure(root);
+  const hybridEnabled = config.mode === 'hybrid' && Boolean(config.remote?.url);
+  const gitEnabled = Boolean(config.vaultGit?.enabled) && config.mode !== 'remote';
+  if (!hybridEnabled && !gitEnabled) {
+    return;
+  }
   const cap = getShutdownFlushMs();
   let timedOut = false;
   const timeout = new Promise<void>((resolve) => {
@@ -164,7 +171,7 @@ export async function flushOnShutdown(vaultRoot?: string): Promise<void> {
   });
   try {
     await Promise.race([
-      syncDual({ vaultRoot, trigger: 'shutdown', all: true }).then(() => undefined),
+      syncDual({ vaultRoot: root, trigger: 'shutdown', all: true }).then(() => undefined),
       timeout
     ]);
     if (timedOut) {
@@ -174,7 +181,7 @@ export async function flushOnShutdown(vaultRoot?: string): Promise<void> {
           error: `shutdown flush timed out after ${cap}ms`,
           context: { phase: 'flush', trigger: 'shutdown' }
         },
-        { vaultRoot }
+        { vaultRoot: root }
       );
     }
   } catch (err: unknown) {
@@ -184,7 +191,7 @@ export async function flushOnShutdown(vaultRoot?: string): Promise<void> {
         error: err,
         context: { phase: 'flush', trigger: 'shutdown' }
       },
-      { vaultRoot }
+      { vaultRoot: root }
     );
   }
 }

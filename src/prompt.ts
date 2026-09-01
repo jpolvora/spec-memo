@@ -313,7 +313,9 @@ ${summary}
   }).then(async (session): Promise<SessionResult> => {
     try {
       const cfg = ensureVaultStructure(vaultRoot);
-      if (cfg.vaultGit?.enabled && cfg.mode !== 'remote') {
+      const hybridEnabled = cfg.mode === 'hybrid' && Boolean(cfg.remote?.url);
+      const gitEnabled = Boolean(cfg.vaultGit?.enabled) && cfg.mode !== 'remote';
+      if (hybridEnabled || gitEnabled) {
         const { syncDual } = await import('./dual-sync.js');
         const sync = await syncDual({
           vaultRoot,
