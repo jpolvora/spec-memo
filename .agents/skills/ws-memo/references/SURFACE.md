@@ -239,7 +239,7 @@ memo install-skills --global [--force] [--json]
 | `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Proxies in remote mode. |
 | `memo import` | Legacy `.agents` / `memory/` / plans → vault. `--from`. |
 | `memo hook install` | Pre-commit write-block. `--productRoot`. Bypass: `SKIP_MEMO_HOOK=1`. (Not available in remote mode). |
-| `memo sync` | Hybrid bidirectional HTTP delta sync with remote daemon (`--all`, `--dry-run`), or vault git remote when vaultGit is enabled. |
+| `memo sync` | Hybrid HTTP and/or vault-git. Dual-mode runs both in parallel. Batched vault-git (`atomic: false`, default) flushes on sync, session_end, and serve shutdown. |
 | `memo sync-vault <target>` | Peer vault delta sync. `--two-way` `--dry-run`. (Not available in remote mode). |
 | `memo export-vault` / `memo import-vault` | Portable archive; optional AES-256-GCM. Prefer `SPEC_MEMO_VAULT_PASSWORD`. (Not available in remote mode). |
 

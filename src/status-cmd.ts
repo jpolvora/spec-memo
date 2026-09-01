@@ -11,7 +11,8 @@ import {
   TopologyRole,
   VaultStorageStatus
 } from './types.js';
-import { getVaultRoot, readVaultConfig } from './vault.js';
+import { getVaultRoot, readVaultConfig, resolveVaultGitAtomic, redactVaultGitRemoteUrl } from './vault.js';
+import { readVaultGitState } from './vault-git-state.js';
 import { listBackups } from './backup.js';
 import { resolveProjectIdentity } from './identity.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
@@ -283,6 +284,7 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
   };
 
   // 6. Operational Settings
+  const gitState = readVaultGitState(root);
   const operational: OperationalStatus = {
     telemetry: {
       enabled: Boolean(config.enableTelemetry),
@@ -296,7 +298,11 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
     },
     vaultGit: {
       enabled: Boolean(config.vaultGit?.enabled),
-      remoteUrl: config.vaultGit?.remoteUrl
+      atomic: resolveVaultGitAtomic(config),
+      remoteUrl: redactVaultGitRemoteUrl(config.vaultGit?.remoteUrl),
+      dirty: gitState.dirty,
+      lastError: gitState.lastError,
+      lastSyncAt: gitState.lastSyncAt
     }
   };
 
@@ -382,7 +388,13 @@ export function formatStatusDashboard(result: StatusResult, options: StatusOptio
   lines.push(
     `  TTL Retention:      scratch=${result.operational.ttl.scratchDays}d, review=${result.operational.ttl.reviewDays}d, logCompaction=${result.operational.ttl.logCompactMonths}mo`
   );
-  lines.push(`  Vault Git Sync:     ${result.operational.vaultGit.enabled ? `Enabled (${result.operational.vaultGit.remoteUrl || 'local'})` : 'Disabled'}`);
+  lines.push(
+    `  Vault Git Sync:     ${
+      result.operational.vaultGit.enabled
+        ? `Enabled (${result.operational.vaultGit.atomic ? 'atomic' : 'batched'}) (${result.operational.vaultGit.remoteUrl || 'local'})`
+        : 'Disabled'
+    }`
+  );
 
   // Issues & Warnings
   if (result.issues.length > 0) {

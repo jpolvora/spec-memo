@@ -15,7 +15,7 @@ import {
   SessionResult
 } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
-import { getVaultProjects, getVaultRoot, withVaultLock, withVaultLockSync } from './vault.js';
+import { getVaultProjects, getVaultRoot, withVaultLock, withVaultLockSync, ensureVaultStructure } from './vault.js';
 import { getRecord, listProjectRecords, upsertRecord } from './store.js';
 import { extractRulesFromPrompts, formatDerivedRulesForExport } from './rules-engine.js';
 import { assertAllowedIdeRulePromote, assertNotInProductRoot, isPathInside, redactSecretsInPayload } from './safety.js';
@@ -299,7 +299,7 @@ ${summary}
       id: res.id,
       sessionId,
       projectId,
-      status: 'completed',
+      status: 'completed' as const,
       startTime,
       endTime,
       durationMinutes,
@@ -310,6 +310,32 @@ ${summary}
       summary,
       path: res.path
     };
+  }).then(async (session): Promise<SessionResult> => {
+    try {
+      const cfg = ensureVaultStructure(vaultRoot);
+      if (cfg.vaultGit?.enabled && cfg.mode !== 'remote') {
+        const { syncDual } = await import('./dual-sync.js');
+        const sync = await syncDual({
+          vaultRoot,
+          projectId,
+          trigger: 'session_end',
+          sessionId
+        });
+        return { ...session, sync };
+      }
+    } catch (err: unknown) {
+      const { logErrorReport } = await import('./error-logger.js');
+      logErrorReport(
+        {
+          subsystem: 'vault-git',
+          error: err,
+          projectId,
+          context: { phase: 'flush', trigger: 'session_end' }
+        },
+        { vaultRoot }
+      );
+    }
+    return session;
   });
 }
 

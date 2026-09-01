@@ -1,10 +1,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { ProjectIdentity, ProjectMetadata, VaultConfig } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getPackageVersion } from './version.js';
+import { logErrorReport } from './error-logger.js';
+import { writeVaultGitState } from './vault-git-state.js';
+
+const execFileAsync = promisify(execFile);
 
 export const DEFAULT_VAULT_CONFIG: VaultConfig = {
   get version() {
@@ -555,36 +560,176 @@ export function resolveHubPath(
   return identity.vaultProjectPath;
 }
 
+export const REQUIRED_VAULT_GITIGNORE = [
+  'memo.sqlite',
+  'memo.sqlite-wal',
+  'memo.sqlite-shm',
+  '.sync/',
+  'error.logs',
+  'telemetry/'
+];
+
+export interface CommitVaultChangeOptions {
+  force?: boolean;
+  skipRemote?: boolean;
+}
+
+export interface VaultGitChannelResult {
+  ok: boolean;
+  committed: boolean;
+  pulled: boolean;
+  pushed: boolean;
+  message: string;
+  error?: string;
+  skipped?: boolean;
+  wouldCommit?: string[];
+}
+
+export interface FlushVaultGitOptions {
+  dryRun?: boolean;
+  trigger?: string;
+  sessionId?: string;
+}
+
+export function getGitTimeoutMs(): number {
+  const envVal = Number(process.env.SPEC_MEMO_SYNC_TIMEOUT_MS);
+  return envVal > 0 ? envVal : 30000;
+}
+
+export function resolveVaultGitAtomic(config: VaultConfig): boolean {
+  const vg = config.vaultGit;
+  if (!vg || vg.enabled !== true) return false;
+  if (typeof vg.atomic === 'boolean') return vg.atomic;
+  if (typeof vg.autoCommit === 'boolean') return vg.autoCommit;
+  return false;
+}
+
+export function redactVaultGitRemoteUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  return url.replace(/\/\/([^/@:\s]+):([^@/]+)@/g, '//***:***@');
+}
+
+function readVaultConfigLoose(vaultRoot: string): VaultConfig | null {
+  const configPath = path.join(vaultRoot, 'config.json');
+  if (!fs.existsSync(configPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(configPath, 'utf8')) as VaultConfig;
+  } catch {
+    return null;
+  }
+}
+
+function gitExec(
+  vaultRoot: string,
+  args: string[],
+  phase: 'init' | 'commit' | 'pull' | 'push' | 'flush' | 'orchestrate'
+): { ok: boolean; stdout: string; error?: string } {
+  const timeout = getGitTimeoutMs();
+  try {
+    const stdout = execFileSync('git', args, {
+      cwd: vaultRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout
+    });
+    return { ok: true, stdout: stdout || '' };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const config = readVaultConfigLoose(vaultRoot);
+    logErrorReport(
+      {
+        subsystem: 'vault-git',
+        mode: config?.mode,
+        error: err,
+        context: { phase, gitArgs: args.slice(0, 4) }
+      },
+      { vaultRoot }
+    );
+    return { ok: false, stdout: '', error: msg };
+  }
+}
+
+async function gitExecAsync(
+  vaultRoot: string,
+  args: string[],
+  phase: 'init' | 'commit' | 'pull' | 'push' | 'flush' | 'orchestrate'
+): Promise<{ ok: boolean; stdout: string; error?: string }> {
+  const timeout = getGitTimeoutMs();
+  try {
+    const { stdout } = await execFileAsync('git', args, {
+      cwd: vaultRoot,
+      encoding: 'utf8',
+      timeout,
+      windowsHide: true,
+      killSignal: 'SIGKILL'
+    });
+    return { ok: true, stdout: stdout || '' };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const config = readVaultConfigLoose(vaultRoot);
+    logErrorReport(
+      {
+        subsystem: 'vault-git',
+        mode: config?.mode,
+        error: err,
+        context: { phase, gitArgs: args.slice(0, 4) }
+      },
+      { vaultRoot }
+    );
+    return { ok: false, stdout: '', error: msg };
+  }
+}
+
+function ensureVaultGitignore(vaultRoot: string): void {
+  const gitignorePath = path.join(vaultRoot, '.gitignore');
+  let existing = '';
+  if (fs.existsSync(gitignorePath)) {
+    existing = fs.readFileSync(gitignorePath, 'utf8');
+  }
+  const lines = existing.split(/\r?\n/);
+  const have = new Set(lines.map((l) => l.trim()).filter(Boolean));
+  const missing = REQUIRED_VAULT_GITIGNORE.filter((entry) => !have.has(entry));
+  if (missing.length === 0 && existing.length > 0) return;
+  const prefix = existing.endsWith('\n') || existing.length === 0 ? existing : `${existing}\n`;
+  fs.writeFileSync(gitignorePath, `${prefix}${missing.join('\n')}\n`, 'utf8');
+}
+
 /**
  * AC1: Initializes git repository in vault if vaultGit.enabled is true.
  */
 export function initVaultGit(vaultRoot: string = getVaultRoot()): boolean {
-  const configPath = path.join(vaultRoot, 'config.json');
-  if (!fs.existsSync(configPath)) return false;
+  const config = readVaultConfigLoose(vaultRoot);
+  if (!config) return false;
 
   try {
-    const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (!config.vaultGit?.enabled) return false;
+    if (config.mode === 'remote') return false;
 
     const gitDir = path.join(vaultRoot, '.git');
     if (!fs.existsSync(gitDir)) {
-      execFileSync('git', ['init'], { cwd: vaultRoot, stdio: 'ignore' });
+      const init = gitExec(vaultRoot, ['init'], 'init');
+      if (!init.ok) return false;
     }
 
-    const gitignorePath = path.join(vaultRoot, '.gitignore');
-    if (!fs.existsSync(gitignorePath)) {
-      fs.writeFileSync(gitignorePath, 'memo.sqlite\nmemo.sqlite-wal\nmemo.sqlite-shm\n', 'utf8');
-    }
+    ensureVaultGitignore(vaultRoot);
 
     if (config.vaultGit.remoteUrl) {
-      try {
-        execFileSync('git', ['remote', 'add', 'origin', config.vaultGit.remoteUrl], { cwd: vaultRoot, stdio: 'ignore' });
-      } catch {
-        execFileSync('git', ['remote', 'set-url', 'origin', config.vaultGit.remoteUrl], { cwd: vaultRoot, stdio: 'ignore' });
+      const add = gitExec(vaultRoot, ['remote', 'add', 'origin', config.vaultGit.remoteUrl], 'init');
+      if (!add.ok) {
+        gitExec(vaultRoot, ['remote', 'set-url', 'origin', config.vaultGit.remoteUrl], 'init');
       }
     }
     return true;
-  } catch {
+  } catch (err: unknown) {
+    logErrorReport(
+      {
+        subsystem: 'vault-git',
+        mode: config.mode,
+        error: err,
+        context: { phase: 'init' }
+      },
+      { vaultRoot }
+    );
     return false;
   }
 }
@@ -608,86 +753,226 @@ function resolveVaultCommitAddPaths(vaultRoot: string, paths: string[]): string[
 }
 
 /**
- * AC2: Auto-commits record mutations in vault if vaultGit is enabled.
+ * AC2: Auto-commits record mutations when vaultGit is enabled and atomic (or force).
  * Stages only `paths` (or projects + config.json), never the entire vault tree.
  */
 export function commitVaultChange(
   message: string,
   vaultRoot: string = getVaultRoot(),
-  paths: string[] = []
+  paths: string[] = [],
+  options: CommitVaultChangeOptions = {}
 ): boolean {
-  const configPath = path.join(vaultRoot, 'config.json');
-  if (!fs.existsSync(configPath)) return false;
+  const config = readVaultConfigLoose(vaultRoot);
+  if (!config) return false;
 
   try {
     acquireVaultLockSync(vaultRoot);
     try {
-      const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       if (!config.vaultGit?.enabled) return false;
+      if (config.mode === 'remote') return false;
+      if (!options.force && !resolveVaultGitAtomic(config)) return false;
 
       initVaultGit(vaultRoot);
 
       const toAdd = resolveVaultCommitAddPaths(vaultRoot, paths);
       if (toAdd.length === 0) return false;
 
-      execFileSync('git', ['add', '--', ...toAdd], { cwd: vaultRoot, stdio: 'ignore' });
-      execFileSync('git', ['commit', '-m', message], { cwd: vaultRoot, stdio: 'ignore' });
+      const addRes = gitExec(vaultRoot, ['add', '--', ...toAdd], 'commit');
+      if (!addRes.ok) {
+        writeVaultGitState(vaultRoot, { dirty: true, lastError: addRes.error || 'git add failed' });
+        return false;
+      }
+      const commitRes = gitExec(vaultRoot, ['commit', '-m', message], 'commit');
+      if (!commitRes.ok) {
+        writeVaultGitState(vaultRoot, { dirty: true, lastError: commitRes.error || 'git commit failed' });
+        return false;
+      }
       return true;
     } finally {
       releaseVaultLockSync(vaultRoot);
     }
-  } catch {
+  } catch (err: unknown) {
+    logErrorReport(
+      {
+        subsystem: 'vault-git',
+        mode: config.mode,
+        error: err,
+        context: { phase: 'commit' }
+      },
+      { vaultRoot }
+    );
+    try {
+      writeVaultGitState(vaultRoot, {
+        dirty: true,
+        lastError: err instanceof Error ? err.message : String(err)
+      });
+    } catch {
+      // state write must never throw into callers
+    }
     return false;
+  } finally {
+    if (!options.skipRemote && resolveVaultGitAtomic(config) && config.vaultGit?.remoteUrl) {
+      scheduleVaultGitRemoteSync(vaultRoot);
+    }
+  }
+}
+
+const gitRemoteInFlight = new Map<string, Promise<void>>();
+const gitRemotePending = new Set<string>();
+
+export function scheduleVaultGitRemoteSync(vaultRoot: string): void {
+  const key = path.resolve(vaultRoot);
+  if (gitRemoteInFlight.has(key)) {
+    gitRemotePending.add(key);
+    return;
+  }
+  const job = syncVaultRemote(vaultRoot)
+    .catch(() => undefined)
+    .finally(() => {
+      gitRemoteInFlight.delete(key);
+      if (gitRemotePending.delete(key)) {
+        scheduleVaultGitRemoteSync(vaultRoot);
+      }
+    });
+  gitRemoteInFlight.set(key, job);
+}
+
+export async function flushScheduledVaultGit(): Promise<void> {
+  while (gitRemoteInFlight.size > 0) {
+    await Promise.all([...gitRemoteInFlight.values()]);
+  }
+}
+
+function vaultGitPorcelain(vaultRoot: string): string {
+  const res = gitExec(
+    vaultRoot,
+    ['status', '--porcelain', '--untracked-files=normal', '--', 'projects', 'config.json', '.gitignore'],
+    'flush'
+  );
+  return (res.stdout || '').trim();
+}
+
+async function syncVaultRemote(vaultRoot: string): Promise<void> {
+  await flushVaultGit(vaultRoot, { dryRun: false, trigger: 'remote-follow' });
+}
+
+/**
+ * Commit dirty vault-git paths (force) then pull/push without holding the vault lock during network.
+ */
+export async function flushVaultGit(
+  vaultRoot: string = getVaultRoot(),
+  options: FlushVaultGitOptions = {}
+): Promise<VaultGitChannelResult> {
+  const config = readVaultConfigLoose(vaultRoot);
+  if (!config) {
+    return {
+      ok: false,
+      committed: false,
+      pulled: false,
+      pushed: false,
+      message: 'Vault config.json not found.',
+      error: 'Vault config.json not found.'
+    };
+  }
+  if (!config.vaultGit?.enabled || config.mode === 'remote') {
+    return {
+      ok: true,
+      committed: false,
+      pulled: false,
+      pushed: false,
+      skipped: true,
+      message: 'Vault git sync is disabled in config.json.'
+    };
+  }
+
+  try {
+    initVaultGit(vaultRoot);
+    const porcelain = vaultGitPorcelain(vaultRoot);
+    const wouldCommit = porcelain
+      ? porcelain
+          .split('\n')
+          .map((l) => l.slice(3).trim())
+          .filter(Boolean)
+      : [];
+
+    if (options.dryRun) {
+      return {
+        ok: true,
+        committed: false,
+        pulled: false,
+        pushed: false,
+        wouldCommit,
+        message: `Dry-run: ${wouldCommit.length} path(s) would commit`
+      };
+    }
+
+    let committed = false;
+    if (porcelain.length > 0) {
+      const trigger = options.trigger || 'sync';
+      const iso = new Date().toISOString();
+      const sessionBit = options.sessionId ? ` session ${options.sessionId}` : '';
+      const message =
+        trigger === 'session_end' || trigger === 'shutdown' || trigger === 'sync' || trigger === 'remote-follow'
+          ? `vault-git flush ${iso}${sessionBit}`
+          : `vault-git flush ${iso}${sessionBit}`;
+      committed = commitVaultChange(message, vaultRoot, [], { force: true, skipRemote: true });
+    }
+
+    let pulled = false;
+    let pushed = false;
+    let remoteError: string | undefined;
+    if (config.vaultGit.remoteUrl) {
+      const branch = resolveVaultGitBranch(config, vaultRoot);
+      const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', 'origin', branch], 'pull');
+      pulled = pullRes.ok;
+      if (!pullRes.ok) remoteError = pullRes.error;
+      const pushRes = await gitExecAsync(vaultRoot, ['push', '-u', 'origin', branch], 'push');
+      pushed = pushRes.ok;
+      if (!pushRes.ok) remoteError = remoteError || pushRes.error;
+    }
+
+    const channelOk = config.vaultGit.remoteUrl ? Boolean(pulled || pushed) : true;
+    writeVaultGitState(vaultRoot, {
+      dirty: Boolean(remoteError),
+      lastError: remoteError || null,
+      lastSyncAt: new Date().toISOString()
+    });
+
+    return {
+      ok: channelOk || (committed && !config.vaultGit.remoteUrl),
+      committed,
+      pulled,
+      pushed,
+      message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`,
+      error: remoteError
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logErrorReport(
+      {
+        subsystem: 'vault-git',
+        mode: config.mode,
+        error: err,
+        context: { phase: 'flush' }
+      },
+      { vaultRoot }
+    );
+    try {
+      writeVaultGitState(vaultRoot, { dirty: true, lastError: msg });
+    } catch {
+      // ignore
+    }
+    return { ok: false, committed: false, pulled: false, pushed: false, message: `Sync failed: ${msg}`, error: msg };
   }
 }
 
 /**
  * AC3: Sync local vault with private git remote (pull/push).
  */
-export function syncVault(vaultRoot: string = getVaultRoot()): { pulled: boolean; pushed: boolean; message: string } {
-  const configPath = path.join(vaultRoot, 'config.json');
-  if (!fs.existsSync(configPath)) {
-    return { pulled: false, pushed: false, message: 'Vault config.json not found.' };
-  }
-
-  try {
-    return withVaultLockSync(vaultRoot, () => {
-      const config: VaultConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (!config.vaultGit?.enabled) {
-        return { pulled: false, pushed: false, message: 'Vault git sync is disabled in config.json.' };
-      }
-
-      initVaultGit(vaultRoot);
-
-      let pulled = false;
-      let pushed = false;
-
-      try {
-        const branch = resolveVaultGitBranch(config, vaultRoot);
-        execFileSync('git', ['pull', '--rebase', 'origin', branch], { cwd: vaultRoot, stdio: 'ignore' });
-        pulled = true;
-      } catch {
-        // Pull optional fallback
-      }
-
-      try {
-        const branch = resolveVaultGitBranch(config, vaultRoot);
-        execFileSync('git', ['push', '-u', 'origin', branch], { cwd: vaultRoot, stdio: 'ignore' });
-        pushed = true;
-      } catch {
-        // Push optional fallback
-      }
-
-      return {
-        pulled,
-        pushed,
-        message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`
-      };
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { pulled: false, pushed: false, message: `Sync failed: ${msg}` };
-  }
+export async function syncVault(
+  vaultRoot: string = getVaultRoot()
+): Promise<VaultGitChannelResult> {
+  return flushVaultGit(vaultRoot, { trigger: 'sync' });
 }
 
 

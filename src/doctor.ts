@@ -1,12 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
-import { ensureVaultStructure, getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot, resolveVaultGitAtomic, redactVaultGitRemoteUrl } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { openIndex, rebuildIndex } from './indexer.js';
 import { wrapSqliteOpenError } from './sqlite.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { readHybridState } from './hybrid-state.js';
+import { readVaultGitState } from './vault-git-state.js';
 import { isPathInside } from './safety.js';
 
 export const DEFAULT_HEALTH_TIMEOUT_MS = 10000;
@@ -317,6 +318,14 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     remoteUrl,
     tokenConfigured,
     hybridState,
+    vaultGit: {
+      enabled: Boolean(config.vaultGit?.enabled),
+      atomic: resolveVaultGitAtomic(config),
+      remoteUrl: redactVaultGitRemoteUrl(config.vaultGit?.remoteUrl),
+      dirty: readVaultGitState(vaultRoot).dirty,
+      lastError: readVaultGitState(vaultRoot).lastError,
+      lastSyncAt: readVaultGitState(vaultRoot).lastSyncAt
+    },
     remoteHealth,
     project: {
       projectId: identity.projectId,

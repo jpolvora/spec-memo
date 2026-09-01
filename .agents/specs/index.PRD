@@ -110,7 +110,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`prompt-history-and-query`](prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
 - [x] [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md): Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI
 - [x] [`status-backup-page`](status-backup-page.spec.md): Dedicated status-monitor backup page with complete archives and inventory management
-- [ ] Batched vault-git sync with dual-mode hybrid parallel dispatch (`spec: vault-git-hybrid-sync.spec.md`)
+- [x] Batched vault-git sync with dual-mode hybrid parallel dispatch (`spec: vault-git-hybrid-sync.spec.md`)
 
 
 
@@ -154,7 +154,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 33 | `configurable-daemon-ports` | `[x]` done | Phase 7: Deployment modes | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas) and CLI fallback |
 | 34 | [`memo-status`](memo-status.spec.md) | `[x]` done | Phase 7: Deployment modes | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard |
 | 35 | [`status-backup-page`](status-backup-page.spec.md) | `[x]` done | Phase 7 | Dedicated status-monitor backup page with complete archives and inventory management |
-| 36 | [`vault-git-hybrid-sync`](vault-git-hybrid-sync.spec.md) | `[ ]` todo | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
+| 36 | [`vault-git-hybrid-sync`](vault-git-hybrid-sync.spec.md) | `[x] done` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -213,6 +213,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` opt-in status companion; local status probes send Bearer | 0.14.2 |
 | 2026-08-31 | release-0.14.2 | Stop stdio serve from binding status `:3124` by default | 0.14.2 |
 | 2026-08-31 | status-backup-page | Dedicated Backups tab: full-backup confirm, complete kinds, inventory filters, restore/delete/download | npm test 380 pass |
+| 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode parallel hybrid+git sync, fail-open logging | npm test 406 pass |
 
 ## Archive
 

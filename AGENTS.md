@@ -159,7 +159,7 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 | Recall | `search` → `get` |
 | Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git; hybrid schedules debounced push) |
 | Audit event | `append` |
-| Sync | `memo sync [--all] [--dry-run]` (hybrid HTTP sync or vault-git) |
+| Sync | `memo sync [--all] [--dry-run]` (hybrid HTTP, vault-git, or both in parallel when dual-mode) |
 | Housekeep | `gc` (`dryRun` first when unsure); `forget` (purge only with explicit user confirm) |
 
 ### Deployment Modes

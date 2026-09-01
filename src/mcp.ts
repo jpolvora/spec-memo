@@ -279,6 +279,12 @@ export async function startMcpServer(
     statusServer,
     activityBus: bus,
     close: async () => {
+      try {
+        const { flushOnShutdown } = await import('./dual-sync.js');
+        await flushOnShutdown(vaultRoot);
+      } catch {
+        // shutdown flush must never block close
+      }
       await server.close();
       if (statusServer) {
         await statusServer.close();

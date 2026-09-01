@@ -12,6 +12,7 @@ export type ErrorLogSubsystem =
   | 'mcp-tool'
   | 'remote-proxy'
   | 'hybrid-sync'
+  | 'vault-git'
   | 'vault'
   | 'canvas'
   | 'cli'

@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.15.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.16.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -679,6 +679,7 @@ In `~/.spec-memo/config.json`:
   },
   "vaultGit": {
     "enabled": true,
+    "atomic": false,
     "remoteUrl": "git@github.com:my-user/my-private-memory-vault.git",
     "branch": "main"
   }
@@ -686,7 +687,9 @@ In `~/.spec-memo/config.json`:
 ```
 `bootstrap.maxBytes` is the default UTF-8 session brief budget (8192). Increase it to return a larger `memo bootstrap` payload; per-call `--maxBytes` / MCP `maxBytes` still overrides this value.
 
-`spec-memo` will automatically stage and commit vault record mutations and sync with your private repository when `vaultGit.enabled` is true.
+`vaultGit.atomic` defaults to `false` (batched): mutations write markdown only; git commit + remote pull/push run on `memo sync`, MCP/CLI `session_end`, or graceful `memo serve` shutdown. Set `"atomic": true` for per-mutation commit and push (fail-open; errors go to `error.logs`).
+
+When **both** `mode: hybrid` and `vaultGit.enabled` are set, `memo sync` dispatches hybrid HTTP and vault-git in parallel. Either channel can fail without crashing the MCP/SSE server. CLI one-shot `memo upsert` in batched mode does not flush git on process exit; run `memo sync`.
 
 ### 5. Promoting Records to Product Documentation (`promote`)
 

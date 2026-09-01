@@ -216,7 +216,7 @@ describe('Vault Management & Project Binding', () => {
     assert.equal(customHub, path.resolve(customRoot));
   });
 
-  it('should support opt-in vault git initialization and sync when enabled in config.json', () => {
+  it('should support opt-in vault git initialization and sync when enabled in config.json', async () => {
     ensureVaultStructure(tempVaultRoot);
     const configPath = path.join(tempVaultRoot, 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -233,7 +233,7 @@ describe('Vault Management & Project Binding', () => {
 
     fs.writeFileSync(path.join(tempVaultRoot, 'scratch-unrelated.md'), 'do not commit', 'utf8');
 
-    const committed = commitVaultChange('Initial test commit', tempVaultRoot);
+    const committed = commitVaultChange('Initial test commit', tempVaultRoot, [], { force: true });
     assert.equal(committed, true);
 
     const tracked = execFileSync('git', ['ls-files'], {
@@ -243,7 +243,7 @@ describe('Vault Management & Project Binding', () => {
     assert.equal(tracked.includes('scratch-unrelated.md'), false);
     assert.ok(tracked.includes('config.json'));
 
-    const syncRes = syncVault(tempVaultRoot);
+    const syncRes = await syncVault(tempVaultRoot);
     assert.ok(syncRes.message.includes('Sync complete'));
   });
 

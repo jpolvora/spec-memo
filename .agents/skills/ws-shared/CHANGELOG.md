@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-09-01 15:00] Agent: Cursor Grok 4.6
+- **Prompt**: /ws-spec-to-pr vault-git-hybrid-sync.spec.md TDD through PR
+- **Done**: `vaultGit.atomic` (default false); dual `memo sync`; session_end/shutdown flush; async git I/O; fail-open `vault-git` error logs; 20 new tests
+- **Result**: npm test 406 pass / 0 fail
+
 ### [2026-08-31 22:55] Agent: Cursor Composer
 - **Prompt**: /ws-fable-method implement status-backup-page.spec.md
 - **Done**: Dedicated Backups tab; persist/list/inspect/download/delete APIs; full-backup confirm; enriched listBackups; prompt/session round-trip; docs + tracking
