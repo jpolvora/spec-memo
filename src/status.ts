@@ -1645,6 +1645,16 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         headers
       }));
       if (res.status === 401) {
+        const probe = res.clone();
+        try {
+          const body = await probe.json();
+          const msg = String(body && body.error ? body.error : "").toLowerCase();
+          if (msg.indexOf("decryption failed") !== -1 || msg.indexOf("incorrect password") !== -1) {
+            return res;
+          }
+        } catch {
+          // fall through to auth redirect
+        }
         const qs = new URLSearchParams(window.location.search);
         qs.delete("token");
         qs.delete("authToken");

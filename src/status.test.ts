@@ -167,6 +167,8 @@ test("MCP status monitor", async (t) => {
     assert.ok(!html.includes("?token="));
     assert.ok(html.includes("withCredentials: true"));
     assert.ok(html.includes('credentials: "same-origin"'));
+    assert.ok(html.includes('decryption failed'));
+    assert.ok(html.includes('incorrect password'));
   });
 
   await t.test("generateStatusHtml supports ?tab=backups deep link", () => {
@@ -1065,6 +1067,24 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
       headers: authHeaders
     });
     assert.strictEqual(res.status, 400);
+  });
+
+  await t.test("GET inspect wrong password returns 401 decrypt error not Unauthorized", async () => {
+    const persistRes = await fetch(`http://127.0.0.1:${server.port}/api/vaults/backups`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmFullBackup: true, password: "right-pass" })
+    });
+    assert.strictEqual(persistRes.status, 200);
+    const persisted = await persistRes.json() as { filename: string };
+    const res = await fetch(
+      `http://127.0.0.1:${server.port}/api/vaults/backups/${encodeURIComponent(persisted.filename)}/inspect?password=wrong-pass`,
+      { headers: authHeaders }
+    );
+    assert.strictEqual(res.status, 401);
+    const data = await res.json() as { error?: string };
+    assert.ok(/decryption failed|incorrect password/i.test(String(data.error || "")));
+    assert.notEqual(data.error, "Unauthorized");
   });
 
   await t.test("GET /api/vaults/backups and POST /api/vaults/reset sanitize host filesystem paths", async () => {
