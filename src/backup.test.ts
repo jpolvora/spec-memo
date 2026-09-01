@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { exportVault, importVault, persistVaultBackup, listBackups, deleteBackup, resolveBackupPath } from './backup.js';
+import { exportVault, importVault, persistVaultBackup, listBackups, deleteBackup, resolveBackupPath, inspectBackup } from './backup.js';
 import { upsertRecord } from './store.js';
 import { searchIndex, closeIndex } from './indexer.js';
 
@@ -404,6 +404,9 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
     const item = listed.find((b) => b.filename === result.filename);
     assert.ok(item);
     assert.ok(item!.recordCount != null && item!.recordCount >= 1);
+    const inspected = inspectBackup(result.filename, { vaultRoot: sourceVault });
+    assert.equal(inspected.recordCount, item!.recordCount);
+    assert.equal(inspected.scope, item!.scope);
     // Full-vault persist with a single project must still report scope "full" (manifest intent).
     assert.equal(item!.scope, 'full');
     assert.ok(item!.recordsByKind && (item!.recordsByKind.trap || 0) >= 1);

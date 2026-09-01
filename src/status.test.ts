@@ -708,6 +708,24 @@ test("MCP status monitor", async (t) => {
         body
       });
       assert.strictEqual(resImpUnauth.status, 401);
+
+      // Persist / delete / download unauthorized (AC44)
+      const resPersistUnauth = await fetch(`${authServer.url}/api/vaults/backups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmFullBackup: true })
+      });
+      assert.strictEqual(resPersistUnauth.status, 401);
+
+      const resDeleteUnauth = await fetch(`${authServer.url}/api/vaults/backups/${encodeURIComponent("missing.zip")}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true })
+      });
+      assert.strictEqual(resDeleteUnauth.status, 401);
+
+      const resDownloadUnauth = await fetch(`${authServer.url}/api/vaults/backups/${encodeURIComponent("missing.zip")}`);
+      assert.strictEqual(resDownloadUnauth.status, 401);
     } finally {
       authBus.close();
       await authServer.close();

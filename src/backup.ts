@@ -37,6 +37,32 @@ const DIR_TO_KIND: Record<string, string> = {
 
 const backupMetaCache = new Map<string, { mtimeMs: number; meta: Partial<BackupFileInfo> }>();
 
+function backupMetaCacheKey(filePath: string, password?: string): string {
+  return `${path.resolve(filePath)}\0${password ?? ''}`;
+}
+
+function invalidateBackupMetaCache(filePath: string): void {
+  const resolved = path.resolve(filePath);
+  const prefix = resolved + '\0';
+  for (const key of [...backupMetaCache.keys()]) {
+    if (key === resolved || key.startsWith(prefix)) {
+      backupMetaCache.delete(key);
+    }
+  }
+}
+
+function cachedPeekBackupMetadata(filePath: string, password?: string): Partial<BackupFileInfo> {
+  const stat = fs.statSync(filePath);
+  const cacheKey = backupMetaCacheKey(filePath, password);
+  const cached = backupMetaCache.get(cacheKey);
+  if (cached && cached.mtimeMs === stat.mtimeMs) {
+    return cached.meta;
+  }
+  const meta = peekBackupMetadata(filePath, password);
+  backupMetaCache.set(cacheKey, { mtimeMs: stat.mtimeMs, meta });
+  return meta;
+}
+
 function kindFromRecord(relativePath: string, content: string): string {
   const dir = relativePath.split(/[/\\]/)[0] || '';
   if (dir === 'plans') {
@@ -689,18 +715,11 @@ export function listBackups(vaultRoot?: string, filters?: BackupListFilters): Ba
         const stat = fs.statSync(fullPath);
         if (!stat.isFile()) continue;
 
-        const cacheKey = fullPath;
-        const cached = backupMetaCache.get(cacheKey);
         let meta: Partial<BackupFileInfo>;
-        if (cached && cached.mtimeMs === stat.mtimeMs) {
-          meta = cached.meta;
-        } else {
-          try {
-            meta = peekBackupMetadata(fullPath);
-          } catch {
-            meta = { encrypted: false, inspectable: false, recordCount: null, recordsByKind: {} };
-          }
-          backupMetaCache.set(cacheKey, { mtimeMs: stat.mtimeMs, meta });
+        try {
+          meta = cachedPeekBackupMetadata(fullPath);
+        } catch {
+          meta = { encrypted: false, inspectable: false, recordCount: null, recordsByKind: {} };
         }
 
         results.push({
@@ -768,7 +787,7 @@ export function filterBackupList(items: BackupFileInfo[], filters?: BackupListFi
  * Persist an export as a timestamped zip under $SPEC_MEMO_ROOT/backups/.
  */
 export async function persistVaultBackup(options: PersistBackupOptions = {}): Promise<PersistBackupResult> {
-  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const vaultRoot = getVaultRoot(options.vaultRoot);
   return withVaultLock(vaultRoot, async () => {
     ensureVaultStructure(vaultRoot);
     const backupsDir = path.join(vaultRoot, 'backups');
@@ -795,7 +814,7 @@ export async function persistVaultBackup(options: PersistBackupOptions = {}): Pr
       throw new Error('Persist backup failed: Backup archive was not created on disk.');
     }
 
-    backupMetaCache.delete(path.resolve(backupPath));
+    invalidateBackupMetaCache(backupPath);
 
     return {
       filename,
@@ -823,7 +842,7 @@ export async function deleteBackup(
       throw err;
     }
     fs.unlinkSync(fullPath);
-    backupMetaCache.delete(path.resolve(fullPath));
+    invalidateBackupMetaCache(fullPath);
     return { ok: true as const, filename: path.basename(fullPath) };
   });
 }
@@ -847,7 +866,7 @@ export function inspectBackup(
 
   let meta: Partial<BackupFileInfo>;
   try {
-    meta = peekBackupMetadata(fullPath, options.password);
+    meta = cachedPeekBackupMetadata(fullPath, options.password);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('Decryption failed') || msg.includes('Incorrect password')) {
