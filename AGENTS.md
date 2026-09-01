@@ -127,6 +127,9 @@ node --test dist/hook.test.js
 # Multi-Machine Sync & Delta Engine
 node --test dist/sync.test.js
 
+# Batched vault-git + dual-mode hybrid parallel dispatch
+node --test dist/vault-git-hybrid-sync.test.js
+
 # Canvas Graph Viewer & REST API
 node --test dist/canvas.test.js
 
@@ -157,9 +160,10 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 | Configure mode | `memo setup [--mode local|hybrid|remote] [--url <url>] [--host <host>] [--print-mcp|--write-mcp]` |
 | Session start | MCP/`memo` `bootstrap` with `cwd` = product root; apply traps before coding (hybrid pulls remote deltas) |
 | Recall | `search` → `get` |
-| Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git; hybrid schedules debounced push) |
+| Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git; hybrid schedules debounced push; batched vault-git does not commit until flush) |
 | Audit event | `append` |
 | Sync | `memo sync [--all] [--dry-run]` (hybrid HTTP, vault-git, or both in parallel when dual-mode) |
+| Session close flush | MCP/CLI `prompt` `session_end` (batched vault-git + hybrid when enabled; fail-open) |
 | Housekeep | `gc` (`dryRun` first when unsure); `forget` (purge only with explicit user confirm) |
 
 ### Deployment Modes
@@ -167,6 +171,16 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 - **`local` (default):** Local records, indexing, and tool execution in `~/.spec-memo/`.
 - **`hybrid`:** Local vault is authoritative cache; auto-pulls deltas during `bootstrap` and debounces pushes on mutations. Manual sync via `memo sync`. Fails open when daemon is down.
 - **`remote`:** Local agent hosts run stdio proxy `memo serve` forwarding the 11 tools to remote daemon. Zero local records. Fails closed when daemon is down.
+
+### Vault-git sync (`vaultGit` in `config.json`)
+
+Optional private git remote backup of the vault root (`~/.spec-memo/`). Orthogonal to deployment mode except remote mode (no local vault writes).
+
+- **`vaultGit.enabled`:** Opt-in. When false or omitted, vault-git is a no-op.
+- **`vaultGit.atomic` (default `false`, batched):** Mutations write markdown + FTS only. Git commit + remote pull/push flush on `memo sync`, MCP/CLI `prompt` `session_end`, and graceful `memo serve` / SSE shutdown. CLI one-shot `memo upsert` does **not** flush on process exit—run `memo sync` or end the agent session.
+- **`vaultGit.atomic: true`:** Per-mutation structured git commit + remote sync (fail-open; errors logged to `error.logs` with `subsystem: vault-git`).
+- **Dual-mode:** When `mode: hybrid` and `vaultGit.enabled`, `memo sync` / `session_end` / shutdown dispatch **both** hybrid HTTP and vault-git concurrently (`Promise.allSettled`). Either channel may fail; the other still runs. Never crashes MCP/SSE.
+- **Status/doctor:** `memo status` reports `Enabled (atomic|batched)`; doctor JSON includes `dirty` / `lastError` (credentials redacted).
 
 ### CLI Binary & PATH Resolution Contract
 
@@ -286,7 +300,7 @@ When the user asks to install a boot service for the SSE daemon:
 - **CLI Example**: `memo install-skills --product-root /path/to/consumer --force`
 
 ### 11. `prompt`
-- **Purpose**: Ingest prompt turns, manage session lifecycles, FTS/list query, activity reports, rule derivation, and session story export.
+- **Purpose**: Ingest prompt turns, manage session lifecycles, FTS/list query, activity reports, rule derivation, and session story export. Successful `session_end` also triggers dual sync flush (hybrid + batched vault-git when enabled; fail-open).
 - **Parameters**: `action` (required intent; default `record`), plus action-specific fields (`body`, `sessionId`, `query`, `ide`, `client`, `since`/`until`, `saveTraps`, `promote`, …).
 - **Actions**: `record`, `list`, `get`, `search`, `session`, `session_start`, `session_end`, `activity_report`, `derive_rules`, `export_story`.
 - **CLI Example**:
@@ -327,6 +341,7 @@ memo doctor --fix
    - `run.json` or `.state.md`
    - `telemetry.jsonl`
    - Agent audit logs (`*.log.md`, `.agents/*.log`)
+5. **Vault-git state** (when enabled): Reports effective `atomic` mode, dirty flag, and redacted `lastError` from `.sync/vault-git-state.json`.
 
 ## Recurring traps (`memo rank`)
 

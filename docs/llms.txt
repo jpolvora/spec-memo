@@ -9,6 +9,8 @@ spec-memo gives AI coding agents a curated working memory outside the product gi
 - SQLite FTS5 Disposable Index: Fast local search with Porter stemming.
 - 11 MCP Tools: bootstrap, search, get, upsert, append, forget, gc, promote, check_version, install_skills, prompt.
 - Server Transports & CLI: Stdio, HTTP/SSE on port 3123 (configurable), status monitor UI on port 3124, canvas graph UI on port 3125, and memo status diagnostic inspector.
+- Deployment modes: local (default), hybrid (debounced HTTP delta sync with shared daemon), remote (stdio proxy; zero local records).
+- Optional vault-git (config.json vaultGit): private git remote backup of ~/.spec-memo/. vaultGit.atomic defaults false (batched)—mutations write markdown only; git commit + pull/push flush on memo sync, prompt session_end, or graceful memo serve shutdown. atomic true restores per-mutation commit+push (fail-open). When hybrid and vaultGit are both enabled, memo sync runs both channels in parallel; either may fail without crashing MCP/SSE.
 
 ## Installation
 npm install -g github:jpolvora/spec-memo

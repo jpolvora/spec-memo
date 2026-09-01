@@ -103,7 +103,7 @@ If you prefer not using npm global link or want a standalone wrapper script:
 `spec-memo` supports **three operational deployment modes** configured via `memo setup`:
 
 1. **Local Mode (Default):** All memory records, indexing, and queries run directly on the local machine in `~/.spec-memo/`. Zero network dependencies.
-2. **Hybrid Mode:** Local vault remains the primary low-latency cache; transparently pulls updates from a shared daemon during `bootstrap` and debounces pushes on mutating operations (`upsert`, `append`, `forget`, `gc`). Works offline seamlessly (fails open).
+2. **Hybrid Mode:** Local vault remains the primary low-latency cache; transparently pulls updates from a shared daemon during `bootstrap` and debounces pushes on mutating operations (`upsert`, `append`, `forget`, `gc`). Manual sync via `memo sync`. Works offline seamlessly (fails open). When `vaultGit.enabled` is also set, `memo sync` runs hybrid HTTP and vault-git in parallel.
 3. **Remote Mode:** Agent hosts run a local stdio MCP proxy (`memo serve`) that forwards all 11 tools to a central remote daemon. Zero memory records stored on local disk. Fails closed with structured errors when unreachable.
 
 #### Configure with `memo setup`
@@ -722,7 +722,7 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
 | `doctor` | Diagnose health, mode, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
-| `sync` | Synchronize vault records (hybrid mode or vault-git) | `--all`, `--dry-run`, `--json` |
+| `sync` | Synchronize vault records (hybrid HTTP, vault-git, or both in parallel) | `--all`, `--dry-run`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |
 | `export-vault` | Export encrypted portable archive | `--password`, `--output`, `--project` |
 | `import-vault` / `restore` | Restore portable archive (.zip or .json) into vault | `<file>`, `--backup`, `--latest`, `--password` |

@@ -188,7 +188,7 @@ memo get --kind trap --slug sqlite-wal-lock
 
 ### 4. `upsert`
 
-**Job:** Write, update, or supersede a memory record. Automatically updates FTS5 index, re-compiles Markdown views, and schedules hybrid background sync.
+**Job:** Write, update, or supersede a memory record. Automatically updates FTS5 index, re-compiles Markdown views, schedules hybrid debounced push (when `mode: hybrid`), and applies vault-git cadence (`vaultGit.atomic: true` commits+syncs per mutation; default batched defers git flush to `memo sync`, `session_end`, or serve shutdown).
 
 #### Parameter Specification
 - `kind` (string, **required**): One of `"trap"`, `"decision"`, `"spec"`, `"plan"`, `"state"`, `"log"`, `"scratch"`, `"review"`.
@@ -522,6 +522,18 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 | `memo import-vault` | Restore vault archive (`--password`, `--archive`, `--overwrite`). |
 | `memo import` | Ingest legacy in-tree memory files (`memo import --from <repoRoot>`). |
 
+### Vault-git sync (`config.json` → `vaultGit`)
+
+Optional private git remote backup of the vault root. Independent of hybrid HTTP except dual-mode orchestration.
+
+| Key | Default | Behavior |
+|---|---|---|
+| `enabled` | `false` | Opt-in. Remote mode ignores vault-git (no local records). |
+| `atomic` | `false` | **Batched:** mutations write markdown only; git flush on `memo sync`, `session_end`, graceful serve shutdown. **Atomic:** per-mutation commit + remote pull/push (fail-open). |
+| `remoteUrl` / `branch` | — | Standard git remote; credentials via git helper (never in config). |
+
+CLI one-shot `memo upsert` in batched mode does **not** flush git on process exit. End the agent session (`session_end`) or run `memo sync`. Errors log to `error.logs` (`subsystem: vault-git`); check `memo status --json` → `operational.vaultGit`.
+
 ---
 
 ## 🛡️ Error Logging & Server Crash Protection
@@ -550,6 +562,7 @@ Match user intent to the correct action:
 | Operational status & daemon check | **status** | CLI `memo status` (`--check`, `--json`) |
 | Vault health & pollution check | **diagnose** | CLI `memo doctor` (`--fix` to clean residue) |
 | TTL cleanup & compaction | **maintain** | MCP `gc` (`dryRun: true` first) |
+| Hybrid / vault-git sync | **sync** | CLI `memo sync` (`--dry-run` first); batched git also flushes on `session_end` |
 | Export documentation / skill | **publish** | MCP `promote` (`destination: "..."`) |
 | Package version check | **version** | MCP `check_version` |
 | Install runtime skill in consumer | **install** | MCP `install_skills` (`productRoot: "."`) or `global: true` / CLI `--global` |

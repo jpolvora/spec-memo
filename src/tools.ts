@@ -69,7 +69,7 @@ export interface ToolDefinition {
 export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   bootstrap: {
     name: 'bootstrap',
-    description: "Bind cwd's git remote; compile a token-budgeted session brief (traps, open decisions, live spec/plan, drift flags).",
+    description: "Bind cwd's git remote; compile a token-budgeted session brief (traps, open decisions, live spec/plan, drift flags). In hybrid mode, pulls remote deltas before compiling the brief.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -172,7 +172,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   },
   upsert: {
     name: 'upsert',
-    description: 'Write or update a memory record (trap, decision, spec, plan, state, review, scratch).',
+    description:
+      'Write or update a memory record (trap, decision, spec, plan, state, review, scratch). Updates FTS5 and compiled views; schedules hybrid debounced push when mode is hybrid. With vaultGit.enabled, batched mode (vaultGit.atomic false, default) defers git commit until memo sync, session_end, or serve shutdown; atomic true commits and remote-syncs fail-open per mutation.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -368,7 +369,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   prompt: {
     name: 'prompt',
     description:
-      'Ingest prompt history, session lifecycles, and timesheet deliverables; query prompts, derive AI rules, export intent stories, and generate activity reports.',
+      'Ingest prompt history, session lifecycles, and timesheet deliverables; query prompts, derive AI rules, export intent stories, and generate activity reports. session_end also flushes hybrid HTTP and batched vault-git sync when enabled (fail-open).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -386,7 +387,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
             'derive_rules',
             'export_story'
           ],
-          description: 'Action to perform (default: "record")'
+          description: 'Action to perform (default: "record"). session_end closes the session and triggers dual sync flush when hybrid or vaultGit is enabled.'
         },
         body: { type: 'string', description: 'Prompt content or work summary' },
         id: { type: 'string', description: 'Unique record identifier' },
