@@ -96,7 +96,24 @@ export function sanitizeLogContext(value: unknown): unknown {
     }
   }
 
-  return out;
+  return redactVaultGitContextDeep(out);
+}
+
+function redactVaultGitContextDeep(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return redactVaultGitError(value) ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactVaultGitContextDeep(item));
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = redactVaultGitContextDeep(v);
+    }
+    return out;
+  }
+  return value;
 }
 
 /**

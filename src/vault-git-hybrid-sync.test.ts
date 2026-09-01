@@ -255,6 +255,40 @@ describe('vault-git-hybrid-sync', () => {
     }
   });
 
+  it('AC21: dual-mode memo sync --dry-run via CLI reports both channels', async () => {
+    const configPath = path.join(tempVault, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.mode = 'hybrid';
+    config.remote = { url: 'http://127.0.0.1:1' };
+    config.vaultGit = { enabled: true };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    initVaultGit(tempVault);
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'scratch',
+      slug: 'cli-dual-dry-run',
+      body: 'dual cli dry'
+    });
+    let captured = '';
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => {
+      captured += args.map(String).join(' ') + '\n';
+    };
+    try {
+      const code = await runCli(['sync', '--dry-run', '--json', '--vaultRoot', tempVault, '--cwd', tempProject]);
+      assert.ok(code === 0 || code === 1);
+      const parsed = JSON.parse(captured.trim());
+      assert.ok(parsed.hybrid);
+      assert.ok(parsed.vaultGit);
+      assert.equal(parsed.vaultGit.committed, false);
+      assert.ok((parsed.vaultGit.wouldCommit || []).length > 0);
+      assert.equal(gitLog(tempVault), '');
+    } finally {
+      console.log = origLog;
+    }
+  });
+
   it('AC23: session_end flush commits batched dirty tree', async () => {
     enableVaultGit(tempVault);
     initVaultGit(tempVault);
