@@ -298,6 +298,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` opt-in status companion; local `memo status` probes send Bearer | npm test |
 | 2026-08-31 | release-0.14.2 | Stop stdio serve from binding status `:3124` by default | 0.14.2 |
 | 2026-08-31 | status-backup-page | Dedicated Backups tab: full-backup confirm, complete kinds, inventory filters, restore/delete/download | npm test 380 pass |
+| 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode parallel hybrid+git `memo sync`, fail-open | npm test 406 pass |
 
 ## 12. Related docs
 

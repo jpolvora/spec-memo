@@ -6,7 +6,7 @@ import { startMcpServer } from './mcp.js';
 import { runDoctor } from './doctor.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
-import { syncVault, ensureVaultStructure, getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { exportVault, importVault, resetVault, restoreVault, listBackups } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { sanitizeToolOutput } from './safety.js';
@@ -218,7 +218,9 @@ Options:
   if (cmd === 'sync') {
     console.log(`Usage: memo sync [options]
 
-Synchronize vault records against remote daemon (hybrid mode) or git remote (vaultGit).
+Synchronize vault records against remote daemon (hybrid), git remote (vaultGit), or both in parallel when dual-mode is enabled.
+
+Default vault-git cadence is batched (vaultGit.atomic false): mutations do not commit until memo sync, session_end, or graceful memo serve shutdown. Set atomic true for per-mutation commit+push.
 
 Options:
   --all           Synchronize all projects in vault (default: current project)
@@ -1136,7 +1138,42 @@ async function runCliInner(
       const cwd = (parsed.options.cwd as string) || process.cwd();
       const identity = resolveProjectIdentity(cwd, { vaultRoot: getVaultRoot(vaultRoot) });
 
-      if (config.mode === 'hybrid') {
+      if (config.mode === 'remote') {
+        throw new Error('memo sync is not available in remote mode (data resides on remote daemon).');
+      }
+
+      const gitEnabled = Boolean(config.vaultGit?.enabled);
+      const hybridEnabled = config.mode === 'hybrid';
+
+      if (hybridEnabled && gitEnabled) {
+        const { syncDual } = await import('./dual-sync.js');
+        const report = await syncDual({
+          vaultRoot,
+          projectId: identity.projectId,
+          all,
+          dryRun,
+          trigger: 'sync'
+        });
+        if (parsed.isJson) {
+          printJson(report);
+        } else {
+          console.log(`spec-memo — Dual Synchronization (${report.ok ? 'ok' : 'partial failure'})\n`);
+          if (report.hybrid?.report) {
+            const h = report.hybrid.report;
+            console.log(`  Hybrid:   pulled applied=${h.pulled.applied} skipped=${h.pulled.skipped} conflicts=${h.pulled.conflicts}`);
+            console.log(`            pushed applied=${h.pushed.applied} skipped=${h.pushed.skipped} conflicts=${h.pushed.conflicts}`);
+            if (report.hybrid.error) console.log(`            error: ${report.hybrid.error}`);
+          }
+          if (report.vaultGit) {
+            console.log(`  Vault Git: committed=${report.vaultGit.committed} pulled=${report.vaultGit.pulled} pushed=${report.vaultGit.pushed}`);
+            console.log(`            ${report.vaultGit.message}`);
+            if (report.vaultGit.error) console.log(`            error: ${report.vaultGit.error}`);
+          }
+        }
+        return report.ok ? 0 : 1;
+      }
+
+      if (hybridEnabled) {
         const report = await syncHybrid({
           vaultRoot,
           projectId: identity.projectId,
@@ -1158,18 +1195,15 @@ async function runCliInner(
         return 0;
       }
 
-      if (config.mode === 'remote') {
-        throw new Error('memo sync is not available in remote mode (data resides on remote daemon).');
-      }
-
-      if (config.vaultGit?.enabled) {
-        const res = syncVault(vaultRoot);
+      if (gitEnabled) {
+        const { flushVaultGit } = await import('./vault.js');
+        const res = await flushVaultGit(getVaultRoot(vaultRoot), { dryRun, trigger: 'sync' });
         if (parsed.isJson) {
           printJson(res);
         } else {
           console.log(`[SYNC] ${res.message}`);
         }
-        return 0;
+        return res.ok ? 0 : 1;
       }
 
       throw new Error(

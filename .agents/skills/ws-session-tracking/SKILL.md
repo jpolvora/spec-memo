@@ -1,6 +1,6 @@
 ---
 name: ws-session-tracking
-version: 0.15.0
+version: 0.16.0
 description: >-
   Session-level deliverable and prompt intent tracking engine. Automatically correlates turn-level
   prompt instructions with git commits, PR deliverables, and task lifecycle boundaries.
@@ -63,6 +63,9 @@ memo session start session-1740000000-a1b2 --task-slug feature-oauth-refresh --c
 ```
 
 **End Session with Deliverables:**
+
+When `vaultGit.enabled` (batched) or `mode: hybrid`, a successful `session_end` also triggers dual sync flush (hybrid HTTP + vault-git in parallel when both are enabled). Sync errors are fail-open and logged; the session payload still returns success.
+
 ```json
 {
   "action": "session_end",

@@ -34,7 +34,7 @@
           </svg>
         </div>
         <span>spec-memo</span>
-        <span class="version-badge brand-badge">v0.15.0</span>
+        <span class="version-badge brand-badge">v0.16.0</span>
       </a>
 
       <ul class="nav-links">
@@ -65,7 +65,7 @@
       <div class="hero-pill">
         <span class="hero-pill-dot"></span>
         <span>Local Working Memory for AI Coding Agents</span>
-        <span class="version-badge">v0.15.0</span>
+        <span class="version-badge">v0.16.0</span>
       </div>
 
       <h1 class="hero-title">
@@ -171,6 +171,10 @@
             <li class="compare-item">
               <span class="compare-bullet">✓</span>
               <div><strong>Disposable SQLite FTS5 Index:</strong> Instant full-text search with Porter stemming, path globbing, and automatic markdown re-indexing.</div>
+            </li>
+            <li class="compare-item">
+              <span class="compare-bullet">✓</span>
+              <div><strong>Batched Vault-Git + Dual-Mode Sync:</strong> Optional private git remote backup with <code>vaultGit.atomic</code> (default batched). When hybrid HTTP and vault-git are both enabled, <code>memo sync</code> and <code>session_end</code> flush both channels in parallel—fail-open, never crashing the MCP server.</div>
             </li>
           </ul>
         </div>
@@ -627,10 +631,10 @@ memo doctor --fix</code></pre>
             <span class="kind-badge plan">History</span>
           </div>
           <p class="tool-desc">
-            Ingests prompt turns and session lifecycles into the vault; supports FTS search, activity reports, AI rule derivation, and intent-story export. Aliases: <code>memo prompts</code>, <code>memo session</code>, <code>memo activity</code>.
+            Ingests prompt turns and session lifecycles into the vault; supports FTS search, activity reports, AI rule derivation, and intent-story export. <code>session_end</code> also flushes hybrid HTTP and batched vault-git when enabled. Aliases: <code>memo prompts</code>, <code>memo session</code>, <code>memo activity</code>.
           </p>
           <div class="tool-example-box">
-            <code>memo prompt record --body "Always close SQLite before unlink" --session-id s1</code>
+            <code>memo session end s1 --summary "Shipped auth refresh"</code>
           </div>
         </div>
 
@@ -644,7 +648,7 @@ memo doctor --fix</code></pre>
             <span class="kind-badge plan">Transport</span>
           </div>
           <p class="tool-desc">
-            Runs the MCP server in stdio mode (default) or HTTP/SSE mode on port :3123 with a live status companion UI on port :3124.
+            Runs the MCP server in stdio mode (default) or HTTP/SSE mode on port :3123 with a live status companion UI on port :3124. Graceful shutdown flushes batched vault-git and hybrid sync when enabled.
           </p>
           <div class="tool-example-box">
             <code>memo serve --sse --port 3123 --status-port 3124</code>
@@ -787,6 +791,23 @@ memo doctor --fix</code></pre>
           </div>
         </div>
 
+        <!-- CLI Extra: sync -->
+        <div class="tool-card" data-name="sync" data-desc="synchronize hybrid http and vault-git in parallel dual mode" data-category="sync" data-tags="cli sync hybrid vault-git git dual-mode">
+          <div class="tool-card-top">
+            <div class="tool-name-wrap">
+              <span class="tool-name">memo sync</span>
+              <span class="tool-role-tag">CLI Only</span>
+            </div>
+            <span class="kind-badge plan">Sync</span>
+          </div>
+          <p class="tool-desc">
+            Flushes hybrid HTTP delta sync and/or vault-git commit + pull/push. Dual-mode (<code>mode: hybrid</code> + <code>vaultGit.enabled</code>) runs both channels in parallel. Batched vault-git (<code>atomic: false</code>, default) does not commit on every upsert—flush here, on <code>session_end</code>, or graceful serve shutdown.
+          </p>
+          <div class="tool-example-box">
+            <code>memo sync --dry-run --json</code>
+          </div>
+        </div>
+
         <!-- CLI Extra: export/import vault -->
         <div class="tool-card" data-name="export-vault" data-desc="encrypted vault backup export and restore aes-256-gcm" data-category="sync" data-tags="cli backup export import crypto sync">
           <div class="tool-card-top">
@@ -878,7 +899,7 @@ memo doctor --fix</code></pre>
               <span>🔗</span> Git Remote Identity
             </div>
             <p class="arch-box-desc">
-              Projects are automatically identified by normalized git remote URL. Multiple local checkouts share identical working memory seamlessly.
+              Projects are automatically identified by normalized git remote URL. Multiple local checkouts share identical working memory seamlessly. Optional <code>vaultGit</code> backs up the vault root to a private git remote with batched or atomic commit cadence.
             </p>
           </div>
         </div>
@@ -1106,7 +1127,7 @@ memo doctor --fix</code></pre>
       </ul>
 
       <p class="footer-copy">
-        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.15.0</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
+        <span class="footer-copy">MIT &mdash; <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener">jpolvora/spec-memo</a> &mdash; <span class="footer-version">v0.16.0</span> &mdash; Developed by <a href="https://jpolvora.github.io/" target="_blank" rel="noopener">Jone Polvora</a></span>
       </p>
     </div>
   </footer>

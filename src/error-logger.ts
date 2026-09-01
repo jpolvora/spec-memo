@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getVaultRoot } from './vault.js';
 import { redactSecretsInPayload } from './safety.js';
+import { redactVaultGitError } from './vault-git-redact.js';
 
 export type ErrorLogLevel = 'ERROR' | 'FATAL' | 'WARN';
 
@@ -12,6 +13,7 @@ export type ErrorLogSubsystem =
   | 'mcp-tool'
   | 'remote-proxy'
   | 'hybrid-sync'
+  | 'vault-git'
   | 'vault'
   | 'canvas'
   | 'cli'
@@ -94,7 +96,24 @@ export function sanitizeLogContext(value: unknown): unknown {
     }
   }
 
-  return out;
+  return redactVaultGitContextDeep(out);
+}
+
+function redactVaultGitContextDeep(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return redactVaultGitError(value) ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactVaultGitContextDeep(item));
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = redactVaultGitContextDeep(v);
+    }
+    return out;
+  }
+  return value;
 }
 
 /**
@@ -127,9 +146,9 @@ export function formatErrorReport(report: ErrorReport): string {
   }
 
   // Redact secrets from error message and stack trace
-  errorMessage = String(redactSecretsInPayload(errorMessage));
+  errorMessage = redactVaultGitError(String(redactSecretsInPayload(errorMessage))) ?? errorMessage;
   if (stackTrace) {
-    stackTrace = String(redactSecretsInPayload(stackTrace));
+    stackTrace = redactVaultGitError(String(redactSecretsInPayload(stackTrace))) ?? stackTrace;
   }
 
   const metaParts: string[] = [];

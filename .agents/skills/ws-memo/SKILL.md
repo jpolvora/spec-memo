@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.15.0
+version: 0.16.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -188,7 +188,7 @@ memo get --kind trap --slug sqlite-wal-lock
 
 ### 4. `upsert`
 
-**Job:** Write, update, or supersede a memory record. Automatically updates FTS5 index, re-compiles Markdown views, and schedules hybrid background sync.
+**Job:** Write, update, or supersede a memory record. Automatically updates FTS5 index, re-compiles Markdown views, schedules hybrid debounced push (when `mode: hybrid`), and applies vault-git cadence (`vaultGit.atomic: true` commits+syncs per mutation; default batched defers git flush to `memo sync`, `session_end`, or serve shutdown).
 
 #### Parameter Specification
 - `kind` (string, **required**): One of `"trap"`, `"decision"`, `"spec"`, `"plan"`, `"state"`, `"log"`, `"scratch"`, `"review"`.
@@ -516,11 +516,23 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 | `memo canvas` | Launch graph visualizer dashboard (default port `3125`, configurable via `config.json` `ports.canvas`). Flags: `--port`, `--host`, `--project`. |
 | `memo serve` | Start MCP transport. Stdio (default) or HTTP/SSE (`--sse` port `3123`, status companion `:3124`, configurable via `config.json` `ports.sse` / `ports.status`). Off-loopback requires `--auth-token` or `SPEC_MEMO_AUTH_TOKEN`. |
 | `memo hook install` | Install Git pre-commit write-block hook to block `.agents/plans/`, `MEMORY.md`, `.state.md`. Bypass: `SKIP_MEMO_HOOK=1`. |
-| `memo sync` | Hybrid bidirectional HTTP delta sync with remote daemon (`--all`, `--dry-run`), or vault Git push/pull. |
+| `memo sync` | Hybrid HTTP and/or vault-git (`--all`, `--dry-run`). Dual-mode runs both in parallel. Batched git flush on sync / session_end / shutdown. |
 | `memo sync-vault` | Peer-to-peer vault directory delta sync (`memo sync-vault <target> [--two-way] [--dry-run]`). |
 | `memo export-vault` | Export encrypted/portable vault archive (`--password`, `--output`, `--project`). |
 | `memo import-vault` | Restore vault archive (`--password`, `--archive`, `--overwrite`). |
 | `memo import` | Ingest legacy in-tree memory files (`memo import --from <repoRoot>`). |
+
+### Vault-git sync (`config.json` → `vaultGit`)
+
+Optional private git remote backup of the vault root. Independent of hybrid HTTP except dual-mode orchestration.
+
+| Key | Default | Behavior |
+|---|---|---|
+| `enabled` | `false` | Opt-in. Remote mode ignores vault-git (no local records). |
+| `atomic` | `false` | **Batched:** mutations write markdown only; git flush on `memo sync`, `session_end`, graceful serve shutdown. **Atomic:** per-mutation commit + remote pull/push (fail-open). |
+| `remoteUrl` / `branch` | — | Standard git remote; credentials via git helper (never in config). |
+
+CLI one-shot `memo upsert` in batched mode does **not** flush git on process exit. End the agent session (`session_end`) or run `memo sync`. Errors log to `error.logs` (`subsystem: vault-git`); check `memo status --json` → `operational.vaultGit`.
 
 ---
 
@@ -550,6 +562,7 @@ Match user intent to the correct action:
 | Operational status & daemon check | **status** | CLI `memo status` (`--check`, `--json`) |
 | Vault health & pollution check | **diagnose** | CLI `memo doctor` (`--fix` to clean residue) |
 | TTL cleanup & compaction | **maintain** | MCP `gc` (`dryRun: true` first) |
+| Hybrid / vault-git sync | **sync** | CLI `memo sync` (`--dry-run` first); batched git also flushes on `session_end` |
 | Export documentation / skill | **publish** | MCP `promote` (`destination: "..."`) |
 | Package version check | **version** | MCP `check_version` |
 | Install runtime skill in consumer | **install** | MCP `install_skills` (`productRoot: "."`) or `global: true` / CLI `--global` |

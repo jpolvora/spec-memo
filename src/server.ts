@@ -654,6 +654,12 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         statusPort,
         activityBus: bus,
         close: async () => {
+          try {
+            const { flushOnShutdown } = await import("./dual-sync.js");
+            await flushOnShutdown(vaultRoot);
+          } catch {
+            // shutdown flush must never block close
+          }
           bus.close();
           if (statusInstance) {
             await statusInstance.close();

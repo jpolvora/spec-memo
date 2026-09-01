@@ -215,6 +215,8 @@ export interface VaultConfig {
     enabled: boolean;
     remoteUrl?: string;
     autoCommit?: boolean;
+    /** When true, commit+push after each mutation. Default false (batched flush). */
+    atomic?: boolean;
     branch?: string;
   };
   embeddings?: {
@@ -700,7 +702,11 @@ export interface OperationalStatus {
   };
   vaultGit: {
     enabled: boolean;
+    atomic?: boolean;
     remoteUrl?: string;
+    dirty?: boolean;
+    lastError?: string | null;
+    lastSyncAt?: string | null;
   };
 }
 
@@ -729,6 +735,14 @@ export interface DoctorResult {
   remoteUrl?: string | null;
   tokenConfigured?: boolean;
   hybridState?: HybridState | null;
+  vaultGit?: {
+    enabled: boolean;
+    atomic: boolean;
+    remoteUrl?: string;
+    dirty?: boolean;
+    lastError?: string | null;
+    lastSyncAt?: string | null;
+  };
   remoteHealth?: {
     reachable: boolean;
     statusCode?: number;
@@ -863,6 +877,7 @@ export interface SessionResult {
   deliverables?: SessionDeliverable[];
   summary?: string;
   path: string;
+  sync?: unknown;
 }
 
 export interface ActivityReportResult {

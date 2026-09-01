@@ -29,7 +29,7 @@ PRD Phase 3: Optional private git remote on the vault (`vault-git`). Enable opti
 
 - Git repository in the vault is isolated from consumer product repositories.
 - `memo.sqlite` is gitignored inside the vault root.
-- **Cadence / dual-mode:** AC2 micro-commit-on-upsert and AC3 `memo sync` as vault-git-only are refined by [`vault-git-hybrid-sync.spec.md`](vault-git-hybrid-sync.spec.md) (`vaultGit.atomic`, batched flush, hybrid+git parallel `memo sync`). Until that spec ships, this file still describes current code.
+- **Cadence / dual-mode:** AC2 micro-commit-on-upsert and AC3 `memo sync` as vault-git-only are refined by [`vault-git-hybrid-sync.spec.md`](vault-git-hybrid-sync.spec.md) (`vaultGit.atomic`, batched flush, hybrid+git parallel `memo sync`). Shipped 2026-09-01.
 
 ### [2026-09-01] Revision: Point AC2/AC3 at vault-git-hybrid-sync refinement (Prompt: "refine gitVault + hybrid dual-mode atomic flag")
 

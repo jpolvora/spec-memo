@@ -136,6 +136,21 @@ describe('Error Logger Subsystem', () => {
     assert(formatted.includes('"project": "test-proj"'));
   });
 
+  it('redacts user:pass in vault-git context gitArgs', () => {
+    const report: ErrorReport = {
+      subsystem: 'vault-git',
+      error: new Error('git remote add failed'),
+      context: {
+        phase: 'init',
+        gitArgs: ['remote', 'add', 'origin', 'http://alice:secret@host/vault.git']
+      }
+    };
+    const formatted = formatErrorReport(report);
+    assert.equal(formatted.includes('secret'), false);
+    assert.equal(formatted.includes('alice'), false);
+    assert.ok(formatted.includes('***:***@'));
+  });
+
   it('appends multiple error reports to error.logs without overwriting', () => {
     logErrorReport(
       {

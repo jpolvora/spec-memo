@@ -695,7 +695,7 @@ ${TRAP_BODY}
     ensureVaultStructure(tempVault);
     const configPath = path.join(tempVault, 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    config.vaultGit = { enabled: true };
+    config.vaultGit = { enabled: true, atomic: true };
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
     assert.equal(initVaultGit(tempVault), true);
 

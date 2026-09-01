@@ -84,7 +84,7 @@ memo get --kind trap --slug sqlite-wal-lock
 
 ### 4. `upsert`
 
-Write or update a memory record (trap, decision, spec, plan, state, review, scratch).
+Write or update a memory record (trap, decision, spec, plan, state, review, scratch). Updates FTS5 and compiled views; schedules hybrid debounced push when `mode: hybrid`. With `vaultGit.enabled`, batched mode (default `atomic: false`) defers git commit until flush; `atomic: true` commits+syncs fail-open per mutation.
 
 | Arg | Type | Required | Notes |
 |---|---|---|---|
@@ -239,7 +239,7 @@ memo install-skills --global [--force] [--json]
 | `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Proxies in remote mode. |
 | `memo import` | Legacy `.agents` / `memory/` / plans → vault. `--from`. |
 | `memo hook install` | Pre-commit write-block. `--productRoot`. Bypass: `SKIP_MEMO_HOOK=1`. (Not available in remote mode). |
-| `memo sync` | Hybrid bidirectional HTTP delta sync with remote daemon (`--all`, `--dry-run`), or vault git remote when vaultGit is enabled. |
+| `memo sync` | Hybrid HTTP and/or vault-git. Dual-mode runs both in parallel. Batched vault-git (`atomic: false`, default) flushes on sync, session_end, and serve shutdown. |
 | `memo sync-vault <target>` | Peer vault delta sync. `--two-way` `--dry-run`. (Not available in remote mode). |
 | `memo export-vault` / `memo import-vault` | Portable archive; optional AES-256-GCM. Prefer `SPEC_MEMO_VAULT_PASSWORD`. (Not available in remote mode). |
 
@@ -248,8 +248,12 @@ memo install-skills --global [--force] [--json]
 ## Deployment Modes
 
 - **`local` (default):** Everything stored and queried directly on the local machine under `~/.spec-memo/`. Zero network requirements.
-- **`hybrid`:** Local vault is authoritative; transparently pulls deltas on `bootstrap` and debounces pushes on mutating operations. Manual sync via `memo sync`. Fails open if remote daemon is unreachable.
+- **`hybrid`:** Local vault is authoritative; transparently pulls deltas on `bootstrap` and debounces pushes on mutating operations. Manual sync via `memo sync`. Fails open if remote daemon is unreachable. When `vaultGit.enabled` is also set, `memo sync` / `session_end` / serve shutdown run hybrid HTTP and vault-git in parallel.
 - **`remote`:** Local agent hosts connect to local `memo serve` stdio proxy, which forwards all 11 tools to a shared remote daemon. Local disk stores no memory records. Fails closed if remote daemon is unreachable.
+
+### Vault-git (`config.json` → `vaultGit`)
+
+Private git remote backup of the vault root. `atomic` defaults `false` (batched): flush events are `memo sync`, MCP/CLI `prompt` `session_end`, and graceful `memo serve` shutdown. `atomic: true` = per-mutation commit + remote sync (fail-open). Legacy `autoCommit` aliases `atomic` when `atomic` is omitted. Status: `memo status` → `Enabled (atomic|batched)`; doctor JSON includes redacted `dirty` / `lastError`.
 
 ### Default Ports & Configurable Values
 
