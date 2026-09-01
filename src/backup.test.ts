@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { exportVault, importVault } from './backup.js';
+import { exportVault, importVault, persistVaultBackup, listBackups, deleteBackup, resolveBackupPath, inspectBackup } from './backup.js';
 import { upsertRecord } from './store.js';
 import { searchIndex, closeIndex } from './indexer.js';
 
@@ -326,5 +326,250 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
     assert.ok(fs.existsSync(targetConfigPath));
     const restoredConfig = JSON.parse(fs.readFileSync(targetConfigPath, 'utf8'));
     assert.equal(restoredConfig.bootstrap?.maxBytes, 12345);
+  });
+
+  it('should round-trip prompt and session records through export/import with FTS search', async () => {
+    const projectId = 'proj-prompt-session-backup';
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      projectId,
+      kind: 'prompt',
+      slug: 'intent-one',
+      frontmatter: {
+        id: 'prompt-proj-prompt-session-backup-intent-one',
+        kind: 'prompt',
+        title: 'Intent story prompt'
+      },
+      body: 'Unique FTS marker prompt-session-roundtrip-alpha'
+    });
+
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      projectId,
+      kind: 'session',
+      slug: 'session-one',
+      frontmatter: {
+        id: 'session-proj-prompt-session-backup-session-one',
+        kind: 'session',
+        title: 'Work session',
+        client: 'acme',
+        billable: true,
+        durationMinutes: 42
+      },
+      body: 'Session body for backup roundtrip validation'
+    });
+
+    const exportPath = path.join(tempDir, 'prompt-session-backup.json');
+    const exportRes = await exportVault({ vaultRoot: sourceVault, projectId, outputPath: exportPath });
+    assert.equal(exportRes.recordsCount, 2);
+
+    await importVault({ vaultRoot: targetVault, archivePath: exportPath });
+
+    const promptHits = searchIndex({
+      vaultRoot: targetVault,
+      cwd: productRepo,
+      query: 'prompt-session-roundtrip-alpha',
+      crossProject: true
+    });
+    assert.equal(promptHits.length, 1);
+    assert.equal(promptHits[0].kind, 'prompt');
+
+    const sessionHits = searchIndex({
+      vaultRoot: targetVault,
+      cwd: productRepo,
+      query: 'backup roundtrip validation',
+      crossProject: true
+    });
+    assert.equal(sessionHits.length, 1);
+    assert.equal(sessionHits[0].kind, 'session');
+  });
+
+  it('should persist backup and list with recordCount metadata', async () => {
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      kind: 'trap',
+      slug: 'persist-list-trap',
+      frontmatter: { id: 'trap-persist-list', title: 'Persist list trap', severity: 'low' },
+      body: 'Trap for persistVaultBackup listBackups test'
+    });
+
+    const result = await persistVaultBackup({ vaultRoot: sourceVault });
+    assert.ok(result.filename.endsWith('.zip'));
+    assert.ok(result.recordCount >= 1);
+
+    const listed = listBackups(sourceVault);
+    const item = listed.find((b) => b.filename === result.filename);
+    assert.ok(item);
+    assert.ok(item!.recordCount != null && item!.recordCount >= 1);
+    const inspected = inspectBackup(result.filename, { vaultRoot: sourceVault });
+    assert.equal(inspected.recordCount, item!.recordCount);
+    assert.equal(inspected.scope, item!.scope);
+    // Full-vault persist with a single project must still report scope "full" (manifest intent).
+    assert.equal(item!.scope, 'full');
+    assert.ok(item!.recordsByKind && (item!.recordsByKind.trap || 0) >= 1);
+  });
+
+  it('should label project-scoped persist as scope project', async () => {
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      kind: 'trap',
+      slug: 'scoped-persist-trap',
+      frontmatter: { id: 'trap-scoped-persist', title: 'Scoped', severity: 'low' },
+      body: 'Project-scoped persist scope test'
+    });
+    const projects = fs.readdirSync(path.join(sourceVault, 'projects')).filter((n) =>
+      fs.statSync(path.join(sourceVault, 'projects', n)).isDirectory()
+    );
+    assert.ok(projects.length >= 1);
+    const result = await persistVaultBackup({ vaultRoot: sourceVault, projectId: projects[0] });
+    const item = listBackups(sourceVault).find((b) => b.filename === result.filename);
+    assert.ok(item);
+    assert.equal(item!.scope, 'project');
+    assert.ok(item!.recordsByKind && (item!.recordsByKind.trap || 0) >= 1);
+  });
+
+  it('should not infer scope project for legacy single-project archives missing manifest.scope', async () => {
+    const backupsDir = path.join(sourceVault, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    const legacy = {
+      format: 'spec-memo-vault-v1',
+      manifest: {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        projects: ['only-one'],
+        recordCount: 1
+      },
+      projects: [
+        {
+          projectId: 'only-one',
+          records: [
+            {
+              relativePath: 'traps/legacy.md',
+              content:
+                '---\nid: trap-legacy-scope\nkind: trap\nproject: only-one\nstatus: active\nsource: agent\ncreated: 2026-08-01T00:00:00.000Z\nupdated: 2026-08-01T00:00:00.000Z\n---\nLegacy trap'
+            }
+          ]
+        }
+      ]
+    };
+    fs.writeFileSync(path.join(backupsDir, 'legacy-one-project.json'), JSON.stringify(legacy), 'utf8');
+    const listed = listBackups(sourceVault);
+    const item = listed.find((b) => b.filename === 'legacy-one-project.json');
+    assert.ok(item);
+    assert.equal(item!.scope, undefined);
+    const fullOnly = listBackups(sourceVault, { scope: 'full' });
+    assert.equal(fullOnly.some((b) => b.filename === 'legacy-one-project.json'), false);
+  });
+
+  it('should infer scope full for legacy multi-project archives missing manifest.scope', async () => {
+    const backupsDir = path.join(sourceVault, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    const legacy = {
+      format: 'spec-memo-vault-v1',
+      manifest: {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        projects: ['a', 'b'],
+        recordCount: 0
+      },
+      projects: [
+        { projectId: 'a', records: [] },
+        { projectId: 'b', records: [] }
+      ]
+    };
+    fs.writeFileSync(path.join(backupsDir, 'legacy-two-project.json'), JSON.stringify(legacy), 'utf8');
+    const item = listBackups(sourceVault).find((b) => b.filename === 'legacy-two-project.json');
+    assert.ok(item);
+    assert.equal(item!.scope, 'full');
+  });
+
+  it('should require existing file for deleteBackup and reject traversal in resolveBackupPath', async () => {
+    assert.throws(
+      () => resolveBackupPath(sourceVault, '../x.zip'),
+      /Invalid backup filename/
+    );
+
+    await assert.rejects(
+      async () => deleteBackup('nonexistent-backup.zip', sourceVault),
+      /Backup not found/
+    );
+  });
+
+  it('should write sidecar metadata on persist, list without unpacking, and remove sidecar on delete', async () => {
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      kind: 'trap',
+      slug: 'sidecar-trap',
+      frontmatter: { id: 'trap-sidecar', title: 'Sidecar', severity: 'low' },
+      body: 'Sidecar metadata test'
+    });
+
+    const result = await persistVaultBackup({ vaultRoot: sourceVault });
+    const backupPath = path.join(sourceVault, 'backups', result.filename);
+    const metaPath = `${backupPath}.meta.json`;
+    assert.ok(fs.existsSync(metaPath));
+    const sidecar = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as {
+      recordCount?: number;
+      scope?: string;
+      recordsByKind?: Record<string, number>;
+      archiveSize?: number;
+      archiveMtimeMs?: number;
+    };
+    assert.equal(sidecar.recordCount, result.recordCount);
+    assert.equal(sidecar.scope, 'full');
+    assert.ok(sidecar.recordsByKind && (sidecar.recordsByKind.trap || 0) >= 1);
+    assert.equal(sidecar.archiveSize, fs.statSync(backupPath).size);
+    assert.equal(typeof sidecar.archiveMtimeMs, 'number');
+
+    const listed = listBackups(sourceVault);
+    assert.ok(!listed.some((b) => b.filename.endsWith('.meta.json')));
+    const item = listed.find((b) => b.filename === result.filename);
+    assert.ok(item);
+    assert.equal(item!.recordCount, result.recordCount);
+    assert.equal(item!.scope, 'full');
+
+    // Stale sidecar (fingerprint mismatch) falls back to peeking the archive
+    fs.writeFileSync(metaPath, JSON.stringify({ ...sidecar, archiveSize: 0 }), 'utf8');
+    const relisted = listBackups(sourceVault).find((b) => b.filename === result.filename);
+    assert.ok(relisted);
+    assert.equal(relisted!.recordCount, result.recordCount);
+    fs.writeFileSync(metaPath, JSON.stringify(sidecar), 'utf8');
+
+    // Inspect without password reads the sidecar instead of unpacking the archive
+    fs.writeFileSync(metaPath, JSON.stringify({ ...sidecar, recordCount: 4242 }), 'utf8');
+    const inspectedFromSidecar = inspectBackup(result.filename, { vaultRoot: sourceVault });
+    assert.equal(inspectedFromSidecar.recordCount, 4242);
+    fs.writeFileSync(metaPath, JSON.stringify(sidecar), 'utf8');
+
+    await deleteBackup(result.filename, sourceVault);
+    assert.ok(!fs.existsSync(backupPath));
+    assert.ok(!fs.existsSync(metaPath));
+  });
+
+  it('should inspect encrypted persisted backups from the sidecar without a password', async () => {
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      kind: 'trap',
+      slug: 'enc-sidecar-trap',
+      frontmatter: { id: 'trap-enc-sidecar', title: 'Encrypted sidecar', severity: 'low' },
+      body: 'Encrypted sidecar inspect test'
+    });
+
+    const result = await persistVaultBackup({ vaultRoot: sourceVault, password: 'enc-pass' });
+    const inspected = inspectBackup(result.filename, { vaultRoot: sourceVault });
+    assert.equal(inspected.encrypted, true);
+    assert.equal(inspected.inspectable, true);
+    assert.equal(inspected.recordCount, result.recordCount);
+
+    assert.throws(
+      () => inspectBackup(result.filename, { vaultRoot: sourceVault, password: 'bad-pass' }),
+      /Decryption failed/
+    );
   });
 });

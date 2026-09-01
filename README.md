@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.14.2**.
+**Local working memory for coding agents outside the product repository.** Version **0.15.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -251,7 +251,23 @@ node dist/cli.js bootstrap
 # or: npm link  →  memo …
 ```
 
-Vault root defaults to `~/.spec-memo/` (`$SPEC_MEMO_ROOT` to override).
+Vault root defaults to `~/.spec-memo/` (`$SPEC_MEMO_ROOT` to override). You can also persist a default vault path in bootstrap `~/.spec-memo/config.json`:
+
+```json
+{
+  "vaultRoot": "/var/lib/spec-memo"
+}
+```
+
+Resolution order: `--vaultRoot` flag → `$SPEC_MEMO_ROOT` → bootstrap `config.json` `vaultRoot` → current directory when it contains `config.json` + `projects/` → `~/.spec-memo/`.
+
+Unusable candidates (not a directory, missing read/write permission, or not creatable) are skipped. Export, import/restore, backups, and reset always resolve through this same path and print the vault root they used.
+
+One-time setup:
+
+```bash
+memo setup --vault-root /var/lib/spec-memo
+```
 
 ### How to serve (MCP)
 
@@ -366,29 +382,31 @@ curl -s http://127.0.0.1:3124/api/vaults
 # Live stream (SSE): GET http://127.0.0.1:3124/api/events/stream
 ```
 
-When a token is set, send `Authorization: Bearer <token>` (or a session cookie from `/login`). All diagnostic status routes remain read-only; only the dedicated backup routes (`POST /api/vaults/export` and `POST /api/vaults/import`) mutate the vault. Canvas (`:4100`) remains a separate graph UI.
+When a token is set, send `Authorization: Bearer <token>` (or a session cookie from `/login`). Diagnostic routes are read-only; vault mutation is limited to backup/reset HTTP endpoints (`POST /api/vaults/export`, `POST /api/vaults/import`, `POST /api/vaults/backups`, `POST /api/vaults/restore`, `DELETE /api/vaults/backups/{filename}`, `POST /api/vaults/reset`). Canvas (`:4100`) remains a separate graph UI.
 
-### Status monitor backup (UI export & import)
+### Status monitor backup (Backups tab)
 
-The status monitor on port `:3001` provides a zero-friction UI for routine vault snapshots and disaster recovery:
+The status monitor includes a dedicated **Backups** tab (`?tab=backups` or `#tab-backups`) for vault snapshot management:
 
-1. **Export a project vault:**
-   - Select a project in the **Vault filter** dropdown.
-   - Click **Export vault** in the sidebar.
-   - Enter an optional encryption password (AES-256-GCM) or leave blank for plaintext.
-   - The browser downloads `spec-memo-vault-{projectId}-{YYYYMMDD-HHmmss}.zip` containing `vault-backup.json`.
+1. **Create Backup** — persists a timestamped `.zip` under `$SPEC_MEMO_ROOT/backups/`. With **All vaults** selected, a confirmation dialog is required (`confirmFullBackup: true` on the API). A selected project vault creates a single-project snapshot.
+2. **Inventory** — lists saved archives with filename, size, entry counts, scope (`full` / `project`), and encryption status. Filter by filename, scope, project, kinds present, date range, and encryption.
+3. **Row actions** — **Restore** (`POST /api/vaults/restore`), **Download** (`GET /api/vaults/backups/{filename}`), and **Delete** (`DELETE /api/vaults/backups/{filename}` with `{ confirm: true }`). Click a row to open the details drawer (`GET /api/vaults/backups/{filename}/inspect`).
+4. **Complete archives** — backups include all durable record kinds (`trap`, `decision`, `spec`, `plan`, `state`, `log`, `scratch`, `review`, `prompt`, `session`). Restore rebuilds FTS automatically.
 
-2. **Import & restore a project vault:**
-   - Click **Choose backup zip…** and select a previously exported `.zip` archive.
-   - Click **Run import**.
-   - Review the confirmation modal (shows target vault summary and overwrite warning) and enter the password if the archive is encrypted.
-   - Click **Confirm & Restore** — records are restored, views and FTS index are rebuilt, and the vault list refreshes immediately without a full page reload.
+HTTP routes:
+
+| Method | Path | Role |
+|--------|------|------|
+| `POST` | `/api/vaults/backups` | Persist snapshot (`projectId` or `confirmFullBackup: true`) |
+| `GET` | `/api/vaults/backups` | List inventory (optional `q`, `scope`, `projectId`, `encrypted`, `since`, `until`, `kind`, size filters) |
+| `GET` | `/api/vaults/backups/{filename}` | Download archive |
+| `GET` | `/api/vaults/backups/{filename}/inspect` | Details drawer metadata |
+| `DELETE` | `/api/vaults/backups/{filename}` | Remove archive file (`{ confirm: true }`) |
+
+`POST /api/vaults/export` remains for scripted browser zip download (full vault requires `confirmFullBackup: true` when `projectId` is omitted).
 
 > [!TIP]
-> **Daily backup tip & CLI parity:**
-> - Keep regular daily `.zip` exports in your cloud or sync folder for peace of mind.
-> - **CLI compatibility:** To restore a UI zip via CLI, extract `vault-backup.json` and run `memo import-vault --archive vault-backup.json`. Conversely, JSON archives created via `memo export-vault --output file.json` can be zipped as `vault-backup.json` and uploaded directly through the UI.
-> - **Daemon note:** In hybrid/remote deployments, the status companion operates on the daemon host's `$SPEC_MEMO_ROOT` vault.
+> **CLI parity:** `memo backups`, `memo restore --backup …`, and `memo export-vault` operate on the same `backups/` folder. UI zips contain `vault-backup.json` — extract and run `memo import-vault --archive vault-backup.json` for CLI restore.
 
 ### How to diagnose
 

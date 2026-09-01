@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { DeploymentMode, HostName, SetupOptions, SetupResult, VaultConfig } from './types.js';
-import { ensureVaultStructure, getVaultRoot, withVaultLockSync } from './vault.js';
+import { ensureVaultStructure, getVaultRoot, withVaultLockSync, writeBootstrapVaultRoot } from './vault.js';
 
 export const SUPPORTED_HOSTS: HostName[] = [
   'cursor',
@@ -214,7 +214,15 @@ function resolveRemoteUrlForMode(
  * Configure spec-memo deployment mode and remote daemon wiring.
  */
 export function runSetup(options: SetupOptions = {}): SetupResult {
-  const vaultRoot = getVaultRoot(options.vaultRoot);
+  let bootstrapConfigPath: string | undefined;
+  let defaultVaultRoot: string | undefined;
+
+  if (options.defaultVaultRoot && options.defaultVaultRoot.trim().length > 0) {
+    defaultVaultRoot = path.resolve(options.defaultVaultRoot.trim());
+    bootstrapConfigPath = writeBootstrapVaultRoot(defaultVaultRoot);
+  }
+
+  const vaultRoot = getVaultRoot(options.vaultRoot || defaultVaultRoot);
   const configPath = path.join(vaultRoot, 'config.json');
 
   return withVaultLockSync(vaultRoot, () => {
@@ -246,6 +254,10 @@ export function runSetup(options: SetupOptions = {}): SetupResult {
       ...existing,
       mode: targetMode
     };
+
+    if (defaultVaultRoot) {
+      updatedConfig.vaultRoot = defaultVaultRoot;
+    }
 
     if (normalizedUrl) {
       updatedConfig.remote = { url: normalizedUrl };
@@ -296,6 +308,8 @@ export function runSetup(options: SetupOptions = {}): SetupResult {
       remoteUrl: normalizedUrl,
       tokenConfigured,
       configPath,
+      bootstrapConfigPath,
+      defaultVaultRoot,
       hostSnippet,
       hostConfigPath,
       writtenMcp,

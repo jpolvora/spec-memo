@@ -67,6 +67,7 @@ test('resetVault performs full wipe after creating pre-wipe zip backup and prese
     assert.ok(result.backupFilename.endsWith('-backup.zip'));
     assert.ok(fs.existsSync(result.backupPath));
     assert.ok(fs.statSync(result.backupPath).size > 0);
+    assert.ok(fs.existsSync(`${result.backupPath}.meta.json`));
 
     // Verify config.json preserved
     assert.ok(fs.existsSync(configPath));

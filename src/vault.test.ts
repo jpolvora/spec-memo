@@ -15,7 +15,12 @@ import {
   syncVault,
   RECORD_SUBDIRS,
   resolveConfiguredPorts,
-  DEFAULT_VAULT_CONFIG
+  DEFAULT_VAULT_CONFIG,
+  readBootstrapVaultRootPointer,
+  writeBootstrapVaultRoot,
+  probeVaultRootFromCwd,
+  getDefaultVaultRoot,
+  isUsableVaultRoot
 } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getPackageVersion } from './version.js';
@@ -50,6 +55,73 @@ describe('Vault Management & Project Binding', () => {
     } finally {
       process.env.SPEC_MEMO_ROOT = originalEnv;
     }
+  });
+
+  it('should resolve vaultRoot from bootstrap config.json pointer', () => {
+    const bootstrapDir = path.join(tempVaultRoot, 'bootstrap-home', '.spec-memo');
+    const actualVault = path.join(tempVaultRoot, 'actual-vault');
+    fs.mkdirSync(bootstrapDir, { recursive: true });
+    fs.mkdirSync(actualVault, { recursive: true });
+
+    const bootstrapConfig = writeBootstrapVaultRoot(actualVault, path.join(bootstrapDir, 'config.json'));
+    const resolved = readBootstrapVaultRootPointer(bootstrapConfig);
+    assert.equal(resolved, path.resolve(actualVault));
+  });
+
+  it('should prefer SPEC_MEMO_ROOT over bootstrap config vaultRoot pointer', () => {
+    const bootstrapDir = path.join(tempVaultRoot, 'bootstrap-home-2', '.spec-memo');
+    const actualVault = path.join(tempVaultRoot, 'actual-vault-2');
+    const envVault = path.join(tempVaultRoot, 'env-vault');
+    fs.mkdirSync(actualVault, { recursive: true });
+    fs.mkdirSync(envVault, { recursive: true });
+    writeBootstrapVaultRoot(actualVault, path.join(bootstrapDir, 'config.json'));
+
+    const originalEnv = process.env.SPEC_MEMO_ROOT;
+    try {
+      process.env.SPEC_MEMO_ROOT = envVault;
+      assert.equal(getVaultRoot(), path.resolve(envVault));
+    } finally {
+      process.env.SPEC_MEMO_ROOT = originalEnv;
+    }
+  });
+
+  it('should probe vault root from cwd when directory contains config.json and projects/', () => {
+    const vaultLikeDir = path.join(tempVaultRoot, 'vault-like');
+    fs.mkdirSync(path.join(vaultLikeDir, 'projects'), { recursive: true });
+    fs.writeFileSync(path.join(vaultLikeDir, 'config.json'), '{}', 'utf8');
+
+    const resolved = probeVaultRootFromCwd(vaultLikeDir);
+    assert.equal(resolved, path.resolve(vaultLikeDir));
+  });
+
+  it('should prefer explicit override over bootstrap and env resolution', () => {
+    const overrideVault = path.join(tempVaultRoot, 'override-vault');
+    fs.mkdirSync(overrideVault, { recursive: true });
+    assert.equal(getVaultRoot(overrideVault), path.resolve(overrideVault));
+  });
+
+  it('should skip an inaccessible configured path and fall back to the next usable candidate', () => {
+    const notADir = path.join(tempVaultRoot, 'not-a-directory');
+    fs.writeFileSync(notADir, 'blocked', 'utf8');
+    assert.equal(isUsableVaultRoot(notADir), false);
+
+    const originalEnv = process.env.SPEC_MEMO_ROOT;
+    try {
+      process.env.SPEC_MEMO_ROOT = notADir;
+      const resolved = getVaultRoot();
+      assert.notEqual(resolved, path.resolve(notADir));
+      assert.equal(isUsableVaultRoot(resolved) || resolved === getDefaultVaultRoot(), true);
+      assert.notEqual(getVaultRoot(notADir), path.resolve(notADir));
+    } finally {
+      process.env.SPEC_MEMO_ROOT = originalEnv;
+    }
+  });
+
+  it('should treat a missing but creatable path as a usable vault root', () => {
+    const missing = path.join(tempVaultRoot, 'new-vault-dir');
+    assert.equal(fs.existsSync(missing), false);
+    assert.equal(isUsableVaultRoot(missing), true);
+    assert.equal(getVaultRoot(missing), path.resolve(missing));
   });
 
   it('should scaffold all record subdirectories and project.json in project vault', () => {

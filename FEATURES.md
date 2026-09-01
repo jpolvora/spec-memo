@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.14.2** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.14.3** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -132,6 +132,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] **Trap recurrence ranking.** `memo rank` lists active traps by `occurrences`; optional `--layer`, `--backfill`; `memo promote --format skill` exports owner skill from ranked traps.
 - [x] **MCP status monitor.** Companion HTTP page (default `:3124`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream).
 - [x] **Status monitor vault backup UI.** Zero-friction export (.zip with `vault-backup.json`, optional AES-256-GCM) and restore (multipart .zip upload with confirmation and overwrite) from the `:3124` status page.
+- [x] **Dedicated Backups tab.** Status monitor **Backups** page with full-vault confirm, complete kind archives (including prompts/sessions), inventory filters, details drawer, and row restore/delete/download.
 - [x] **Status monitor client tracking & request visibility.** Real-time tracking of active and recent vault clients (proxy vs direct-remote badges, client IP, client name, bound vault, active status, request count) with rich display of all HTTP endpoints and MCP commands in the live activity log (`GET /api/clients`, `GET /api/status`).
 - [x] **Complete Vault Database Reset with Mandatory Pre-Wipe Backup.** Complete database reset and disk clean (`memo reset`, `POST /api/vaults/reset`) with automatic pre-wipe backup snapshots stored as `{YYYY-MM-DD-HH-mm-ss-backup}.zip` in `$SPEC_MEMO_ROOT/backups/`, unlinking records, compiled views, and SQLite databases while strictly preserving `config.json` and `backups/`.
 - [x] **Full Backup Restoration Engine & Management.** Seamless restoration from ZIP archives and raw payloads (`memo restore`, `memo backups`, `GET /api/vaults/backups`, `POST /api/vaults/restore`) supporting one-click restoration from saved backups and `--latest` restore flag.

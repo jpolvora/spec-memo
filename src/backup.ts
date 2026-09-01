@@ -9,6 +9,10 @@ import {
   ResetVaultOptions,
   ResetVaultResult,
   BackupFileInfo,
+  BackupListFilters,
+  PersistBackupOptions,
+  PersistBackupResult,
+  InspectBackupResult,
   VaultConfig
 } from './types.js';
 import { getVaultRoot, ensureVaultStructure, withVaultLock, commitVaultChange, RECORD_SUBDIRS } from './vault.js';
@@ -18,6 +22,178 @@ import { isPathInside, assertNoSecrets, assertValidProjectId } from './safety.js
 import { parseRecord, validateFrontmatter } from './schema.js';
 import { upsertRecord } from './store.js';
 import { packVaultZip, unpackVaultZip } from './status-backup.js';
+
+const DIR_TO_KIND: Record<string, string> = {
+  traps: 'trap',
+  decisions: 'decision',
+  specs: 'spec',
+  plans: 'plan',
+  logs: 'log',
+  reviews: 'review',
+  scratch: 'scratch',
+  prompts: 'prompt',
+  sessions: 'session'
+};
+
+const backupMetaCache = new Map<string, { mtimeMs: number; meta: Partial<BackupFileInfo> }>();
+
+function backupMetaCacheKey(filePath: string, password?: string): string {
+  return `${path.resolve(filePath)}\0${password ?? ''}`;
+}
+
+function invalidateBackupMetaCache(filePath: string): void {
+  const resolved = path.resolve(filePath);
+  const prefix = resolved + '\0';
+  for (const key of [...backupMetaCache.keys()]) {
+    if (key === resolved || key.startsWith(prefix)) {
+      backupMetaCache.delete(key);
+    }
+  }
+}
+
+function cachedPeekBackupMetadata(filePath: string, password?: string): Partial<BackupFileInfo> {
+  const stat = fs.statSync(filePath);
+  const cacheKey = backupMetaCacheKey(filePath, password);
+  const cached = backupMetaCache.get(cacheKey);
+  if (cached && cached.mtimeMs === stat.mtimeMs) {
+    return cached.meta;
+  }
+  const meta = peekBackupMetadata(filePath, password);
+  backupMetaCache.set(cacheKey, { mtimeMs: stat.mtimeMs, meta });
+  return meta;
+}
+
+function kindFromRecord(relativePath: string, content: string): string {
+  const dir = relativePath.split(/[/\\]/)[0] || '';
+  if (dir === 'plans') {
+    try {
+      const parsed = parseRecord(content);
+      if (parsed.frontmatter?.kind === 'state') return 'state';
+      if (parsed.frontmatter?.kind === 'plan') return 'plan';
+    } catch {
+      // fall through
+    }
+  }
+  return DIR_TO_KIND[dir] || dir || 'unknown';
+}
+
+function summarizePlainArchive(plain: PlainVaultArchive): Partial<BackupFileInfo> {
+  const projectIds = (plain.manifest?.projects || plain.projects.map((p) => p.projectId)).filter(Boolean);
+  // Legacy archives without manifest.scope: infer full only when multiple projects; never guess "project".
+  const scope: 'full' | 'project' | undefined =
+    plain.manifest?.scope ?? (projectIds.length > 1 ? 'full' : undefined);
+
+  const manifestKinds = plain.manifest?.recordsByKind;
+  const hasKindCounts = Boolean(manifestKinds && typeof manifestKinds === 'object');
+  let recordsByKind: Record<string, number> = hasKindCounts ? { ...manifestKinds } : {};
+  let walkedCount = 0;
+  if (!hasKindCounts) {
+    for (const project of plain.projects || []) {
+      for (const record of project.records || []) {
+        const kind = kindFromRecord(record.relativePath, record.content);
+        recordsByKind[kind] = (recordsByKind[kind] || 0) + 1;
+        walkedCount++;
+      }
+    }
+  }
+
+  return {
+    encrypted: false,
+    inspectable: true,
+    format: plain.format,
+    scope,
+    projectIds,
+    recordCount: plain.manifest?.recordCount ?? walkedCount,
+    recordsByKind
+  };
+}
+
+function readArchivePayload(filePath: string): string {
+  const fileBuf = fs.readFileSync(filePath);
+  if (
+    filePath.toLowerCase().endsWith('.zip') ||
+    (fileBuf.length >= 4 &&
+      fileBuf[0] === 0x50 &&
+      fileBuf[1] === 0x4b &&
+      fileBuf[2] === 0x03 &&
+      fileBuf[3] === 0x04)
+  ) {
+    return unpackVaultZip(fileBuf);
+  }
+  return fileBuf.toString('utf8');
+}
+
+function peekBackupMetadata(filePath: string, password?: string): Partial<BackupFileInfo> {
+  let raw: string;
+  try {
+    raw = readArchivePayload(filePath);
+  } catch {
+    return { encrypted: false, inspectable: false, recordCount: null, recordsByKind: {} };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { encrypted: false, inspectable: false, recordCount: null, recordsByKind: {} };
+  }
+
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    (parsed as { format?: string }).format === 'spec-memo-encrypted-vault-v1'
+  ) {
+    if (!password || !password.trim()) {
+      return {
+        encrypted: true,
+        inspectable: false,
+        format: 'spec-memo-encrypted-vault-v1',
+        recordCount: null,
+        recordsByKind: {}
+      };
+    }
+    try {
+      const decrypted = decryptPayload(parsed as EncryptedVaultArchive, password.trim());
+      const plain = JSON.parse(decrypted) as PlainVaultArchive;
+      return { ...summarizePlainArchive(plain), encrypted: true, format: 'spec-memo-encrypted-vault-v1' };
+    } catch {
+      throw new Error('Decryption failed: Incorrect password or corrupted backup archive.');
+    }
+  }
+
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    (parsed as { format?: string }).format === 'spec-memo-vault-v1'
+  ) {
+    return summarizePlainArchive(parsed as PlainVaultArchive);
+  }
+
+  return { encrypted: false, inspectable: false, recordCount: null, recordsByKind: {} };
+}
+
+/**
+ * Resolve a backup filename to an absolute path under backups/, rejecting traversal.
+ */
+export function resolveBackupPath(vaultRoot: string, filename: string): string {
+  const raw = String(filename || '');
+  if (!raw || /[/\\]/.test(raw) || raw.includes('..')) {
+    throw new Error('Invalid backup filename');
+  }
+  const safeFn = path.basename(raw);
+  if (safeFn !== raw) {
+    throw new Error('Invalid backup filename');
+  }
+  if (!safeFn.endsWith('.zip') && !safeFn.endsWith('.json')) {
+    throw new Error('Invalid backup filename');
+  }
+  const backupsDir = path.resolve(vaultRoot, 'backups');
+  const fullPath = path.resolve(backupsDir, safeFn);
+  if (!isPathInside(fullPath, backupsDir)) {
+    throw new Error('Backup path escapes backups directory');
+  }
+  return fullPath;
+}
 
 interface RawVaultRecord {
   relativePath: string;
@@ -35,6 +211,9 @@ interface VaultArchiveManifest {
   exportedAt: string;
   projects: string[];
   recordCount: number;
+  /** Export intent: all projects vs a single projectId (not inferred from project count). */
+  scope?: 'full' | 'project';
+  recordsByKind?: Record<string, number>;
 }
 
 interface PlainVaultArchive {
@@ -120,7 +299,7 @@ export function formatBackupFilename(date: Date = new Date()): string {
  * Export vault projects and records into a portable archive bundle (optionally encrypted).
  */
 export async function exportVault(options: ExportVaultOptions = {}): Promise<ExportVaultResult> {
-  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const vaultRoot = getVaultRoot(options.vaultRoot);
   return withVaultLock(vaultRoot, async () => {
     ensureVaultStructure(vaultRoot);
 
@@ -128,6 +307,7 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
     const exportedProjects: ExportedProject[] = [];
     const projectNames: string[] = [];
     let totalRecords = 0;
+    const recordsByKind: Record<string, number> = {};
 
     const targetProject = options.projectId;
 
@@ -165,6 +345,8 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
                   const content = fs.readFileSync(filePath, 'utf8');
                   assertNoSecrets(content, `export record ${relPath}`);
                   records.push({ relativePath: relPath, content });
+                  const kind = kindFromRecord(relPath, content);
+                  recordsByKind[kind] = (recordsByKind[kind] || 0) + 1;
                   totalRecords++;
                 } catch (err: unknown) {
                   if (err instanceof Error && err.message.includes('Safety violation')) {
@@ -189,7 +371,9 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
       version: '1.0',
       exportedAt: new Date().toISOString(),
       projects: projectNames,
-      recordCount: totalRecords
+      recordCount: totalRecords,
+      scope: targetProject ? 'project' : 'full',
+      recordsByKind
     };
 
     let vaultConfig: VaultConfig | undefined;
@@ -246,7 +430,7 @@ export async function exportVault(options: ExportVaultOptions = {}): Promise<Exp
  * Import a vault archive bundle (plaintext or encrypted, ZIP or JSON) into the local vault.
  */
 export async function importVault(options: ImportVaultOptions = {}): Promise<ImportVaultResult> {
-  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const vaultRoot = getVaultRoot(options.vaultRoot);
   return withVaultLock(vaultRoot, async () => {
     ensureVaultStructure(vaultRoot);
 
@@ -389,7 +573,7 @@ export const restoreVault = importVault;
  * Complete database reset and file clear with mandatory pre-wipe timestamped backup.
  */
 export async function resetVault(options: ResetVaultOptions = {}): Promise<ResetVaultResult> {
-  const vaultRoot = options.vaultRoot || getVaultRoot();
+  const vaultRoot = getVaultRoot(options.vaultRoot);
   return withVaultLock(vaultRoot, async () => {
     ensureVaultStructure(vaultRoot);
 
@@ -413,14 +597,9 @@ export async function resetVault(options: ResetVaultOptions = {}): Promise<Reset
       throw new Error('Pre-wipe backup failed: Export payload was empty.');
     }
 
-    // Pack into ZIP archive
+    // Pack into ZIP archive (atomic write + sidecar metadata)
     const zipBuf = packVaultZip(exportRes.payload);
-    fs.writeFileSync(backupPath, zipBuf);
-
-    // Verify backup on disk
-    if (!fs.existsSync(backupPath) || fs.statSync(backupPath).size === 0) {
-      throw new Error('Pre-wipe backup failed: Backup archive was not created on disk.');
-    }
+    writeBackupArchiveAtomic(backupPath, zipBuf, exportRes);
 
     let wipedProjectsCount = 0;
     let wipedRecordsCount = 0;
@@ -512,9 +691,10 @@ export async function resetVault(options: ResetVaultOptions = {}): Promise<Reset
 
 /**
  * List all backup archives available in the vault's backups/ directory.
+ * Enriches each entry with manifest metadata when the archive is readable without a password.
  */
-export function listBackups(vaultRoot?: string): BackupFileInfo[] {
-  const root = vaultRoot || getVaultRoot();
+export function listBackups(vaultRoot?: string, filters?: BackupListFilters): BackupFileInfo[] {
+  const root = getVaultRoot(vaultRoot);
   const backupsDir = path.join(root, 'backups');
   if (!fs.existsSync(backupsDir)) {
     return [];
@@ -524,26 +704,256 @@ export function listBackups(vaultRoot?: string): BackupFileInfo[] {
   const results: BackupFileInfo[] = [];
 
   for (const entry of entries) {
+    if (entry.endsWith('.meta.json')) continue;
     if (entry.endsWith('.zip') || entry.endsWith('.json')) {
       const fullPath = path.join(backupsDir, entry);
       try {
         const stat = fs.statSync(fullPath);
-        if (stat.isFile()) {
-          results.push({
-            filename: entry,
-            path: fullPath,
-            size: stat.size,
-            createdAt: stat.mtime.toISOString(),
-            isZip: entry.endsWith('.zip')
-          });
+        if (!stat.isFile()) continue;
+
+        let meta: Partial<BackupFileInfo> | undefined = readBackupSidecarMeta(fullPath, stat);
+        if (!meta) {
+          try {
+            meta = cachedPeekBackupMetadata(fullPath);
+          } catch {
+            meta = { encrypted: false, inspectable: false, recordCount: null, recordsByKind: {} };
+          }
         }
+
+        results.push({
+          filename: entry,
+          path: fullPath,
+          size: stat.size,
+          createdAt: stat.mtime.toISOString(),
+          isZip: entry.endsWith('.zip'),
+          encrypted: meta.encrypted ?? false,
+          inspectable: meta.inspectable,
+          scope: meta.scope,
+          projectIds: meta.projectIds,
+          recordCount: meta.recordCount ?? null,
+          recordsByKind: meta.recordsByKind || (meta.encrypted ? undefined : {}),
+          format: meta.format
+        });
       } catch {
         // ignore unreadable files
       }
     }
   }
 
-  // Sort chronologically descending (newest first)
   results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return results;
+  return filterBackupList(results, filters);
+}
+
+/**
+ * Apply inventory filters to a backup list (server-side GET query support).
+ */
+export function filterBackupList(items: BackupFileInfo[], filters?: BackupListFilters): BackupFileInfo[] {
+  if (!filters) return items;
+  return items.filter((b) => {
+    if (filters.q) {
+      const q = filters.q.toLowerCase();
+      if (!b.filename.toLowerCase().includes(q)) return false;
+    }
+    if (filters.scope && filters.scope !== 'all') {
+      if (b.scope !== filters.scope) return false;
+    }
+    if (filters.projectId) {
+      if (!b.projectIds || !b.projectIds.includes(filters.projectId)) return false;
+    }
+    if (typeof filters.encrypted === 'boolean') {
+      if (Boolean(b.encrypted) !== filters.encrypted) return false;
+    }
+    if (filters.since) {
+      if (b.createdAt < filters.since) return false;
+    }
+    if (filters.until) {
+      if (b.createdAt > filters.until) return false;
+    }
+    if (typeof filters.minSize === 'number' && b.size < filters.minSize) return false;
+    if (typeof filters.maxSize === 'number' && b.size > filters.maxSize) return false;
+    if (filters.kinds && filters.kinds.length > 0) {
+      const byKind = b.recordsByKind || {};
+      for (const kind of filters.kinds) {
+        if (!byKind[kind] || byKind[kind] <= 0) return false;
+      }
+    }
+    return true;
+  });
+}
+
+interface BackupSidecarMeta extends Partial<BackupFileInfo> {
+  archiveSize?: number;
+  archiveMtimeMs?: number;
+}
+
+function readBackupSidecarMeta(fullPath: string, stat: fs.Stats): Partial<BackupFileInfo> | undefined {
+  const metaPath = `${fullPath}.meta.json`;
+  try {
+    if (!fs.existsSync(metaPath)) return undefined;
+    const sidecar = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as BackupSidecarMeta;
+    if (sidecar.archiveSize === stat.size && sidecar.archiveMtimeMs === stat.mtimeMs) {
+      return sidecar;
+    }
+  } catch {
+    // malformed sidecar — fall back to peeking the archive
+  }
+  return undefined;
+}
+
+function writeBackupArchiveAtomic(backupPath: string, zipBuf: Buffer, exportRes: ExportVaultResult): void {
+  const tmpPath = `${backupPath}.partial`;
+  fs.writeFileSync(tmpPath, zipBuf);
+  fs.renameSync(tmpPath, backupPath);
+  const stat = fs.statSync(backupPath);
+  if (stat.size === 0) {
+    throw new Error('Backup archive was not created on disk.');
+  }
+  const sidecarMeta: BackupSidecarMeta = {
+    scope: exportRes.manifest.scope,
+    recordCount: exportRes.recordsCount,
+    recordsByKind: exportRes.manifest.recordsByKind,
+    projectIds: exportRes.manifest.projects.slice(),
+    encrypted: exportRes.encrypted,
+    inspectable: true,
+    format: exportRes.encrypted ? 'spec-memo-encrypted-vault-v1' : 'spec-memo-vault-v1',
+    archiveSize: stat.size,
+    archiveMtimeMs: stat.mtimeMs
+  };
+  fs.writeFileSync(`${backupPath}.meta.json`, JSON.stringify(sidecarMeta), 'utf8');
+  invalidateBackupMetaCache(backupPath);
+}
+
+/**
+ * Persist an export as a timestamped zip under $SPEC_MEMO_ROOT/backups/.
+ */
+export async function persistVaultBackup(options: PersistBackupOptions = {}): Promise<PersistBackupResult> {
+  const vaultRoot = getVaultRoot(options.vaultRoot);
+  return withVaultLock(vaultRoot, async () => {
+    ensureVaultStructure(vaultRoot);
+    const backupsDir = path.join(vaultRoot, 'backups');
+    if (!fs.existsSync(backupsDir)) {
+      fs.mkdirSync(backupsDir, { recursive: true });
+    }
+
+    const exportRes = await exportVault({
+      vaultRoot,
+      projectId: options.projectId,
+      password: options.password
+    });
+
+    if (!exportRes.payload) {
+      throw new Error('Persist backup failed: Export payload was empty.');
+    }
+
+    const filename = formatBackupFilename();
+    const backupPath = path.join(backupsDir, filename);
+    const zipBuf = packVaultZip(exportRes.payload);
+    writeBackupArchiveAtomic(backupPath, zipBuf, exportRes);
+
+    return {
+      filename,
+      size: zipBuf.length,
+      recordCount: exportRes.recordsCount,
+      projectIds: exportRes.manifest.projects.slice(),
+      encrypted: exportRes.encrypted
+    };
+  });
+}
+
+/**
+ * Delete a backup archive under backups/ only (never live vault records).
+ */
+export async function deleteBackup(
+  filename: string,
+  vaultRoot?: string
+): Promise<{ ok: true; filename: string }> {
+  const root = getVaultRoot(vaultRoot);
+  return withVaultLock(root, async () => {
+    const fullPath = resolveBackupPath(root, filename);
+    if (!fs.existsSync(fullPath)) {
+      const err = new Error(`Backup not found: ${path.basename(filename)}`);
+      (err as Error & { code?: string }).code = 'BACKUP_NOT_FOUND';
+      throw err;
+    }
+    fs.unlinkSync(fullPath);
+    const metaPath = `${fullPath}.meta.json`;
+    if (fs.existsSync(metaPath)) {
+      fs.unlinkSync(metaPath);
+    }
+    invalidateBackupMetaCache(fullPath);
+    return { ok: true as const, filename: path.basename(fullPath) };
+  });
+}
+
+/**
+ * Inspect a backup archive for the details drawer (no vault mutation).
+ */
+export function inspectBackup(
+  filename: string,
+  options: { vaultRoot?: string; password?: string } = {}
+): InspectBackupResult {
+  const root = getVaultRoot(options.vaultRoot);
+  const fullPath = resolveBackupPath(root, filename);
+  if (!fs.existsSync(fullPath)) {
+    const err = new Error(`Backup not found: ${path.basename(filename)}`);
+    (err as Error & { code?: string }).code = 'BACKUP_NOT_FOUND';
+    throw err;
+  }
+  const stat = fs.statSync(fullPath);
+  const safeName = path.basename(fullPath);
+
+  let meta: Partial<BackupFileInfo>;
+  const sidecar = options.password ? undefined : readBackupSidecarMeta(fullPath, stat);
+  if (sidecar) {
+    meta = sidecar;
+  } else {
+    try {
+      meta = cachedPeekBackupMetadata(fullPath, options.password);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Decryption failed') || msg.includes('Incorrect password')) {
+        const e = new Error(msg);
+        (e as Error & { code?: string }).code = 'BACKUP_DECRYPT_FAILED';
+        throw e;
+      }
+      throw err;
+    }
+  }
+
+  if (meta.encrypted && meta.inspectable === false) {
+    return {
+      ok: true,
+      filename: safeName,
+      size: stat.size,
+      createdAt: stat.mtime.toISOString(),
+      isZip: safeName.endsWith('.zip'),
+      encrypted: true,
+      inspectable: false,
+      format: meta.format,
+      recordCount: null,
+      recordsByKind: {}
+    };
+  }
+
+  return {
+    ok: true,
+    filename: safeName,
+    size: stat.size,
+    createdAt: stat.mtime.toISOString(),
+    isZip: safeName.endsWith('.zip'),
+    encrypted: Boolean(meta.encrypted),
+    inspectable: meta.inspectable !== false,
+    scope: meta.scope,
+    projectIds: meta.projectIds,
+    recordCount: meta.recordCount ?? null,
+    recordsByKind: meta.recordsByKind || {},
+    format: meta.format,
+    manifest: meta.projectIds
+      ? {
+          version: '1.0',
+          projects: meta.projectIds,
+          recordCount: meta.recordCount ?? undefined
+        }
+      : undefined
+  };
 }
