@@ -8,6 +8,7 @@ import {
 import { flushDebouncedPushes, syncHybrid, type HybridSyncReport } from './hybrid-sync.js';
 import { logErrorReport } from './error-logger.js';
 import { recordTelemetry } from './telemetry.js';
+import { safeVaultGitError } from './vault-git-redact.js';
 
 export type DualSyncTrigger = 'sync' | 'session_end' | 'shutdown';
 
@@ -113,8 +114,12 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
           committed: false,
           pulled: false,
           pushed: false,
-          message: gitSettled.reason instanceof Error ? gitSettled.reason.message : String(gitSettled.reason),
-          error: gitSettled.reason instanceof Error ? gitSettled.reason.message : String(gitSettled.reason)
+          message: safeVaultGitError(
+            gitSettled.reason instanceof Error ? gitSettled.reason.message : String(gitSettled.reason)
+          ) || 'vault-git sync failed',
+          error: safeVaultGitError(
+            gitSettled.reason instanceof Error ? gitSettled.reason.message : String(gitSettled.reason)
+          )
         };
 
   const enabledResults: boolean[] = [];

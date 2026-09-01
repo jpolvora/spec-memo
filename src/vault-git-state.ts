@@ -1,15 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getVaultRoot, withVaultLockSync } from './vault.js';
-import { redactSecretsInPayload } from './safety.js';
+import { redactVaultGitError } from './vault-git-redact.js';
 
-/** Redact credentials in persisted/exposed vault-git error strings. */
-export function redactVaultGitError(msg: string | null | undefined): string | null {
-  if (msg == null || msg === '') return null;
-  let s = String(redactSecretsInPayload(msg));
-  s = s.replace(/\/\/([^/@:\s]+):([^@/]+)@/g, '//***:***@');
-  return s;
-}
+export { redactVaultGitError } from './vault-git-redact.js';
 
 export interface VaultGitState {
   dirty: boolean;

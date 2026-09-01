@@ -399,7 +399,11 @@ describe('vault-git-hybrid-sync', () => {
   it('lastError redacts user:pass embedded in git failure messages', async () => {
     enableVaultGit(tempVault, { remoteUrl: 'http://alice:secret@example.com/vault.git' });
     initVaultGit(tempVault);
-    await flushVaultGit(tempVault, { trigger: 'sync' });
+    const result = await flushVaultGit(tempVault, { trigger: 'sync' });
+    if (result.error) {
+      assert.equal(result.error.includes('secret'), false);
+      assert.equal(result.error.includes('alice'), false);
+    }
     const state = readVaultGitState(tempVault);
     if (state.lastError) {
       assert.equal(state.lastError.includes('secret'), false);

@@ -8,6 +8,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { getPackageVersion } from './version.js';
 import { logErrorReport } from './error-logger.js';
 import { writeVaultGitState } from './vault-git-state.js';
+import { safeVaultGitError } from './vault-git-redact.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -867,6 +868,35 @@ async function syncVaultRemote(vaultRoot: string): Promise<void> {
   await flushVaultGit(vaultRoot, { dryRun: false, trigger: 'remote-follow' });
 }
 
+async function withVaultGitRemoteExclusive<T>(
+  vaultRoot: string,
+  trigger: string | undefined,
+  fn: () => Promise<T>
+): Promise<T> {
+  if (trigger === 'remote-follow') {
+    return fn();
+  }
+  const key = path.resolve(vaultRoot);
+  await flushScheduledVaultGit();
+  while (gitRemoteInFlight.has(key)) {
+    await gitRemoteInFlight.get(key);
+  }
+  const job = fn();
+  const tracked = job.then(
+    () => undefined,
+    () => undefined
+  );
+  gitRemoteInFlight.set(key, tracked);
+  try {
+    return await job;
+  } finally {
+    gitRemoteInFlight.delete(key);
+    if (gitRemotePending.delete(key)) {
+      scheduleVaultGitRemoteSync(vaultRoot);
+    }
+  }
+}
+
 /**
  * Commit dirty vault-git paths (force) then pull/push without holding the vault lock during network.
  */
@@ -900,14 +930,15 @@ export async function flushVaultGit(
     initVaultGit(vaultRoot);
     const statusRes = vaultGitPorcelain(vaultRoot);
     if (!statusRes.ok) {
+      const err = safeVaultGitError(statusRes.error)!;
       writeVaultGitState(vaultRoot, { dirty: true, lastError: statusRes.error });
       return {
         ok: false,
         committed: false,
         pulled: false,
         pushed: false,
-        message: `Sync failed: ${statusRes.error}`,
-        error: statusRes.error
+        message: `Sync failed: ${err}`,
+        error: err
       };
     }
     const porcelain = statusRes.porcelain;
@@ -945,32 +976,36 @@ export async function flushVaultGit(
     let pushed = false;
     let remoteError: string | undefined;
     if (config.vaultGit.remoteUrl) {
-      const branch = resolveVaultGitBranch(config, vaultRoot);
-      const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', 'origin', branch], 'pull');
-      pulled = pullRes.ok;
-      if (!pullRes.ok) {
-        remoteError = pullRes.error;
-      } else {
-        const pushRes = await gitExecAsync(vaultRoot, ['push', '-u', 'origin', branch], 'push');
-        pushed = pushRes.ok;
-        if (!pushRes.ok) remoteError = pushRes.error;
-      }
+      await withVaultGitRemoteExclusive(vaultRoot, options.trigger, async () => {
+        const branch = resolveVaultGitBranch(config, vaultRoot);
+        const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', 'origin', branch], 'pull');
+        pulled = pullRes.ok;
+        if (!pullRes.ok) {
+          remoteError = pullRes.error;
+        } else {
+          const pushRes = await gitExecAsync(vaultRoot, ['push', '-u', 'origin', branch], 'push');
+          pushed = pushRes.ok;
+          if (!pushRes.ok) remoteError = pushRes.error;
+        }
+      });
     }
 
-    const channelOk = config.vaultGit.remoteUrl ? pulled && pushed && !remoteError : true;
+    const hasRemote = Boolean(config.vaultGit.remoteUrl);
+    const localOk = !hasRemote ? porcelain.length === 0 || committed : true;
+    const channelOk = hasRemote ? pulled && pushed && !remoteError : localOk;
     writeVaultGitState(vaultRoot, {
-      dirty: Boolean(remoteError),
+      dirty: Boolean(remoteError) || (hasRemote && committed && !pushed),
       lastError: remoteError || null,
       lastSyncAt: new Date().toISOString()
     });
 
     return {
-      ok: channelOk || (committed && !config.vaultGit.remoteUrl),
+      ok: channelOk,
       committed,
       pulled,
       pushed,
       message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`,
-      error: remoteError
+      error: safeVaultGitError(remoteError)
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -988,7 +1023,8 @@ export async function flushVaultGit(
     } catch {
       // ignore
     }
-    return { ok: false, committed: false, pulled: false, pushed: false, message: `Sync failed: ${msg}`, error: msg };
+    const safeMsg = safeVaultGitError(msg)!;
+    return { ok: false, committed: false, pulled: false, pushed: false, message: `Sync failed: ${safeMsg}`, error: safeMsg };
   }
 }
 
