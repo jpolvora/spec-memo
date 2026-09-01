@@ -597,14 +597,9 @@ export async function resetVault(options: ResetVaultOptions = {}): Promise<Reset
       throw new Error('Pre-wipe backup failed: Export payload was empty.');
     }
 
-    // Pack into ZIP archive
+    // Pack into ZIP archive (atomic write + sidecar metadata)
     const zipBuf = packVaultZip(exportRes.payload);
-    fs.writeFileSync(backupPath, zipBuf);
-
-    // Verify backup on disk
-    if (!fs.existsSync(backupPath) || fs.statSync(backupPath).size === 0) {
-      throw new Error('Pre-wipe backup failed: Backup archive was not created on disk.');
-    }
+    writeBackupArchiveAtomic(backupPath, zipBuf, exportRes);
 
     let wipedProjectsCount = 0;
     let wipedRecordsCount = 0;
@@ -719,8 +714,11 @@ export function listBackups(vaultRoot?: string, filters?: BackupListFilters): Ba
         let meta: Partial<BackupFileInfo> | undefined;
         const metaPath = `${fullPath}.meta.json`;
         try {
-          if (fs.existsSync(metaPath) && fs.statSync(metaPath).mtimeMs >= stat.mtimeMs) {
-            meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as Partial<BackupFileInfo>;
+          if (fs.existsSync(metaPath)) {
+            const sidecar = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as BackupSidecarMeta;
+            if (sidecar.archiveSize === stat.size && sidecar.archiveMtimeMs === stat.mtimeMs) {
+              meta = sidecar;
+            }
           }
         } catch {
           meta = undefined;
@@ -794,6 +792,34 @@ export function filterBackupList(items: BackupFileInfo[], filters?: BackupListFi
   });
 }
 
+interface BackupSidecarMeta extends Partial<BackupFileInfo> {
+  archiveSize?: number;
+  archiveMtimeMs?: number;
+}
+
+function writeBackupArchiveAtomic(backupPath: string, zipBuf: Buffer, exportRes: ExportVaultResult): void {
+  const tmpPath = `${backupPath}.partial`;
+  fs.writeFileSync(tmpPath, zipBuf);
+  fs.renameSync(tmpPath, backupPath);
+  const stat = fs.statSync(backupPath);
+  if (stat.size === 0) {
+    throw new Error('Backup archive was not created on disk.');
+  }
+  const sidecarMeta: BackupSidecarMeta = {
+    scope: exportRes.manifest.scope,
+    recordCount: exportRes.recordsCount,
+    recordsByKind: exportRes.manifest.recordsByKind,
+    projectIds: exportRes.manifest.projects.slice(),
+    encrypted: exportRes.encrypted,
+    inspectable: true,
+    format: exportRes.encrypted ? 'spec-memo-encrypted-vault-v1' : 'spec-memo-vault-v1',
+    archiveSize: stat.size,
+    archiveMtimeMs: stat.mtimeMs
+  };
+  fs.writeFileSync(`${backupPath}.meta.json`, JSON.stringify(sidecarMeta), 'utf8');
+  invalidateBackupMetaCache(backupPath);
+}
+
 /**
  * Persist an export as a timestamped zip under $SPEC_MEMO_ROOT/backups/.
  */
@@ -819,24 +845,7 @@ export async function persistVaultBackup(options: PersistBackupOptions = {}): Pr
     const filename = formatBackupFilename();
     const backupPath = path.join(backupsDir, filename);
     const zipBuf = packVaultZip(exportRes.payload);
-    fs.writeFileSync(backupPath, zipBuf);
-
-    if (!fs.existsSync(backupPath) || fs.statSync(backupPath).size === 0) {
-      throw new Error('Persist backup failed: Backup archive was not created on disk.');
-    }
-
-    const sidecarMeta: Partial<BackupFileInfo> = {
-      scope: exportRes.manifest.scope,
-      recordCount: exportRes.recordsCount,
-      recordsByKind: exportRes.manifest.recordsByKind,
-      projectIds: exportRes.manifest.projects.slice(),
-      encrypted: exportRes.encrypted,
-      inspectable: true,
-      format: exportRes.encrypted ? 'spec-memo-encrypted-vault-v1' : 'spec-memo-vault-v1'
-    };
-    fs.writeFileSync(`${backupPath}.meta.json`, JSON.stringify(sidecarMeta), 'utf8');
-
-    invalidateBackupMetaCache(backupPath);
+    writeBackupArchiveAtomic(backupPath, zipBuf, exportRes);
 
     return {
       filename,

@@ -3435,7 +3435,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
         if ((req.method === "GET" || req.method === "POST") && isInspect) {
           try {
-            let password = url.searchParams.get("password") || undefined;
+            let password: string | undefined;
             if (req.method === "POST") {
               const rawBody = await readBodyBuffer(req, 64 * 1024);
               if (rawBody.length > 0) {
@@ -3450,6 +3450,9 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
                   password = parsed.password;
                 }
               }
+            } else if (url.searchParams.has("password")) {
+              writeJson(res, 400, { ok: false, error: "Password must be sent in the POST JSON body, not the query string." });
+              return;
             }
             const result = inspectBackup(rawFilename, { vaultRoot, password });
             writeJson(res, 200, sanitizeToolOutput(result));

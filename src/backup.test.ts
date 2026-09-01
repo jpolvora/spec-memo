@@ -517,10 +517,14 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
       recordCount?: number;
       scope?: string;
       recordsByKind?: Record<string, number>;
+      archiveSize?: number;
+      archiveMtimeMs?: number;
     };
     assert.equal(sidecar.recordCount, result.recordCount);
     assert.equal(sidecar.scope, 'full');
     assert.ok(sidecar.recordsByKind && (sidecar.recordsByKind.trap || 0) >= 1);
+    assert.equal(sidecar.archiveSize, fs.statSync(backupPath).size);
+    assert.equal(typeof sidecar.archiveMtimeMs, 'number');
 
     const listed = listBackups(sourceVault);
     assert.ok(!listed.some((b) => b.filename.endsWith('.meta.json')));
@@ -528,6 +532,13 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
     assert.ok(item);
     assert.equal(item!.recordCount, result.recordCount);
     assert.equal(item!.scope, 'full');
+
+    // Stale sidecar (fingerprint mismatch) falls back to peeking the archive
+    fs.writeFileSync(metaPath, JSON.stringify({ ...sidecar, archiveSize: 0 }), 'utf8');
+    const relisted = listBackups(sourceVault).find((b) => b.filename === result.filename);
+    assert.ok(relisted);
+    assert.equal(relisted!.recordCount, result.recordCount);
+    fs.writeFileSync(metaPath, JSON.stringify(sidecar), 'utf8');
 
     await deleteBackup(result.filename, sourceVault);
     assert.ok(!fs.existsSync(backupPath));

@@ -1095,7 +1095,9 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
       `http://127.0.0.1:${server.port}/api/vaults/backups/${encodeURIComponent(persisted.filename)}/inspect?password=wrong-pass`,
       { headers: authHeaders }
     );
-    assert.strictEqual(resGet.status, 401);
+    assert.strictEqual(resGet.status, 400);
+    const getData = await resGet.json() as { error?: string };
+    assert.ok(/POST JSON body/i.test(String(getData.error || "")));
   });
 
   await t.test("GET /api/vaults/backups and POST /api/vaults/reset sanitize host filesystem paths", async () => {

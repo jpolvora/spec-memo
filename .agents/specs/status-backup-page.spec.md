@@ -69,7 +69,7 @@ Design choices: [`status-backup-page.context.md`](status-backup-page.context.md)
 - AC24: `GET /api/vaults/backups` accepts optional query filters `q`, `scope`, `projectId`, `encrypted`, `since`, `until`, `kind` (repeatable) and returns only matching items; invalid `encrypted` that is not `true`/`false`/empty returns `400`.
 - AC25: Clicking a table row (not an action button) opens the details drawer with filename, metadata card fields from AC19, records-by-kind breakdown, and redacted manifest JSON (no record bodies, no host paths).
 - AC26: `GET /api/vaults/backups/{filename}/inspect` returns that drawer payload; `{filename}` is `path.basename` only and must resolve inside `backups/` or the handler returns `400`.
-- AC27: Inspect of an encrypted archive without password returns `200` `{ ok: true, encrypted: true, inspectable: false }` without decrypting; with the correct `password` query or JSON body it returns full metadata; wrong password returns `401` `{ ok: false, error: "..." }` without vault mutation.
+- AC27: Inspect of an encrypted archive without password returns `200` `{ ok: true, encrypted: true, inspectable: false }` without decrypting; with the correct `password` in the POST JSON body (`POST /api/vaults/backups/{filename}/inspect`) it returns full metadata; wrong password returns `401` `{ ok: false, error: "..." }` without vault mutation. Passwords in the GET query string are rejected with `400` (secrets must not travel in URLs).
 - AC28: Empty inventory shows a helper empty state; Refresh reloads `GET /api/vaults/backups`.
 - AC29: Closing the drawer (X, overlay click, or Escape) returns focus to the table without resetting filters.
 
