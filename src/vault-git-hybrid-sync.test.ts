@@ -228,6 +228,33 @@ describe('vault-git-hybrid-sync', () => {
     assert.equal(gitLog(tempVault), '');
   });
 
+  it('AC21: git-only memo sync --dry-run via CLI does not commit', async () => {
+    enableVaultGit(tempVault);
+    initVaultGit(tempVault);
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'scratch',
+      slug: 'cli-git-dry-run',
+      body: 'cli dry'
+    });
+    let captured = '';
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => {
+      captured += args.map(String).join(' ') + '\n';
+    };
+    try {
+      const code = await runCli(['sync', '--dry-run', '--json', '--vaultRoot', tempVault, '--cwd', tempProject]);
+      assert.equal(code, 0);
+      const parsed = JSON.parse(captured.trim());
+      assert.equal(parsed.committed, false);
+      assert.ok((parsed.wouldCommit || []).length > 0);
+      assert.equal(gitLog(tempVault), '');
+    } finally {
+      console.log = origLog;
+    }
+  });
+
   it('AC23: session_end flush commits batched dirty tree', async () => {
     enableVaultGit(tempVault);
     initVaultGit(tempVault);

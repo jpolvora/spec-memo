@@ -6,7 +6,7 @@ import { startMcpServer } from './mcp.js';
 import { runDoctor } from './doctor.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
-import { syncVault, ensureVaultStructure, getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot } from './vault.js';
 import { exportVault, importVault, resetVault, restoreVault, listBackups } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { sanitizeToolOutput } from './safety.js';
@@ -1196,7 +1196,8 @@ async function runCliInner(
       }
 
       if (gitEnabled) {
-        const res = await syncVault(vaultRoot);
+        const { flushVaultGit } = await import('./vault.js');
+        const res = await flushVaultGit(getVaultRoot(vaultRoot), { dryRun, trigger: 'sync' });
         if (parsed.isJson) {
           printJson(res);
         } else {
