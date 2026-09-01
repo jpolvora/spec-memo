@@ -6,6 +6,7 @@ import {
   type VaultGitChannelResult
 } from './vault.js';
 import { flushDebouncedPushes, syncHybrid, type HybridSyncReport } from './hybrid-sync.js';
+import { readHybridState } from './hybrid-state.js';
 import { logErrorReport } from './error-logger.js';
 import { recordTelemetry } from './telemetry.js';
 import { safeVaultGitError } from './vault-git-redact.js';
@@ -42,6 +43,14 @@ const EMPTY_HYBRID: HybridSyncReport = {
   timestamp: new Date(0).toISOString()
 };
 
+function isHybridReportSuccessful(report: HybridSyncReport, vaultRoot: string): boolean {
+  if ((report.pulled?.conflicts ?? 0) > 0 || (report.pushed?.conflicts ?? 0) > 0) {
+    return false;
+  }
+  const state = readHybridState(vaultRoot);
+  return !state.dirty;
+}
+
 /**
  * Dual-mode orchestrator: hybrid HTTP and vault-git run concurrently when both are enabled.
  */
@@ -71,7 +80,7 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
             all: options.all,
             dryRun: options.dryRun
           });
-          return { ok: true, report };
+          return { ok: isHybridReportSuccessful(report, vaultRoot), report };
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           logErrorReport(

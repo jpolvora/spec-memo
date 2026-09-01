@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getVaultRoot } from './vault.js';
 import { redactSecretsInPayload } from './safety.js';
+import { redactVaultGitError } from './vault-git-redact.js';
 
 export type ErrorLogLevel = 'ERROR' | 'FATAL' | 'WARN';
 
@@ -128,9 +129,9 @@ export function formatErrorReport(report: ErrorReport): string {
   }
 
   // Redact secrets from error message and stack trace
-  errorMessage = String(redactSecretsInPayload(errorMessage));
+  errorMessage = redactVaultGitError(String(redactSecretsInPayload(errorMessage))) ?? errorMessage;
   if (stackTrace) {
-    stackTrace = String(redactSecretsInPayload(stackTrace));
+    stackTrace = redactVaultGitError(String(redactSecretsInPayload(stackTrace))) ?? stackTrace;
   }
 
   const metaParts: string[] = [];

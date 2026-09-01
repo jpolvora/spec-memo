@@ -201,6 +201,33 @@ describe('vault-git-hybrid-sync', () => {
     assert.equal(gitLog(tempVault), '');
   });
 
+  it('AC21: dual-mode syncDual dry-run reports both channels without commit', async () => {
+    const configPath = path.join(tempVault, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.mode = 'hybrid';
+    config.remote = { url: 'http://127.0.0.1:1' };
+    config.vaultGit = { enabled: true };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    initVaultGit(tempVault);
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'scratch',
+      slug: 'dual-dry-run',
+      body: 'dual dry'
+    });
+    const report = await syncDual({
+      vaultRoot: tempVault,
+      trigger: 'sync',
+      dryRun: true
+    });
+    assert.ok(report.hybrid);
+    assert.ok(report.vaultGit);
+    assert.equal(report.vaultGit?.committed, false);
+    assert.ok((report.vaultGit?.wouldCommit || []).length > 0);
+    assert.equal(gitLog(tempVault), '');
+  });
+
   it('AC23: session_end flush commits batched dirty tree', async () => {
     enableVaultGit(tempVault);
     initVaultGit(tempVault);

@@ -970,6 +970,18 @@ export async function flushVaultGit(
           ? `vault-git flush ${iso}${sessionBit}`
           : `vault-git flush ${iso}${sessionBit}`;
       committed = commitVaultChange(message, vaultRoot, [], { force: true, skipRemote: true });
+      if (!committed) {
+        const localErr = 'Local vault-git commit failed';
+        writeVaultGitState(vaultRoot, { dirty: true, lastError: localErr });
+        return {
+          ok: false,
+          committed: false,
+          pulled: false,
+          pushed: false,
+          message: `Sync failed: ${localErr}`,
+          error: localErr
+        };
+      }
     }
 
     let pulled = false;
