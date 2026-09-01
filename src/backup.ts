@@ -711,18 +711,7 @@ export function listBackups(vaultRoot?: string, filters?: BackupListFilters): Ba
         const stat = fs.statSync(fullPath);
         if (!stat.isFile()) continue;
 
-        let meta: Partial<BackupFileInfo> | undefined;
-        const metaPath = `${fullPath}.meta.json`;
-        try {
-          if (fs.existsSync(metaPath)) {
-            const sidecar = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as BackupSidecarMeta;
-            if (sidecar.archiveSize === stat.size && sidecar.archiveMtimeMs === stat.mtimeMs) {
-              meta = sidecar;
-            }
-          }
-        } catch {
-          meta = undefined;
-        }
+        let meta: Partial<BackupFileInfo> | undefined = readBackupSidecarMeta(fullPath, stat);
         if (!meta) {
           try {
             meta = cachedPeekBackupMetadata(fullPath);
@@ -795,6 +784,20 @@ export function filterBackupList(items: BackupFileInfo[], filters?: BackupListFi
 interface BackupSidecarMeta extends Partial<BackupFileInfo> {
   archiveSize?: number;
   archiveMtimeMs?: number;
+}
+
+function readBackupSidecarMeta(fullPath: string, stat: fs.Stats): Partial<BackupFileInfo> | undefined {
+  const metaPath = `${fullPath}.meta.json`;
+  try {
+    if (!fs.existsSync(metaPath)) return undefined;
+    const sidecar = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as BackupSidecarMeta;
+    if (sidecar.archiveSize === stat.size && sidecar.archiveMtimeMs === stat.mtimeMs) {
+      return sidecar;
+    }
+  } catch {
+    // malformed sidecar — fall back to peeking the archive
+  }
+  return undefined;
 }
 
 function writeBackupArchiveAtomic(backupPath: string, zipBuf: Buffer, exportRes: ExportVaultResult): void {
@@ -900,16 +903,21 @@ export function inspectBackup(
   const safeName = path.basename(fullPath);
 
   let meta: Partial<BackupFileInfo>;
-  try {
-    meta = cachedPeekBackupMetadata(fullPath, options.password);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('Decryption failed') || msg.includes('Incorrect password')) {
-      const e = new Error(msg);
-      (e as Error & { code?: string }).code = 'BACKUP_DECRYPT_FAILED';
-      throw e;
+  const sidecar = options.password ? undefined : readBackupSidecarMeta(fullPath, stat);
+  if (sidecar) {
+    meta = sidecar;
+  } else {
+    try {
+      meta = cachedPeekBackupMetadata(fullPath, options.password);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Decryption failed') || msg.includes('Incorrect password')) {
+        const e = new Error(msg);
+        (e as Error & { code?: string }).code = 'BACKUP_DECRYPT_FAILED';
+        throw e;
+      }
+      throw err;
     }
-    throw err;
   }
 
   if (meta.encrypted && meta.inspectable === false) {

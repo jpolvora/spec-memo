@@ -540,8 +540,36 @@ describe('Vault Backup & Encryption Engine (exportVault & importVault)', () => {
     assert.equal(relisted!.recordCount, result.recordCount);
     fs.writeFileSync(metaPath, JSON.stringify(sidecar), 'utf8');
 
+    // Inspect without password reads the sidecar instead of unpacking the archive
+    fs.writeFileSync(metaPath, JSON.stringify({ ...sidecar, recordCount: 4242 }), 'utf8');
+    const inspectedFromSidecar = inspectBackup(result.filename, { vaultRoot: sourceVault });
+    assert.equal(inspectedFromSidecar.recordCount, 4242);
+    fs.writeFileSync(metaPath, JSON.stringify(sidecar), 'utf8');
+
     await deleteBackup(result.filename, sourceVault);
     assert.ok(!fs.existsSync(backupPath));
     assert.ok(!fs.existsSync(metaPath));
+  });
+
+  it('should inspect encrypted persisted backups from the sidecar without a password', async () => {
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot: sourceVault,
+      kind: 'trap',
+      slug: 'enc-sidecar-trap',
+      frontmatter: { id: 'trap-enc-sidecar', title: 'Encrypted sidecar', severity: 'low' },
+      body: 'Encrypted sidecar inspect test'
+    });
+
+    const result = await persistVaultBackup({ vaultRoot: sourceVault, password: 'enc-pass' });
+    const inspected = inspectBackup(result.filename, { vaultRoot: sourceVault });
+    assert.equal(inspected.encrypted, true);
+    assert.equal(inspected.inspectable, true);
+    assert.equal(inspected.recordCount, result.recordCount);
+
+    assert.throws(
+      () => inspectBackup(result.filename, { vaultRoot: sourceVault, password: 'bad-pass' }),
+      /Decryption failed/
+    );
   });
 });
