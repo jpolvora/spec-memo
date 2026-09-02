@@ -620,13 +620,20 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       if (Array.isArray(hitIds) && hitIds.length > 0) {
         const hitIdSet = new Set(hitIds);
         const idProjectHints: Record<string, string> = {};
+        const ambiguousHitIds = new Set<string>();
         for (const hit of results) {
-          if (hitIdSet.has(hit.id) && hit.projectId) {
+          if (!hitIdSet.has(hit.id) || !hit.projectId) continue;
+          if (idProjectHints[hit.id] && idProjectHints[hit.id] !== hit.projectId) {
+            ambiguousHitIds.add(hit.id);
+          } else {
             idProjectHints[hit.id] = hit.projectId;
           }
         }
+        for (const id of ambiguousHitIds) {
+          delete idProjectHints[id];
+        }
         await recordMemoryHits({
-          ids: hitIds,
+          ids: hitIds.filter((id) => !ambiguousHitIds.has(id)),
           sessionId,
           source: 'search',
           projectId: searchOpts.projectId,

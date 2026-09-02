@@ -289,6 +289,8 @@ function scanProjectForRecord(
 /**
  * Resolve a record by id across vault projects.
  * Prefer hint projectId, then primaryProjectId, then scan getVaultProjects.
+ * Fail-closed: if the same id resolves to more than one distinct file path, return null
+ * (matches getRecord cross-project ambiguity).
  */
 function findRecordFile(
   vaultRoot: string,
@@ -296,25 +298,27 @@ function findRecordFile(
   primaryProjectId: string,
   hintProjectId?: string
 ): { record: MemoRecord; filePath: string; projectId: string } | null {
-  const tried = new Set<string>();
+  const matches: Array<{ record: MemoRecord; filePath: string; projectId: string }> = [];
+  const seenPaths = new Set<string>();
 
-  const tryProject = (projectId: string | undefined) => {
-    if (!projectId || tried.has(projectId)) return null;
-    tried.add(projectId);
-    return scanProjectForRecord(vaultRoot, projectId, recordId);
+  const tryCollect = (projectId: string | undefined) => {
+    if (!projectId) return;
+    const found = scanProjectForRecord(vaultRoot, projectId, recordId);
+    if (found && !seenPaths.has(found.filePath)) {
+      seenPaths.add(found.filePath);
+      matches.push(found);
+    }
   };
 
-  const fromHint = tryProject(hintProjectId);
-  if (fromHint) return fromHint;
-
-  const fromPrimary = tryProject(primaryProjectId);
-  if (fromPrimary) return fromPrimary;
-
+  tryCollect(hintProjectId);
+  tryCollect(primaryProjectId);
   for (const p of getVaultProjects(vaultRoot)) {
-    const found = tryProject(p.id);
-    if (found) return found;
+    tryCollect(p.id);
   }
-  return null;
+
+  if (matches.length === 0) return null;
+  if (matches.length > 1) return null;
+  return matches[0];
 }
 
 /**

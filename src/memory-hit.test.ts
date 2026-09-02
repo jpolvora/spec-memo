@@ -598,6 +598,46 @@ describe('Memory retrieval hit count', () => {
     }
   });
 
+  it('ambiguous duplicate record id across projects does not bump hits', async () => {
+    const tempProj2 = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-hits-ambig-'));
+    fs.mkdirSync(path.join(tempProj2, '.git'), { recursive: true });
+    try {
+      const sharedId = 'trap-duplicate-shared';
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: 'dup-a',
+        allowDuplicate: true,
+        frontmatter: { id: sharedId, title: 'Dup A', pathPatterns: ['src/a/**'] },
+        body: TRAP_BODY + '\nAmbiguousDupA'
+      });
+      await upsertRecord({
+        cwd: tempProj2,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: 'dup-b',
+        allowDuplicate: true,
+        frontmatter: { id: sharedId, title: 'Dup B', pathPatterns: ['src/b/**'] },
+        body: TRAP_BODY + '\nAmbiguousDupB'
+      });
+
+      await recordMemoryHits({
+        ids: [sharedId],
+        source: 'search',
+        cwd: tempProject,
+        vaultRoot: tempVault
+      });
+
+      const a = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: sharedId });
+      const b = await getRecord({ cwd: tempProj2, vaultRoot: tempVault, id: sharedId });
+      assert.equal(a!.frontmatter.hits, undefined);
+      assert.equal(b!.frontmatter.hits, undefined);
+    } finally {
+      fs.rmSync(tempProj2, { recursive: true, force: true });
+    }
+  });
+
   it('AC22: hit persistence failures are fail-open with subsystem memory-hits', async () => {
     await upsertRecord({
       cwd: tempProject,
