@@ -54,7 +54,8 @@ export interface RecordMemoryHitsOptions {
 }
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_SESSIONS = 500;
+/** Soft in-memory hot-cache size only — disk retains all non-expired sessions (AC19). */
+const MAX_MEMORY_SESSION_CACHE = 500;
 
 interface PersistedSessionEntry {
   updatedAt: string;
@@ -123,43 +124,97 @@ function hydrateSessionsFromDisk(vaultRoot: string): void {
   }
 }
 
-/** Persist in-memory session cache for a vault (prune + fail-open). */
+/** Read one session entry from disk (fail-open). */
+function loadSessionFromDisk(
+  vaultRoot: string,
+  sessionId: string
+): SessionCacheEntry | null {
+  const filePath = sessionsFilePath(vaultRoot);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as PersistedSessionsFile;
+    const entry = raw?.sessions?.[sessionId];
+    if (!entry || typeof entry !== 'object') return null;
+    const updatedAt = typeof entry.updatedAt === 'string' ? entry.updatedAt : '';
+    const ts = updatedAt ? Date.parse(updatedAt) : NaN;
+    if (Number.isFinite(ts) && Date.now() - ts > SESSION_TTL_MS) return null;
+    const ids = Array.isArray(entry.ids)
+      ? entry.ids.filter((id) => typeof id === 'string' && id.trim())
+      : [];
+    return { updatedAt: updatedAt || new Date().toISOString(), ids: new Set(ids) };
+  } catch {
+    return null;
+  }
+}
+
+/** Soft-trim in-memory cache only; never drops durable disk sessions. */
+function trimMemorySessionCache(vaultRoot: string): void {
+  const keysForVault: Array<{ key: string; updatedAt: string }> = [];
+  for (const [key, entry] of sessionHitSeen) {
+    if (!parseSessionIdFromKey(key, vaultRoot)) continue;
+    keysForVault.push({ key, updatedAt: entry.updatedAt });
+  }
+  if (keysForVault.length <= MAX_MEMORY_SESSION_CACHE) return;
+  keysForVault.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  for (const { key } of keysForVault.slice(MAX_MEMORY_SESSION_CACHE)) {
+    sessionHitSeen.delete(key);
+  }
+}
+
+/** Persist all non-expired sessions for a vault (merge disk + memory; TTL prune only). */
 function persistSessionsToDisk(vaultRoot: string): void {
   try {
     const now = Date.now();
-    const entries: Array<{ sessionId: string; updatedAt: string; ids: string[] }> = [];
+    const payload: PersistedSessionsFile = { sessions: {} };
+
+    // Start from existing disk so cold sessions outside the hot cache are not wiped.
+    const filePath = sessionsFilePath(vaultRoot);
+    if (fs.existsSync(filePath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as PersistedSessionsFile;
+        if (raw?.sessions && typeof raw.sessions === 'object') {
+          for (const [sessionId, entry] of Object.entries(raw.sessions)) {
+            if (!entry || typeof entry !== 'object') continue;
+            const updatedAt = typeof entry.updatedAt === 'string' ? entry.updatedAt : '';
+            const ts = updatedAt ? Date.parse(updatedAt) : NaN;
+            if (Number.isFinite(ts) && now - ts > SESSION_TTL_MS) continue;
+            const ids = Array.isArray(entry.ids)
+              ? entry.ids.filter((id) => typeof id === 'string' && id.trim())
+              : [];
+            payload.sessions[sessionId] = { updatedAt: updatedAt || new Date().toISOString(), ids };
+          }
+        }
+      } catch {
+        // ignore corrupt prior file; rewrite from memory
+      }
+    }
+
     for (const [key, entry] of sessionHitSeen) {
       const sessionId = parseSessionIdFromKey(key, vaultRoot);
       if (!sessionId) continue;
       const ts = Date.parse(entry.updatedAt);
       if (Number.isFinite(ts) && now - ts > SESSION_TTL_MS) {
         sessionHitSeen.delete(key);
+        delete payload.sessions[sessionId];
         continue;
       }
-      entries.push({
-        sessionId,
-        updatedAt: entry.updatedAt,
-        ids: [...entry.ids]
-      });
-    }
-    entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    const kept = entries.slice(0, MAX_SESSIONS);
-    const dropped = new Set(entries.slice(MAX_SESSIONS).map((e) => e.sessionId));
-    for (const sessionId of dropped) {
-      sessionHitSeen.delete(sessionKey(vaultRoot, sessionId));
+      const prior = payload.sessions[sessionId];
+      const merged = new Set<string>([...(prior?.ids || []), ...entry.ids]);
+      payload.sessions[sessionId] = {
+        updatedAt:
+          !prior?.updatedAt || entry.updatedAt > prior.updatedAt
+            ? entry.updatedAt
+            : prior.updatedAt,
+        ids: [...merged]
+      };
     }
 
-    const payload: PersistedSessionsFile = { sessions: {} };
-    for (const e of kept) {
-      payload.sessions[e.sessionId] = { updatedAt: e.updatedAt, ids: e.ids };
-    }
-
-    const filePath = sessionsFilePath(vaultRoot);
     const syncDir = path.dirname(filePath);
     if (!fs.existsSync(syncDir)) {
       fs.mkdirSync(syncDir, { recursive: true });
     }
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    trimMemorySessionCache(vaultRoot);
   } catch {
     // fail-open
   }
@@ -170,18 +225,23 @@ export function resetMemoryHitSessionsForTests(): void {
   sessionHitSeen.clear();
 }
 
+function ensureSessionCached(vaultRoot: string, sessionId: string): SessionCacheEntry {
+  const key = sessionKey(vaultRoot, sessionId);
+  let entry = sessionHitSeen.get(key);
+  if (entry) return entry;
+  const fromDisk = loadSessionFromDisk(vaultRoot, sessionId);
+  entry = fromDisk || { updatedAt: new Date().toISOString(), ids: new Set() };
+  sessionHitSeen.set(key, entry);
+  trimMemorySessionCache(vaultRoot);
+  return entry;
+}
+
 function alreadyHitInSession(vaultRoot: string, sessionId: string, recordId: string): boolean {
-  const set = sessionHitSeen.get(sessionKey(vaultRoot, sessionId));
-  return Boolean(set?.ids.has(recordId));
+  return ensureSessionCached(vaultRoot, sessionId).ids.has(recordId);
 }
 
 function markHitInSession(vaultRoot: string, sessionId: string, recordId: string): void {
-  const key = sessionKey(vaultRoot, sessionId);
-  let entry = sessionHitSeen.get(key);
-  if (!entry) {
-    entry = { updatedAt: new Date().toISOString(), ids: new Set() };
-    sessionHitSeen.set(key, entry);
-  }
+  const entry = ensureSessionCached(vaultRoot, sessionId);
   entry.ids.add(recordId);
   entry.updatedAt = new Date().toISOString();
 }

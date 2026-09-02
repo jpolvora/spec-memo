@@ -485,6 +485,53 @@ describe('Memory retrieval hit count', () => {
     assert.equal(afterRestart!.frontmatter.hits, 1, 'disk-backed session must de-dupe across restarts');
   });
 
+  it('AC19: session de-dupe is not silently dropped when many sessions exist', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'many-sess',
+      frontmatter: {
+        id: 'trap-many-sess',
+        title: 'Many sessions',
+        severity: 'high',
+        pathPatterns: ['src/**']
+      },
+      body: TRAP_BODY
+    });
+
+    const sessionFile = path.join(tempVault, '.sync', 'memory-hit-sessions.json');
+    const sessions: Record<string, { updatedAt: string; ids: string[] }> = {};
+    const now = new Date().toISOString();
+    for (let i = 0; i < 520; i++) {
+      sessions[`sess-flood-${i}`] = { updatedAt: now, ids: [`trap-other-${i}`] };
+    }
+    sessions['sess-keep-alive'] = { updatedAt: now, ids: ['trap-many-sess'] };
+    fs.mkdirSync(path.dirname(sessionFile), { recursive: true });
+    fs.writeFileSync(sessionFile, JSON.stringify({ sessions }, null, 2), 'utf8');
+    resetMemoryHitSessionsForTests();
+
+    await recordMemoryHits({
+      ids: ['trap-many-sess'],
+      sessionId: 'sess-keep-alive',
+      source: 'get',
+      cwd: tempProject,
+      vaultRoot: tempVault
+    });
+    const after = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-many-sess'
+    });
+    assert.equal(
+      after!.frontmatter.hits,
+      undefined,
+      'cold session beyond hot-cache size must still de-dupe from disk'
+    );
+    // hits omitted until first successful bump; de-dupe means still undefined/0
+    assert.ok(!after!.frontmatter.hits || after!.frontmatter.hits === 0);
+  });
+
   it('crossProject search hitIds resolve records in other vault projects', async () => {
     const tempProj2 = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-hits-proj2-'));
     fs.mkdirSync(path.join(tempProj2, '.git'), { recursive: true });
