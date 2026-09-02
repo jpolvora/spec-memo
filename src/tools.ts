@@ -714,6 +714,13 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         });
         const refreshed = await getRecord({ id: String(record.frontmatter.id), kind: record.frontmatter.kind, cwd, vaultRoot, projectId });
         if (refreshed) {
+          // AC5: missing hits → 0 in payload without requiring a file rewrite
+          if (refreshed.frontmatter.hits == null) {
+            return ok({
+              ...refreshed,
+              frontmatter: { ...refreshed.frontmatter, hits: 0 }
+            });
+          }
           return ok(refreshed);
         }
       }
