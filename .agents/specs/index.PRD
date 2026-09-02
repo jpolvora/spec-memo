@@ -111,6 +111,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md): Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI
 - [x] [`status-backup-page`](status-backup-page.spec.md): Dedicated status-monitor backup page with complete archives and inventory management
 - [x] Batched vault-git sync with dual-mode hybrid parallel dispatch (`spec: vault-git-hybrid-sync.spec.md`)
+- [ ] Memory retrieval hit count and status-monitor list (`spec: memory-hit-count.spec.md`)
+
 
 
 
@@ -155,6 +157,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 34 | [`memo-status`](memo-status.spec.md) | `[x]` done | Phase 7: Deployment modes | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard |
 | 35 | [`status-backup-page`](status-backup-page.spec.md) | `[x]` done | Phase 7 | Dedicated status-monitor backup page with complete archives and inventory management |
 | 36 | [`vault-git-hybrid-sync`](vault-git-hybrid-sync.spec.md) | `[x] done` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
+
+| 37 | `memory-hit-count` | `[ ]` todo | Phase 7: Deployment modes | Memory retrieval hit count and status-monitor list |
 
 ## 9. Inbox (unscheduled ideas)
 
