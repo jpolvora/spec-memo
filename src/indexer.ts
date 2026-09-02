@@ -344,6 +344,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   // Occurrences / hits ranking must evaluate the full active set (same semantics as `memo rank`),
   // not an updated-DESC / FTS-relevance pre-cap. Skip FTS for these sort paths.
   if (sortMode === 'occurrences' || sortMode === 'hits') {
+    const defaultHitsKinds = ['trap', 'decision', 'spec', 'plan'] as RecordKind[];
     return searchIndexByFullScanRank(
       {
         ...options,
@@ -352,8 +353,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
             ? options.kinds
             : sortMode === 'occurrences'
               ? (['trap'] as RecordKind[])
-              : undefined,
-        status: options.status ?? (sortMode === 'occurrences' ? 'active' : undefined)
+              : defaultHitsKinds,
+        status: options.status ?? 'active'
       },
       vaultRoot,
       targetProjectId,
