@@ -1,8 +1,8 @@
 name: Agentic Code Review (Cursor)
 
 on:
-  pull_request:
-    branches: [main, master, develop]
+  # Disabled; OpenCode workflow is the active PR reviewer. Trigger manually when needed.
+  workflow_dispatch:
 
 permissions:
   contents: read
