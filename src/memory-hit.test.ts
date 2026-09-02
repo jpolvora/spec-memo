@@ -430,6 +430,127 @@ describe('Memory retrieval hit count', () => {
     assert.equal(noSession!.frontmatter.hits, 2);
   });
 
+  it('AC19: session de-dupe persists across in-memory cache clear (process restart)', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'persist-sess',
+      frontmatter: {
+        id: 'trap-persist-sess',
+        title: 'Persist session',
+        severity: 'critical',
+        pathPatterns: ['src/**']
+      },
+      body: TRAP_BODY
+    });
+
+    const sessionId = 'sess-persist-1';
+    await recordMemoryHits({
+      ids: ['trap-persist-sess'],
+      sessionId,
+      source: 'get',
+      cwd: tempProject,
+      vaultRoot: tempVault
+    });
+    const afterFirst = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-persist-sess'
+    });
+    assert.equal(afterFirst!.frontmatter.hits, 1);
+
+    const sessionFile = path.join(tempVault, '.sync', 'memory-hit-sessions.json');
+    assert.ok(fs.existsSync(sessionFile), 'expected persisted session hit file');
+    const persisted = JSON.parse(fs.readFileSync(sessionFile, 'utf8')) as {
+      sessions: Record<string, { ids: string[] }>;
+    };
+    assert.ok(persisted.sessions[sessionId]?.ids.includes('trap-persist-sess'));
+
+    // Simulate MCP/CLI process restart: drop in-memory Map, keep vault file.
+    resetMemoryHitSessionsForTests();
+
+    await recordMemoryHits({
+      ids: ['trap-persist-sess'],
+      sessionId,
+      source: 'get',
+      cwd: tempProject,
+      vaultRoot: tempVault
+    });
+    const afterRestart = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: 'trap-persist-sess'
+    });
+    assert.equal(afterRestart!.frontmatter.hits, 1, 'disk-backed session must de-dupe across restarts');
+  });
+
+  it('crossProject search hitIds resolve records in other vault projects', async () => {
+    const tempProj2 = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-hits-proj2-'));
+    fs.mkdirSync(path.join(tempProj2, '.git'), { recursive: true });
+    try {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: 'local-trap',
+        allowDuplicate: true,
+        frontmatter: {
+          id: 'trap-cross-local',
+          title: 'Cross local',
+          pathPatterns: ['src/local/**']
+        },
+        body: TRAP_BODY + '\nCrossProject unique local'
+      });
+      await upsertRecord({
+        cwd: tempProj2,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: 'remote-trap',
+        allowDuplicate: true,
+        frontmatter: {
+          id: 'trap-cross-remote',
+          title: 'Cross remote',
+          pathPatterns: ['src/remote/**']
+        },
+        body: TRAP_BODY + '\nCrossProject unique remote'
+      });
+
+      const identity1 = resolveProjectIdentity(tempProject, { vaultRoot: tempVault });
+      const identity2 = resolveProjectIdentity(tempProj2, { vaultRoot: tempVault });
+      assert.notEqual(identity1.projectId, identity2.projectId);
+
+      const res = await executeTool('search', {
+        query: 'CrossProject',
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        crossProject: true,
+        kinds: ['trap'],
+        hitIds: ['trap-cross-remote']
+      });
+      assert.equal(res.isError, undefined);
+      const hits = res.data as Array<{ id: string; projectId: string }>;
+      assert.ok(hits.some((h) => h.id === 'trap-cross-remote'));
+
+      const remote = await getRecord({
+        cwd: tempProj2,
+        vaultRoot: tempVault,
+        id: 'trap-cross-remote'
+      });
+      assert.ok(remote);
+      assert.equal(remote.frontmatter.hits, 1, 'cross-project hitId must bump foreign project record');
+
+      const local = await getRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        id: 'trap-cross-local'
+      });
+      assert.equal(local!.frontmatter.hits, undefined);
+    } finally {
+      fs.rmSync(tempProj2, { recursive: true, force: true });
+    }
+  });
+
   it('AC22: hit persistence failures are fail-open with subsystem memory-hits', async () => {
     await upsertRecord({
       cwd: tempProject,

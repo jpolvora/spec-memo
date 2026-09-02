@@ -618,11 +618,19 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       const { hitIds, sessionId, ...indexOpts } = searchOpts;
       const results = searchIndex(indexOpts);
       if (Array.isArray(hitIds) && hitIds.length > 0) {
+        const hitIdSet = new Set(hitIds);
+        const idProjectHints: Record<string, string> = {};
+        for (const hit of results) {
+          if (hitIdSet.has(hit.id) && hit.projectId) {
+            idProjectHints[hit.id] = hit.projectId;
+          }
+        }
         await recordMemoryHits({
           ids: hitIds,
           sessionId,
           source: 'search',
           projectId: searchOpts.projectId,
+          idProjectHints,
           vaultRoot: searchOpts.vaultRoot,
           cwd: searchOpts.cwd
         });
