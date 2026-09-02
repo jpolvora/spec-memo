@@ -20,6 +20,11 @@ import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
 import { searchIndex } from './indexer.js';
 import { wrapSqliteOpenError } from './sqlite.js';
 import { compileBootstrapBrief } from './bootstrap.js';
+import {
+  recordMemoryHits,
+  collectBootstrapHitIds,
+  isHitEligibleKind
+} from './hits.js';
 import { runGc } from './curator.js';
 import { promoteRecord } from './promote.js';
 import { checkVersion } from './version.js';
@@ -78,7 +83,11 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         slug: { type: 'string', description: 'Active feature spec/plan slug identifier' },
         path: { type: 'string', description: 'Focus file path to prioritize matching traps' },
         maxBytes: { type: 'number', description: 'Maximum UTF-8 payload byte budget (defaults to vault config.bootstrap.maxBytes, 8192)' },
-        projectId: { type: 'string', description: 'Specific project ID override' }
+        projectId: { type: 'string', description: 'Specific project ID override' },
+        sessionId: {
+          type: 'string',
+          description: 'Optional session id for hit de-dupe (at most one bump per record per session)'
+        }
       }
     },
     zodSchema: z.object({
@@ -88,12 +97,13 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       path: z.string().optional(),
       maxBytes: z.number().int().positive().optional(),
       vaultRoot: z.string().optional(),
-      projectId: z.string().optional()
+      projectId: z.string().optional(),
+      sessionId: z.string().optional()
     })
   },
   search: {
     name: 'search',
-    description: 'Filtered full-text retrieval across memory records via SQLite FTS5 (excludes scratch, logs, review by default).',
+    description: 'Filtered full-text retrieval across memory records via SQLite FTS5 (excludes scratch, logs, review by default). Bare search does not increment hits; pass hitIds for rows you actually used.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -123,8 +133,17 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         limit: { type: 'number', description: 'Maximum number of results to return' },
         sort: {
           type: 'string',
-          enum: ['relevance', 'occurrences', 'updated'],
-          description: 'Result order: relevance (default), occurrences, or updated'
+          enum: ['relevance', 'occurrences', 'updated', 'hits'],
+          description: 'Result order: relevance (default), occurrences, updated, or hits'
+        },
+        hitIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Record ids to acknowledge as retrieval hits after search (optional; bare search does not count)'
+        },
+        sessionId: {
+          type: 'string',
+          description: 'Optional session id for hit de-dupe when recording hitIds'
         },
         cwd: { type: 'string', description: 'Product repository working directory' }
       }
@@ -141,12 +160,14 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       limit: z.number().int().positive().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
-      sort: z.enum(['relevance', 'occurrences', 'updated']).optional()
+      sort: z.enum(['relevance', 'occurrences', 'updated', 'hits']).optional(),
+      hitIds: z.array(z.string()).optional(),
+      sessionId: z.string().optional()
     })
   },
   get: {
     name: 'get',
-    description: 'Read one record by unique id OR by kind+slug.',
+    description: 'Read one record by unique id OR by kind+slug. Successful get of trap/decision/spec/plan increments hits.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -158,7 +179,11 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         },
         slug: { type: 'string', description: 'Record slug identifier (when lookup by kind+slug)' },
         cwd: { type: 'string', description: 'Product repository working directory' },
-        projectId: { type: 'string', description: 'Specific project ID override' }
+        projectId: { type: 'string', description: 'Specific project ID override' },
+        sessionId: {
+          type: 'string',
+          description: 'Optional session id for hit de-dupe (at most one bump per record per session)'
+        }
       }
     },
     zodSchema: z.object({
@@ -167,7 +192,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       slug: z.string().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
-      projectId: z.string().optional()
+      projectId: z.string().optional(),
+      sessionId: z.string().optional()
     })
   },
   upsert: {
@@ -569,6 +595,17 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
     try {
       const bootstrapOpts = parseResult.data as BootstrapOptions;
       const result = await compileBootstrapBrief(bootstrapOpts);
+      const hitIds = collectBootstrapHitIds(result);
+      if (hitIds.length > 0) {
+        await recordMemoryHits({
+          ids: hitIds,
+          sessionId: bootstrapOpts.sessionId,
+          source: 'bootstrap',
+          projectId: bootstrapOpts.projectId || result.projectId,
+          vaultRoot: bootstrapOpts.vaultRoot,
+          cwd: bootstrapOpts.cwd
+        });
+      }
       return ok(result);
     } catch (err: unknown) {
       return fail('BOOTSTRAP_FAILED', err);
@@ -578,7 +615,33 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
   if (name === 'search') {
     try {
       const searchOpts = parseResult.data as SearchOptions;
-      const results = searchIndex(searchOpts);
+      const { hitIds, sessionId, ...indexOpts } = searchOpts;
+      const results = searchIndex(indexOpts);
+      if (Array.isArray(hitIds) && hitIds.length > 0) {
+        const hitIdSet = new Set(hitIds);
+        const idProjectHints: Record<string, string> = {};
+        const ambiguousHitIds = new Set<string>();
+        for (const hit of results) {
+          if (!hitIdSet.has(hit.id) || !hit.projectId) continue;
+          if (idProjectHints[hit.id] && idProjectHints[hit.id] !== hit.projectId) {
+            ambiguousHitIds.add(hit.id);
+          } else {
+            idProjectHints[hit.id] = hit.projectId;
+          }
+        }
+        for (const id of ambiguousHitIds) {
+          delete idProjectHints[id];
+        }
+        await recordMemoryHits({
+          ids: hitIds.filter((id) => !ambiguousHitIds.has(id)),
+          sessionId,
+          source: 'search',
+          projectId: searchOpts.projectId,
+          idProjectHints,
+          vaultRoot: searchOpts.vaultRoot,
+          cwd: searchOpts.cwd
+        });
+      }
       return ok(results);
     } catch (err: unknown) {
       return fail('SEARCH_FAILED', err);
@@ -628,13 +691,14 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
 
   if (name === 'get') {
     try {
-      const { id, kind, slug, cwd, vaultRoot, projectId } = parseResult.data as {
+      const { id, kind, slug, cwd, vaultRoot, projectId, sessionId } = parseResult.data as {
         id?: string;
         kind?: RecordKind;
         slug?: string;
         cwd?: string;
         vaultRoot?: string;
         projectId?: string;
+        sessionId?: string;
       };
       if (!id && !(kind && slug)) {
         return fail(
@@ -645,6 +709,34 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       const record = await getRecord({ id, kind, slug, cwd, vaultRoot, projectId });
       if (!record) {
         return fail('RECORD_NOT_FOUND', `Record not found: id=${id || 'n/a'}, kind=${kind || 'n/a'}, slug=${slug || 'n/a'}`);
+      }
+      if (isHitEligibleKind(record.frontmatter.kind)) {
+        await recordMemoryHits({
+          ids: [String(record.frontmatter.id)],
+          sessionId,
+          source: 'get',
+          projectId: projectId || String(record.frontmatter.project),
+          vaultRoot,
+          cwd
+        });
+        const refreshed = await getRecord({ id: String(record.frontmatter.id), kind: record.frontmatter.kind, cwd, vaultRoot, projectId });
+        if (refreshed) {
+          // AC5: missing hits → 0 in payload without requiring a file rewrite
+          if (refreshed.frontmatter.hits == null) {
+            return ok({
+              ...refreshed,
+              frontmatter: { ...refreshed.frontmatter, hits: 0 }
+            });
+          }
+          return ok(refreshed);
+        }
+      }
+      // AC5: treat missing hits as 0 in payload without rewriting the file
+      if (record.frontmatter.hits == null) {
+        return ok({
+          ...record,
+          frontmatter: { ...record.frontmatter, hits: 0 }
+        });
       }
       return ok(record);
     } catch (err: unknown) {

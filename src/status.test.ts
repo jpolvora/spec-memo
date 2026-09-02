@@ -172,6 +172,20 @@ test("MCP status monitor", async (t) => {
     assert.ok(!html.includes('url += "?password="'), "inspect password must not be appended to the request URL");
   });
 
+  await t.test("generateStatusHtml includes Memory tab with Hits column and drawer", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('data-tab="tab-memory"'));
+    assert.ok(html.includes('id="tab-memory"'));
+    assert.ok(html.includes('id="memory-table"'));
+    assert.ok(html.includes(">Hits</th>") || html.includes(">Hits</"));
+    assert.ok(html.includes("Last hit"));
+    assert.ok(html.includes('id="memory-drawer"'));
+    assert.ok(html.includes('id="memory-drawer-metadata"'));
+    assert.ok(html.includes("/api/records"));
+    assert.ok(html.includes("openMemoryDrawer"));
+    assert.ok(html.includes('meta-label">Hits</span>') || html.includes("Hits</span>"));
+  });
+
   await t.test("generateStatusHtml supports ?tab=backups deep link", () => {
     const html = generateStatusHtml(getPackageVersion());
     assert.ok(html.includes('urlParams.get("tab")'));
@@ -371,6 +385,79 @@ test("MCP status monitor", async (t) => {
     assert.strictEqual(res.status, 404);
     const body = await res.json() as { error: string };
     assert.strictEqual(body.error, "Not found");
+  });
+
+  await t.test("GET /api/records returns memory list with hits and is read-only", async () => {
+    const proj = fs.mkdtempSync(path.join(os.tmpdir(), "spec-memo-status-hit-proj-"));
+    fs.mkdirSync(path.join(proj, ".git"), { recursive: true });
+    try {
+      await upsertRecord({
+        cwd: proj,
+        vaultRoot,
+        kind: "trap",
+        slug: "status-hit",
+        frontmatter: {
+          id: "trap-status-hit",
+          title: "Status hit row",
+          pathPatterns: ["src/**"],
+          hits: 6,
+          lastHit: "2026-09-02T12:00:00.000Z"
+        },
+        body: "Status memory hit body"
+      });
+
+      const res = await fetch(`${baseUrl}/api/records?sort=hits&limit=50`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json() as {
+        records: Array<{
+          id: string;
+          hits: number;
+          occurrences: number;
+          lastHit?: string | null;
+          title?: string;
+          updated?: string;
+        }>;
+      };
+      assert.ok(Array.isArray(body.records));
+      const row = body.records.find((r) => r.id === "trap-status-hit");
+      assert.ok(row, "expected trap-status-hit in /api/records");
+      assert.strictEqual(row.hits, 6);
+      assert.ok(row.occurrences >= 1);
+      assert.ok("lastHit" in row);
+      assert.ok("updated" in row);
+
+      for (let i = 0; i < 10; i++) {
+        await fetch(`${baseUrl}/api/records?sort=hits`);
+      }
+      const again = await fetch(`${baseUrl}/api/records?sort=hits`);
+      const againBody = await again.json() as { records: Array<{ id: string; hits: number }> };
+      const againRow = againBody.records.find((r) => r.id === "trap-status-hit");
+      assert.strictEqual(againRow?.hits, 6);
+    } finally {
+      fs.rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  await t.test("GET /api/records returns 401 when auth token configured", async () => {
+    const authBus = createActivityBus();
+    const authServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "records-secret",
+      activityBus: authBus
+    });
+    try {
+      const unauth = await fetch(`${authServer.url}/api/records`);
+      assert.strictEqual(unauth.status, 401);
+      const auth = await fetch(`${authServer.url}/api/records`, {
+        headers: { Authorization: "Bearer records-secret" }
+      });
+      assert.strictEqual(auth.status, 200);
+    } finally {
+      authBus.close();
+      await authServer.close();
+    }
   });
 
   await t.test("enforces auth token on API routes when configured", async () => {

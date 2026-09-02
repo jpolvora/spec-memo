@@ -7,6 +7,7 @@ import { parseRecord } from "./schema.js";
 import { searchIndex } from "./indexer.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
 import { MemoRecord, RecordKind, RecordStatus } from "./types.js";
+import { hitCountOf, occurrenceOf } from "./recurrence.js";
 
 export interface GraphNode {
   id: string;
@@ -19,6 +20,9 @@ export interface GraphNode {
   project: string;
   pathPatterns?: string[];
   tags?: string[];
+  /** Retrieval hit count (0 when missing). */
+  hits: number;
+  occurrences?: number;
 }
 
 export interface GraphEdge {
@@ -146,7 +150,9 @@ export function generateProjectGraph(
       updated: String(rec.frontmatter.updated),
       project: String(rec.frontmatter.project),
       pathPatterns: rec.frontmatter.pathPatterns,
-      tags: rec.frontmatter.tags
+      tags: rec.frontmatter.tags,
+      hits: hitCountOf(rec.frontmatter),
+      occurrences: occurrenceOf(rec.frontmatter)
     });
   }
 
@@ -484,12 +490,22 @@ export function generateCanvasHtml(): string {
     async function openDetail(node) {
       const drawer = document.getElementById("detail-drawer");
       document.getElementById("detail-title").textContent = node.title;
-      document.getElementById("detail-meta").textContent = \`ID: \${node.id} | Kind: \${node.kind} | Status: \${node.status}\`;
+      const hitsVal = node.hits != null ? node.hits : 0;
+      const occPart = node.occurrences != null ? \` | Occurrences: \${node.occurrences}\` : "";
+      document.getElementById("detail-meta").textContent =
+        \`ID: \${node.id} | Kind: \${node.kind} | Status: \${node.status} | Hits: \${hitsVal}\${occPart}\`;
       drawer.classList.add("open");
 
       try {
         const res = await fetch(\`/api/record/\${currentProject}/\${node.kind}/\${node.id}\`, { headers: apiHeaders });
         const data = await res.json();
+        if (data.record && data.record.frontmatter) {
+          const fm = data.record.frontmatter;
+          const h = fm.hits != null ? fm.hits : 0;
+          const occ = fm.occurrences != null ? \` | Occurrences: \${fm.occurrences}\` : occPart;
+          document.getElementById("detail-meta").textContent =
+            \`ID: \${node.id} | Kind: \${node.kind} | Status: \${node.status} | Hits: \${h}\${occ}\`;
+        }
         document.getElementById("detail-body").textContent = data.record ? data.record.body : "No content body";
       } catch (err) {
         document.getElementById("detail-body").textContent = "Failed to load record content.";

@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.16.0
+version: 0.17.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -62,8 +62,8 @@ All 11 MCP tools are available over MCP stdio (`memo serve`) or MCP SSE (`memo s
 | # | MCP Tool | Purpose | Required Fields | Key Defaults & Enums |
 |---|---|---|---|---|
 | 1 | `bootstrap` | Session brief & traps | _(none)_ | `maxBytes`: 8192, `cwd`: current dir |
-| 2 | `search` | FTS5 memory retrieval | _(none)_ | `sort`: `relevance`\|`occurrences`\|`updated` |
-| 3 | `get` | Read single record | `id` **or** (`kind` + `slug`) | `kind`: closed enum of 10 kinds |
+| 2 | `search` | FTS5 memory retrieval | _(none)_ | `sort`: `relevance`\|`occurrences`\|`updated`\|`hits`; bare search does not count hits — pass `hitIds` |
+| 3 | `get` | Read single record | `id` **or** (`kind` + `slug`) | Eligible kinds auto-increment `hits`; optional `sessionId` |
 | 4 | `upsert` | Write memory record | `kind`, `body` | `kind`: 10 kinds; frontmatter optional |
 | 5 | `append` | Write-only audit event | `event` | `kind`: defaults to `"log"` |
 | 6 | `forget` | Archive or purge record | `id` **or** (`kind` + `slug`) | `purge`: boolean (default `false`) |
@@ -86,6 +86,9 @@ All 11 MCP tools are available over MCP stdio (`memo serve`) or MCP SSE (`memo s
 - `path` (string, optional): Focus file path (e.g. `src/auth.ts`) to prioritize matching traps by `pathPatterns`.
 - `maxBytes` (number, optional): UTF-8 byte budget. Defaults to vault config (`bootstrap.maxBytes`, 8192).
 - `projectId` (string, optional): Explicit project ID override.
+- `sessionId` (string, optional): Hit de-dupe key (at most one bump per included record per session).
+
+**Hit contract:** Hit-eligible records (`trap`/`decision`/`spec`/`plan`) that appear in the returned brief auto-increment `hits`. Records dropped by the token budget do not. Pass the same `sessionId` used for `prompt` session tracking when available.
 
 #### Pre-Flight Checklist
 - [ ] Pass `cwd` when calling from subagents or non-root directories.
@@ -120,7 +123,9 @@ memo bootstrap --path src/store/sqlite.ts --slug feature-auth --maxBytes 16384
 - `tags` (string[], optional): Filter by tags. **Must be an array of strings.**
 - `path` (string, optional): Match records whose `pathPatterns` cover this path.
 - `includeScratch` (boolean, optional): Include `scratch` records (defaults to `false`).
-- `sort` (string, optional): `"relevance"` (default), `"occurrences"`, or `"updated"`.
+- `sort` (string, optional): `"relevance"` (default), `"occurrences"`, `"updated"`, or `"hits"`.
+- `hitIds` (string[], optional): Record ids to acknowledge as retrieval hits after search. **Bare search does not increment `hits`.**
+- `sessionId` (string, optional): Hit de-dupe when recording `hitIds` (reuse prompt `sessionId`).
 - `limit` (number, optional): Maximum results to return (positive integer).
 - `crossProject` (boolean, optional): Search across all projects in the vault.
 - `projectId` (string, optional): Target specific project ID.
@@ -128,23 +133,26 @@ memo bootstrap --path src/store/sqlite.ts --slug feature-auth --maxBytes 16384
 
 #### Pre-Flight Checklist
 - [ ] `kinds` and `tags` MUST be arrays of strings (`["trap"]`), NOT single strings (`"trap"`).
-- [ ] `sort` MUST be one of `"relevance"`, `"occurrences"`, or `"updated"`.
+- [ ] `sort` MUST be one of `"relevance"`, `"occurrences"`, `"updated"`, or `"hits"`.
 - [ ] For trap recurrence ranking, use `sort: "occurrences"` and `kinds: ["trap"]`.
+- [ ] After using search results, pass `hitIds` (+ `sessionId`) for rows you actually applied — bare search does not count.
 
 #### MCP Calling Example
 ```json
 {
   "query": "sqlite lock",
   "kinds": ["trap"],
-  "sort": "occurrences",
+  "sort": "hits",
   "path": "src/db/client.ts",
-  "limit": 5
+  "limit": 5,
+  "hitIds": ["trap-sqlite-wal-lock"],
+  "sessionId": "sess-123"
 }
 ```
 
 #### CLI Equivalent
 ```bash
-memo search "sqlite lock" --kind trap --sort occurrences --path src/db/client.ts --limit 5
+memo search "sqlite lock" --kind trap --sort hits --path src/db/client.ts --limit 5 --hit-ids trap-sqlite-wal-lock --session-id sess-123
 ```
 
 ---
@@ -159,10 +167,14 @@ memo search "sqlite lock" --kind trap --sort occurrences --path src/db/client.ts
 - `slug` (string, optional): Record slug (e.g. `sqlite-wal-lock`).
 - `cwd` (string, optional): Product working directory.
 - `projectId` (string, optional): Target project ID.
+- `sessionId` (string, optional): Hit de-dupe key (reuse prompt session id).
+
+**Hit contract:** Successful `get` of `trap` / `decision` / `spec` / `plan` increments `hits`. Scratch/log/prompt/session/etc. do not.
 
 #### Pre-Flight Checklist
 - [ ] **Mandatory Rule:** You MUST provide either `id` OR both `kind` and `slug`. Calling `get` without both will return `INVALID_ARGUMENTS`.
 - [ ] If record is not found, the tool returns `RECORD_NOT_FOUND`. Do NOT invent placeholder content.
+- [ ] Pass `sessionId` when available so bootstrap + get in one session count as one hit.
 
 #### MCP Calling Example
 ```json

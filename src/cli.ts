@@ -1436,6 +1436,10 @@ async function runCliInner(
       if (typeof payload.maxBytes === 'string') {
         payload.maxBytes = parseInt(payload.maxBytes, 10);
       }
+      if (payload['session-id'] && !payload.sessionId) {
+        payload.sessionId = String(payload['session-id']);
+        delete payload['session-id'];
+      }
     }
 
     // Normalization for search command
@@ -1469,12 +1473,32 @@ async function runCliInner(
       if (payload.sort) {
         payload.sort = String(payload.sort);
       }
+      if (payload['hit-ids'] && !payload.hitIds) {
+        payload.hitIds = String(payload['hit-ids'])
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        delete payload['hit-ids'];
+      } else if (typeof payload.hitIds === 'string') {
+        payload.hitIds = String(payload.hitIds)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      if (payload['session-id'] && !payload.sessionId) {
+        payload.sessionId = String(payload['session-id']);
+        delete payload['session-id'];
+      }
     }
 
     // Normalization for get command
     if (parsed.command === 'get') {
       if (parsed.positionals.length > 0 && !payload.id && !payload.slug) {
         payload.id = parsed.positionals[0];
+      }
+      if (payload['session-id'] && !payload.sessionId) {
+        payload.sessionId = String(payload['session-id']);
+        delete payload['session-id'];
       }
     }
 

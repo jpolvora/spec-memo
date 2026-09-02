@@ -246,24 +246,24 @@ When the user asks to install a boot service for the SSE daemon:
 `spec-memo` exposes exactly **11** core tools through MCP stdio and matching CLI commands (`memo <command>`):
 
 ### 1. `bootstrap`
-- **Purpose**: Bind working directory to project identity; return token-budgeted brief (default 8 KB; overridable).
-- **Parameters**: `cwd` (string), `query` (string), `slug` (string), `path` (string), `maxBytes` (number; defaults to `~/.spec-memo/config.json` `bootstrap.maxBytes`, 8192).
-- **CLI Example**: `memo bootstrap --slug feature-auth --path src/auth.ts`
+- **Purpose**: Bind working directory to project identity; return token-budgeted brief (default 8 KB; overridable). Hit-eligible records included in the brief increment `hits`.
+- **Parameters**: `cwd` (string), `query` (string), `slug` (string), `path` (string), `maxBytes` (number; defaults to `~/.spec-memo/config.json` `bootstrap.maxBytes`, 8192), `sessionId` (string; optional hit de-dupe).
+- **CLI Example**: `memo bootstrap --slug feature-auth --path src/auth.ts --session-id s1`
 
 ### 2. `search`
-- **Purpose**: Filtered full-text search across vault records via SQLite FTS5.
-- **Parameters**: `query` (string), `kinds` (string[]), `status` (string), `tags` (string[]), `path` (string), `includeScratch` (boolean), `crossProject` (boolean), `limit` (number), `sort` (`relevance` \| `occurrences` \| `updated`).
-- **CLI Example**: `memo search "database lock" --kind trap --path src/db/client.ts --sort occurrences`
+- **Purpose**: Filtered full-text search across vault records via SQLite FTS5. Bare search does **not** increment `hits`; pass `hitIds` for rows actually used.
+- **Parameters**: `query` (string), `kinds` (string[]), `status` (string), `tags` (string[]), `path` (string), `includeScratch` (boolean), `crossProject` (boolean), `limit` (number), `sort` (`relevance` \| `occurrences` \| `updated` \| `hits`), `hitIds` (string[]), `sessionId` (string).
+- **CLI Example**: `memo search "database lock" --kind trap --path src/db/client.ts --sort hits --hit-ids trap-a,trap-b --session-id s1`
 
 ### 3. `get`
-- **Purpose**: Retrieve a single record by ID or kind+slug.
-- **Parameters**: `id` (string), `kind` (string), `slug` (string).
-- **CLI Example**: `memo get --id trap-sqlite-wal-lock`
+- **Purpose**: Retrieve a single record by ID or kind+slug. Successful get of `trap` / `decision` / `spec` / `plan` increments `hits`.
+- **Parameters**: `id` (string), `kind` (string), `slug` (string), `sessionId` (string; optional hit de-dupe).
+- **CLI Example**: `memo get --id trap-sqlite-wal-lock --session-id s1`
 
 ### 4. `upsert`
 - **Purpose**: Write or update a memory record (trap, decision, spec, plan, state, log, scratch, review).
 - **Parameters**: `kind` (required), `body` (required), `slug` (optional), `frontmatter` (optional object).
-- **Frontmatter Fields**: `id`, `title`, `severity` (low/medium/high/critical), `pathPatterns` (string[]), `tags` (string[]), `layer`, `module`, `occurrences`, `lastSeen`, `supersedes` (string), `linkedPaths` (string[]), `verifiedAtSha` (string).
+- **Frontmatter Fields**: `id`, `title`, `severity` (low/medium/high/critical), `pathPatterns` (string[]), `tags` (string[]), `layer`, `module`, `occurrences`, `lastSeen`, `hits`, `lastHit`, `supersedes` (string), `linkedPaths` (string[]), `verifiedAtSha` (string).
 - **CLI Example**:
   ```bash
   memo upsert --kind trap --title "Close SQLite DB before unlink on Windows" --severity critical --path-patterns "src/**/*.ts" --body "Windows holds file lock on open SQLite handles. Call closeIndex() before deleting test directories."

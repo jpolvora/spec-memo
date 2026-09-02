@@ -48,6 +48,10 @@ export interface RecordFrontmatter {
   module?: string;
   occurrences?: number;
   lastSeen?: string;
+  /** Retrieval usefulness counter (bootstrap/get/search.hitIds). Orthogonal to occurrences. */
+  hits?: number;
+  /** ISO timestamp of the most recent retrieval hit. */
+  lastHit?: string;
   // Prompt & Session extended fields
   ide?: string;
   model?: string;
@@ -247,9 +251,13 @@ export interface SearchOptions {
   crossProject?: boolean;
   limit?: number;
   sort?: SearchSort;
+  /** Record ids to acknowledge as retrieval hits after search returns (optional). */
+  hitIds?: string[];
+  /** When set, at most one hit bump per (sessionId, record id). */
+  sessionId?: string;
 }
 
-export type SearchSort = 'relevance' | 'occurrences' | 'updated';
+export type SearchSort = 'relevance' | 'occurrences' | 'updated' | 'hits';
 
 export interface SearchHit {
   id: string;
@@ -265,6 +273,8 @@ export interface SearchHit {
   updated?: string;
   occurrences?: number;
   lastSeen?: string;
+  hits?: number;
+  lastHit?: string | null;
   layer?: TrapLayer;
   severity?: 'low' | 'medium' | 'high' | 'critical';
 }
@@ -312,6 +322,22 @@ export interface BootstrapOptions {
   slug?: string;
   path?: string;
   maxBytes?: number;
+  /** When set, at most one hit bump per (sessionId, record id). */
+  sessionId?: string;
+}
+
+export interface MemoryRecordListItem {
+  id: string;
+  projectId: string;
+  kind: RecordKind;
+  status: RecordStatus;
+  title?: string;
+  hits: number;
+  occurrences: number;
+  lastHit?: string | null;
+  lastSeen?: string | null;
+  updated: string;
+  snippet?: string;
 }
 
 export interface BootstrapBrief {
