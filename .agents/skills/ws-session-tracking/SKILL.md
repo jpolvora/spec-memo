@@ -1,6 +1,6 @@
 ---
 name: ws-session-tracking
-version: 0.16.0
+version: 0.17.0
 description: >-
   Session-level deliverable and prompt intent tracking engine. Automatically correlates turn-level
   prompt instructions with git commits, PR deliverables, and task lifecycle boundaries.
@@ -25,6 +25,8 @@ invocation_names:
 3. **Intent Stories Export**: Compile turn-level conversational prompts into cohesive Markdown narratives for PR bodies and audit logs.
 4. **AI Rule Derivation**: Discover recurring user constraints and operational rules from prompt history and persist them as anti-regression traps.
 5. **Activity & Invoicing Reports**: Compute billable hours, session counts, and deliverable summaries aggregated by client and project.
+
+**Memory hit de-dupe:** When consulting the vault during a tracked session, pass the same `sessionId` to `bootstrap` / `search` (`hitIds`) / `get` so retrieval hits increment at most once per record per session. Bare `search` without `hitIds` does not count as a hit.
 
 ---
 

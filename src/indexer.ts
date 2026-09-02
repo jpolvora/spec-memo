@@ -8,9 +8,11 @@ import { createSqliteDatabase } from './sqlite.js';
 import { parseRecord } from './schema.js';
 import {
   compareSearchHits,
-  enrichHitFromFile,
   occurrenceOf,
   lastSeenOf,
+  hitCountOf,
+  lastHitOf,
+  compareHitsSearch,
   applyTrapClassification
 } from './recurrence.js';
 
@@ -252,13 +254,14 @@ function listProjectMarkdownRecords(vaultRoot: string, projectId: string): MemoR
 }
 
 /**
- * Full-set occurrences ranking (aligned with `memo rank` / promote skill export).
- * Avoids FTS/updated-DESC pre-caps that drop stale high-occurrence traps.
+ * Full-set ranking for occurrences or hits (aligned with `memo rank`).
+ * Avoids FTS/updated-DESC pre-caps that drop stale high-count records.
  */
-function searchIndexByOccurrences(
+function searchIndexByFullScanRank(
   options: SearchOptions,
   vaultRoot: string,
-  targetProjectId?: string
+  targetProjectId: string | undefined,
+  mode: 'occurrences' | 'hits'
 ): SearchHit[] {
   const projectIds = options.crossProject
     ? getVaultProjects(vaultRoot).map((p) => p.id)
@@ -308,13 +311,19 @@ function searchIndexByOccurrences(
         updated: typeof fm.updated === 'string' ? fm.updated : undefined,
         occurrences: occurrenceOf(fm),
         lastSeen: lastSeenOf(fm) || undefined,
+        hits: hitCountOf(fm),
+        lastHit: lastHitOf(fm) || null,
         layer: (fm.layer || classified.layer) as SearchHit['layer'],
         severity: fm.severity
       });
     }
   }
 
-  hits.sort(compareSearchHits);
+  if (mode === 'hits') {
+    hits.sort(compareHitsSearch);
+  } else {
+    hits.sort(compareSearchHits);
+  }
   return hits.slice(0, limit);
 }
 
@@ -330,17 +339,25 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
     targetProjectId = identity.projectId;
   }
 
-  // Occurrences ranking must evaluate the full active set (same semantics as `memo rank`),
-  // not an updated-DESC / FTS-relevance pre-cap. Skip FTS for this sort path.
-  if ((options.sort || 'relevance') === 'occurrences') {
-    return searchIndexByOccurrences(
+  const sortMode = options.sort || 'relevance';
+
+  // Occurrences / hits ranking must evaluate the full active set (same semantics as `memo rank`),
+  // not an updated-DESC / FTS-relevance pre-cap. Skip FTS for these sort paths.
+  if (sortMode === 'occurrences' || sortMode === 'hits') {
+    return searchIndexByFullScanRank(
       {
         ...options,
-        kinds: options.kinds && options.kinds.length > 0 ? options.kinds : (['trap'] as RecordKind[]),
-        status: options.status ?? 'active'
+        kinds:
+          options.kinds && options.kinds.length > 0
+            ? options.kinds
+            : sortMode === 'occurrences'
+              ? (['trap'] as RecordKind[])
+              : undefined,
+        status: options.status ?? (sortMode === 'occurrences' ? 'active' : undefined)
       },
       vaultRoot,
-      targetProjectId
+      targetProjectId,
+      sortMode
     );
   }
 
@@ -397,10 +414,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const limit = options.limit && options.limit > 0 ? options.limit : 50;
   const sort = options.sort || 'relevance';
-  // Occurrences sort needs a wider candidate pool than the final limit, but must stay
-  // bounded so enrichHitFromFile does not sync-parse the entire vault.
-  const candidateCap =
-    sort === 'occurrences' ? Math.min(Math.max(limit * 20, 200), 2000) : limit * 2;
+  const candidateCap = limit * 2;
   const limitSql = `LIMIT ${candidateCap}`;
 
   let querySql: string;
@@ -531,21 +545,27 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       updated: row.updated || undefined
     });
 
-    if (sort !== 'occurrences' && results.length >= limit) {
+    if (results.length >= limit) {
       break;
     }
   }
 
-  if (sort === 'occurrences') {
-    for (const hit of results) {
-      const extra = enrichHitFromFile(hit.filepath);
-      hit.occurrences = extra.occurrences;
-      hit.lastSeen = extra.lastSeen;
-      hit.layer = extra.layer as SearchHit['layer'];
-      hit.severity = extra.severity;
+  for (const hit of results) {
+    try {
+      if (hit.filepath && fs.existsSync(hit.filepath)) {
+        const record = parseRecord(fs.readFileSync(hit.filepath, 'utf8'), hit.filepath);
+        hit.hits = hitCountOf(record.frontmatter);
+        hit.lastHit = lastHitOf(record.frontmatter) || null;
+        hit.occurrences = occurrenceOf(record.frontmatter);
+        hit.lastSeen = lastSeenOf(record.frontmatter) || undefined;
+      } else {
+        hit.hits = 0;
+        hit.lastHit = null;
+      }
+    } catch {
+      hit.hits = hit.hits ?? 0;
+      hit.lastHit = hit.lastHit ?? null;
     }
-    results.sort(compareSearchHits);
-    return results.slice(0, limit);
   }
 
   if (sort === 'updated') {

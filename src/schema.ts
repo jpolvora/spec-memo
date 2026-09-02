@@ -64,6 +64,8 @@ export const RecordFrontmatterSchema = z.object({
   module: z.string().optional(),
   occurrences: z.coerce.number().int().min(1).optional(),
   lastSeen: DateOrStringSchema.optional(),
+  hits: z.coerce.number().int().min(0).optional(),
+  lastHit: DateOrStringSchema.optional(),
   // Prompt & Session extended fields
   ide: z.string().optional(),
   model: z.string().optional(),

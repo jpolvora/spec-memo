@@ -39,6 +39,8 @@ export interface GetOptions {
   id?: string;
   kind?: RecordKind;
   slug?: string;
+  /** When set, at most one hit bump per (sessionId, record id) on eligible gets. */
+  sessionId?: string;
 }
 
 export function listProjectRecords(vaultRoot: string = getVaultRoot(), projectId: string): MemoRecord[] {

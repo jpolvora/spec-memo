@@ -128,7 +128,7 @@ $SPEC_MEMO_ROOT/                    # default ~/.spec-memo
 
 Required: `id`, `kind`, `project`, `status`, `created`, `updated`, `source` (`agent` \| `human` \| `imported`).
 
-Optional: `ttl`, `pathPatterns`, `tags`, `supersedes`, `gitRemote`, `relatedSlug`, `severity` (traps), `layer` / `module` / `occurrences` / `lastSeen` (traps), `linkedPaths` + `verifiedAtSha` (specs).
+Optional: `ttl`, `pathPatterns`, `tags`, `supersedes`, `gitRemote`, `relatedSlug`, `severity` (traps), `layer` / `module` / `occurrences` / `lastSeen` (traps), `hits` / `lastHit` (retrieval usefulness on trap/decision/spec/plan), `linkedPaths` + `verifiedAtSha` (specs).
 
 `status`: `active` \| `paused` \| `shipped` \| `superseded` \| `archived`.
 
@@ -299,6 +299,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-31 | release-0.14.2 | Stop stdio serve from binding status `:3124` by default | 0.14.2 |
 | 2026-08-31 | status-backup-page | Dedicated Backups tab: full-backup confirm, complete kinds, inventory filters, restore/delete/download | npm test 380 pass |
 | 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode parallel hybrid+git `memo sync`, fail-open | npm test 406 pass |
+| 2026-09-02 | memory-hit-count | Retrieval hit count (`hits`/`lastHit`), status Memory list+drawer, canvas detail Hits; package 0.17.0 | npm test 435 pass |
 
 ## 12. Related docs
 

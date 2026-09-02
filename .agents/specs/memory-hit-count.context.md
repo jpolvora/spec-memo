@@ -6,9 +6,9 @@ Interview prompt: agents already query the vault during tasks. When a stored tra
 
 ## Feature Boundary
 
-In: a retrieval-usefulness counter (`hits` / `lastHit`) on durable memory records; increment on bootstrap inclusion, successful `get`, and optional `search.hitIds`; session-scoped de-dupe; JSON/CLI/status-monitor list visualization; keep `occurrences` as recurrence-on-upsert.
+In: a retrieval-usefulness counter (`hits` / `lastHit`) on durable memory records; increment on bootstrap inclusion, successful `get`, and optional `search.hitIds`; session-scoped de-dupe; status-monitor Memory **list column + details drawer**, canvas **detail panel**, JSON/CLI surfaces; keep `occurrences` as recurrence-on-upsert.
 
-Out: a 12th MCP tool; auto-incrementing every search result row; overloading `occurrences`; SQLite-only counters; status-monitor writes; time-decay ranking; per-hit audit log kind.
+Out: a 12th MCP tool; auto-incrementing every search result row; overloading `occurrences`; SQLite-only counters; status-monitor writes; time-decay ranking; per-hit audit log kind; list-only UI without a details view.
 
 ## Implementation Decisions
 
@@ -53,13 +53,14 @@ Out: a 12th MCP tool; auto-incrementing every search result row; overloading `oc
 | B. Increment every qualifying call with no window | Bootstrap + get in the same turn double-counts. |
 | C. Calendar-day unique | Simple, but two distinct tasks the same day undercount usefulness. |
 
-### UI: status-monitor Memory tab (chosen)
+### UI: status-monitor Memory tab + detail drawers (chosen)
 
 | Option | Trade-off |
 |--------|-----------|
-| **A. New status-monitor Memory tab (table: kind, title, hits, occurrences, lastHit) (chosen)** | Operators already live on `:3124`. Prompts tab already proved the master-detail table pattern. Status routes stay read-only (listing does not increment). |
-| B. Canvas node size only | Canvas is a graph, not a sortable list. User asked to see hit count in a list of entries. |
-| C. CLI `memo rank` only | Agents can query JSON, humans cannot scan usefulness next to the rest of the vault UI. Keep CLI fields, but do not make CLI the only viewer. |
+| **A. Memory tab list + details drawer, and canvas detail meta shows Hits (chosen)** | Operators see hit count in every records list row and again in the detail panel (status Memory drawer + canvas node drawer). Reuses Prompts master-detail pattern. Read-only; listing/detail never increment. |
+| B. List column only, no detail panel | Easy to miss when inspecting a single entry. |
+| C. Canvas node size only | Canvas is a graph, not a sortable list. User asked for list + detail visibility. |
+| D. CLI `memo rank` only | Agents can query JSON; humans need the status/canvas UI. |
 
 ## Deferred Ideas
 

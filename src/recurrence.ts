@@ -69,6 +69,31 @@ export function lastSeenOf(fm: RecordFrontmatter | Record<string, unknown>): str
   return typeof fm.created === 'string' ? fm.created : '';
 }
 
+/** Retrieval hit count; missing ranks as 0 (orthogonal to occurrences). */
+export function hitCountOf(fm: RecordFrontmatter | Record<string, unknown>): number {
+  const value = Number(fm.hits);
+  return Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+export function lastHitOf(fm: RecordFrontmatter | Record<string, unknown>): string | undefined {
+  const lastHit = fm.lastHit;
+  if (typeof lastHit === 'string' && lastHit) return lastHit;
+  return undefined;
+}
+
+export function compareHitsSearch(
+  a: { hits?: number; lastHit?: string | null; updated?: string; id: string },
+  b: { hits?: number; lastHit?: string | null; updated?: string; id: string }
+): number {
+  const hitsDiff = (b.hits ?? 0) - (a.hits ?? 0);
+  if (hitsDiff !== 0) return hitsDiff;
+  const lastCmp = String(b.lastHit || '').localeCompare(String(a.lastHit || ''));
+  if (lastCmp !== 0) return lastCmp;
+  const upd = String(b.updated || '').localeCompare(String(a.updated || ''));
+  if (upd !== 0) return upd;
+  return String(a.id).localeCompare(String(b.id));
+}
+
 export function compareTrapRank(a: MemoRecord, b: MemoRecord): number {
   const occ = occurrenceOf(b.frontmatter) - occurrenceOf(a.frontmatter);
   if (occ !== 0) return occ;

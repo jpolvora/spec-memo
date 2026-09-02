@@ -39,8 +39,10 @@ All records have YAML frontmatter.
 - `module` (string, optional): Subsystem or component name.
 - `pathPatterns` (string[], optional): Array of glob patterns (e.g. `["src/db/**/*.ts"]`).
 - `tags` (string[], optional): Array of tags (e.g. `["security", "sqlite"]`).
-- `occurrences` (number, optional): Integer >= 1.
-- `lastSeen` (ISO timestamp string, optional): When this issue was last observed.
+- `occurrences` (number, optional): Integer >= 1 (recurrence-on-upsert).
+- `lastSeen` (ISO timestamp string, optional): When this issue was last observed via upsert/dedup.
+- `hits` (number, optional): Integer >= 0 — retrieval usefulness (bootstrap inclusion / get / search.hitIds). Orthogonal to `occurrences`.
+- `lastHit` (ISO timestamp string, optional): When this record was last retrieved as a hit.
 - `supersedes` (string, optional): ID of previous record superseded by this one.
 - `linkedPaths` (string[], optional): Array of relative file paths.
 - `verifiedAtSha` (string, optional): Git commit SHA.

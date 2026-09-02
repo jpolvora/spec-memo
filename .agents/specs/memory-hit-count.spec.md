@@ -12,14 +12,15 @@ specDate: 2026-09-02
 
 When agents implement tasks they consult the vault (`bootstrap`, `search`, `get`) to find traps and other durable memory. Today a returned record has no signal that it was **retrieved as useful**. The existing `occurrences` field means a later upsert matched the same trap situation (recurrence-on-write). Operators cannot tell whether a stored entry is actually helping later sessions.
 
-This slice adds a retrieval **hit** counter: increment when a durable memory entry is selected into a bootstrap brief, successfully loaded via `get`, or explicitly acknowledged from a search result list. The counter is visualized in the status-monitor Memory table so humans can see how useful previously recorded entries have been.
+This slice adds a retrieval **hit** counter: increment when a durable memory entry is selected into a bootstrap brief, successfully loaded via `get`, or explicitly acknowledged from a search result list. The counter is visible wherever operators browse memory: the status-monitor Memory **list** (Hits column on every row), the Memory **details drawer**, and the canvas **node detail panel**.
 
 Architecture touchpoints:
 
 - **Schema (`src/schema.ts`, `src/types.ts`)**: optional `hits` (integer >= 0) and `lastHit` (ISO timestamp) on record frontmatter. Missing `hits` ranks as 0. Do not reuse `occurrences` / `lastSeen`.
 - **Hit recorder (`src/store.ts` or a focused helper)**: `recordMemoryHits({ ids, sessionId, source })` bumps eligible records, de-dupes by session, persists markdown, indexes, fail-open. Recurrence upserts continue to bump only `occurrences`.
 - **Consult tools (`src/bootstrap.ts`, `src/indexer.ts`, get handler, `src/tools.ts`)**: bootstrap increments for records actually included in the returned brief; `get` increments on successful load of hit-eligible kinds; `search` stays read-only unless `hitIds` is provided. Optional `sessionId` on those three tools. `search.sort` gains `hits`.
-- **Status monitor (`src/status.ts`)**: new read-only Memory tab listing vault records with `hits` / `occurrences` / `lastHit`. `GET /api/records` feeds the table. Listing never increments.
+- **Status monitor (`src/status.ts`)**: new read-only Memory tab listing vault records with `hits` / `occurrences` / `lastHit`. `GET /api/records` feeds the table. Each list row shows Hits; opening a row opens a details drawer that also shows Hits and Last hit in the metadata card (same drawer pattern as Prompts). Listing never increments.
+- **Canvas (`src/canvas.ts`)**: graph nodes include `hits`; the existing detail drawer shows Hits (and Occurrences when present) in the meta panel when a node is selected. `GET /api/record/...` responses expose `hits` / `lastHit` in frontmatter.
 - **Compiled views (`src/compiler.ts`)**: trap headings include `hits` beside `occurrences`.
 - **Docs (`PRODUCT.PRD`, `FEATURES.md`, `ws-memo`)**: document the hit contract; no 12th MCP tool.
 
@@ -58,13 +59,16 @@ Hit-eligible kinds: `trap`, `decision`, `spec`, `plan`.
 - AC27: Search hit objects include `hits` and `lastHit` (omitted or null when unset) alongside existing `occurrences` / `lastSeen`.
 - AC28: Status monitor `GET /api/records` returns 200 JSON `{ records: MemoryRecordListItem[] }` where each item includes `id`, `projectId`, `kind`, `status`, `title`, `hits`, `occurrences`, `lastHit`, `lastSeen`, and `updated`.
 - AC29: `GET /api/records` accepts query `project`, `kind`, `sort` (`hits` default, `occurrences`, `updated`), and `limit`, and does not increment `hits`.
-- AC30: Status monitor HTML includes a Memory tab that renders the `/api/records` table with columns Kind, Title, Hits, Occurrences, Last hit, and Updated, default-sorted by Hits descending.
-- AC31: Status Memory tab listing and `GET /api/records` remain read-only: they never create, update, archive, or delete vault records.
-- AC32: When a status auth token is configured, unauthorized `GET /api/records` returns 401 JSON, matching other `/api/*` routes.
-- AC33: Compiled `TRAPS.md` active headings include `hits` in addition to existing `layer` and `occurrences`.
-- AC34: Canvas `GET /api/project/:projectId/graph` node objects include `hits` (0 when missing) without changing graph layout rules.
-- AC35: This slice does not add a 12th MCP tool; hit recording is implemented by extending `bootstrap`, `search`, and `get`.
-- AC36: Packaged `ws-memo` documents that bare `search` does not count as a hit, that bootstrap/`get` auto-count, and that agents pass `hitIds` plus `sessionId` for search rows they actually used.
+- AC30: Status monitor HTML includes a Memory tab that renders the `/api/records` table with columns Kind, Title, Hits, Occurrences, Last hit, and Updated, default-sorted by Hits descending; each row's Hits cell shows the numeric hit count (0 when missing).
+- AC31: Clicking a Memory table row opens a details drawer (or equivalent side panel) that shows at least title, kind, status, Hits, Occurrences, Last hit, Updated, and the record body/snippet; the Hits value matches the list row.
+- AC32: Status Memory tab listing, details drawer reads, and `GET /api/records` remain read-only: they never create, update, archive, or delete vault records and never increment `hits`.
+- AC33: When a status auth token is configured, unauthorized `GET /api/records` returns 401 JSON, matching other `/api/*` routes.
+- AC34: Compiled `TRAPS.md` active headings include `hits` in addition to existing `layer` and `occurrences`.
+- AC35: Canvas `GET /api/project/:projectId/graph` node objects include `hits` (0 when missing) without changing graph layout rules.
+- AC36: Canvas detail drawer (node selection) displays the selected record's Hits value in the meta panel (0 when missing).
+- AC37: Canvas `GET /api/record/:projectId/:kind/:id` (or equivalent record detail API) returns frontmatter that includes `hits` and `lastHit` when present (and treats missing `hits` as displayable 0 in the UI).
+- AC38: This slice does not add a 12th MCP tool; hit recording is implemented by extending `bootstrap`, `search`, and `get`.
+- AC39: Packaged `ws-memo` documents that bare `search` does not count as a hit, that bootstrap/`get` auto-count, and that agents pass `hitIds` plus `sessionId` for search rows they actually used.
 
 ## Original Issue Context
 
@@ -95,11 +99,11 @@ Related hits recorded; no exact same-issue open PR. Continue.
 
 ## Notes
 
-- Chosen interview defaults are in [`memory-hit-count.context.md`](memory-hit-count.context.md): separate `hits` field; increment on bootstrap inclusion, `get`, and optional `search.hitIds`; session de-dupe; status Memory tab.
+- Chosen interview defaults are in [`memory-hit-count.context.md`](memory-hit-count.context.md): separate `hits` field; increment on bootstrap inclusion, `get`, and optional `search.hitIds`; session de-dupe; status Memory list + details drawer; canvas detail meta.
 - "Found" in the user request is implemented as consult-grade events, not every FTS row. Bare search remains the discovery query.
 - `ws-self-learning` consults already call `bootstrap` / `search`; after this slice, `search` usefulness requires `hitIds` (or a follow-up `get`). Skill text must say so or counts stay at bootstrap/`get` only.
 - Remote/hybrid: the daemon that executes the tool writes the hit (same as other vault mutations). Stdio proxy does not keep a second counter.
-- Status Memory tab may reuse `#prompts-table` CSS (`data-table`, master-row). Do not add an npm frontend.
+- Status Memory tab may reuse `#prompts-table` / prompt-drawer CSS (`data-table`, master-row, drawer). Do not add an npm frontend. Hit count must appear in both the list and the opened details panel (never list-only).
 
 ## Out of Scope
 
@@ -125,7 +129,7 @@ Related hits recorded; no exact same-issue open PR. Continue.
 | Increment trigger | Bootstrap inclusion + successful eligible `get` + optional `search.hitIds` | Consult-grade usefulness without FTS inflation | n |
 | Eligible kinds | `trap`, `decision`, `spec`, `plan` | Durable memory consulted during tasks | n |
 | De-dupe | At most one increment per (`sessionId`, record id) when `sessionId` is set | Bootstrap then get in one session is one useful retrieval | n |
-| UI | Status-monitor Memory tab + `/api/records`; canvas JSON field only | User asked for a list; `:3124` already hosts vault UI | n |
+| UI | Status Memory list + details drawer show Hits; canvas detail meta shows Hits; `/api/records` + record detail API expose fields | Operators must see hit count when browsing and when inspecting one entry | y |
 | MCP surface | No 12th tool; `search.hitIds` + optional `sessionId` | Matches trap-recurrence "sort + CLI, no extra tool" | n |
 | Implicit dimensions (auth, rate limits, TTL class, external deps) | N/A because hits ride existing local vault writes, status bearer auth, and record lifetime (archive/purge with the record) | No new network, tenant, or retention class | n |
 
@@ -133,7 +137,7 @@ Related hits recorded; no exact same-issue open PR. Continue.
 
 | Readiness Item | Requirement | Verification Method |
 |----------------|-------------|---------------------|
-| Bounded scope | Hits counter, consult-tool increments, Memory tab list; no 12th tool, no occurrences overload | This spec Out of Scope table plus context.md Feature Boundary |
+| Bounded scope | Hits counter, consult-tool increments, Memory list + details drawer + canvas detail Hits; no 12th tool, no occurrences overload | This spec Out of Scope table plus context.md Feature Boundary |
 | Atomic criteria | ACs 1–36 are individually pass/fail with named files and commands | `validate_spec.cjs --mode=authoring` on this file |
 | Failure modes | Fail-open hit I/O, invalid sort, unknown hitIds, failed get, status 401 | Negative scenarios below plus targeted tests |
 | Observation telemetry | Named npm test files, `/api/records`, `search.sort=hits`, error.logs subsystem `memory-hits` | Validation Notes |
@@ -145,7 +149,8 @@ Related hits recorded; no exact same-issue open PR. Continue.
 
 - `node --test dist/store.test.js dist/trap-recurrence.test.js` still pass (recurrence `occurrences` unchanged).
 - New suite (for example `node --test dist/memory-hit.test.js`): bootstrap inclusion bumps `hits`; bare search does not; `hitIds` does; session de-dupe holds; recurrence bump does not touch `hits`.
-- `node --test dist/status.test.js`: `GET /api/records` read-only; Memory tab markup present; 401 with token.
+- `node --test dist/status.test.js`: `GET /api/records` read-only; Memory tab table has Hits column; details drawer markup includes Hits; 401 with token.
+- Canvas HTML/API tests: graph nodes include `hits`; detail drawer/meta shows Hits; record detail API returns `hits`/`lastHit`.
 - `memo search --json` / MCP search payload includes `hits` and `lastHit`.
 - Fail-open: injected write error still returns search/get/bootstrap success and writes `subsystem: memory-hits` in vault error logs.
 - Compiled `TRAPS.md` heading contains `Hits` (or `hits`) after a recorded hit.

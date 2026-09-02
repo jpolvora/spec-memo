@@ -22,6 +22,7 @@ import { getRecord } from "./store.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
 import { scheduleHybridPush } from "./hybrid-sync.js";
 import { TopologyInfo, TopologyRole, BackupFileInfo, BackupListFilters } from "./types.js";
+import { listMemoryRecords } from "./hits.js";
 import {
   listPrompts,
   searchPrompts,
@@ -1089,6 +1090,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
   <nav class="nav-tabs">
     <button class="tab-btn active" data-tab="tab-activity">Activity & Status</button>
+    <button class="tab-btn" data-tab="tab-memory">Memory</button>
     <button class="tab-btn" data-tab="tab-prompts">Prompts & Intent Stories</button>
     <button class="tab-btn" data-tab="tab-invoicing">Activity & Invoicing</button>
     <button class="tab-btn" data-tab="tab-rules">Derived Rules</button>
@@ -1165,6 +1167,62 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div id="activity-log"></div>
     </section>
   </main>
+
+  <!-- TAB: Memory (retrieval hits) -->
+  <section id="tab-memory" class="tab-content">
+    <div class="prompts-container">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <div class="filter-group" style="max-width: 220px;">
+            <label for="memory-vault-select">Vault:</label>
+            <select id="memory-vault-select"><option value="all">All Vaults</option></select>
+          </div>
+          <div class="filter-group" style="max-width: 160px;">
+            <label for="memory-kind-select">Kind:</label>
+            <select id="memory-kind-select">
+              <option value="">All</option>
+              <option value="trap">trap</option>
+              <option value="decision">decision</option>
+              <option value="spec">spec</option>
+              <option value="plan">plan</option>
+              <option value="state">state</option>
+              <option value="review">review</option>
+            </select>
+          </div>
+          <div class="filter-group" style="max-width: 160px;">
+            <label for="memory-sort-select">Sort:</label>
+            <select id="memory-sort-select">
+              <option value="hits" selected>Hits</option>
+              <option value="occurrences">Occurrences</option>
+              <option value="updated">Updated</option>
+            </select>
+          </div>
+          <button type="button" id="btn-memory-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Refresh</button>
+        </div>
+      </div>
+
+      <div class="data-table-container">
+        <table class="data-table" id="memory-table">
+          <thead>
+            <tr>
+              <th style="width: 90px;">Kind</th>
+              <th>Title</th>
+              <th style="width: 70px;">Hits</th>
+              <th style="width: 100px;">Occurrences</th>
+              <th style="width: 150px;">Last hit</th>
+              <th style="width: 150px;">Updated</th>
+            </tr>
+          </thead>
+          <tbody id="memory-tbody">
+            <tr><td colspan="6" style="text-align:center; padding:30px; color:var(--muted);">Open this tab to load memory records…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-bar">
+        <div><span id="memory-count-badge">0 records</span></div>
+      </div>
+    </div>
+  </section>
 
   <!-- TAB 2: Prompts & Intent Stories Explorer -->
   <section id="tab-prompts" class="tab-content">
@@ -1453,6 +1511,22 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div>
         <h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Prompt Content</h4>
         <div class="markdown-body" id="drawer-markdown"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memory Details Drawer -->
+  <div class="drawer-overlay" id="memory-drawer-overlay"></div>
+  <div class="drawer" id="memory-drawer">
+    <div class="drawer-header">
+      <h3 id="memory-drawer-title">Memory Details</h3>
+      <button type="button" class="drawer-close" id="memory-drawer-close-btn">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="metadata-card" id="memory-drawer-metadata"></div>
+      <div>
+        <h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Record Body</h4>
+        <div class="markdown-body" id="memory-drawer-body"></div>
       </div>
     </div>
   </div>
@@ -1823,6 +1897,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       const selectors = [
         document.getElementById("vault-filter"),
         document.getElementById("prompt-vault-select"),
+        document.getElementById("memory-vault-select"),
         document.getElementById("invoicing-vault-select"),
         document.getElementById("rules-vault-select"),
         document.getElementById("backup-vault-select")
@@ -1830,7 +1905,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       for (const sel of selectors) {
         if (!sel) continue;
         const currentVal = sel.value;
-        sel.innerHTML = '<option value="">All vaults</option>';
+        const allLabel = sel.id === "memory-vault-select" ? "All Vaults" : "All vaults";
+        const allValue = sel.id === "memory-vault-select" ? "all" : "";
+        sel.innerHTML = '<option value="' + allValue + '">' + allLabel + "</option>";
         for (const v of vaults) {
           const opt = document.createElement("option");
           opt.value = v.id;
@@ -1972,7 +2049,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       document.querySelectorAll(".tab-content").forEach((c) => {
         c.classList.toggle("active", c.id === tabId);
       });
-      if (tabId === "tab-prompts") {
+      if (tabId === "tab-memory") {
+        loadMemoryRecords();
+      } else if (tabId === "tab-prompts") {
         loadPrompts();
       } else if (tabId === "tab-invoicing") {
         loadActivityReport();
@@ -1988,6 +2067,89 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         if (targetId) activateTab(targetId);
       });
     });
+
+    // --- MEMORY TAB LOGIC ---
+    let memoryRecordsCache = [];
+
+    function formatIsoShort(iso) {
+      if (!iso) return "-";
+      const s = String(iso);
+      return s.length >= 19 ? s.slice(0, 19).replace("T", " ") : s;
+    }
+
+    async function loadMemoryRecords() {
+      const tbody = document.getElementById("memory-tbody");
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--muted);">Loading memory…</td></tr>';
+      try {
+        const params = new URLSearchParams();
+        const vault = document.getElementById("memory-vault-select").value;
+        if (vault && vault !== "all") params.set("project", vault);
+        const kind = document.getElementById("memory-kind-select").value;
+        if (kind) params.set("kind", kind);
+        const sort = document.getElementById("memory-sort-select").value || "hits";
+        params.set("sort", sort);
+        params.set("limit", "200");
+
+        const res = await apiFetch("/api/records?" + params.toString(), { headers: apiHeaders() });
+        const data = await res.json();
+        const records = data.records || [];
+        memoryRecordsCache = records;
+        document.getElementById("memory-count-badge").textContent = records.length + " record(s)";
+
+        if (records.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--muted);">No memory records match the current filters.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = "";
+        for (const r of records) {
+          const tr = document.createElement("tr");
+          tr.className = "master-row";
+          tr.dataset.id = r.id;
+          tr.innerHTML =
+            "<td><code>" + escapeHtml(r.kind) + "</code></td>" +
+            "<td>" + escapeHtml(r.title || r.id) + "</td>" +
+            "<td>" + escapeHtml(String(r.hits != null ? r.hits : 0)) + "</td>" +
+            "<td>" + escapeHtml(String(r.occurrences != null ? r.occurrences : 0)) + "</td>" +
+            "<td>" + escapeHtml(formatIsoShort(r.lastHit)) + "</td>" +
+            "<td>" + escapeHtml(formatIsoShort(r.updated)) + "</td>";
+          tr.addEventListener("click", () => openMemoryDrawer(r));
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--err);">Failed to load memory records.</td></tr>';
+      }
+    }
+
+    function openMemoryDrawer(record) {
+      document.getElementById("memory-drawer-title").textContent = record.title || record.id || "Memory";
+      const meta = document.getElementById("memory-drawer-metadata");
+      meta.innerHTML =
+        '<div class="meta-item"><span class="meta-label">Title</span><span class="meta-val">' + escapeHtml(record.title || record.id) + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Kind</span><span class="meta-val">' + escapeHtml(record.kind) + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Status</span><span class="meta-val">' + escapeHtml(record.status || "-") + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Hits</span><span class="meta-val">' + escapeHtml(String(record.hits != null ? record.hits : 0)) + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Occurrences</span><span class="meta-val">' + escapeHtml(String(record.occurrences != null ? record.occurrences : 0)) + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Last hit</span><span class="meta-val">' + escapeHtml(record.lastHit || "-") + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Updated</span><span class="meta-val">' + escapeHtml(record.updated || "-") + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Project</span><span class="meta-val">' + escapeHtml(displayNameForProject(record.projectId)) + "</span></div>";
+      const bodyEl = document.getElementById("memory-drawer-body");
+      bodyEl.textContent = record.snippet || "(no body snippet)";
+      document.getElementById("memory-drawer-overlay").classList.add("open");
+      document.getElementById("memory-drawer").classList.add("open");
+    }
+
+    function closeMemoryDrawer() {
+      document.getElementById("memory-drawer-overlay").classList.remove("open");
+      document.getElementById("memory-drawer").classList.remove("open");
+    }
+
+    document.getElementById("memory-drawer-close-btn").addEventListener("click", closeMemoryDrawer);
+    document.getElementById("memory-drawer-overlay").addEventListener("click", closeMemoryDrawer);
+    document.getElementById("btn-memory-refresh").addEventListener("click", () => loadMemoryRecords());
+    document.getElementById("memory-kind-select").addEventListener("change", () => loadMemoryRecords());
+    document.getElementById("memory-sort-select").addEventListener("change", () => loadMemoryRecords());
+    document.getElementById("memory-vault-select").addEventListener("change", () => loadMemoryRecords());
 
     // --- PROMPTS TAB LOGIC ---
     async function loadPrompts() {
@@ -3151,6 +3313,28 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
       if (req.method === "GET" && pathname === "/api/vaults") {
         writeJson(res, 200, getVaultProjectList(vaultRoot));
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/records") {
+        const project = url.searchParams.get("project") || undefined;
+        const kind = url.searchParams.get("kind") || undefined;
+        const sortRaw = url.searchParams.get("sort") || "hits";
+        const sort =
+          sortRaw === "occurrences" || sortRaw === "updated" || sortRaw === "hits"
+            ? sortRaw
+            : "hits";
+        const limit = url.searchParams.get("limit")
+          ? Number(url.searchParams.get("limit"))
+          : 200;
+        const records = listMemoryRecords({
+          vaultRoot,
+          projectId: project && project !== "all" ? project : undefined,
+          kind: kind || undefined,
+          sort,
+          limit: Number.isFinite(limit) && limit > 0 ? limit : 200
+        });
+        writeJson(res, 200, sanitizeToolOutput({ records }));
         return;
       }
 

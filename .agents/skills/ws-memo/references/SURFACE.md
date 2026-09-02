@@ -20,6 +20,9 @@ Bind cwd git remote; check code drift; compile a token-budgeted session brief.
 | `path` | string | Optional | Prioritize traps whose `pathPatterns` match this file |
 | `maxBytes` | number | Optional | UTF-8 byte budget for the entire brief payload (positive integer) |
 | `projectId` | string | Optional | Override bound project |
+| `sessionId` | string | Optional | Hit de-dupe: at most one bump per record per session |
+
+**Hit contract:** Each hit-eligible record (`trap`/`decision`/`spec`/`plan`) that survives the budget and appears in the returned brief increments `hits` once (fail-open).
 
 **Budget precedence** (first match wins): per-call `maxBytes` → vault `config.json` `bootstrap.maxBytes` (8192 default) → hard fallback 8192.
 
@@ -50,12 +53,16 @@ Filtered SQLite FTS5 full-text retrieval. Default excludes `scratch`, `state`, `
 | `crossProject` | boolean | Optional | Search across all bound projects in vault |
 | `projectId` | string | Optional | Target specific project ID |
 | `limit` | number | Optional | Max results to return (positive integer) |
-| `sort` | string | Optional | Enum: `relevance` (default), `occurrences`, `updated` |
+| `sort` | string | Optional | Enum: `relevance` (default), `occurrences`, `updated`, `hits` |
+| `hitIds` | string[] | Optional | Record ids to acknowledge as retrieval hits after search |
+| `sessionId` | string | Optional | Hit de-dupe when recording `hitIds` |
 | `cwd` | string | Optional | Product working directory |
+
+**Hit contract:** Bare `search` does **not** increment `hits`. Pass `hitIds` (plus `sessionId` when available) for rows you actually used. Bootstrap brief inclusion and successful `get` of eligible kinds auto-count.
 
 CLI:
 ```bash
-memo search "database lock" --kind trap --path src/db/client.ts --sort occurrences
+memo search "database lock" --kind trap --path src/db/client.ts --sort hits --hit-ids trap-a,trap-b --session-id s1
 ```
 
 ---
@@ -71,12 +78,15 @@ Read one record by unique `id` **or** `kind` + `slug`.
 | `slug` | string | Conditional | Record slug identifier. Required if `kind` provided without `id`. |
 | `cwd` | string | Optional | Product working directory |
 | `projectId` | string | Optional | Specific project ID |
+| `sessionId` | string | Optional | Hit de-dupe: at most one bump per record per session |
 
 *Pre-validation rule:* Either `id` OR (`kind` AND `slug`) must be provided, or `INVALID_ARGUMENTS` is returned.
 
+**Hit contract:** Successful `get` of `trap` / `decision` / `spec` / `plan` increments `hits`. Other kinds do not.
+
 CLI:
 ```bash
-memo get --id trap-sqlite-wal-lock
+memo get --id trap-sqlite-wal-lock --session-id s1
 memo get --kind trap --slug sqlite-wal-lock
 ```
 
