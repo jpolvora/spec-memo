@@ -79,12 +79,15 @@ export function resolveHostConfigPath(host: HostName): string {
 }
 
 /**
- * Generate host-specific stdio MCP configuration snippet.
+ * Generate host-specific MCP configuration snippet.
+ * OpenCode uses `type: "local"` + `command: string[]` (McpLocalConfig);
+ * all other stdio hosts use `command: string` + `args: string[]`.
  */
 export function generateHostMcpSnippet(
   host: HostName,
   command: string = 'memo',
-  args: string[] = ['serve']
+  args: string[] = ['serve'],
+  options: { vaultRoot?: string } = {}
 ): Record<string, unknown> {
   const normalizedHost = host.toLowerCase() as HostName;
   if (!SUPPORTED_HOSTS.includes(normalizedHost)) {
@@ -110,16 +113,37 @@ export function generateHostMcpSnippet(
           }
         }
       };
-    case 'opencode':
+    case 'opencode': {
+      const fullCommand = [command, ...args];
+      const vaultRoot = options.vaultRoot?.trim();
+      const defaultRoot = path.join(os.homedir(), '.spec-memo');
+      const isNonDefault =
+        Boolean(vaultRoot) && path.resolve(vaultRoot as string) !== path.resolve(defaultRoot);
+      if (isNonDefault) {
+        const root = vaultRoot as string;
+        return {
+          mcp: {
+            'spec-memo': {
+              type: 'local',
+              command: [...fullCommand, '--vaultRoot', root],
+              enabled: true,
+              environment: {
+                SPEC_MEMO_ROOT: root
+              }
+            }
+          }
+        };
+      }
       return {
         mcp: {
           'spec-memo': {
-            type: 'stdio',
-            command,
-            args
+            type: 'local',
+            command: fullCommand,
+            enabled: true
           }
         }
       };
+    }
     case 'antigravity':
     case 'claude':
     case 'generic':
@@ -277,7 +301,7 @@ export function runSetup(options: SetupOptions = {}): SetupResult {
 
     if (options.host) {
       const host = options.host.toLowerCase() as HostName;
-      hostSnippet = generateHostMcpSnippet(host);
+      hostSnippet = generateHostMcpSnippet(host, 'memo', ['serve'], { vaultRoot });
       hostConfigPath = resolveHostConfigPath(host);
 
       if (options.writeMcp) {

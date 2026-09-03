@@ -129,6 +129,7 @@ All agent hosts (Cursor, VS Code, OpenCode, Antigravity, Claude Desktop) use the
 # Print MCP configuration snippet for your editor
 memo setup --host cursor --print-mcp
 memo setup --host vscode --print-mcp
+memo setup --host opencode --print-mcp
 memo setup --host claude --print-mcp
 
 # Automatically write/merge MCP configuration directly to your editor's config file
@@ -185,6 +186,20 @@ Add to your extension's MCP configuration settings:
     "spec-memo": {
       "command": "memo",
       "args": ["serve"]
+    }
+  }
+}
+```
+
+#### OpenCode
+Add to `~/.config/opencode/config.json` (`type` is `local`, `command` is an array — `args` is not valid here):
+```json
+{
+  "mcp": {
+    "spec-memo": {
+      "type": "local",
+      "command": ["memo", "serve"],
+      "enabled": true
     }
   }
 }
