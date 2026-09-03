@@ -160,6 +160,34 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       const str = JSON.stringify(snippet);
       assert.ok(str.includes('memo') && str.includes('serve'), `Snippet for ${host} must run memo serve`);
     }
+    // GH#36: opencode must emit McpLocalConfig (type local + command array, no args).
+    const opencode = generateHostMcpSnippet('opencode') as {
+      mcp: { 'spec-memo': { type: string; command: unknown; enabled?: boolean; args?: unknown } };
+    };
+    assert.strictEqual(opencode.mcp['spec-memo'].type, 'local');
+    assert.deepStrictEqual(opencode.mcp['spec-memo'].command, ['memo', 'serve']);
+    assert.strictEqual(opencode.mcp['spec-memo'].enabled, true);
+    assert.ok(!('args' in opencode.mcp['spec-memo']), 'opencode snippet must not contain args');
+    // Non-default vault pins SPEC_MEMO_ROOT + --vaultRoot.
+    const pinned = generateHostMcpSnippet('opencode', 'memo', ['serve'], {
+      vaultRoot: path.join(tempDir, 'custom-vault')
+    }) as {
+      mcp: {
+        'spec-memo': { command: string[]; environment: { SPEC_MEMO_ROOT: string } };
+      };
+    };
+    assert.ok(pinned.mcp['spec-memo'].command.includes('--vaultRoot'));
+    assert.strictEqual(
+      pinned.mcp['spec-memo'].environment.SPEC_MEMO_ROOT,
+      path.join(tempDir, 'custom-vault')
+    );
+    // Other hosts keep command string + args shape.
+    for (const host of ['cursor', 'vscode', 'claude', 'antigravity', 'generic'] as const) {
+      const other = generateHostMcpSnippet(host) as Record<string, Record<string, { command: unknown; args: unknown }>>;
+      const key = host === 'vscode' ? 'servers' : 'mcpServers';
+      assert.strictEqual(typeof other[key]['spec-memo'].command, 'string');
+      assert.deepStrictEqual(other[key]['spec-memo'].args, ['serve']);
+    }
   });
 
   await t.test('Phase 1: Doctor reports mode, remote URL, token status, and hybrid state', async () => {

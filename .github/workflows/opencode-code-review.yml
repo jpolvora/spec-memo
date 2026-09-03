@@ -1,7 +1,8 @@
 name: Agentic Code Review (OpenCode)
 
 on:
-  # Disabled for now; Cursor workflow is the active PR reviewer. Trigger manually when needed.
+  pull_request:
+    branches: [main, master, develop]
   workflow_dispatch:
 
 permissions:
@@ -50,7 +51,7 @@ jobs:
             -o /tmp/agentic-code-reviewers-run.sh
           bash /tmp/agentic-code-reviewers-run.sh \
             --engine opencode \
-            --model opencode-go/deepseek-v4-flash \
+            --model opencode-go/muse-spark-1.3-contributor \
             --variant high \
             --gh \
             --stack Custom \
