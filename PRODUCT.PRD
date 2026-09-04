@@ -311,6 +311,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode parallel hybrid+git `memo sync`, fail-open | npm test 406 pass |
 | 2026-09-02 | memory-hit-count | Retrieval hit count (`hits`/`lastHit`), status Memory list+drawer, canvas detail Hits; package 0.17.0 | npm test 435 pass |
 | 2026-09-04 | project-wiki | Per-project vault WIKI.md, status Wiki tab, CLI memo wiki; optional AI polish fail-open | implement |
+| 2026-09-04 | vault-merge-alias | Vault alias redirect + merge, status Vaults tab, memo vault CLI; package 0.20.0 | npm test 514 pass |
 
 
 ## 12. Related docs

@@ -204,6 +204,7 @@ Utility Commands:
   reset         Reset vault database and clear records with mandatory pre-wipe backup
   canvas        Start interactive Canvas visualizer and graph UI server
   wiki          Print or regenerate the vault project wiki (WIKI.md)
+  vault         Manage vault projects (list, alias, merge, create, update, delete)
   sync-vault    Synchronize delta changesets directly between vault instances
   serve         Run the stdio or SSE MCP server for agent integration
 
@@ -730,6 +731,122 @@ async function runCliInner(
       const code = err instanceof WikiError ? err.code : 'WIKI_ERROR';
       if (parsed.isJson) {
         printJson({ isError: true, error: msg, code });
+      } else {
+        console.error(msg);
+      }
+      return 1;
+    }
+  }
+
+  if (parsed.command === 'vault') {
+    const {
+      VaultManagerError,
+      getVaultProjectListEnriched,
+      setProjectAlias,
+      removeProjectAlias,
+      mergeVaultProjects,
+      createVaultProject,
+      updateVaultProject,
+      deleteVaultProject
+    } = await import('./vault-manager.js');
+    const vaultRoot = getVaultRoot(vaultRootArg);
+    const sub = parsed.positionals[0] || 'list';
+
+    const collectSources = (): string[] => {
+      const sources: string[] = [];
+      for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === '--source' && argv[i + 1]) {
+          sources.push(argv[i + 1]);
+          i++;
+        }
+      }
+      return sources;
+    };
+
+    try {
+      if (sub === 'list') {
+        const projects = getVaultProjectListEnriched(vaultRoot);
+        if (parsed.isJson) {
+          printJson(projects);
+        } else {
+          for (const p of projects) {
+            const alias = p.aliasOf ? ` aliasOf=${p.aliasOf}` : '';
+            console.log(`${p.id}\t${p.displayName || p.id}\trecords=${p.recordCount}${alias}`);
+          }
+        }
+        return 0;
+      }
+
+      if (sub === 'alias') {
+        const from = String(parsed.options.from || '');
+        const to = String(parsed.options.to || '');
+        const result = await setProjectAlias(from, to, vaultRoot);
+        if (parsed.isJson) printJson({ ok: true, ...result });
+        else console.log(`Alias set: ${result.from} -> ${result.to}`);
+        return 0;
+      }
+
+      if (sub === 'unalias' || sub === 'remove-alias') {
+        const from = String(parsed.options.from || parsed.positionals[1] || '');
+        const result = await removeProjectAlias(from, vaultRoot);
+        if (parsed.isJson) printJson({ ok: true, ...result });
+        else console.log(`Alias removed: ${result.from}`);
+        return 0;
+      }
+
+      if (sub === 'merge') {
+        const sources = collectSources();
+        const target = String(parsed.options.target || '');
+        const copyRecords =
+          parsed.options['copy-records'] === true ||
+          parsed.options['copy-records'] === 'true' ||
+          parsed.options.copyRecords === true;
+        const result = await mergeVaultProjects({ sources, target, copyRecords, vaultRoot });
+        if (parsed.isJson) printJson(result);
+        else {
+          console.log(
+            `Merged ${result.sources.join(', ')} -> ${result.target} (copied=${result.copied}, skipped=${result.skipped})`
+          );
+        }
+        return 0;
+      }
+
+      if (sub === 'create') {
+        const id = String(parsed.options.id || parsed.positionals[1] || '');
+        const displayName = String(parsed.options['display-name'] || parsed.options.displayName || id);
+        const result = await createVaultProject(id, displayName, vaultRoot);
+        if (parsed.isJson) printJson({ ok: true, ...result });
+        else console.log(`Created project ${result.id}`);
+        return 0;
+      }
+
+      if (sub === 'update') {
+        const id = String(parsed.options.id || parsed.positionals[1] || '');
+        const displayName = String(parsed.options['display-name'] || parsed.options.displayName || '');
+        const result = await updateVaultProject(id, displayName, vaultRoot);
+        if (parsed.isJson) printJson({ ok: true, ...result });
+        else console.log(`Updated ${result.id} displayName=${result.displayName}`);
+        return 0;
+      }
+
+      if (sub === 'delete') {
+        const id = String(parsed.options.id || parsed.positionals[1] || '');
+        const confirm = parsed.options.confirm === true || parsed.options.confirm === 'true';
+        const force = parsed.options.force === true || parsed.options.force === 'true';
+        const result = await deleteVaultProject({ id, confirm, force, vaultRoot });
+        if (parsed.isJson) printJson(result);
+        else console.log(`Deleted project ${result.id}`);
+        return 0;
+      }
+
+      const msg = `Unknown vault subcommand: ${sub}`;
+      if (parsed.isJson) printJson({ isError: true, error: msg });
+      else console.error(msg);
+      return 1;
+    } catch (err: unknown) {
+      const msg = err instanceof VaultManagerError ? err.message : err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg });
       } else {
         console.error(msg);
       }

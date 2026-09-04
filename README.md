@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.19.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.20.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -425,6 +425,10 @@ HTTP routes:
 
 ### Status monitor Wiki tab
 
+The **Vaults** tab (`?tab=vaults`) lists vault projects from `GET /api/vaults` (JSON array with `id`, `displayName`, `aliasOf`, `recordCount`). Operators can create projects, set aliases, merge sources into a canonical id (optional `copyRecords`), edit display names, and delete with confirmation. Mutating routes use the same auth and path sanitization as backup/reset.
+
+CLI extra (not an MCP tool): `memo vault list|alias|merge|create|update|delete` (see Command Reference).
+
 The **Wiki** tab (`?tab=wiki` or `?tab=wiki&project={id}`) shows the vault file `projects/{projectId}/WIKI.md`. It is not the consumer product README.
 
 - Select a project (All vaults is refused). Missing `WIKI.md` shows an empty state; **Regenerate** stays available.
@@ -786,6 +790,7 @@ memo reconcile --clean-sidecars
 | `reset` | Reset vault database and clear files with mandatory pre-wipe backup | `--all`, `--project`, `--force`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
 | `wiki` | Print or regenerate vault `projects/{id}/WIKI.md` (CLI extra; not an MCP tool) | `--project`, `--regenerate`, `--json` |
+| `vault` | Manage vault projects (alias redirect, merge, CRUD; CLI extra; not an MCP tool) | `list`, `alias --from --to`, `unalias --from`, `merge --source --target [--copy-records]`, `create`, `update`, `delete --confirm` |
 | `serve` | Run stdio or SSE MCP server for agent hosts (SSE co-starts status on :3124; stdio opt-in via `--status`) | `--sse`, `--port`, `--status`, `--status-port`, `--no-status`, `--auth-token` |
 
 ### Operator Q&A

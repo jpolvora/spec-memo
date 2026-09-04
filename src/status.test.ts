@@ -8,6 +8,7 @@ import { createActivityBus } from "./activity.js";
 import { generateStatusHtml, generateLoginHtml, startStatusServer, safeStatusNextPath, renderPromptMarkdownHtml, wrapWikiH2Html } from "./status.js";
 import { getPackageVersion } from "./version.js";
 import { ensureProjectVault } from "./vault.js";
+import { getVaultProjectList } from "./canvas.js";
 import { closeIndex } from "./indexer.js";
 import { executeTool } from "./tools.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
@@ -253,6 +254,15 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('activateTab("tab-wiki")'));
   });
 
+  await t.test("generateStatusHtml Vaults tab markers and tab=vaults deep-link", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('data-tab="tab-vaults"'));
+    assert.ok(html.includes('id="tab-vaults"'));
+    assert.ok(html.includes('activateTab("tab-vaults")'));
+    assert.ok(html.includes('tabParam === "vaults"'));
+    assert.ok(html.includes('data-vault-action="unalias"'));
+  });
+
   await t.test("generateStatusHtml loadVaults accepts GET /api/vaults array payload", () => {
     const html = generateStatusHtml(getPackageVersion());
     assert.match(
@@ -345,8 +355,79 @@ test("MCP status monitor", async (t) => {
 
     const vaultsRes = await fetch(`${baseUrl}/api/vaults`);
     assert.strictEqual(vaultsRes.status, 200);
-    const vaults = await vaultsRes.json() as Array<{ id: string; displayName?: string }>;
+    const vaults = await vaultsRes.json() as Array<{ id: string; displayName?: string; aliasOf?: string | null; recordCount?: number }>;
     assert.ok(vaults.some((v) => v.id === projectId));
+    const row = vaults.find((v) => v.id === projectId);
+    assert.ok(row);
+    assert.ok(typeof row!.recordCount === 'number');
+  });
+
+  await t.test("POST /api/vaults/alias and merge endpoints", async () => {
+    const createA = await fetch(`${baseUrl}/api/vaults/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'alias-src-test', displayName: 'Alias Src' })
+    });
+    assert.strictEqual(createA.status, 201);
+    const createB = await fetch(`${baseUrl}/api/vaults/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'alias-tgt-test', displayName: 'Alias Tgt' })
+    });
+    assert.strictEqual(createB.status, 201);
+
+    const badAlias = await fetch(`${baseUrl}/api/vaults/alias`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'alias-src-test', to: 'alias-src-test' })
+    });
+    assert.strictEqual(badAlias.status, 400);
+
+    const okAlias = await fetch(`${baseUrl}/api/vaults/alias`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'alias-src-test', to: 'alias-tgt-test' })
+    });
+    assert.strictEqual(okAlias.status, 200);
+    const aliasBody = await okAlias.json() as { ok: boolean; from: string; to: string };
+    assert.strictEqual(aliasBody.ok, true);
+    assert.ok(!JSON.stringify(aliasBody).includes(vaultRoot));
+
+    const delAlias = await fetch(`${baseUrl}/api/vaults/alias`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'alias-src-test' })
+    });
+    assert.strictEqual(delAlias.status, 200);
+    const delBody = await delAlias.json() as { ok: boolean; from: string };
+    assert.strictEqual(delBody.from, 'alias-src-test');
+
+    const delMissing = await fetch(`${baseUrl}/api/vaults/alias`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'alias-src-test' })
+    });
+    assert.strictEqual(delMissing.status, 404);
+
+    const mergeBad = await fetch(`${baseUrl}/api/vaults/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sources: [], target: 'alias-tgt-test' })
+    });
+    assert.strictEqual(mergeBad.status, 400);
+  });
+
+  await t.test("GET /api/vaults on pristine vaultRoot does not scaffold config (AC24)", async () => {
+    const pristine = fs.mkdtempSync(path.join(os.tmpdir(), "status-pristine-"));
+    try {
+      const before = fs.readdirSync(pristine);
+      const list = getVaultProjectList(pristine);
+      assert.deepEqual(list, []);
+      assert.deepStrictEqual(fs.readdirSync(pristine).sort(), before.sort());
+      assert.ok(!fs.existsSync(path.join(pristine, "config.json")));
+    } finally {
+      fs.rmSync(pristine, { recursive: true, force: true });
+    }
   });
 
   await t.test("GET /api/wiki?project= returns 200 sanitized JSON; missing file exists:false markdown:\"\"", async () => {

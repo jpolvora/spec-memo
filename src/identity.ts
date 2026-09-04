@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { ProjectIdentity } from './types.js';
 import { getVaultRoot } from './vault.js';
 import { isPathInside } from './safety.js';
+import { resolveCanonicalProjectId } from './vault-manager.js';
 
 /**
  * Normalize any Git remote URL into a canonical hostname/path identifier.
@@ -433,10 +434,11 @@ export function resolveProjectIdentity(
     }
   }
 
-  const vaultProjectPath = path.join(resolvedVaultRoot, 'projects', projectId);
+  const canonicalId = resolveCanonicalProjectId(projectId, resolvedVaultRoot);
+  const vaultProjectPath = path.join(resolvedVaultRoot, 'projects', canonicalId);
 
   return {
-    projectId,
+    projectId: canonicalId,
     normalizedRemote,
     rootPath,
     isGit,

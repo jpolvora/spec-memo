@@ -30,6 +30,15 @@ import {
   WikiError
 } from "./wiki.js";
 import {
+  VaultManagerError,
+  setProjectAlias,
+  removeProjectAlias,
+  mergeVaultProjects,
+  createVaultProject,
+  updateVaultProject,
+  deleteVaultProject
+} from "./vault-manager.js";
+import {
   listPrompts,
   searchPrompts,
   listSessions,
@@ -1118,6 +1127,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     <button class="tab-btn" data-tab="tab-rules">Derived Rules</button>
     <button class="tab-btn" data-tab="tab-backups">Backups</button>
     <button class="tab-btn" data-tab="tab-wiki">Wiki</button>
+    <button class="tab-btn" data-tab="tab-vaults">Vaults</button>
   </nav>
 
   <div class="banner-container" id="banner-container"></div>
@@ -1447,6 +1457,35 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       </div>
       <div class="helper-text" id="wiki-empty" style="margin-bottom:8px;">Select a project to view its wiki. Missing wiki shows an empty state; Regenerate is always available.</div>
       <div id="wiki-view" class="wiki-view" style="padding:12px 4px;"></div>
+    </div>
+  </section>
+
+  <!-- TAB: Vaults (project identity manager) -->
+  <section id="tab-vaults" class="tab-content">
+    <div class="prompts-container">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <button type="button" id="btn-vaults-refresh" class="btn-secondary" style="width:auto; margin-top:0; padding:6px 14px;">Refresh</button>
+          <button type="button" id="btn-vault-create" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px;">Create project</button>
+        </div>
+      </div>
+      <div class="data-table-container">
+        <table class="data-table" id="vaults-manager-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Display name</th>
+              <th>Alias target</th>
+              <th style="width:90px;">Records</th>
+              <th style="width:280px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vaults-manager-tbody">
+            <tr><td colspan="5" style="text-align:center; padding:30px; color:var(--muted);">Open this tab to load vault projects…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="helper-text" style="margin-top:12px;">Merge redirects source ids to a canonical project. Optional record copy imports history once; new writes always use the canonical folder.</div>
     </div>
   </section>
 
@@ -2111,6 +2150,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         loadBackups();
       } else if (tabId === "tab-wiki") {
         loadWiki();
+      } else if (tabId === "tab-vaults") {
+        loadVaultsManager();
       }
     }
 
@@ -3186,6 +3227,133 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       });
     }
 
+    let vaultsManagerBusy = false;
+
+    function setVaultsManagerBusy(busy) {
+      vaultsManagerBusy = busy;
+      document.querySelectorAll("#tab-vaults button[data-vault-action]").forEach((btn) => {
+        btn.disabled = busy;
+      });
+    }
+
+    async function vaultManagerApi(path, body, method) {
+      const httpMethod = method || (body ? "POST" : "GET");
+      const res = await apiFetch(path, {
+        method: httpMethod,
+        headers: Object.assign({}, apiHeaders(), body ? { "Content-Type": "application/json" } : {}),
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || res.statusText || "Request failed");
+      }
+      return data;
+    }
+
+    function renderVaultsManagerTable() {
+      const tbody = document.getElementById("vaults-manager-tbody");
+      if (!tbody) return;
+      if (!vaults.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--muted);">No vault projects found</td></tr>';
+        return;
+      }
+      tbody.innerHTML = vaults.map((v) => {
+        const alias = v.aliasOf ? String(v.aliasOf) : "-";
+        const count = v.recordCount != null ? String(v.recordCount) : "0";
+        const safeId = String(v.id).replace(/"/g, "");
+        return '<tr>' +
+          '<td><code>' + safeId + '</code></td>' +
+          '<td>' + (v.displayName || v.id) + '</td>' +
+          '<td>' + alias + '</td>' +
+          '<td>' + count + '</td>' +
+          '<td>' +
+            '<button type="button" class="btn-secondary" data-vault-action="edit" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Edit</button>' +
+            '<button type="button" class="btn-secondary" data-vault-action="alias" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Alias</button>' +
+            '<button type="button" class="btn-secondary" data-vault-action="merge" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Merge</button>' +
+            (v.aliasOf ? '<button type="button" class="btn-secondary" data-vault-action="unalias" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Remove alias</button>' : '') +
+            '<button type="button" class="btn-secondary" data-vault-action="delete" data-id="' + safeId + '" style="padding:4px 8px;">Delete</button>' +
+          '</td>' +
+        '</tr>';
+      }).join("");
+    }
+
+    async function loadVaultsManager() {
+      await loadVaults();
+      renderVaultsManagerTable();
+    }
+
+    const vaultsTbody = document.getElementById("vaults-manager-tbody");
+    if (vaultsTbody) {
+      vaultsTbody.addEventListener("click", async (ev) => {
+        const btn = ev.target.closest("button[data-vault-action]");
+        if (!btn || vaultsManagerBusy) return;
+        const action = btn.getAttribute("data-vault-action");
+        const id = btn.getAttribute("data-id");
+        if (!action || !id) return;
+        try {
+          setVaultsManagerBusy(true);
+          if (action === "edit") {
+            const name = window.prompt("Display name for " + id + ":", vaults.find((v) => v.id === id)?.displayName || id);
+            if (name == null) return;
+            await vaultManagerApi("/api/vaults/update", { id, displayName: name });
+            showBanner("Updated display name for " + id, "success");
+          } else if (action === "alias") {
+            const to = window.prompt("Canonical target id for alias from " + id + ":");
+            if (!to) return;
+            await vaultManagerApi("/api/vaults/alias", { from: id, to });
+            showBanner("Alias set: " + id + " → " + to, "success");
+          } else if (action === "unalias") {
+            await vaultManagerApi("/api/vaults/alias", { from: id }, "DELETE");
+            showBanner("Alias removed for " + id, "success");
+          } else if (action === "merge") {
+            const sourcesRaw = window.prompt("Source ids to merge into " + id + " (comma-separated):");
+            if (!sourcesRaw) return;
+            const sources = sourcesRaw.split(",").map((s) => s.trim()).filter(Boolean);
+            const copyRecords = window.confirm("Copy records from sources into " + id + "? Cancel = alias only.");
+            await vaultManagerApi("/api/vaults/merge", { sources, target: id, copyRecords });
+            showBanner("Merged " + sources.length + " source(s) into " + id, "success");
+          } else if (action === "delete") {
+            const typed = window.prompt('Type project id "' + id + '" to confirm delete:');
+            if (typed !== id) {
+              showBanner("Delete cancelled — id did not match", "error");
+              return;
+            }
+            await vaultManagerApi("/api/vaults/delete", { id, confirm: true });
+            showBanner("Deleted project " + id, "success");
+          }
+          await loadVaultsManager();
+        } catch (err) {
+          showBanner(String(err.message || err), "error");
+        } finally {
+          setVaultsManagerBusy(false);
+        }
+      });
+    }
+
+    const btnVaultsRefresh = document.getElementById("btn-vaults-refresh");
+    if (btnVaultsRefresh) {
+      btnVaultsRefresh.addEventListener("click", () => loadVaultsManager());
+    }
+    const btnVaultCreate = document.getElementById("btn-vault-create");
+    if (btnVaultCreate) {
+      btnVaultCreate.addEventListener("click", async () => {
+        if (vaultsManagerBusy) return;
+        const newId = window.prompt("New project id (filesystem-safe):");
+        if (!newId) return;
+        const displayName = window.prompt("Display name:", newId) || newId;
+        try {
+          setVaultsManagerBusy(true);
+          await vaultManagerApi("/api/vaults/create", { id: newId, displayName });
+          showBanner("Created project " + newId, "success");
+          await loadVaultsManager();
+        } catch (err) {
+          showBanner(String(err.message || err), "error");
+        } finally {
+          setVaultsManagerBusy(false);
+        }
+      });
+    }
+
     loadVaults().then(() => {
       const tabParam = urlParams.get("tab");
       const hashTab = (window.location.hash || "").replace("#", "");
@@ -3199,6 +3367,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           wikiSel.value = projectParam;
         }
         activateTab("tab-wiki");
+      }
+      if (tabParam === "vaults" || hashTab === "tab-vaults") {
+        activateTab("tab-vaults");
       }
       reconnectStream(true);
       refreshStatus();
@@ -3491,6 +3662,230 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
       if (req.method === "GET" && pathname === "/api/vaults") {
         writeJson(res, 200, getVaultProjectList(vaultRoot));
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/alias") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: { from?: string; to?: string } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          const result = await setProjectAlias(String(parsed.from || ""), String(parsed.to || ""), vaultRoot);
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `vault alias ${result.from} -> ${result.to}`,
+            method: "POST",
+            path: "/api/vaults/alias",
+            statusCode: 200
+          });
+          writeJson(res, 200, sanitizeToolOutput({ ok: true, ...result }));
+        } catch (err: unknown) {
+          const status = err instanceof VaultManagerError ? err.httpStatus : 500;
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "DELETE" && pathname === "/api/vaults/alias") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: { from?: string } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          const result = await removeProjectAlias(String(parsed.from || ""), vaultRoot);
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `vault alias removed ${result.from}`,
+            method: "DELETE",
+            path: "/api/vaults/alias",
+            statusCode: 200
+          });
+          writeJson(res, 200, sanitizeToolOutput({ ok: true, ...result }));
+        } catch (err: unknown) {
+          const status = err instanceof VaultManagerError ? err.httpStatus : 500;
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/merge") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 256 * 1024);
+          let parsed: { sources?: string[]; target?: string; copyRecords?: boolean } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          const result = await mergeVaultProjects({
+            sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+            target: String(parsed.target || ""),
+            copyRecords: parsed.copyRecords === true,
+            vaultRoot
+          });
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `vault merge -> ${result.target}`,
+            method: "POST",
+            path: "/api/vaults/merge",
+            statusCode: 200
+          });
+          writeJson(res, 200, sanitizeToolOutput(result));
+        } catch (err: unknown) {
+          const status = err instanceof VaultManagerError ? err.httpStatus : 500;
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/create") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: { id?: string; displayName?: string } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          const result = await createVaultProject(
+            String(parsed.id || ""),
+            String(parsed.displayName || parsed.id || ""),
+            vaultRoot
+          );
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `vault create ${result.id}`,
+            method: "POST",
+            path: "/api/vaults/create",
+            statusCode: 201
+          });
+          writeJson(res, 201, sanitizeToolOutput({ ok: true, ...result }));
+        } catch (err: unknown) {
+          const status = err instanceof VaultManagerError ? err.httpStatus : 500;
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (
+        (req.method === "PATCH" && pathname.startsWith("/api/vaults/")) ||
+        (req.method === "POST" && pathname === "/api/vaults/update")
+      ) {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: { id?: string; displayName?: string } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          let projectId = parsed.id;
+          if (!projectId && req.method === "PATCH") {
+            const parts = pathname.split("/").filter(Boolean);
+            if (parts.length >= 3) projectId = decodeURIComponent(parts[2]);
+          }
+          const result = await updateVaultProject(
+            String(projectId || ""),
+            String(parsed.displayName || ""),
+            vaultRoot
+          );
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `vault update ${result.id}`,
+            method: req.method || "POST",
+            path: pathname,
+            statusCode: 200
+          });
+          writeJson(res, 200, sanitizeToolOutput({ ok: true, ...result }));
+        } catch (err: unknown) {
+          const status = err instanceof VaultManagerError ? err.httpStatus : 500;
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/delete") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: { id?: string; confirm?: boolean; force?: boolean } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          const result = await deleteVaultProject({
+            id: String(parsed.id || ""),
+            confirm: parsed.confirm === true,
+            force: parsed.force === true,
+            vaultRoot
+          });
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `vault delete ${result.id}`,
+            method: "POST",
+            path: "/api/vaults/delete",
+            statusCode: 200
+          });
+          writeJson(res, 200, sanitizeToolOutput(result));
+        } catch (err: unknown) {
+          const status = err instanceof VaultManagerError ? err.httpStatus : 500;
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
         return;
       }
 
