@@ -19,6 +19,8 @@ import { recordPromptTurn } from './prompt.js';
 import { compileBootstrapBrief } from './bootstrap.js';
 import { searchIndex } from './indexer.js';
 import { runDoctor } from './doctor.js';
+import { resolveProjectIdentity } from './identity.js';
+import { ensureProjectVault } from './vault.js';
 
 describe('Capture ignore marker and safety boundary', () => {
   let tempDir: string;
@@ -216,6 +218,29 @@ describe('Capture ignore marker and safety boundary', () => {
     const hits = searchIndex({
       vaultRoot,
       cwd: productRepo,
+      path: 'vendor/sdk/foo.ts',
+      kinds: ['trap']
+    });
+    assert.equal(hits.length, 0);
+  });
+
+  it('search with ignored --path uses lastSeenRoot when cwd omitted', async () => {
+    const identity = resolveProjectIdentity(productRepo, { vaultRoot });
+    ensureProjectVault(identity, vaultRoot);
+    await upsertRecord({
+      vaultRoot,
+      cwd: productRepo,
+      kind: 'trap',
+      slug: 'remote-trap',
+      frontmatter: { title: 'Remote', pathPatterns: ['vendor/**'] },
+      body: 'Vendor trap'
+    });
+    fs.writeFileSync(path.join(productRepo, '.spec-memo-ignore'), 'vendor/**\n');
+    clearIgnoreCacheForTests();
+
+    const hits = searchIndex({
+      vaultRoot,
+      projectId: identity.projectId,
       path: 'vendor/sdk/foo.ts',
       kinds: ['trap']
     });

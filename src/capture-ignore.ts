@@ -445,6 +445,9 @@ export function resolveCaptureProductRoot(options: {
     if (lastSeen) {
       return path.resolve(lastSeen);
     }
+    throw new Error(
+      'Capture boundary requires cwd or a bootstrapped projectId with lastSeenRoot.'
+    );
   }
   return resolveProjectIdentity(process.cwd(), { vaultRoot: options.vaultRoot }).rootPath;
 }
