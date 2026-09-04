@@ -27,6 +27,7 @@ import { readWikiFile, regenerateWiki, WikiError, wikiProjectExists, WIKI_PROJEC
 import { getPackageVersion } from './version.js';
 import { assertSupportedNodeRuntime } from './sqlite.js';
 import { submitMemoryFeedback } from './feedback.js';
+import { scheduleHybridPush } from './hybrid-sync.js';
 import type { FeedbackType } from './types.js';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
@@ -1236,6 +1237,7 @@ async function runCliInner(
         cwd,
         vaultRoot
       });
+      scheduleHybridPush(vaultRoot, resolveProjectIdentity(cwd, { vaultRoot }).projectId);
       if (parsed.isJson) {
         printJson(result);
       } else {

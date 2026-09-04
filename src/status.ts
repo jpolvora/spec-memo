@@ -2246,7 +2246,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     async function openMemoryDrawer(record) {
       memoryDrawerRecord = record;
       try {
-        const linkRes = await fetch("/api/records/links?id=" + encodeURIComponent(record.id));
+        const linkRes = await fetch("/api/records/links?id=" + encodeURIComponent(record.id) + "&project=" + encodeURIComponent(record.projectId || ""));
         if (linkRes.ok) {
           const linkData = await linkRes.json();
           record.links = linkData.outgoing || record.links || [];
@@ -3975,7 +3975,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           writeJson(res, 400, sanitizeToolOutput({ error: "Query parameter 'id' is required" }));
           return;
         }
-        const graph = getRecordLinkGraph(recordId, vaultRoot);
+        const graph = getRecordLinkGraph(recordId, vaultRoot, url.searchParams.get("project") || undefined);
         writeJson(res, 200, sanitizeToolOutput({ id: recordId, ...graph }));
         return;
       }

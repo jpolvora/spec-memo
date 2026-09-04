@@ -373,5 +373,6 @@ function applyStaleBadgesToBrief(brief: BootstrapBrief): BootstrapBrief {
       brief.activeSlice.state = cloneRecordWithStaleBadge(brief.activeSlice.state);
     }
   }
+  brief.byteLength = calculatePayloadSize(brief);
   return brief;
 }

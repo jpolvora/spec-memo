@@ -155,7 +155,7 @@ export function findActiveSemanticContradictions(
       SELECT rl.source_id AS sourceId, rl.target_id AS targetId
       FROM record_links rl
       INNER JOIN records_fts src ON src.id = rl.source_id AND src.projectId = rl.source_project
-      INNER JOIN records_fts tgt ON tgt.id = rl.target_id
+      INNER JOIN records_fts tgt ON tgt.id = rl.target_id AND tgt.projectId = rl.source_project
       WHERE rl.link_type = 'contradicts'
         AND src.status = 'active'
         AND tgt.status = 'active'
@@ -180,7 +180,8 @@ export function findActiveSemanticContradictions(
 
 export function getRecordLinkGraph(
   recordId: string,
-  vaultRoot: string = getVaultRoot()
+  vaultRoot: string = getVaultRoot(),
+  projectId?: string
 ): {
   outgoing: ReturnType<typeof parseRecordLinks>;
   incoming: Array<{ sourceId: string; type: string; sourceTitle?: string }>;
@@ -192,13 +193,18 @@ export function getRecordLinkGraph(
       SELECT rl.source_id AS sourceId, rl.link_type AS type, src.title AS sourceTitle
       FROM record_links rl
       LEFT JOIN records_fts src ON src.id = rl.source_id AND src.projectId = rl.source_project
-      WHERE rl.target_id = ?
+      WHERE rl.target_id = ?${projectId ? ' AND rl.source_project = ?' : ''}
     `
     )
-    .all(recordId) as Array<{ sourceId: string; type: string; sourceTitle?: string }>;
+    .all(...(projectId ? [recordId, projectId] : [recordId])) as Array<{
+      sourceId: string;
+      type: string;
+      sourceTitle?: string;
+    }>;
 
   let outgoing: ReturnType<typeof parseRecordLinks> = [];
   for (const project of getVaultProjects(vaultRoot)) {
+    if (projectId && project.id !== projectId) continue;
     for (const record of listProjectMarkdownRecords(vaultRoot, project.id)) {
       if (String(record.frontmatter.id) === recordId) {
         outgoing = parseRecordLinks(record.frontmatter);
@@ -217,11 +223,8 @@ function enrichHitSalience(hit: SearchHit, fm: RecordFrontmatter): void {
     hit.flaggedStale = true;
   }
   const mult = salienceMultiplier(fm);
-  if (mult < 1) {
-    if (hit.rank !== undefined) {
-      hit.rank = hit.rank * mult;
-    }
-    hit.hits = Math.round((hit.hits ?? 0) * mult);
+  if (mult < 1 && hit.rank !== undefined) {
+    hit.rank = hit.rank * mult;
   }
 }
 
