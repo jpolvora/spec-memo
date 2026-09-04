@@ -2,6 +2,7 @@ name: Agentic Code Review (Cursor)
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main, master, develop]
   workflow_dispatch:
     inputs:
@@ -63,18 +64,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           PR_NUM="${{ github.event.pull_request.number || inputs.pr_number || '' }}"
+          REPO="${{ github.repository }}"
+          OWNER="${REPO%/*}"
+          NAME="${REPO#*/}"
+
           if [ -n "$PR_NUM" ]; then
-            ACTIVE=$(gh pr view "$PR_NUM" --json comments --jq '[.comments[] | select(.isResolved == false and .author.login != "github-actions[bot]" and .author.login != "github-actions")] | length' 2>/dev/null || echo 0)
-            echo "active_threads=$ACTIVE" >> $GITHUB_OUTPUT
+            QUERY='query($owner: String!, $name: String!, $pr: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pr) { reviewThreads(first: 100) { nodes { id isResolved isOutdated } } } } }'
+            ACTIVE=$(gh api graphql -f query="$QUERY" -F owner="$OWNER" -F name="$NAME" -F pr="$PR_NUM" --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' 2>/dev/null || echo 0)
+            echo "active_threads=$ACTIVE" >> "$GITHUB_OUTPUT"
             echo "Unresolved threads: $ACTIVE"
           else
-            echo "active_threads=0" >> $GITHUB_OUTPUT
+            echo "active_threads=0" >> "$GITHUB_OUTPUT"
             echo "No PR number provided; skipping unresolved threads check."
           fi
 
       - name: Block merge on unresolved threads
         if: ${{ steps.check-threads.outputs.active_threads != '0' }}
         run: |
-          echo "::error::PR has ${{ steps.check-threads.outputs.active_threads }} unresolved review thread(s). Resolve them before merging."
+          echo "::error::PR has ${{ steps.check-threads.outputs.active_threads }} unresolved review thread(s). Resolve all review comments before merging."
           exit 1
