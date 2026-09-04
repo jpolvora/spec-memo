@@ -556,6 +556,65 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     assert.ok(parsed.sync && parsed.sync.vaultGit, "expected vaultGit channel in local mode");
   });
 
+  await t.test("hybrid push forwards cleanSidecars to the remote daemon", async () => {
+    const http = await import("node:http");
+    let receivedBody: any = null;
+    const server = http.createServer((req, res) => {
+      if (req.method === "POST" && (req.url || "").startsWith("/api/sync/push")) {
+        let raw = "";
+        req.on("data", (chunk) => {
+          raw += chunk;
+        });
+        req.on("end", () => {
+          try {
+            receivedBody = JSON.parse(raw);
+          } catch {
+            receivedBody = null;
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({ applied: 0, skipped: 0, conflicts: 0, dryRun: false, recordsApplied: [] })
+          );
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const { pushHybridProject } = await import("./hybrid-sync.js");
+      await pushHybridProject(
+        vaultRoot,
+        projectId,
+        `http://127.0.0.1:${port}`,
+        undefined,
+        false,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        true
+      );
+      assert.ok(receivedBody, "expected push request body");
+      assert.strictEqual(receivedBody.cleanSidecars, true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  await t.test("parseReconcilePreference maps interactive choices (AC9)", async () => {
+    const { parseReconcilePreference } = await import("./cli.js");
+    assert.strictEqual(parseReconcilePreference("l"), "local");
+    assert.strictEqual(parseReconcilePreference("LOCAL"), "local");
+    assert.strictEqual(parseReconcilePreference("r"), "remote");
+    assert.strictEqual(parseReconcilePreference("remote"), "remote");
+    assert.strictEqual(parseReconcilePreference("m"), undefined);
+    assert.strictEqual(parseReconcilePreference(""), undefined);
+    assert.strictEqual(parseReconcilePreference(undefined), undefined);
+  });
+
   await t.test("dual-sync report.ok is false when hybrid channel fails even if vault-git succeeds", async () => {
     const dualVault = path.join(tempDir, "dual-vault");
     initVault({ vaultRoot: dualVault, projectId: "proj-dual" });

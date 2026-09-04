@@ -759,6 +759,13 @@ export interface OperationalStatus {
     lastError?: string | null;
     lastSyncAt?: string | null;
   };
+  sync: {
+    conflictStrategy: string;
+    autoSyncIntervalMinutes?: number;
+    hybridDirty: boolean;
+    dirtyProjects?: Record<string, boolean>;
+    conflictSidecars: number;
+  };
 }
 
 export interface StatusResult {

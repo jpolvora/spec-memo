@@ -127,6 +127,7 @@ export interface CleanSidecarsResult {
   cleaned: number;
   retained: number;
   filesCleaned: string[];
+  filesRetained: string[];
 }
 
 export function cleanConflictSidecars(
@@ -136,12 +137,13 @@ export function cleanConflictSidecars(
   const vaultRoot = getVaultRoot(vaultRootInput);
   const projectsDir = path.resolve(vaultRoot, "projects");
   if (!fs.existsSync(projectsDir)) {
-    return { cleaned: 0, retained: 0, filesCleaned: [] };
+    return { cleaned: 0, retained: 0, filesCleaned: [], filesRetained: [] };
   }
 
   let cleaned = 0;
   let retained = 0;
   const filesCleaned: string[] = [];
+  const filesRetained: string[] = [];
   const journal = options.journal;
   const recordJournal = (filePath: string, originalContent: string | null): void => {
     if (!journal || options.dryRun) return;
@@ -229,6 +231,7 @@ export function cleanConflictSidecars(
             filesCleaned.push(`${projId}/${subdir}/${entry}`);
           } else {
             retained++;
+            filesRetained.push(`${projId}/${subdir}/${entry}`);
           }
         } else {
           if (!options.dryRun) {
@@ -251,7 +254,7 @@ export function cleanConflictSidecars(
     }
   }
 
-  return { cleaned, retained, filesCleaned };
+  return { cleaned, retained, filesCleaned, filesRetained };
 }
 
 export function readSyncCursor(vaultRoot: string, peerVault: string): string | undefined {

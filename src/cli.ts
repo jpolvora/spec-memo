@@ -40,6 +40,36 @@ async function confirmPrompt(message: string): Promise<boolean> {
   });
 }
 
+/**
+ * Parse an interactive reconcile source-of-truth choice (AC9).
+ * l/local → 'local', r/remote → 'remote', anything else (m/merge/skip/empty)
+ * keeps the non-interactive smart-merge default.
+ */
+export function parseReconcilePreference(input: string | undefined): 'local' | 'remote' | undefined {
+  const v = (input || '').trim().toLowerCase();
+  if (v === 'l' || v === 'local') return 'local';
+  if (v === 'r' || v === 'remote') return 'remote';
+  return undefined;
+}
+
+async function promptReconcilePreference(count: number): Promise<'local' | 'remote' | undefined> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  try {
+    const answer: string = await new Promise((resolve) => {
+      rl.question(
+        `${count} conflict(s) need review. Choose source of truth: [l]ocal / [r]emote / [m]erge smart-merge (default): `,
+        resolve
+      );
+    });
+    return parseReconcilePreference(answer);
+  } finally {
+    rl.close();
+  }
+}
+
 /** True when this process is a CLI invocation (dist/cli.js, src/cli.ts, or npm bin shim named memo). */
 export function isCliMainEntry(argv1: string | undefined = process.argv[1]): boolean {
   if (!argv1) return false;
@@ -1261,22 +1291,52 @@ async function runCliInner(
       // 1. Clean conflict sidecars (serialized under vault lock vs daemon auto-sync)
       const { withVaultLock } = await import('./vault.js');
       const { cleanConflictSidecars } = await import('./sync.js');
-      const cleanResult = await withVaultLock(root, async () =>
-        cleanConflictSidecars(root, {
-          prefer,
-          dryRun,
-          projectId: all ? undefined : identity.projectId
-        })
-      );
-      if (!dryRun && cleanResult.cleaned > 0) {
-        await withVaultLock(root, async () => {
-          const { rebuildIndex } = await import('./indexer.js');
-          const { rebuildCompiledViews } = await import('./compiler.js');
-          await rebuildIndex(root);
-          for (const pid of new Set(cleanResult.filesCleaned.map((f) => f.split('/')[0]))) {
-            if (pid) rebuildCompiledViews(pid, root);
+      const cleanAndRebuild = async (selected?: 'local' | 'remote') => {
+        const res = await withVaultLock(root, async () =>
+          cleanConflictSidecars(root, {
+            prefer: selected,
+            dryRun,
+            projectId: all ? undefined : identity.projectId
+          })
+        );
+        if (!dryRun && res.cleaned > 0) {
+          await withVaultLock(root, async () => {
+            const { rebuildIndex } = await import('./indexer.js');
+            const { rebuildCompiledViews } = await import('./compiler.js');
+            await rebuildIndex(root);
+            for (const pid of new Set(res.filesCleaned.map((f) => f.split('/')[0]))) {
+              if (pid) rebuildCompiledViews(pid, root);
+            }
+          });
+        }
+        return res;
+      };
+      let activePrefer = prefer;
+      let cleanResult = await cleanAndRebuild(activePrefer);
+
+      // AC9: interactive mode — TTY only, skipped in scripts/CI/dry-run
+      // and when the operator already passed --prefer.
+      if (
+        !dryRun &&
+        cleanResult.retained > 0 &&
+        !activePrefer &&
+        process.stdin.isTTY &&
+        process.stdout.isTTY
+      ) {
+        if (!parsed.isJson) {
+          console.log(`\n  Retained conflicts (${cleanResult.retained}):`);
+          for (const f of cleanResult.filesRetained.slice(0, 10)) {
+            console.log(`    - ${f}`);
           }
-        });
+          if (cleanResult.filesRetained.length > 10) {
+            console.log(`    ... (${cleanResult.filesRetained.length - 10} more)`);
+          }
+        }
+        const choice = await promptReconcilePreference(cleanResult.retained);
+        if (choice) {
+          activePrefer = choice;
+          cleanResult = await cleanAndRebuild(activePrefer);
+        }
       }
 
       // 2. Perform synchronization when a sync channel is configured
@@ -1292,7 +1352,7 @@ async function runCliInner(
           all,
           dryRun,
           trigger: 'sync',
-          prefer,
+          prefer: activePrefer,
           strategy,
           cleanSidecars
         });
@@ -1300,7 +1360,7 @@ async function runCliInner(
 
       const report = {
         command: 'reconcile',
-        prefer: prefer || 'none',
+        prefer: activePrefer || 'none',
         strategy,
         dryRun,
         sidecarsCleaned: cleanResult.cleaned,
@@ -1313,7 +1373,7 @@ async function runCliInner(
         printJson(report);
       } else {
         console.log(`spec-memo — Vault Conflict Reconciliation Complete\n`);
-        console.log(`  Source of Truth:  ${prefer ? `Prefer ${prefer.toUpperCase()}` : 'None (Smart-Merge)'}`);
+        console.log(`  Source of Truth:  ${activePrefer ? `Prefer ${activePrefer.toUpperCase()}` : 'None (Smart-Merge)'}`);
         console.log(`  Strategy:         ${strategy}`);
         console.log(`  Sidecars Cleaned: ${cleanResult.cleaned} (retained: ${cleanResult.retained})`);
         if (cleanResult.filesCleaned.length > 0 && cleanResult.filesCleaned.length <= 10) {
@@ -1356,7 +1416,7 @@ async function runCliInner(
         projectId: all ? undefined : identity.projectId,
         vaultRoot: root,
         metadata: {
-          prefer: prefer || 'none',
+          prefer: activePrefer || 'none',
           strategy,
           dryRun,
           sidecarsCleaned: cleanResult.cleaned,

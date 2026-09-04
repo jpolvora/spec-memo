@@ -174,7 +174,8 @@ export async function pushHybridProject(
   force: boolean = false,
   sinceOverride?: string,
   prefer?: 'local' | 'remote',
-  strategy?: import('./types.js').ConflictStrategy
+  strategy?: import('./types.js').ConflictStrategy,
+  cleanSidecars?: boolean
 ): Promise<SyncResult> {
   const vaultRoot = getVaultRoot(vaultRootInput);
   const config = ensureVaultStructure(vaultRoot);
@@ -210,7 +211,7 @@ export async function pushHybridProject(
     const res = await fetch(`${remoteOrigin}/api/sync/push`, {
       method: 'POST',
       headers: buildHeaders(authToken),
-      body: JSON.stringify({ changeset, force: effectiveForce, dryRun, prefer, strategy }),
+      body: JSON.stringify({ changeset, force: effectiveForce, dryRun, prefer, strategy, cleanSidecars }),
       signal: controller.signal
     });
 
@@ -368,7 +369,8 @@ export async function syncHybrid(
       options.force,
       sinceForPush,
       options.prefer,
-      options.strategy
+      options.strategy,
+      options.cleanSidecars
     );
 
     report = {
