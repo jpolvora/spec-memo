@@ -60,7 +60,9 @@ export function computeSearchExplain(
     rawRank = -(options.hit?.occurrences ?? 1);
   }
   const feedbackMultiplier = roundExplain(salienceMultiplier(fm));
-  const effectiveRank = rawRank * (feedbackMultiplier < 1 ? feedbackMultiplier : 1);
+  const applyFeedbackToScore = !options.sort || options.sort === 'relevance';
+  const effectiveRank =
+    rawRank * (applyFeedbackToScore && feedbackMultiplier < 1 ? feedbackMultiplier : 1);
   const ftsBm25 = roundExplain(Math.abs(rawRank));
   const pathPatternBoost = roundExplain(
     pathPatternBoostOf(options.pathFilter, options.pathPatterns)
