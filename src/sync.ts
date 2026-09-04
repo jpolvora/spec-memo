@@ -550,7 +550,7 @@ export async function applyChangeset(
               ? "local-wins"
               : options.prefer === "remote"
                 ? "remote-wins"
-                : options.strategy || (options.force ? "local-wins" : "smart-merge");
+                : options.strategy || (options.force ? "remote-wins" : "smart-merge");
 
           if (effectiveStrategy === "local-wins") {
             // Local wins: existing local record is preserved; incoming remote record is skipped

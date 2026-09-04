@@ -7,7 +7,7 @@ import http from "node:http";
 import net from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { ensureProjectVault } from "./vault.js";
+import { ensureProjectVault, tryAcquireVaultLockSync, releaseVaultLockSync } from "./vault.js";
 import { closeIndex } from "./indexer.js";
 import { startSseServer } from "./server.js";
 import { TOOL_NAMES } from "./types.js";
@@ -473,6 +473,44 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
       assert.strictEqual(sseInst.port, customSsePort);
       assert.strictEqual(sseInst.statusPort, customStatusPort);
     } finally {
+      await sseInst.close();
+    }
+  });
+
+  await t.test("should start background auto-sync timer in hybrid mode, skip when vault lock is busy, and clean up on close", async () => {
+    const autoSyncVault = path.join(tempDir, "autosync-vault");
+    fs.mkdirSync(autoSyncVault, { recursive: true });
+    const configPath = path.join(autoSyncVault, "config.json");
+
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          mode: "hybrid",
+          sync: {
+            autoSyncIntervalMinutes: 0.0005
+          }
+        },
+        null,
+        2
+      )
+    );
+
+    // Hold vault lock externally to verify skip-when-busy
+    const acquired = tryAcquireVaultLockSync(autoSyncVault);
+    assert.strictEqual(acquired, true);
+
+    const sseInst = await startSseServer({
+      vaultRoot: autoSyncVault,
+      host: "127.0.0.1",
+      enableStatus: false
+    });
+
+    try {
+      // Wait long enough for timer tick to fire and observe lock busy skip
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    } finally {
+      releaseVaultLockSync(autoSyncVault);
       await sseInst.close();
     }
   });

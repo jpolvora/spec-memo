@@ -207,11 +207,24 @@ export async function pushHybridProject(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const effectiveForce = force || prefer === 'local' || strategy === 'local-wins';
+    const pushPrefer =
+      prefer === 'local' ? 'remote' :
+      prefer === 'remote' ? 'local' : undefined;
+    const pushStrategy =
+      strategy === 'local-wins' ? 'remote-wins' :
+      strategy === 'remote-wins' ? 'local-wins' : strategy;
+    const effectiveForce = force || pushPrefer === 'remote' || pushStrategy === 'remote-wins';
     const res = await fetch(`${remoteOrigin}/api/sync/push`, {
       method: 'POST',
       headers: buildHeaders(authToken),
-      body: JSON.stringify({ changeset, force: effectiveForce, dryRun, prefer, strategy, cleanSidecars }),
+      body: JSON.stringify({
+        changeset,
+        force: effectiveForce,
+        dryRun,
+        prefer: pushPrefer,
+        strategy: pushStrategy,
+        cleanSidecars
+      }),
       signal: controller.signal
     });
 
@@ -225,7 +238,11 @@ export async function pushHybridProject(
     if (!dryRun) {
       const now = new Date().toISOString();
       let cursorsUpdate: Record<string, string> | undefined;
-      if (pushResult.applied > 0 || (pushResult.autoMerged || 0) > 0) {
+      const exportedCount = changeset.records.length + (changeset.deletions?.length ?? 0);
+      const totalProcessed = pushResult.applied + (pushResult.autoMerged || 0) + pushResult.skipped + pushResult.conflicts;
+      const fullyAcknowledged = exportedCount > 0 && totalProcessed >= exportedCount && pushResult.conflicts === 0;
+
+      if (pushResult.applied > 0 || (pushResult.autoMerged || 0) > 0 || fullyAcknowledged) {
         // Use export snapshot time — not push-completion wall clock — so records
         // updated during an in-flight push remain visible to the next since-filter.
         const cursorVal = changeset.generatedAt || now;
@@ -245,10 +262,13 @@ export async function pushHybridProject(
         }
       }
 
-      const exportedCount = changeset.records.length + (changeset.deletions?.length ?? 0);
       const pushHadConflicts = pushResult.conflicts > 0;
-      const totalProcessed = pushResult.applied + (pushResult.autoMerged || 0) + pushResult.skipped + pushResult.conflicts;
-      const pushIncomplete = exportedCount > 0 && totalProcessed < exportedCount;
+      const pushIncomplete =
+        exportedCount > 0 &&
+        (totalProcessed < exportedCount ||
+          (pushResult.applied === 0 &&
+            (pushResult.skipped || 0) > 0 &&
+            (prefer === 'local' || strategy === 'local-wins')));
 
       if (pushHadConflicts || pushIncomplete) {
         const errorMsg = pushHadConflicts
