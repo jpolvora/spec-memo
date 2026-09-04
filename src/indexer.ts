@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordStatus, SearchHit, SearchOptions } from './types.js';
-import { getVaultRoot, withVaultLock, getVaultProjects } from './vault.js';
+import { getVaultRoot, withVaultLock, getVaultProjects, ensureVaultStructure } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { createSqliteDatabase } from './sqlite.js';
@@ -24,6 +24,7 @@ import {
   parseRecordLinks
 } from './salience.js';
 import { computeSearchExplain } from './ranking-explain.js';
+import { applySearchExpirationFilter } from './expiration.js';
 
 const dbPool = new Map<string, Database.Database>();
 
@@ -395,10 +396,13 @@ function searchIndexByFullScanRank(
   const kinds = options.kinds;
   const query = (options.query || '').trim().toLowerCase();
   const hits: SearchHit[] = [];
+  const expCtx = resolveExpirationContext(options, vaultRoot);
 
   for (const projectId of projectIds) {
     for (const record of listProjectMarkdownRecords(vaultRoot, projectId)) {
       const fm = record.frontmatter;
+      const exp = passesExpirationForRecord(fm, expCtx);
+      if (!exp.include) continue;
       if (kinds && kinds.length > 0 && !kinds.includes(fm.kind)) continue;
       if (!kinds && options.crossProject && ['scratch', 'state', 'review'].includes(fm.kind)) {
         continue;
@@ -437,6 +441,7 @@ function searchIndexByFullScanRank(
         layer: (fm.layer || classified.layer) as SearchHit['layer'],
         severity: fm.severity
       };
+      if (exp.expired) hit.expired = true;
       enrichHitSalience(hit, fm);
       if (options.explain) {
         const rawRank = hit.rank;
@@ -458,6 +463,26 @@ function searchIndexByFullScanRank(
     hits.sort(compareSearchHits);
   }
   return hits.slice(0, limit);
+}
+
+function resolveExpirationContext(
+  options: SearchOptions,
+  vaultRoot: string
+): { includeExpired?: boolean; asOf?: string; scratchDays: number; reviewDays: number } {
+  const config = ensureVaultStructure(vaultRoot);
+  return {
+    includeExpired: options.includeExpired,
+    asOf: options.asOf,
+    scratchDays: config.ttl?.scratchDays ?? 7,
+    reviewDays: config.ttl?.reviewDays ?? 14
+  };
+}
+
+function passesExpirationForRecord(
+  fm: import('./types.js').RecordFrontmatter,
+  ctx: ReturnType<typeof resolveExpirationContext>
+): { include: boolean; expired: boolean } {
+  return applySearchExpirationFilter(fm, ctx);
 }
 
 /**
@@ -645,6 +670,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   }
 
   const results: SearchHit[] = [];
+  const expCtx = resolveExpirationContext(options, vaultRoot);
 
   for (const row of rows) {
     const tagsArr = row.tags ? row.tags.split(/\s+/).filter(Boolean) : [];
@@ -676,6 +702,18 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       }
     }
 
+    let expiredBadge = false;
+    if (row.filepath && fs.existsSync(row.filepath)) {
+      try {
+        const record = parseRecord(fs.readFileSync(row.filepath, 'utf8'), row.filepath);
+        const exp = passesExpirationForRecord(record.frontmatter, expCtx);
+        if (!exp.include) continue;
+        expiredBadge = exp.expired;
+      } catch {
+        // fail open on unreadable records
+      }
+    }
+
     results.push({
       id: row.id,
       projectId: row.projectId,
@@ -687,7 +725,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       filepath: row.filepath,
       snippet: row.snippet || undefined,
       rank: row.rank,
-      updated: row.updated || undefined
+      updated: row.updated || undefined,
+      expired: expiredBadge || undefined
     });
 
     if (results.length >= limit) {
@@ -703,6 +742,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         hit.lastHit = lastHitOf(record.frontmatter) || null;
         hit.occurrences = occurrenceOf(record.frontmatter);
         hit.lastSeen = lastSeenOf(record.frontmatter) || undefined;
+        const exp = passesExpirationForRecord(record.frontmatter, expCtx);
+        if (exp.expired) hit.expired = true;
         const rawRank = hit.rank;
         enrichHitSalience(hit, record.frontmatter);
         if (options.explain) {

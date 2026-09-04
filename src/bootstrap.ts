@@ -11,6 +11,7 @@ import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { pullHybridProject } from './hybrid-sync.js';
 import { cloneRecordWithStaleBadge } from './salience.js';
 import { roundExplain } from './ranking-explain.js';
+import { isRecordExpiredAt, defaultTtlDaysForKind } from './expiration.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -140,7 +141,9 @@ function buildBudgetReport(
   budgetBytes: number,
   consumedBytes: number,
   options: BootstrapOptions,
-  pathFilter?: string
+  pathFilter?: string,
+  scratchTtlDays = 7,
+  reviewTtlDays = 14
 ): BootstrapBudgetReport {
   const includedIds = new Set([
     ...includedTraps.map((r) => String(r.frontmatter.id)),
@@ -153,6 +156,12 @@ function buildBudgetReport(
     const id = String(trap.frontmatter.id);
     const status = trap.frontmatter.status !== 'active'
       ? 'excluded_expired'
+      : isRecordExpiredAt(
+            trap.frontmatter,
+            Date.now(),
+            defaultTtlDaysForKind('trap', scratchTtlDays, reviewTtlDays)
+          )
+        ? 'excluded_expired'
       : includedIds.has(id)
         ? 'included'
         : 'truncated_budget_exhausted';
@@ -172,6 +181,12 @@ function buildBudgetReport(
     const status =
       decision.frontmatter.status !== 'active' && decision.frontmatter.status !== 'shipped'
         ? 'excluded_expired'
+        : isRecordExpiredAt(
+              decision.frontmatter,
+              Date.now(),
+              defaultTtlDaysForKind('decision', scratchTtlDays, reviewTtlDays)
+            )
+          ? 'excluded_expired'
         : includedIds.has(id)
           ? 'included'
           : 'truncated_budget_exhausted';
@@ -247,10 +262,21 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       ? options.path
       : undefined;
 
-  // 1. Gather & rank traps (all for explain report; active for brief)
+  const scratchTtlDays = config.ttl?.scratchDays ?? 7;
+  const reviewTtlDays = config.ttl?.reviewDays ?? 14;
+
+  // 1. Gather & rank traps (all for explain report; active non-expired for brief)
   const allTrapsForReport = allRecords.filter((r) => r.frontmatter.kind === 'trap');
   const activeTraps = allTrapsForReport
-    .filter((r) => r.frontmatter.status === 'active')
+    .filter(
+      (r) =>
+        r.frontmatter.status === 'active' &&
+        !isRecordExpiredAt(
+          r.frontmatter,
+          Date.now(),
+          defaultTtlDaysForKind('trap', scratchTtlDays, reviewTtlDays)
+        )
+    )
     .sort((a, b) => {
       const scoreA = scoreTrap(a, options.query, pathFilter);
       const scoreB = scoreTrap(b, options.query, pathFilter);
@@ -265,7 +291,12 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
   const activeDecisions = allDecisionsForReport
     .filter(
       (r) =>
-        r.frontmatter.status === 'active' || r.frontmatter.status === 'shipped'
+        (r.frontmatter.status === 'active' || r.frontmatter.status === 'shipped') &&
+        !isRecordExpiredAt(
+          r.frontmatter,
+          Date.now(),
+          defaultTtlDaysForKind('decision', scratchTtlDays, reviewTtlDays)
+        )
     )
     .sort((a, b) => (b.frontmatter.updated || '').localeCompare(a.frontmatter.updated || ''));
 
@@ -454,7 +485,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
           budgetBytes,
           minimal.byteLength,
           options,
-          pathFilter
+          pathFilter,
+          scratchTtlDays,
+          reviewTtlDays
         );
       }
       return minimal;
@@ -474,7 +507,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       budgetBytes,
       initialBrief.byteLength,
       options,
-      pathFilter
+      pathFilter,
+      scratchTtlDays,
+      reviewTtlDays
     );
   }
 

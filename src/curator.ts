@@ -8,16 +8,30 @@ import { openIndex, indexRecord, removeRecord, rebuildIndex } from './indexer.js
 import { rebuildCompiledViews } from './compiler.js';
 import { recordTombstone } from './sync.js';
 import { recordTelemetry } from './telemetry.js';
+import {
+  isRecordExpiredAt,
+  defaultTtlDaysForKind,
+  resolveExpiresAtMs
+} from './expiration.js';
 
 /**
- * Check if a record has expired given its date, default TTL days, and optional custom TTL.
+ * Check if a record has expired given its date, default TTL days, optional custom TTL, or explicit expires_at.
  */
 export function isRecordExpired(
   dateStr: string,
   defaultTtlDays: number,
   customTtl?: string,
-  now: number = Date.now()
+  now: number = Date.now(),
+  expiresAt?: string
 ): boolean {
+  if (expiresAt) {
+    const expMs = resolveExpiresAtMs(
+      { id: 'x', kind: 'trap', project: 'x', status: 'active', created: dateStr, updated: dateStr, source: 'agent', expires_at: expiresAt },
+      defaultTtlDays
+    );
+    if (expMs !== null) return now >= expMs;
+  }
+
   const recordTime = new Date(dateStr).getTime();
   if (isNaN(recordTime)) {
     return false;
@@ -44,6 +58,102 @@ export function isRecordExpired(
 
   const defaultMs = defaultTtlDays * 86400 * 1000;
   return now - recordTime >= defaultMs;
+}
+
+const EXPIRATION_SWEEP_DIRS = ['traps', 'decisions', 'plans', 'state', 'scratch', 'reviews'] as const;
+const ARCHIVE_ON_EXPIRE_KINDS = new Set<RecordFrontmatter['kind']>(['trap', 'decision', 'plan']);
+
+function sweepExpiredRecords(
+  projectDir: string,
+  projectId: string,
+  vaultRoot: string,
+  db: ReturnType<typeof openIndex>,
+  options: {
+    dryRun: boolean;
+    purge: boolean;
+    now: number;
+    scratchTtlDays: number;
+    reviewTtlDays: number;
+  }
+): {
+  purgedScratchCount: number;
+  purgedReviewCount: number;
+  trapsArchivedCount: number;
+  decisionsArchivedCount: number;
+  plansArchivedCount: number;
+  purgedFiles: string[];
+} {
+  let purgedScratchCount = 0;
+  let purgedReviewCount = 0;
+  let trapsArchivedCount = 0;
+  let decisionsArchivedCount = 0;
+  let plansArchivedCount = 0;
+  const purgedFiles: string[] = [];
+
+  for (const subdir of EXPIRATION_SWEEP_DIRS) {
+    const dir = path.join(projectDir, subdir);
+    if (!fs.existsSync(dir)) continue;
+
+    for (const file of fs.readdirSync(dir)) {
+      if (!file.endsWith('.md') || file.includes('.conflict.')) continue;
+      const filePath = path.join(dir, file);
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const record = parseRecord(content, filePath);
+        const fm = record.frontmatter;
+        if (fm.status === 'archived' || fm.compacted) continue;
+
+        const defaultDays = defaultTtlDaysForKind(fm.kind, options.scratchTtlDays, options.reviewTtlDays);
+        if (!isRecordExpiredAt(fm, options.now, defaultDays)) continue;
+
+        const shouldPurge = options.purge || !ARCHIVE_ON_EXPIRE_KINDS.has(fm.kind);
+
+        if (shouldPurge) {
+          if (fm.kind === 'scratch') purgedScratchCount++;
+          else if (fm.kind === 'review') purgedReviewCount++;
+          purgedFiles.push(filePath);
+          if (!options.dryRun) {
+            recordTombstone(
+              vaultRoot,
+              projectId,
+              fm.kind,
+              fm.id,
+              String(fm.slug || fm.id)
+            );
+            fs.unlinkSync(filePath);
+            removeRecord(db, fm.id, projectId);
+          }
+        } else {
+          if (fm.kind === 'trap') trapsArchivedCount++;
+          else if (fm.kind === 'decision') decisionsArchivedCount++;
+          else if (fm.kind === 'plan') plansArchivedCount++;
+          purgedFiles.push(filePath);
+          if (!options.dryRun) {
+            const archivedFm: RecordFrontmatter = {
+              ...fm,
+              status: 'archived',
+              archivedReason: 'expired',
+              updated: new Date(options.now).toISOString()
+            };
+            const serialized = serializeRecord({ frontmatter: archivedFm, body: record.body });
+            fs.writeFileSync(filePath, serialized, 'utf8');
+            indexRecord(db, { frontmatter: archivedFm, body: record.body }, filePath);
+          }
+        }
+      } catch {
+        // skip unreadable records
+      }
+    }
+  }
+
+  return {
+    purgedScratchCount,
+    purgedReviewCount,
+    trapsArchivedCount,
+    decisionsArchivedCount,
+    plansArchivedCount,
+    purgedFiles
+  };
 }
 
 /**
@@ -262,96 +372,29 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
 
   const scratchTtlDays = config.ttl?.scratchDays ?? 7;
   const reviewTtlDays = config.ttl?.reviewDays ?? 14;
+  const purge = Boolean(options.purge);
 
   const projectDir = path.join(vaultRoot, 'projects', projectId);
   const purgedFiles: string[] = [];
   const compactedPlans: string[] = [];
-  let purgedScratchCount = 0;
-  let purgedReviewCount = 0;
   let compactedPlansCount = 0;
 
   const db = openIndex(vaultRoot);
   const now = options.now ?? Date.now();
 
-  // 1. Clean scratch directory
-  const scratchDir = path.join(projectDir, 'scratch');
-  if (fs.existsSync(scratchDir)) {
-    const files = fs.readdirSync(scratchDir);
-    for (const file of files) {
-      if (file.endsWith('.md')) {
-        const filePath = path.join(scratchDir, file);
-        try {
-          const content = fs.readFileSync(filePath, 'utf8');
-          const record = parseRecord(content, filePath);
-          const dateStr = record.frontmatter.created || record.frontmatter.updated;
-          if (isRecordExpired(dateStr, scratchTtlDays, record.frontmatter.ttl, now)) {
-            purgedScratchCount++;
-            purgedFiles.push(filePath);
-            if (!dryRun) {
-              recordTombstone(
-                vaultRoot,
-                projectId,
-                record.frontmatter.kind,
-                record.frontmatter.id,
-                String(record.frontmatter.slug || record.frontmatter.id)
-              );
-              fs.unlinkSync(filePath);
-              removeRecord(db, record.frontmatter.id, projectId);
-            }
-          }
-        } catch {
-          // If corrupted scratch file, also delete on GC if older than TTL
-          try {
-            const stat = fs.statSync(filePath);
-            if (now - stat.mtimeMs >= scratchTtlDays * 86400 * 1000) {
-              purgedScratchCount++;
-              purgedFiles.push(filePath);
-              if (!dryRun) {
-                fs.unlinkSync(filePath);
-              }
-            }
-          } catch {
-            // Ignore stat error
-          }
-        }
-      }
-    }
-  }
-
-  // 2. Clean reviews directory
-  const reviewsDir = path.join(projectDir, 'reviews');
-  if (fs.existsSync(reviewsDir)) {
-    const files = fs.readdirSync(reviewsDir);
-    for (const file of files) {
-      if (file.endsWith('.md')) {
-        const filePath = path.join(reviewsDir, file);
-        try {
-          const content = fs.readFileSync(filePath, 'utf8');
-          const record = parseRecord(content, filePath);
-          const dateStr = record.frontmatter.created || record.frontmatter.updated;
-          if (isRecordExpired(dateStr, reviewTtlDays, record.frontmatter.ttl, now)) {
-            purgedReviewCount++;
-            purgedFiles.push(filePath);
-            if (!dryRun) {
-              recordTombstone(
-                vaultRoot,
-                projectId,
-                record.frontmatter.kind,
-                record.frontmatter.id,
-                String(record.frontmatter.slug || record.frontmatter.id)
-              );
-              fs.unlinkSync(filePath);
-              removeRecord(db, record.frontmatter.id, projectId);
-            }
-          }
-        } catch {
-          // Ignore parse errors
-        }
-      }
-    }
-  }
-
-  // 3. Compact shipped plans
+  const sweep = sweepExpiredRecords(projectDir, projectId, vaultRoot, db, {
+    dryRun,
+    purge,
+    now,
+    scratchTtlDays,
+    reviewTtlDays
+  });
+  let purgedScratchCount = sweep.purgedScratchCount;
+  let purgedReviewCount = sweep.purgedReviewCount;
+  const trapsArchivedCount = sweep.trapsArchivedCount;
+  const decisionsArchivedCount = sweep.decisionsArchivedCount;
+  const plansArchivedCount = sweep.plansArchivedCount;
+  purgedFiles.push(...sweep.purgedFiles);
   const plansDir = path.join(projectDir, 'plans');
   if (fs.existsSync(plansDir)) {
     const files = fs.readdirSync(plansDir);
@@ -399,6 +442,9 @@ export async function runGc(options: GcOptions = {}): Promise<GcResult> {
       projectId,
       purgedScratchCount,
       purgedReviewCount,
+      trapsArchivedCount,
+      decisionsArchivedCount,
+      plansArchivedCount,
       compactedPlansCount,
       compactedLogsCount,
       rebuiltFts,

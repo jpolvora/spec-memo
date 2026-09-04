@@ -3,13 +3,14 @@ import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordSource, RecordStatus, AppendOptions, AppendResult, ForgetOptions, ForgetResult } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 import { randomBytes } from 'node:crypto';
-import { ensureProjectVault, getVaultRoot, commitVaultChange, withVaultLock, withVaultLockSync } from './vault.js';
+import { ensureProjectVault, getVaultRoot, commitVaultChange, withVaultLock, withVaultLockSync, ensureVaultStructure } from './vault.js';
 import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
 import { assertNoSecrets, assertNotInProductRoot } from './safety.js';
 import { recordTombstone } from './sync.js';
 import { applyTrapClassification, occurrenceOf, lastSeenOf } from './recurrence.js';
+import { computeExpiresAt, validateTtlInput, annotateExpiredFrontmatter } from './expiration.js';
 
 export interface UpsertOptions {
   cwd?: string;
@@ -283,6 +284,29 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     rawFrontmatter.status = rawFrontmatter.status.trim().toLowerCase() as RecordStatus;
   }
 
+  const ttlInput =
+    typeof options.frontmatter?.ttl === 'string'
+      ? options.frontmatter.ttl
+      : typeof rawFrontmatter.ttl === 'string'
+        ? rawFrontmatter.ttl
+        : undefined;
+  const expiresAtInput =
+    typeof options.frontmatter?.expires_at === 'string'
+      ? options.frontmatter.expires_at
+      : typeof rawFrontmatter.expires_at === 'string'
+        ? rawFrontmatter.expires_at
+        : undefined;
+  if (ttlInput || expiresAtInput) {
+    const ttlValidation = validateTtlInput(ttlInput);
+    if (!ttlValidation.ok) {
+      throw new Error(ttlValidation.error);
+    }
+    const computed = computeExpiresAt(String(rawFrontmatter.created), ttlInput, expiresAtInput);
+    if (computed) {
+      rawFrontmatter.expires_at = computed;
+    }
+  }
+
   if (rawFrontmatter.path && typeof rawFrontmatter.path === 'string') {
     const rawPath = String(rawFrontmatter.path).trim();
     if (rawPath) {
@@ -418,6 +442,18 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
 /**
  * Retrieve a memory record by ID or by kind+slug.
  */
+function annotateRetrievedRecord(record: MemoRecord, vaultRoot: string): MemoRecord {
+  const config = ensureVaultStructure(vaultRoot);
+  return {
+    ...record,
+    frontmatter: annotateExpiredFrontmatter(
+      record.frontmatter,
+      config.ttl?.scratchDays ?? 7,
+      config.ttl?.reviewDays ?? 14
+    )
+  };
+}
+
 export async function getRecord(options: GetOptions): Promise<MemoRecord | null> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
   const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
@@ -437,7 +473,8 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
       const directPath = path.join(projectDir, subdir, `${directLookup}.md`);
       if (fs.existsSync(directPath)) {
         try {
-          return parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
+          const record = parseRecord(fs.readFileSync(directPath, 'utf8'), directPath);
+          return annotateRetrievedRecord(record, vaultRoot);
         } catch {
           return null;
         }
@@ -454,7 +491,10 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
           const directFile = path.join(dirPath, `${lookupId}.md`);
           if (fs.existsSync(directFile)) {
             try {
-              return parseRecord(fs.readFileSync(directFile, 'utf8'), directFile);
+              return annotateRetrievedRecord(
+                parseRecord(fs.readFileSync(directFile, 'utf8'), directFile),
+                vaultRoot
+              );
             } catch {
               // Continue scanning
             }
@@ -468,7 +508,7 @@ export async function getRecord(options: GetOptions): Promise<MemoRecord | null>
               try {
                 const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
                 if (parsed.frontmatter.id === lookupId) {
-                  return parsed;
+                  return annotateRetrievedRecord(parsed, vaultRoot);
                 }
               } catch {
                 // Ignore unparseable
@@ -573,7 +613,7 @@ const CROSS_PROJECT_GET_EXCLUDED: RecordKind[] = ['scratch', 'state', 'review'];
       ];
 
       if (uniqueMatches.length === 1) {
-        return uniqueMatches[0];
+        return annotateRetrievedRecord(uniqueMatches[0], vaultRoot);
       }
       if (uniqueMatches.length > 1) {
         // Ambiguous match across multiple sibling projects — fail closed
