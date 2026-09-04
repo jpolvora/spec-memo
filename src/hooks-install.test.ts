@@ -12,6 +12,7 @@ import {
   generateFailOpenShellBody,
   generateOpenCodePlugin,
   generateCursorRule,
+  stripSpecMemoFromHookConfig,
   HOOK_TIMEOUT_MS
 } from './hooks-install.js';
 
@@ -72,6 +73,14 @@ describe('hooks-install', () => {
       PreInvocation: [{ matcher: { invocationNum: 0 }, command: 'memo bootstrap' }]
     });
     assert.equal(merged.keep, true);
+  });
+
+  it('deepMergeJson appends hook arrays instead of replacing existing entries', () => {
+    const merged = deepMergeJson(
+      { hooks: { PreInvocation: [{ command: 'echo keep-me' }] } },
+      { hooks: { PreInvocation: [{ command: '.agents/hooks/spec-memo-session-start.sh' }] } }
+    );
+    assert.equal((merged.hooks as { PreInvocation: unknown[] }).PreInvocation.length, 2);
   });
 
   it('dry-run preview does not write files per AC13', async () => {
@@ -175,6 +184,69 @@ describe('hooks-install', () => {
     assert.equal(inspection.installed, true);
     assert.ok(inspection.hosts.some((h) => h.host === 'Cursor' && h.active));
     assert.match(inspection.summary, /Cursor \(Active\)/);
+  });
+
+  it('generated record scripts include session id and non-empty body', async () => {
+    await installHooks({
+      host: 'cursor',
+      productRoot,
+      cwd: productRoot,
+      apply: true,
+      force: true,
+      packageVersion: '1.0.0'
+    });
+    const record = fs.readFileSync(
+      path.join(productRoot, '.cursor', 'hooks', 'spec-memo-record.sh'),
+      'utf8'
+    );
+    assert.match(record, /--session-id/);
+    assert.match(record, /\[hook-automated turn\]/);
+  });
+
+  it('--remove strips spec-memo hook entries from hooks.json per AC15', async () => {
+    const hooksPath = path.join(productRoot, '.cursor', 'hooks.json');
+    fs.mkdirSync(path.dirname(hooksPath), { recursive: true });
+    fs.writeFileSync(
+      hooksPath,
+      JSON.stringify(
+        {
+          version: 1,
+          hooks: {
+            sessionStart: [{ command: 'echo keep' }],
+            beforeSubmitPrompt: [{ command: '.cursor/hooks/spec-memo-record.sh' }]
+          }
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    await installHooks({
+      host: 'cursor',
+      productRoot,
+      cwd: productRoot,
+      apply: true,
+      remove: true,
+      packageVersion: '1.0.0'
+    });
+
+    const parsed = JSON.parse(fs.readFileSync(hooksPath, 'utf8')) as {
+      hooks: { sessionStart: Array<{ command: string }>; beforeSubmitPrompt?: unknown[] };
+    };
+    assert.equal(parsed.hooks.sessionStart.length, 1);
+    assert.equal(parsed.hooks.beforeSubmitPrompt?.length ?? 0, 0);
+  });
+
+  it('stripSpecMemoFromHookConfig removes spec-memo commands only', () => {
+    const cleaned = stripSpecMemoFromHookConfig({
+      hooks: {
+        sessionStart: [{ command: 'echo ok' }, { command: '.cursor/hooks/spec-memo-bootstrap.sh' }]
+      },
+      'spec-memo': { version: '1.0.0' }
+    });
+    assert.equal((cleaned.hooks as { sessionStart: unknown[] }).sessionStart.length, 1);
+    assert.equal(cleaned['spec-memo'], undefined);
   });
 
   it('--remove uninstalls generated cursor artifacts per AC15', async () => {

@@ -9,6 +9,7 @@ export type HookHostName = (typeof SUPPORTED_HOOK_HOSTS)[number];
 
 export const HOOK_TIMEOUT_MS = 1500;
 export const GENERATED_BY_PREFIX = '// generated-by: spec-memo@';
+export const ACTIVE_SESSION_FILE = '.spec-memo/.active-session-id';
 
 export interface InstallHooksOptions {
   host?: HookHostName | string;
@@ -137,16 +138,36 @@ export function resolveHostHookPaths(
   }
 }
 
+function mergeHookArrays(existing: unknown[], incoming: unknown[]): unknown[] {
+  const seen = new Set(existing.map((entry) => JSON.stringify(entry)));
+  const out = [...existing];
+  for (const entry of incoming) {
+    const key = JSON.stringify(entry);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
 export function deepMergeJson(
   base: Record<string, unknown>,
   patch: Record<string, unknown>
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(patch)) {
+    if (Array.isArray(value)) {
+      if (Array.isArray(out[key])) {
+        out[key] = mergeHookArrays(out[key] as unknown[], value);
+      } else {
+        out[key] = value;
+      }
+      continue;
+    }
     if (
       value &&
       typeof value === 'object' &&
-      !Array.isArray(value) &&
       out[key] &&
       typeof out[key] === 'object' &&
       !Array.isArray(out[key])
@@ -159,23 +180,75 @@ export function deepMergeJson(
   return out;
 }
 
+function isSpecMemoHookEntry(entry: unknown): boolean {
+  if (!entry || typeof entry !== 'object') return false;
+  const cmd = String((entry as Record<string, unknown>).command || '');
+  return cmd.includes('spec-memo') || cmd.includes('.spec-memo');
+}
+
+export function stripSpecMemoFromHookConfig(parsed: Record<string, unknown>): Record<string, unknown> {
+  delete parsed['spec-memo'];
+  const hooks = parsed.hooks;
+  if (hooks && typeof hooks === 'object' && !Array.isArray(hooks)) {
+    for (const [key, value] of Object.entries(hooks as Record<string, unknown>)) {
+      if (Array.isArray(value)) {
+        (hooks as Record<string, unknown>)[key] = value.filter((entry) => !isSpecMemoHookEntry(entry));
+      }
+    }
+  }
+  return parsed;
+}
+
 function shellHeader(version: string): string {
   return `#!/bin/sh
 # ${GENERATED_BY_PREFIX}${version}
 # spec-memo fail-open hook (max ${HOOK_TIMEOUT_MS}ms)
+SESSION_FILE="${ACTIVE_SESSION_FILE}"
 `;
 }
 
-export function generateFailOpenShellBody(memoArgs: string[]): string {
-  const quoted = memoArgs.map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ');
-  return `${shellHeader(getPackageVersion())}
-run_memo() {
-  if command -v memo >/dev/null 2>&1; then
-    timeout 1.5 memo ${quoted} >/dev/null 2>&1 || true
-  fi
-  exit 0
+function generateSessionStartScript(version: string): string {
+  return `${shellHeader(version)}SID="hook-$(date +%s)-$$"
+mkdir -p .spec-memo 2>/dev/null || true
+echo "$SID" > "$SESSION_FILE" 2>/dev/null || true
+if command -v memo >/dev/null 2>&1; then
+  timeout 1.5 memo bootstrap >/dev/null 2>&1 || true
+  timeout 1.5 memo prompt session_start --session-id "$SID" >/dev/null 2>&1 || true
+fi
+exit 0
+`;
 }
-run_memo
+
+function generateRecordScript(version: string, body: string): string {
+  const escaped = body.replace(/'/g, `'\\''`);
+  return `${shellHeader(version)}SID=""
+if [ -f "$SESSION_FILE" ]; then SID="$(cat "$SESSION_FILE" 2>/dev/null)"; fi
+if [ -z "$SID" ]; then SID="hook-orphan-$$"; fi
+if command -v memo >/dev/null 2>&1; then
+  timeout 1.5 memo prompt record --session-id "$SID" --body '${escaped}' >/dev/null 2>&1 || true
+fi
+exit 0
+`;
+}
+
+function generateSessionEndScript(version: string): string {
+  return `${shellHeader(version)}SID=""
+if [ -f "$SESSION_FILE" ]; then SID="$(cat "$SESSION_FILE" 2>/dev/null)"; fi
+if [ -z "$SID" ]; then exit 0; fi
+if command -v memo >/dev/null 2>&1; then
+  timeout 1.5 memo prompt session_end --session-id "$SID" >/dev/null 2>&1 || true
+fi
+rm -f "$SESSION_FILE" 2>/dev/null || true
+exit 0
+`;
+}
+
+export function generateFailOpenShellBody(memoArgs: string[], version = getPackageVersion()): string {
+  const quoted = memoArgs.map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ');
+  return `${shellHeader(version)}if command -v memo >/dev/null 2>&1; then
+  timeout 1.5 memo ${quoted} >/dev/null 2>&1 || true
+fi
+exit 0
 `;
 }
 
@@ -233,18 +306,24 @@ function generateClaudeHooksConfig(version: string): Record<string, unknown> {
 
 export function generateOpenCodePlugin(version: string): string {
   return `${GENERATED_BY_PREFIX}${version}
-export default {
-  name: 'spec-memo',
-  async onInit() {
-    await runMemo(['bootstrap']);
-  },
-  async onPrompt() {
-    await runMemo(['prompt', 'record', '--body', '']);
-  },
-  async onExit() {
-    await runMemo(['sync']);
+import * as fs from 'node:fs';
+
+const SESSION_FILE = '${ACTIVE_SESSION_FILE}';
+
+function readSessionId() {
+  try {
+    return fs.readFileSync(SESSION_FILE, 'utf8').trim();
+  } catch {
+    return \`hook-\${Date.now()}\`;
   }
-};
+}
+
+function writeSessionId(id) {
+  try {
+    fs.mkdirSync('.spec-memo', { recursive: true });
+    fs.writeFileSync(SESSION_FILE, id, 'utf8');
+  } catch {}
+}
 
 async function runMemo(args) {
   const { spawn } = await import('node:child_process');
@@ -258,6 +337,26 @@ async function runMemo(args) {
     child.on('close', () => { clearTimeout(timer); resolve(0); });
   });
 }
+
+export default {
+  name: 'spec-memo',
+  async onInit() {
+    const sid = \`hook-\${Date.now()}\`;
+    writeSessionId(sid);
+    await runMemo(['bootstrap']);
+    await runMemo(['prompt', 'session_start', '--session-id', sid]);
+  },
+  async onPrompt() {
+    const sid = readSessionId();
+    await runMemo(['prompt', 'record', '--session-id', sid, '--body', '[hook-automated turn]']);
+  },
+  async onExit() {
+    const sid = readSessionId();
+    await runMemo(['prompt', 'session_end', '--session-id', sid]);
+    try { fs.unlinkSync(SESSION_FILE); } catch {}
+    await runMemo(['sync']);
+  }
+};
 `;
 }
 
@@ -280,53 +379,30 @@ Hooks are optional; skill-only mode via ws-memo autoload is fully supported.
 }
 
 function uniqueScripts(
-  host: Exclude<HookHostName, 'all'>
+  host: Exclude<HookHostName, 'all'>,
+  version: string
 ): Array<{ rel: string; content: string }> {
   switch (host) {
     case 'antigravity':
       return [
-        {
-          rel: 'spec-memo-session-start.sh',
-          content: `${shellHeader(getPackageVersion())}
-if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo bootstrap >/dev/null 2>&1 || true
-  timeout 1.5 memo prompt session_start >/dev/null 2>&1 || true
-fi
-exit 0
-`
-        },
-        {
-          rel: 'spec-memo-session-end.sh',
-          content: generateFailOpenShellBody(['prompt', 'session_end'])
-        }
+        { rel: 'spec-memo-session-start.sh', content: generateSessionStartScript(version) },
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
       ];
     case 'cursor':
       return [
-        { rel: 'spec-memo-bootstrap.sh', content: generateFailOpenShellBody(['bootstrap']) },
-        {
-          rel: 'spec-memo-record.sh',
-          content: generateFailOpenShellBody(['prompt', 'record', '--body', ''])
-        },
-        {
-          rel: 'spec-memo-session-end.sh',
-          content: generateFailOpenShellBody(['prompt', 'session_end'])
-        }
+        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version) },
+        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]') },
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
       ];
     case 'claude':
       return [
-        { rel: 'spec-memo-bootstrap.sh', content: generateFailOpenShellBody(['bootstrap']) },
-        {
-          rel: 'spec-memo-record.sh',
-          content: generateFailOpenShellBody(['prompt', 'record', '--body', ''])
-        },
+        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version) },
+        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]') },
         {
           rel: 'spec-memo-checkpoint.sh',
-          content: generateFailOpenShellBody(['prompt', 'record', '--checkpoint'])
+          content: generateRecordScript(version, '[pre-compact checkpoint]')
         },
-        {
-          rel: 'spec-memo-session-end.sh',
-          content: generateFailOpenShellBody(['prompt', 'session_end'])
-        }
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
       ];
     default:
       return [];
@@ -394,15 +470,9 @@ function removeSpecMemoBlock(filePath: string): 'removed' | 'unchanged' {
     return 'removed';
   }
   if (filePath.endsWith('.json')) {
-    const parsed = readJsonFile(filePath);
-    if (parsed['spec-memo']) {
-      delete parsed['spec-memo'];
-      if (parsed.hooks && typeof parsed.hooks === 'object') {
-        // Best-effort prune: if only spec-memo hooks, leave merged hooks for user
-      }
-      fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), 'utf8');
-      return 'removed';
-    }
+    const parsed = stripSpecMemoFromHookConfig(readJsonFile(filePath));
+    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), 'utf8');
+    return 'removed';
   }
   if (filePath.endsWith('.mdc') || filePath.endsWith('.js')) {
     const text = fs.readFileSync(filePath, 'utf8');
@@ -418,7 +488,7 @@ function buildHostArtifacts(
   host: Exclude<HookHostName, 'all'>,
   version: string
 ): Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> {
-  const scripts = uniqueScripts(host);
+    const scripts = uniqueScripts(host, version);
   const artifacts: Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> = [];
 
   switch (host) {
