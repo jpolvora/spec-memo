@@ -184,6 +184,18 @@ export function matchEligibleHandoff(
   return null;
 }
 
+export function peekEligibleHandoff(options: {
+  projectDir: string;
+  cwd: string;
+  owner?: string;
+  branch?: string;
+}): HandoffRecord | null {
+  const owner = options.owner || resolveOwner(options.cwd);
+  const branch = options.branch || resolveGitBranch(options.cwd);
+  const pending = listPendingHandoffs(options.projectDir);
+  return matchEligibleHandoff(pending, owner, branch);
+}
+
 export function findHandoffFile(projectDir: string, record: HandoffRecord): string | null {
   const dir = path.join(projectDir, HANDOFFS_SUBDIR);
   const expected = handoffFileName(record.owner, record.branch, record.shared);
@@ -336,13 +348,19 @@ export function getSessionObjective(options: {
   cwd: string;
   owner?: string;
   branch?: string;
+  requireActiveSession?: boolean;
 }): SessionObjective | null {
   const owner = options.owner || resolveOwner(options.cwd);
   const branch = options.branch || resolveGitBranch(options.cwd);
   const filePath = path.join(objectivesDir(options.projectDir), objectiveFileName(owner, branch));
   if (!fs.existsSync(filePath)) return null;
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as SessionObjective;
+    const record = JSON.parse(fs.readFileSync(filePath, 'utf8')) as SessionObjective;
+    if (options.requireActiveSession !== false && record.sessionId) {
+      const sessionPath = path.join(options.projectDir, 'sessions', `session-${record.sessionId}.md`);
+      if (!fs.existsSync(sessionPath)) return null;
+    }
+    return record;
   } catch {
     return null;
   }

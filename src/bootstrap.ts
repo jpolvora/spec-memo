@@ -13,10 +13,12 @@ import { cloneRecordWithStaleBadge } from './salience.js';
 import { roundExplain } from './ranking-explain.js';
 import { isRecordExpiredAt, defaultTtlDaysForKind } from './expiration.js';
 import {
-  deliverAndClaimHandoff,
+  claimHandoff,
   getSessionObjective,
+  peekEligibleHandoff,
   renderHandoffMarkdown
 } from './handoff.js';
+import { HandoffRecord, SessionObjective } from './types.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -263,23 +265,15 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
   const allRecords = scanProjectRecords(projectDir);
   const cwd = options.cwd || process.cwd();
 
-  // Handoff delivery (AC7-AC11): claim eligible baton before budget trimming
-  let handoffClaimed;
+  // Handoff delivery (AC7-AC11): peek before budget pass; claim only after brief fits
+  let handoffCandidate: HandoffRecord | null = null;
   let handoffMarkdown: string | undefined;
-  let sessionObjective;
+  let sessionObjective: SessionObjective | undefined;
   try {
-    sessionObjective =
-      getSessionObjective({ projectDir, cwd }) || undefined;
-    const claimed = deliverAndClaimHandoff({
-      projectDir,
-      cwd,
-      vaultRoot,
-      sessionId: options.sessionId,
-      projectId
-    });
-    if (claimed) {
-      handoffClaimed = claimed;
-      handoffMarkdown = renderHandoffMarkdown(claimed);
+    sessionObjective = getSessionObjective({ projectDir, cwd }) || undefined;
+    handoffCandidate = peekEligibleHandoff({ projectDir, cwd });
+    if (handoffCandidate) {
+      handoffMarkdown = renderHandoffMarkdown(handoffCandidate);
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -397,7 +391,6 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     projectId,
     gitRemote: metadata?.gitRemote || identity.normalizedRemote,
     lastSeenRoot: identity.rootPath,
-    handoff: handoffClaimed,
     handoffMarkdown,
     sessionObjective,
     activeSlice,
@@ -414,9 +407,45 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
   initialBrief.byteLength = calculatePayloadSize(initialBrief);
 
-  // Reserve handoff section bytes before trap/decision trimming (AC10)
-  const handoffReserve = handoffMarkdown ? Buffer.byteLength(handoffMarkdown, 'utf8') + 64 : 0;
-  const effectiveBudget = Math.max(512, budgetBytes - handoffReserve);
+  const finalizeBrief = (brief: BootstrapBrief): BootstrapBrief => {
+    if (!handoffCandidate || !handoffMarkdown) {
+      brief.byteLength = calculatePayloadSize(brief);
+      return brief;
+    }
+    const deliverable: BootstrapBrief = {
+      ...brief,
+      handoffMarkdown,
+      sessionObjective: brief.sessionObjective ?? sessionObjective
+    };
+    if (calculatePayloadSize(deliverable) > budgetBytes) {
+      brief.byteLength = calculatePayloadSize(brief);
+      return brief;
+    }
+    try {
+      deliverable.handoff = claimHandoff({
+        projectDir,
+        record: handoffCandidate,
+        claimedBySession: options.sessionId,
+        vaultRoot,
+        projectId
+      });
+      deliverable.byteLength = calculatePayloadSize(deliverable);
+      return deliverable;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notices.push(`Handoff claim warning: ${msg}`);
+      brief.byteLength = calculatePayloadSize(brief);
+      return brief;
+    }
+  };
+
+  // Reserve immutable handoff/objective bytes before trap/decision trimming (AC10)
+  const immutableReserve =
+    (handoffMarkdown ? Buffer.byteLength(handoffMarkdown, 'utf8') : 0) +
+    (sessionObjective ? Buffer.byteLength(JSON.stringify(sessionObjective), 'utf8') : 0) +
+    (handoffCandidate ? Buffer.byteLength(JSON.stringify(handoffCandidate), 'utf8') : 0) +
+    64;
+  const effectiveBudget = Math.max(512, budgetBytes - immutableReserve);
 
   if (initialBrief.byteLength > budgetBytes) {
     initialBrief.truncated = true;
@@ -499,6 +528,8 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     if (calculatePayloadSize(initialBrief) > budgetBytes) {
       const minimal: BootstrapBrief = {
         projectId: initialBrief.projectId,
+        handoffMarkdown,
+        sessionObjective,
         traps: [],
         decisions: [],
         totalTrapsCount: initialBrief.totalTrapsCount,
@@ -527,7 +558,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
           reviewTtlDays
         );
       }
-      return minimal;
+      return finalizeBrief(minimal);
     }
 
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
@@ -550,5 +581,5 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     );
   }
 
-  return initialBrief;
+  return finalizeBrief(initialBrief);
 }

@@ -199,6 +199,8 @@ export async function startSessionRecord(options: PromptOptions): Promise<Sessio
         objective: options.objective,
         sessionId
       });
+    } else {
+      clearSessionObjective({ projectDir, cwd });
     }
 
     const claimed = deliverAndClaimHandoff({

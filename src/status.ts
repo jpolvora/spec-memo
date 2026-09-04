@@ -4988,7 +4988,11 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const projectDir = path.join(vaultRoot, "projects", project);
         const { listPendingHandoffs } = await import("./handoff.js");
         const items = fs.existsSync(projectDir) ? listPendingHandoffs(projectDir) : [];
-        writeJson(res, 200, { items, total: items.length, projectId: project, lastSeenRoot: meta?.lastSeenRoot });
+        writeJson(
+          res,
+          200,
+          sanitizeToolOutput({ items, total: items.length, projectId: project, lastSeenRoot: meta?.lastSeenRoot })
+        );
         return;
       }
 
@@ -5002,7 +5006,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const projectDir = path.join(vaultRoot, "projects", project);
         const { dismissHandoffById } = await import("./handoff.js");
         const dismissed = dismissHandoffById(projectDir, handoffId);
-        writeJson(res, 200, { dismissed, id: handoffId });
+        writeJson(res, 200, sanitizeToolOutput({ dismissed, id: handoffId }));
         return;
       }
 
