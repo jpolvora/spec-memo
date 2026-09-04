@@ -784,7 +784,7 @@ export function commitVaultChange(
       const toAdd = resolveVaultCommitAddPaths(vaultRoot, paths);
       if (toAdd.length === 0) return false;
 
-      const addRes = gitExec(vaultRoot, ['add', '--', ...toAdd], 'commit');
+      const addRes = gitExec(vaultRoot, ['add', '-A', '--', ...toAdd], 'commit');
       if (!addRes.ok) {
         writeVaultGitState(vaultRoot, { dirty: true, lastError: addRes.error || 'git add failed' });
         return false;

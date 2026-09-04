@@ -228,6 +228,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-31 | status-backup-page | Dedicated Backups tab with full-backup confirm, complete archives, inventory filters, restore/delete/download; npm test 380 pass |
 | 2026-09-01 | vault-git-hybrid-sync | Batched vault-git + dual-mode hybrid parallel dispatch; npm test 406 pass |
 | 2026-09-02 | memory-hit-count | Retrieval `hits`/`lastHit`, bootstrap/get/search.hitIds, status Memory list+drawer, canvas Hits; v0.17.0; npm test 435 pass |
+| 2026-09-04 | sync-conflict-reconciliation | Vault sync conflict reconciliation, semantic auto-merge, memo reconcile, rollback journal, single conflict cap; npm test 451 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

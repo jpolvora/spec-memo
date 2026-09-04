@@ -8,7 +8,7 @@ import { rebuildIndex } from "./indexer.js";
 import { rebuildCompiledViews } from "./compiler.js";
 import { getVaultProjectList, listProjectRecordsInternal } from "./canvas.js";
 import { isPathInside, assertNoSecrets, assertValidProjectId } from "./safety.js";
-import { RecordFrontmatter, RecordKind } from "./types.js";
+import { RecordFrontmatter, RecordKind, ConflictStrategy, ConflictRecordDetail } from "./types.js";
 
 export interface ChangesetRecord {
   frontmatter: RecordFrontmatter;
@@ -37,6 +37,9 @@ export interface SyncResult {
   conflicts: number;
   dryRun: boolean;
   recordsApplied: string[];
+  autoMerged?: number;
+  sidecarsCleaned?: number;
+  conflictDetails?: ConflictRecordDetail[];
 }
 
 export interface ExportChangesetOptions {
@@ -47,6 +50,187 @@ export interface ExportChangesetOptions {
 export interface ApplyChangesetOptions {
   dryRun?: boolean;
   force?: boolean;
+  prefer?: 'local' | 'remote';
+  strategy?: ConflictStrategy;
+  cleanSidecars?: boolean;
+}
+
+export function areBodiesSemanticallyEqual(bodyA: string, bodyB: string): boolean {
+  const normA = (bodyA || "").replace(/\r\n/g, "\n").trim();
+  const normB = (bodyB || "").replace(/\r\n/g, "\n").trim();
+  return normA === normB;
+}
+
+export function mergeRecordMetadata(
+  localFm: RecordFrontmatter,
+  incomingFm: RecordFrontmatter
+): RecordFrontmatter {
+  const merged: RecordFrontmatter = { ...localFm, ...incomingFm };
+
+  const localHits = Number(localFm.hits || 0);
+  const incomingHits = Number(incomingFm.hits || 0);
+  if (localHits > 0 || incomingHits > 0) {
+    merged.hits = Math.max(localHits, incomingHits);
+  }
+
+  const localOcc = Number(localFm.occurrences || 1);
+  const incomingOcc = Number(incomingFm.occurrences || 1);
+  if (localOcc > 1 || incomingOcc > 1) {
+    merged.occurrences = Math.max(localOcc, incomingOcc);
+  }
+
+  if (localFm.lastHit || incomingFm.lastHit) {
+    const tLocal = localFm.lastHit ? new Date(localFm.lastHit).getTime() : 0;
+    const tIncoming = incomingFm.lastHit ? new Date(incomingFm.lastHit).getTime() : 0;
+    merged.lastHit = tIncoming >= tLocal ? incomingFm.lastHit : localFm.lastHit;
+  }
+
+  if (localFm.lastSeen || incomingFm.lastSeen) {
+    const tLocal = localFm.lastSeen ? new Date(localFm.lastSeen).getTime() : 0;
+    const tIncoming = incomingFm.lastSeen ? new Date(incomingFm.lastSeen).getTime() : 0;
+    merged.lastSeen = tIncoming >= tLocal ? incomingFm.lastSeen : localFm.lastSeen;
+  }
+
+  const localTags = Array.isArray(localFm.tags) ? localFm.tags : [];
+  const incomingTags = Array.isArray(incomingFm.tags) ? incomingFm.tags : [];
+  if (localTags.length > 0 || incomingTags.length > 0) {
+    merged.tags = Array.from(new Set([...localTags, ...incomingTags]));
+  }
+
+  const localPaths = Array.isArray(localFm.linkedPaths) ? localFm.linkedPaths : [];
+  const incomingPaths = Array.isArray(incomingFm.linkedPaths) ? incomingFm.linkedPaths : [];
+  if (localPaths.length > 0 || incomingPaths.length > 0) {
+    merged.linkedPaths = Array.from(new Set([...localPaths, ...incomingPaths]));
+  }
+
+  if (localFm.status === "superseded" || incomingFm.status === "superseded") {
+    merged.status = "superseded";
+  } else if (localFm.status === "archived" || incomingFm.status === "archived") {
+    merged.status = "archived";
+  }
+
+  const tLocalUp = new Date(localFm.updated || localFm.created).getTime();
+  const tIncomingUp = new Date(incomingFm.updated || incomingFm.created).getTime();
+  merged.updated = tIncomingUp >= tLocalUp ? incomingFm.updated : localFm.updated;
+
+  return merged;
+}
+
+export interface CleanSidecarsOptions {
+  prefer?: 'local' | 'remote';
+  dryRun?: boolean;
+  projectId?: string;
+}
+
+export interface CleanSidecarsResult {
+  cleaned: number;
+  retained: number;
+  filesCleaned: string[];
+}
+
+export function cleanConflictSidecars(
+  vaultRootInput?: string,
+  options: CleanSidecarsOptions = {}
+): CleanSidecarsResult {
+  const vaultRoot = getVaultRoot(vaultRootInput);
+  const projectsDir = path.resolve(vaultRoot, "projects");
+  if (!fs.existsSync(projectsDir)) {
+    return { cleaned: 0, retained: 0, filesCleaned: [] };
+  }
+
+  let cleaned = 0;
+  let retained = 0;
+  const filesCleaned: string[] = [];
+
+  const targetProjects = options.projectId
+    ? [options.projectId]
+    : fs.readdirSync(projectsDir).filter((d) => {
+        try {
+          return fs.statSync(path.join(projectsDir, d)).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+
+  for (const projId of targetProjects) {
+    const projDir = path.join(projectsDir, projId);
+    if (!fs.existsSync(projDir)) continue;
+
+    for (const subdir of Object.values(RECORD_SUBDIRS)) {
+      const kindDir = path.join(projDir, subdir);
+      if (!fs.existsSync(kindDir)) continue;
+
+      const entries = fs.readdirSync(kindDir);
+      for (const entry of entries) {
+        if (!entry.endsWith(".md")) continue;
+        const conflictMatch = entry.match(/^(.+?)\.conflict(?:\..+?)?\.md$/);
+        if (!conflictMatch) continue;
+
+        const baseSlug = conflictMatch[1];
+        const baseFilePath = path.join(kindDir, `${baseSlug}.md`);
+        const sidecarFilePath = path.join(kindDir, entry);
+
+        if (fs.existsSync(baseFilePath)) {
+          let canClean = false;
+          try {
+            const baseContent = fs.readFileSync(baseFilePath, "utf8");
+            const sidecarContent = fs.readFileSync(sidecarFilePath, "utf8");
+            const baseRecord = parseRecord(baseContent);
+            const sidecarRecord = parseRecord(sidecarContent);
+
+            if (areBodiesSemanticallyEqual(baseRecord.body, sidecarRecord.body)) {
+              if (!options.dryRun) {
+                const mergedFm = mergeRecordMetadata(baseRecord.frontmatter, sidecarRecord.frontmatter);
+                fs.writeFileSync(
+                  baseFilePath,
+                  serializeRecord({ frontmatter: mergedFm, body: baseRecord.body }),
+                  "utf8"
+                );
+              }
+              canClean = true;
+            } else if (options.prefer === "local") {
+              canClean = true;
+            } else if (options.prefer === "remote") {
+              if (!options.dryRun) {
+                fs.copyFileSync(sidecarFilePath, baseFilePath);
+              }
+              canClean = true;
+            }
+          } catch {
+            if (options.prefer === "local") {
+              canClean = true;
+            }
+          }
+
+          if (canClean) {
+            if (!options.dryRun) {
+              try {
+                fs.unlinkSync(sidecarFilePath);
+              } catch {
+                // Ignore unlink errors
+              }
+            }
+            cleaned++;
+            filesCleaned.push(`${projId}/${subdir}/${entry}`);
+          } else {
+            retained++;
+          }
+        } else {
+          if (!options.dryRun) {
+            try {
+              fs.renameSync(sidecarFilePath, baseFilePath);
+            } catch {
+              // Ignore
+            }
+          }
+          cleaned++;
+          filesCleaned.push(`${projId}/${subdir}/${entry} (promoted)`);
+        }
+      }
+    }
+  }
+
+  return { cleaned, retained, filesCleaned };
 }
 
 export function readSyncCursor(vaultRoot: string, peerVault: string): string | undefined {
@@ -196,66 +380,157 @@ export async function applyChangeset(
   options: ApplyChangesetOptions = {}
 ): Promise<SyncResult> {
   const vaultRoot = getVaultRoot(vaultRootInput);
+
+  // Phase 1: Pre-execution validation across all records (AC9)
+  const validatedRecords: Array<{
+    projId: string;
+    projDir: string;
+    kind: import("./types.js").RecordKind;
+    recId: string;
+    slug: string;
+    kindDir: string;
+    targetFilePath: string;
+    item: ChangesetRecord;
+  }> = [];
+
+  for (const item of changeset.records || []) {
+    const projId = assertValidProjectId(item.project, path.resolve(vaultRoot, "projects"));
+    const projDir = path.resolve(vaultRoot, "projects", projId);
+    const kind = item.frontmatter.kind;
+    const recId = item.frontmatter.id;
+    const slug = String(item.frontmatter.slug || recId);
+    const kindDir = path.join(projDir, getSubdirForKind(kind));
+    const targetFilePath = path.resolve(kindDir, `${slug}.md`);
+
+    if (!isPathInside(targetFilePath, projDir)) {
+      throw new Error("Changeset record path escapes project directory");
+    }
+
+    assertNoSecrets(item.body, "synced changeset body");
+    assertNoSecrets(item.frontmatter, "synced changeset frontmatter");
+    const validation = validateFrontmatter(item.frontmatter);
+    if (!validation.success) {
+      throw new Error(`Invalid changeset record ${item.frontmatter.id}: ${validation.errors.join(", ")}`);
+    }
+
+    validatedRecords.push({
+      projId,
+      projDir,
+      kind,
+      recId,
+      slug,
+      kindDir,
+      targetFilePath,
+      item
+    });
+  }
+
+  // Phase 2: Transactional Execution with Staging Rollback Journal (AC10, AC11, AC12)
   return withVaultLock(vaultRoot, async () => {
     const dryRun = !!options.dryRun;
     let applied = 0;
     let skipped = 0;
     let conflicts = 0;
+    let autoMerged = 0;
     const recordsApplied: string[] = [];
-
+    const conflictDetails: ConflictRecordDetail[] = [];
     const touchedProjects = new Set<string>();
 
-    for (const item of changeset.records) {
-      const projId = assertValidProjectId(item.project, path.resolve(vaultRoot, "projects"));
-      touchedProjects.add(projId);
+    const journal: Array<{ filePath: string; originalContent: string | null }> = [];
 
-      const projDir = path.resolve(vaultRoot, "projects", projId);
-      if (!dryRun && !fs.existsSync(projDir)) {
-        initVault({ vaultRoot, projectId: projId, displayName: projId });
-      }
+    try {
+      for (const rec of validatedRecords) {
+        const { projId, projDir, kind, recId, slug, kindDir, targetFilePath, item } = rec;
+        touchedProjects.add(projId);
 
-      const kind = item.frontmatter.kind;
-      const recId = item.frontmatter.id;
-      const slug = String(item.frontmatter.slug || recId);
-      const kindDir = path.join(projDir, getSubdirForKind(kind));
-      const targetFilePath = path.resolve(kindDir, `${slug}.md`);
-
-      if (!isPathInside(targetFilePath, projDir)) {
-        throw new Error("Changeset record path escapes project directory");
-      }
-
-      assertNoSecrets(item.body, "synced changeset body");
-      assertNoSecrets(item.frontmatter, "synced changeset frontmatter");
-      const validation = validateFrontmatter(item.frontmatter);
-      if (!validation.success) {
-        throw new Error(`Invalid changeset record ${item.frontmatter.id}: ${validation.errors.join(", ")}`);
-      }
-
-      if (fs.existsSync(targetFilePath)) {
-        const existingContent = fs.readFileSync(targetFilePath, "utf8");
-        const existing = parseRecord(existingContent);
-
-        const localTime = new Date(existing.frontmatter.updated || existing.frontmatter.created).getTime();
-        const remoteTime = new Date(item.frontmatter.updated || item.frontmatter.created).getTime();
-
-        if (existingContent === serializeRecord(item)) {
-          skipped++;
-          continue;
+        if (!dryRun && !fs.existsSync(projDir)) {
+          initVault({ vaultRoot, projectId: projId, displayName: projId });
         }
 
-        if (remoteTime > localTime || options.force) {
-          if (!dryRun) {
-            if (kind === "log") {
-              const mergedSlug = `${slug}.remote.${Date.now()}`;
+        if (fs.existsSync(targetFilePath)) {
+          const existingContent = fs.readFileSync(targetFilePath, "utf8");
+          const existing = parseRecord(existingContent);
+
+          const localTime = new Date(existing.frontmatter.updated || existing.frontmatter.created).getTime();
+          const remoteTime = new Date(item.frontmatter.updated || item.frontmatter.created).getTime();
+
+          const bodiesMatch = areBodiesSemanticallyEqual(existing.body, item.body);
+
+          // Record original for rollback journal before any modification
+          if (!dryRun && !journal.some((j) => j.filePath === targetFilePath)) {
+            journal.push({ filePath: targetFilePath, originalContent: existingContent });
+          }
+
+          if (bodiesMatch) {
+            // Bodies are identical: check if frontmatter also matches
+            const existingNormalizedFm = { ...(existing.frontmatter as Record<string, unknown>) };
+            const incomingNormalizedFm = { ...(item.frontmatter as Record<string, unknown>) };
+            delete existingNormalizedFm.hits;
+            delete existingNormalizedFm.lastHit;
+            delete incomingNormalizedFm.hits;
+            delete incomingNormalizedFm.lastHit;
+
+            if (!existingNormalizedFm.slug || existingNormalizedFm.slug === existingNormalizedFm.id) {
+              delete existingNormalizedFm.slug;
+            }
+            if (!incomingNormalizedFm.slug || incomingNormalizedFm.slug === incomingNormalizedFm.id) {
+              delete incomingNormalizedFm.slug;
+            }
+
+            const stableStringify = (obj: Record<string, unknown>): string => {
+              const sorted: Record<string, unknown> = {};
+              for (const key of Object.keys(obj).sort()) {
+                if (obj[key] !== undefined) {
+                  sorted[key] = obj[key];
+                }
+              }
+              return JSON.stringify(sorted);
+            };
+
+            const fmIdentical = stableStringify(existingNormalizedFm) === stableStringify(incomingNormalizedFm);
+            const hitsIdentical =
+              Number(existing.frontmatter.hits || 0) === Number(item.frontmatter.hits || 0) &&
+              existing.frontmatter.lastHit === item.frontmatter.lastHit;
+
+            if (fmIdentical && hitsIdentical) {
+              skipped++;
+              continue;
+            }
+
+            // AC2 & AC3: Bodies match but metadata differs -> auto-merge metadata cleanly
+            const mergedFm = mergeRecordMetadata(existing.frontmatter, item.frontmatter);
+            if (!dryRun) {
               await upsertRecord({
                 vaultRoot,
                 projectId: projId,
                 kind,
-                slug: mergedSlug,
-                frontmatter: item.frontmatter,
-                body: item.body
+                slug,
+                frontmatter: mergedFm,
+                body: existing.body,
+                allowDuplicate: kind !== "trap"
               });
-            } else {
+            }
+            applied++;
+            autoMerged++;
+            recordsApplied.push(`${projId}/${kind}/${recId} (auto-merged)`);
+            continue;
+          }
+
+          // Bodies actually diverge! Determine conflict strategy
+          const effectiveStrategy =
+            options.prefer === "local"
+              ? "local-wins"
+              : options.prefer === "remote"
+                ? "remote-wins"
+                : options.strategy || (options.force ? "local-wins" : "smart-merge");
+
+          if (effectiveStrategy === "local-wins") {
+            // Local wins: existing local record is preserved; incoming remote record is skipped
+            skipped++;
+            recordsApplied.push(`${projId}/${kind}/${recId} (local-wins)`);
+          } else if (effectiveStrategy === "remote-wins") {
+            // Remote wins: incoming record overwrites
+            if (!dryRun) {
               await upsertRecord({
                 vaultRoot,
                 projectId: projId,
@@ -265,81 +540,178 @@ export async function applyChangeset(
                 body: item.body
               });
             }
+            applied++;
+            recordsApplied.push(`${projId}/${kind}/${recId} (remote-wins)`);
+          } else if (effectiveStrategy === "sidecar") {
+            // Sidecar strategy: write single deterministic conflict sidecar for incoming
+            conflicts++;
+            if (!dryRun) {
+              const conflictPath = path.resolve(kindDir, `${slug}.conflict.md`);
+              fs.writeFileSync(conflictPath, serializeRecord(item), "utf8");
+            }
+            conflictDetails.push({
+              id: recId,
+              kind,
+              projectId: projId,
+              category: "body_divergence",
+              resolution: "sidecar-written",
+              localTime: existing.frontmatter.updated || existing.frontmatter.created,
+              remoteTime: item.frontmatter.updated || item.frontmatter.created
+            });
+            recordsApplied.push(`${projId}/${kind}/${recId} (conflict-saved)`);
+          } else {
+            // Smart-merge default strategy
+            if (remoteTime > localTime) {
+              // Remote is newer
+              if (!dryRun) {
+                if (kind === "log") {
+                  const mergedSlug = `${slug}.remote.${Date.now()}`;
+                  await upsertRecord({
+                    vaultRoot,
+                    projectId: projId,
+                    kind,
+                    slug: mergedSlug,
+                    frontmatter: item.frontmatter,
+                    body: item.body
+                  });
+                } else {
+                  await upsertRecord({
+                    vaultRoot,
+                    projectId: projId,
+                    kind,
+                    slug,
+                    frontmatter: item.frontmatter,
+                    body: item.body
+                  });
+                }
+              }
+              applied++;
+              recordsApplied.push(`${projId}/${kind}/${recId}`);
+            } else if (remoteTime === localTime) {
+              // True body conflict with identical timestamp: write single deterministic sidecar
+              conflicts++;
+              if (!dryRun) {
+                // AC4: Write single deterministic ${slug}.conflict.md
+                const conflictPath = path.resolve(kindDir, `${slug}.conflict.md`);
+                fs.writeFileSync(conflictPath, serializeRecord(item), "utf8");
+              }
+              conflictDetails.push({
+                id: recId,
+                kind,
+                projectId: projId,
+                category: "body_divergence",
+                resolution: "sidecar-written",
+                localTime: existing.frontmatter.updated || existing.frontmatter.created,
+                remoteTime: item.frontmatter.updated || item.frontmatter.created
+              });
+              recordsApplied.push(`${projId}/${kind}/${recId} (conflict-saved)`);
+            } else {
+              // localTime > remoteTime: local is newer, preserve local
+              skipped++;
+            }
+          }
+        } else {
+          // Record does not exist locally yet (new record)
+          if (!dryRun && !journal.some((j) => j.filePath === targetFilePath)) {
+            journal.push({ filePath: targetFilePath, originalContent: null });
+          }
+          if (!dryRun) {
+            await upsertRecord({
+              vaultRoot,
+              projectId: projId,
+              kind,
+              slug,
+              frontmatter: item.frontmatter,
+              body: item.body,
+              allowDuplicate: kind !== "trap"
+            });
           }
           applied++;
           recordsApplied.push(`${projId}/${kind}/${recId}`);
-        } else if (remoteTime === localTime) {
-          conflicts++;
-          if (!dryRun) {
-            const conflictPath = path.resolve(kindDir, `${slug}.conflict.${Date.now()}.md`);
-            fs.writeFileSync(conflictPath, serializeRecord(item), "utf8");
+        }
+      }
+
+      if (changeset.deletions && Array.isArray(changeset.deletions)) {
+        for (const del of changeset.deletions) {
+          const projId = assertValidProjectId(del.project, path.resolve(vaultRoot, "projects"));
+          const projDir = path.resolve(vaultRoot, "projects", projId);
+          const kindDir = path.join(projDir, getSubdirForKind(del.kind));
+          const slug = del.slug || del.id;
+          const targetPath = path.resolve(kindDir, `${slug}.md`);
+          if (isPathInside(targetPath, projDir) && fs.existsSync(targetPath)) {
+            if (!dryRun && !journal.some((j) => j.filePath === targetPath)) {
+              journal.push({ filePath: targetPath, originalContent: fs.readFileSync(targetPath, "utf8") });
+            }
+            if (!dryRun) {
+              fs.unlinkSync(targetPath);
+              recordTombstone(vaultRoot, projId, del.kind, del.id, slug);
+            }
+            touchedProjects.add(projId);
+            applied++;
+            recordsApplied.push(`${projId}/${del.kind}/${del.id} (deleted)`);
           }
-          recordsApplied.push(`${projId}/${kind}/${recId} (conflict-saved)`);
-        } else {
-          skipped++;
         }
-      } else {
-        if (!dryRun) {
-          await upsertRecord({
-            vaultRoot,
-            projectId: projId,
-            kind,
-            slug,
-            frontmatter: item.frontmatter,
-            body: item.body,
-            allowDuplicate: kind !== "trap"
-          });
-        }
-        applied++;
-        recordsApplied.push(`${projId}/${kind}/${recId}`);
       }
-    }
 
-    if (changeset.deletions && Array.isArray(changeset.deletions)) {
-      for (const del of changeset.deletions) {
-        const projId = assertValidProjectId(del.project, path.resolve(vaultRoot, "projects"));
-        const projDir = path.resolve(vaultRoot, "projects", projId);
-        const kindDir = path.join(projDir, getSubdirForKind(del.kind));
-        const slug = del.slug || del.id;
-        const targetPath = path.resolve(kindDir, `${slug}.md`);
-        if (isPathInside(targetPath, projDir) && fs.existsSync(targetPath)) {
-          if (!dryRun) {
-            fs.unlinkSync(targetPath);
-            recordTombstone(vaultRoot, projId, del.kind, del.id, slug);
+      let sidecarsCleaned = 0;
+      if (options.cleanSidecars && !dryRun) {
+        const cleanRes = cleanConflictSidecars(vaultRoot, { prefer: options.prefer });
+        sidecarsCleaned = cleanRes.cleaned;
+      }
+
+      if (!dryRun && applied > 0) {
+        for (const projId of touchedProjects) {
+          rebuildCompiledViews(projId, vaultRoot);
+        }
+        await rebuildIndex(vaultRoot);
+        commitVaultChange(
+          "sync changeset applied",
+          vaultRoot,
+          Array.from(touchedProjects).map((p) => path.join("projects", p))
+        );
+      }
+
+      return {
+        applied,
+        skipped,
+        conflicts,
+        dryRun,
+        recordsApplied,
+        autoMerged,
+        sidecarsCleaned,
+        conflictDetails: conflictDetails.length > 0 ? conflictDetails : undefined
+      };
+    } catch (err: unknown) {
+      // AC11: Rollback all modified files from journal on failure
+      if (!dryRun && journal.length > 0) {
+        for (const entry of journal.reverse()) {
+          try {
+            if (entry.originalContent !== null) {
+              fs.writeFileSync(entry.filePath, entry.originalContent, "utf8");
+            } else if (fs.existsSync(entry.filePath)) {
+              fs.unlinkSync(entry.filePath);
+            }
+          } catch {
+            // Best effort rollback
           }
-          touchedProjects.add(projId);
-          applied++;
-          recordsApplied.push(`${projId}/${del.kind}/${del.id} (deleted)`);
         }
       }
+      throw err;
     }
-
-    if (!dryRun && applied > 0) {
-      for (const projId of touchedProjects) {
-        rebuildCompiledViews(projId, vaultRoot);
-      }
-      await rebuildIndex(vaultRoot);
-      commitVaultChange(
-        "sync changeset applied",
-        vaultRoot,
-        Array.from(touchedProjects).map((p) => path.join("projects", p))
-      );
-    }
-
-    return {
-      applied,
-      skipped,
-      conflicts,
-      dryRun,
-      recordsApplied
-    };
   });
 }
 
 export async function syncVaults(
   sourceVaultInput: string,
   targetVaultInput: string,
-  options: { twoWay?: boolean; since?: string; dryRun?: boolean } = {}
+  options: {
+    twoWay?: boolean;
+    since?: string;
+    dryRun?: boolean;
+    prefer?: 'local' | 'remote';
+    strategy?: ConflictStrategy;
+    cleanSidecars?: boolean;
+  } = {}
 ): Promise<{ forward: SyncResult; backward?: SyncResult }> {
   const sourceVault = getVaultRoot(sourceVaultInput);
   const targetVault = getVaultRoot(targetVaultInput);
@@ -350,7 +722,12 @@ export async function syncVaults(
     // 1. Source -> Target
     const sinceForward = options.since ?? readSyncCursor(sourceVault, targetVault);
     const changesetForward = exportChangeset(sourceVault, { since: sinceForward });
-    const forwardResult = await applyChangeset(targetVault, changesetForward, { dryRun: options.dryRun });
+    const forwardResult = await applyChangeset(targetVault, changesetForward, {
+      dryRun: options.dryRun,
+      prefer: options.prefer,
+      strategy: options.strategy,
+      cleanSidecars: options.cleanSidecars
+    });
     if (!options.dryRun) {
       writeSyncCursor(sourceVault, targetVault, changesetForward.generatedAt);
     }
@@ -360,7 +737,12 @@ export async function syncVaults(
       // 2. Target -> Source
       const sinceBackward = options.since ?? readSyncCursor(targetVault, sourceVault);
       const changesetBackward = exportChangeset(targetVault, { since: sinceBackward });
-      backwardResult = await applyChangeset(sourceVault, changesetBackward, { dryRun: options.dryRun });
+      backwardResult = await applyChangeset(sourceVault, changesetBackward, {
+        dryRun: options.dryRun,
+        prefer: options.prefer,
+        strategy: options.strategy,
+        cleanSidecars: options.cleanSidecars
+      });
       if (!options.dryRun) {
         writeSyncCursor(targetVault, sourceVault, changesetBackward.generatedAt);
       }

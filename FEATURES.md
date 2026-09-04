@@ -155,6 +155,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] **Remote Mode CLI Restrictions.** Extras (`canvas`, `sync-vault`, `export-vault`, `import-vault`, `hook`) refuse with exit code 1. `doctor`, `setup`, and `check-version` run locally. `rank` proxies to the daemon.
 - [x] **Operational Telemetry & Rolling Usage Logging.** Configurable switch `enableTelemetry` in `config.json` (default `true`); append-only structured JSONL streaming under `$SPEC_MEMO_ROOT/telemetry/`; rolling daily part rotation (`telemetry-YYYY-MM-DD.part-N.jsonl`) by file size limit (`maxFileSizeMb`); non-blocking fail-safe queue with zero-crash error isolation and secret redaction.
 - [x] **Prompt, session, activity & rule derivation.** Vault kinds `prompt`/`session`; 11th MCP tool `prompt` (record/list/get/search/session lifecycle/activity/derive/export); FTS search; status monitor Prompts explorer; CLI `memo prompt|session|activity`; IDE rule promote allowlist; packaged `ws-session-tracking`.
+- [x] **Vault Sync Conflict Reconciliation & Automated Resilience.** Semantic auto-merging (`hits`, `occurrences`, `tags`) for identical bodies; transactional copy-on-write rollback journals; strategy dispatch (`smart-merge`, `local-wins`, `remote-wins`, `sidecar`); single deterministic `${slug}.conflict.md` cap; dedicated `memo reconcile` command with automated sidecar cleanup (`--clean-sidecars`, `--prefer local|remote`); strict dual-sync status accuracy (`report.ok` false on partial failure); and background auto-sync worker (`autoSyncIntervalMinutes`).
 
 ---
 

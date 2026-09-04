@@ -13,6 +13,9 @@ export interface HybridSyncOptions {
   remoteUrl?: string;
   authToken?: string;
   force?: boolean;
+  prefer?: 'local' | 'remote';
+  strategy?: import('./types.js').ConflictStrategy;
+  cleanSidecars?: boolean;
 }
 
 export interface HybridSyncReport {
@@ -49,7 +52,10 @@ export async function pullHybridProject(
   projectId?: string,
   remoteUrlInput?: string,
   authToken?: string,
-  dryRun: boolean = false
+  dryRun: boolean = false,
+  prefer?: 'local' | 'remote',
+  strategy?: import('./types.js').ConflictStrategy,
+  cleanSidecars?: boolean
 ): Promise<SyncResult> {
   const vaultRoot = getVaultRoot(vaultRootInput);
   const config = ensureVaultStructure(vaultRoot);
@@ -80,7 +86,12 @@ export async function pullHybridProject(
     }
 
     const changeset = (await res.json()) as Changeset;
-    const applyResult = await applyChangeset(vaultRoot, changeset, { dryRun });
+    const applyResult = await applyChangeset(vaultRoot, changeset, {
+      dryRun,
+      prefer,
+      strategy,
+      cleanSidecars
+    });
 
     if (!dryRun) {
       const now = new Date().toISOString();
@@ -161,7 +172,9 @@ export async function pushHybridProject(
   authToken?: string,
   dryRun: boolean = false,
   force: boolean = false,
-  sinceOverride?: string
+  sinceOverride?: string,
+  prefer?: 'local' | 'remote',
+  strategy?: import('./types.js').ConflictStrategy
 ): Promise<SyncResult> {
   const vaultRoot = getVaultRoot(vaultRootInput);
   const config = ensureVaultStructure(vaultRoot);
@@ -193,10 +206,11 @@ export async function pushHybridProject(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const effectiveForce = force || prefer === 'local' || strategy === 'local-wins';
     const res = await fetch(`${remoteOrigin}/api/sync/push`, {
       method: 'POST',
       headers: buildHeaders(authToken),
-      body: JSON.stringify({ changeset, force, dryRun }),
+      body: JSON.stringify({ changeset, force: effectiveForce, dryRun, prefer, strategy }),
       signal: controller.signal
     });
 
@@ -210,7 +224,7 @@ export async function pushHybridProject(
     if (!dryRun) {
       const now = new Date().toISOString();
       let cursorsUpdate: Record<string, string> | undefined;
-      if (pushResult.applied > 0) {
+      if (pushResult.applied > 0 || (pushResult.autoMerged || 0) > 0) {
         // Use export snapshot time — not push-completion wall clock — so records
         // updated during an in-flight push remain visible to the next since-filter.
         const cursorVal = changeset.generatedAt || now;
@@ -232,17 +246,13 @@ export async function pushHybridProject(
 
       const exportedCount = changeset.records.length + (changeset.deletions?.length ?? 0);
       const pushHadConflicts = pushResult.conflicts > 0;
-      const pushIncomplete =
-        (exportedCount > 0 && pushResult.applied === 0 && pushResult.skipped > 0) ||
-        (exportedCount > 0 &&
-          pushResult.applied + pushResult.skipped + pushResult.conflicts < exportedCount);
+      const totalProcessed = pushResult.applied + (pushResult.autoMerged || 0) + pushResult.skipped + pushResult.conflicts;
+      const pushIncomplete = exportedCount > 0 && totalProcessed < exportedCount;
 
       if (pushHadConflicts || pushIncomplete) {
         const errorMsg = pushHadConflicts
           ? `Remote sync push reported ${pushResult.conflicts} conflict(s)`
-          : pushResult.skipped > 0
-            ? `Remote sync push skipped ${pushResult.skipped} record(s); pull to reconcile`
-            : `Remote sync push applied 0 of ${exportedCount} exported record(s)`;
+          : `Remote sync push applied 0 of ${exportedCount} exported record(s)`;
         writeHybridState(vaultRoot, {
           dirty: true,
           dirtyProjects: projectId ? { [projectId]: true } : undefined,
@@ -343,7 +353,10 @@ export async function syncHybrid(
       targetProjectId,
       options.remoteUrl,
       options.authToken,
-      options.dryRun
+      options.dryRun,
+      options.prefer,
+      options.strategy,
+      options.cleanSidecars
     );
 
     const pushResult = await pushHybridProject(
@@ -353,7 +366,9 @@ export async function syncHybrid(
       options.authToken,
       options.dryRun,
       options.force,
-      sinceForPush
+      sinceForPush,
+      options.prefer,
+      options.strategy
     );
 
     report = {

@@ -645,6 +645,33 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         }
       }
 
+      let autoSyncTimer: NodeJS.Timeout | undefined;
+      const autoSyncMinutes = config.sync?.autoSyncIntervalMinutes;
+      if (typeof autoSyncMinutes === 'number' && autoSyncMinutes > 0 && config.mode === 'hybrid') {
+        const intervalMs = autoSyncMinutes * 60 * 1000;
+        autoSyncTimer = setInterval(async () => {
+          try {
+            const { syncDual } = await import("./dual-sync.js");
+            await syncDual({
+              vaultRoot,
+              trigger: "sync",
+              strategy: config.sync?.defaultStrategy || "smart-merge",
+              cleanSidecars: config.sync?.cleanSidecars ?? false
+            });
+          } catch (err: unknown) {
+            logErrorReport({
+              subsystem: "sync-reconcile",
+              error: err,
+              level: "WARN",
+              context: { phase: "background_autosync" }
+            }, { vaultRoot, logPath: errorLogPath });
+          }
+        }, intervalMs);
+        if (typeof autoSyncTimer.unref === 'function') {
+          autoSyncTimer.unref();
+        }
+      }
+
       resolve({
         server,
         port: actualPort,
@@ -654,6 +681,10 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         statusPort,
         activityBus: bus,
         close: async () => {
+          if (autoSyncTimer) {
+            clearInterval(autoSyncTimer);
+            autoSyncTimer = undefined;
+          }
           try {
             const { flushOnShutdown } = await import("./dual-sync.js");
             await flushOnShutdown(vaultRoot);

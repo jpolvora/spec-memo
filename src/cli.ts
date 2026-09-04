@@ -1137,6 +1137,13 @@ async function runCliInner(
         parsed.options.dryRun === true;
       const cwd = (parsed.options.cwd as string) || process.cwd();
       const identity = resolveProjectIdentity(cwd, { vaultRoot: getVaultRoot(vaultRoot) });
+      const prefer = (parsed.options.prefer as 'local' | 'remote') || undefined;
+      const strategy = (parsed.options.strategy as import('./types.js').ConflictStrategy) || undefined;
+      const cleanSidecars =
+        parsed.options['clean-sidecars'] === true ||
+        parsed.options['clean-sidecars'] === 'true' ||
+        parsed.options.cleanSidecars === true;
+      const force = parsed.options.force === true || parsed.options.force === 'true';
 
       if (config.mode === 'remote') {
         throw new Error('memo sync is not available in remote mode (data resides on remote daemon).');
@@ -1152,7 +1159,11 @@ async function runCliInner(
           projectId: identity.projectId,
           all,
           dryRun,
-          trigger: 'sync'
+          trigger: 'sync',
+          force,
+          prefer,
+          strategy,
+          cleanSidecars
         });
         if (parsed.isJson) {
           printJson(report);
@@ -1161,7 +1172,9 @@ async function runCliInner(
           if (report.hybrid?.report) {
             const h = report.hybrid.report;
             console.log(`  Hybrid:   pulled applied=${h.pulled.applied} skipped=${h.pulled.skipped} conflicts=${h.pulled.conflicts}`);
+            if (h.pulled.autoMerged) console.log(`            pulled auto-merged=${h.pulled.autoMerged}`);
             console.log(`            pushed applied=${h.pushed.applied} skipped=${h.pushed.skipped} conflicts=${h.pushed.conflicts}`);
+            if (h.pushed.autoMerged) console.log(`            pushed auto-merged=${h.pushed.autoMerged}`);
             if (report.hybrid.error) console.log(`            error: ${report.hybrid.error}`);
           }
           if (report.vaultGit) {
@@ -1178,7 +1191,11 @@ async function runCliInner(
           vaultRoot,
           projectId: identity.projectId,
           all,
-          dryRun
+          dryRun,
+          force,
+          prefer,
+          strategy,
+          cleanSidecars
         });
         if (parsed.isJson) {
           printJson(report);
@@ -1186,13 +1203,13 @@ async function runCliInner(
           console.log(`spec-memo — Hybrid Synchronization Complete\n`);
           console.log(`  Scope:    ${report.all ? 'All Projects' : `Project ${report.projectId}`}`);
           console.log(
-            `  Pulled:   applied=${report.pulled.applied}, skipped=${report.pulled.skipped}, conflicts=${report.pulled.conflicts}`
+            `  Pulled:   applied=${report.pulled.applied}, skipped=${report.pulled.skipped}, conflicts=${report.pulled.conflicts}${report.pulled.autoMerged ? `, auto-merged=${report.pulled.autoMerged}` : ''}`
           );
           console.log(
-            `  Pushed:   applied=${report.pushed.applied}, skipped=${report.pushed.skipped}, conflicts=${report.pushed.conflicts}`
+            `  Pushed:   applied=${report.pushed.applied}, skipped=${report.pushed.skipped}, conflicts=${report.pushed.conflicts}${report.pushed.autoMerged ? `, auto-merged=${report.pushed.autoMerged}` : ''}`
           );
         }
-        return 0;
+        return report.pulled.conflicts > 0 || report.pushed.conflicts > 0 ? 1 : 0;
       }
 
       if (gitEnabled) {
@@ -1215,6 +1232,99 @@ async function runCliInner(
         printJson({ isError: true, error: msg, code: 'SYNC_ERROR' });
       } else {
         console.error(`Sync failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo reconcile command (AC12, AC13, AC14, AC15)
+  if (parsed.command === 'reconcile') {
+    try {
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const root = getVaultRoot(vaultRoot);
+      const config = ensureVaultStructure(root);
+      const all = parsed.options.all === true || parsed.options.all === 'true';
+      const dryRun =
+        parsed.options['dry-run'] === true ||
+        parsed.options['dry-run'] === 'true' ||
+        parsed.options.dryRun === true;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const identity = resolveProjectIdentity(cwd, { vaultRoot: root });
+      const prefer = (parsed.options.prefer as 'local' | 'remote') || 'local';
+      const strategy = (parsed.options.strategy as import('./types.js').ConflictStrategy) || 'smart-merge';
+      const cleanSidecars = parsed.options['clean-sidecars'] !== false && parsed.options['clean-sidecars'] !== 'false';
+
+      // 1. Clean conflict sidecars
+      const { cleanConflictSidecars } = await import('./sync.js');
+      const cleanResult = cleanConflictSidecars(root, {
+        prefer,
+        dryRun,
+        projectId: all ? undefined : identity.projectId
+      });
+
+      // 2. Perform synchronization if in hybrid mode
+      let syncResult: any = null;
+      if (config.mode === 'hybrid') {
+        const { syncDual } = await import('./dual-sync.js');
+        syncResult = await syncDual({
+          vaultRoot: root,
+          projectId: identity.projectId,
+          all,
+          dryRun,
+          trigger: 'sync',
+          prefer,
+          strategy,
+          cleanSidecars
+        });
+      }
+
+      const report = {
+        command: 'reconcile',
+        prefer,
+        strategy,
+        dryRun,
+        sidecarsCleaned: cleanResult.cleaned,
+        sidecarsRetained: cleanResult.retained,
+        filesCleaned: cleanResult.filesCleaned,
+        sync: syncResult
+      };
+
+      if (parsed.isJson) {
+        printJson(report);
+      } else {
+        console.log(`spec-memo — Vault Conflict Reconciliation Complete\n`);
+        console.log(`  Source of Truth:  Prefer ${prefer.toUpperCase()}`);
+        console.log(`  Strategy:         ${strategy}`);
+        console.log(`  Sidecars Cleaned: ${cleanResult.cleaned} (retained: ${cleanResult.retained})`);
+        if (cleanResult.filesCleaned.length > 0 && cleanResult.filesCleaned.length <= 10) {
+          for (const f of cleanResult.filesCleaned) {
+            console.log(`    - ${f}`);
+          }
+        } else if (cleanResult.filesCleaned.length > 10) {
+          console.log(`    - ${cleanResult.filesCleaned.slice(0, 5).join(', ')} ... (${cleanResult.filesCleaned.length} total)`);
+        }
+        if (syncResult?.hybrid?.report) {
+          const h = syncResult.hybrid.report;
+          console.log(`\n  Hybrid Sync:`);
+          console.log(
+            `    Pulled: applied=${h.pulled.applied} auto-merged=${h.pulled.autoMerged || 0} conflicts=${h.pulled.conflicts}`
+          );
+          console.log(
+            `    Pushed: applied=${h.pushed.applied} auto-merged=${h.pushed.autoMerged || 0} conflicts=${h.pushed.conflicts}`
+          );
+          if (syncResult.hybrid.error) {
+            console.log(`    Error:  ${syncResult.hybrid.error}`);
+          }
+        }
+      }
+
+      return syncResult && !syncResult.ok ? 1 : 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'RECONCILE_ERROR' });
+      } else {
+        console.error(`Error reconciling vault: ${msg}`);
       }
       return 1;
     }

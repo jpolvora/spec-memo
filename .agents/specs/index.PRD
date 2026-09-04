@@ -112,6 +112,16 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`status-backup-page`](status-backup-page.spec.md): Dedicated status-monitor backup page with complete archives and inventory management
 - [x] Batched vault-git sync with dual-mode hybrid parallel dispatch (`spec: vault-git-hybrid-sync.spec.md`)
 - [x] Memory retrieval hit count and status-monitor list (`spec: memory-hit-count.spec.md`)
+- [x] [`sync-conflict-reconciliation`](sync-conflict-reconciliation.spec.md): Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience
+
+### Phase 8: Agent Continuity & Knowledge Lifecycle
+
+- [ ] [`session-handoff-baton`](session-handoff-baton.spec.md): Cross-Agent Session Handoff Baton via Prompt and Bootstrap
+- [ ] [`record-ttl-expiration`](record-ttl-expiration.spec.md): Universal Record Time-To-Live and Expiration Engine
+- [ ] [`search-ranking-explain`](search-ranking-explain.spec.md): Retrieval Ranking and Bootstrap Brief Explainability
+- [ ] [`memory-feedback-salience`](memory-feedback-salience.spec.md): Memory Retrieval Feedback, Stale Flagging, and Salience Tuning
+- [ ] [`capture-ignore-marker`](capture-ignore-marker.spec.md): Project-Local Capture Exclusions Marker and Safety Boundary
+- [ ] [`agent-hooks-install`](agent-hooks-install.spec.md): Automatic Agent Lifecycle Hooks Installer (memo install-hooks)
 
 
 
@@ -157,8 +167,14 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 34 | [`memo-status`](memo-status.spec.md) | `[x]` done | Phase 7: Deployment modes | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard |
 | 35 | [`status-backup-page`](status-backup-page.spec.md) | `[x]` done | Phase 7 | Dedicated status-monitor backup page with complete archives and inventory management |
 | 36 | [`vault-git-hybrid-sync`](vault-git-hybrid-sync.spec.md) | `[x] done` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
-
 | 37 | `memory-hit-count` | `[x]` done | Phase 7: Deployment modes | Memory retrieval hit count and status-monitor list |
+| 38 | [`sync-conflict-reconciliation`](sync-conflict-reconciliation.spec.md) | `[~] in progress` | Phase 7: Deployment modes | Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience |
+| 39 | [`session-handoff-baton`](session-handoff-baton.spec.md) | `[ ] todo` | Phase 8 | Cross-Agent Session Handoff Baton via Prompt and Bootstrap |
+| 40 | [`record-ttl-expiration`](record-ttl-expiration.spec.md) | `[ ] todo` | Phase 8 | Universal Record Time-To-Live and Expiration Engine |
+| 41 | [`search-ranking-explain`](search-ranking-explain.spec.md) | `[ ] todo` | Phase 8 | Retrieval Ranking and Bootstrap Brief Explainability |
+| 42 | [`memory-feedback-salience`](memory-feedback-salience.spec.md) | `[ ] todo` | Phase 8 | Memory Retrieval Feedback, Stale Flagging, and Salience Tuning |
+| 43 | [`capture-ignore-marker`](capture-ignore-marker.spec.md) | `[ ] todo` | Phase 8 | Project-Local Capture Exclusions Marker and Safety Boundary |
+| 44 | [`agent-hooks-install`](agent-hooks-install.spec.md) | `[ ] todo` | Phase 8 | Automatic Agent Lifecycle Hooks Installer (memo install-hooks) |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -219,6 +235,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-31 | status-backup-page | Dedicated Backups tab: full-backup confirm, complete kinds, inventory filters, restore/delete/download | npm test 380 pass |
 | 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode parallel hybrid+git sync, fail-open logging | npm test 406 pass |
 | 2026-09-02 | memory-hit-count | Retrieval hits/lastHit, status Memory list+drawer, canvas Hits; package 0.17.0 | npm test 435 pass |
+| 2026-09-04 | sync-conflict-reconciliation | Semantic auto-merge, memo reconcile, rollback journal, single conflict cap, dual-sync report.ok | npm test 451 pass |
 
 ## Archive
 

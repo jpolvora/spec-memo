@@ -188,10 +188,15 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 - [x] Multi-Machine Vault Synchronization and Delta Engine (`.agents/specs/multi-machine-sync.spec.md`)
 - [x] HTTP and Server-Sent Events (SSE) MCP Transport (`.agents/specs/mcp-sse-transport.spec.md`)
 
-### Phase 6 — Recurrence learning
+### Phase 7 — Deployment modes & advanced reliability
 
-- [x] Trap recurrence ranking and owner-skill export (`.agents/specs/trap-recurrence.spec.md`)
-- [x] MCP status monitor page with live activity log (`.agents/specs/mcp-status-monitor.spec.md`)
+- [x] Deployment modes, memo setup, daemon HTTP sync routes (`.agents/specs/deployment-modes.spec.md`)
+- [x] Operational telemetry & rolling usage logging (`.agents/specs/operational-telemetry.spec.md`)
+- [x] Prompt, session, activity ingestion, rule derivation (`.agents/specs/prompt-history-and-query.spec.md`)
+- [x] Vault reset with pre-wipe backup, full restore, proxy monitor (`.agents/specs/vault-reset-and-proxy-monitor.spec.md`)
+- [x] Batched vault-git sync with dual-mode hybrid dispatch (`.agents/specs/vault-git-hybrid-sync.spec.md`)
+- [x] Memory retrieval hit count and status-monitor list (`.agents/specs/memory-hit-count.spec.md`)
+- [x] Vault sync conflict reconciliation, semantic auto-merge, and resilience (`.agents/specs/sync-conflict-reconciliation.spec.md`)
 
 ## 9. Next specs
 
@@ -232,6 +237,10 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 32 | `vault-reset-and-proxy-monitor` | `[x]` | Ops/UI | Database reset with pre-wipe backup, full restore, proxy monitor, 3-mode topology |
 | 33 | `configurable-daemon-ports` | `[x]` | Phase 7 | Configurable daemon ports via config.json and new default ports |
 | 34 | `memo-status` | `[x]` | Phase 7 | Operational status & configuration inspector (memo status) |
+| 35 | `status-backup-page` | `[x]` | Ops/UI | Dedicated status-monitor backup page with complete archives and inventory |
+| 36 | `vault-git-hybrid-sync` | `[x]` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
+| 37 | `memory-hit-count` | `[x]` | Phase 7 | Memory retrieval hit count and status-monitor list |
+| 38 | `sync-conflict-reconciliation` | `[x]` | Phase 7 | Vault sync conflict reconciliation, semantic auto-merge, rollback journal, single conflict cap |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
