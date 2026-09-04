@@ -17,6 +17,7 @@ import { backfillTrapRecurrence, listProjectRecords } from './store.js';
 import { aliasLayer, rankActiveTraps, occurrenceOf, lastSeenOf, applyTrapClassification } from './recurrence.js';
 import { resolveProjectIdentity } from './identity.js';
 import { runSetup } from './setup.js';
+import { installHooks } from './hooks-install.js';
 import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
 import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
@@ -186,6 +187,7 @@ Core Memory Commands:
   promote         Copy one record into the product repository
   check_version   Compare running version to npm latest (alias: check-version)
   install_skills  Install ws-memo / ws-session-tracking into a consumer repo or --global (alias: install-skills)
+  install_hooks   Install optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Claude (alias: install-hooks)
   prompt          Ingest, query, export prompt turns, stories, and derive rules
   session         Start, complete, export, or inspect session lifecycles
   activity        Generate timesheet activity and invoicing report
@@ -397,6 +399,27 @@ Options:
   --cwd           Product repository working directory
   --vaultRoot     Override vault root directory
   --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'install-hooks' || cmd === 'install_hooks') {
+    console.log(`Usage: memo install-hooks [options]
+
+Install optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, and Claude Code.
+Default is dry-run preview; pass --apply to write files.
+
+Options:
+  --host          Target host: antigravity, opencode, cursor, claude, or all (default: all)
+  --global        Install to global host paths instead of workspace-local
+  --apply         Write hook files (default: preview only)
+  --dry-run       Force preview mode (default when --apply omitted)
+  --force         Overwrite differing targets (creates timestamped .bak backups)
+  --remove        Remove spec-memo hooks (alias: --uninstall)
+  --uninstall     Alias for --remove
+  --cwd           Product repository working directory
+  --product-root  Explicit product root for workspace-local installs
+  --json          Output machine-readable JSON
   -h, --help      Show this help message`);
     return;
   }
@@ -927,6 +950,68 @@ async function runCliInner(
     }
   }
 
+  if (parsed.command === 'install-hooks' || parsed.command === 'install_hooks') {
+    try {
+      const host = (parsed.options.host as string) || undefined;
+      const global = parsed.options.global === true || parsed.options.global === 'true';
+      const apply = parsed.options.apply === true || parsed.options.apply === 'true';
+      const dryRun =
+        parsed.options['dry-run'] === true ||
+        parsed.options['dry-run'] === 'true' ||
+        parsed.options.dryRun === true;
+      const force = parsed.options.force === true || parsed.options.force === 'true';
+      const remove =
+        parsed.options.remove === true ||
+        parsed.options.remove === 'true' ||
+        parsed.options.uninstall === true ||
+        parsed.options.uninstall === 'true';
+      const productRoot =
+        (parsed.options['product-root'] as string) ||
+        (parsed.options.productRoot as string) ||
+        undefined;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+
+      const result = await installHooks({
+        host,
+        global,
+        apply: apply && !dryRun,
+        dryRun: dryRun || !apply,
+        force,
+        remove,
+        productRoot,
+        cwd
+      });
+
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(`spec-memo — Install Hooks (${result.mode})\n`);
+        console.log(`Product root: ${result.productRoot}\n`);
+        for (const row of result.results) {
+          console.log(`  [${row.status}] ${row.host}: ${row.path}`);
+          if (row.diff) {
+            console.log(row.diff
+              .split('\n')
+              .map((l) => `    ${l}`)
+              .join('\n'));
+          }
+        }
+        if (!apply && !remove) {
+          console.log('\nDry-run preview only. Re-run with --apply to write files.');
+        }
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'INSTALL_HOOKS_FAILED' });
+      } else {
+        console.error(`Install hooks failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
   if (parsed.command === 'serve') {
     if (parsed.options.sse) {
       try {
@@ -1282,7 +1367,11 @@ async function runCliInner(
           `SQLite FTS:      Indexed ${result.fts.indexedRecordsCount} records (healthy: ${result.fts.healthy})\n`
         );
 
-        console.log(`Repository Pollution Scan:`);
+        if (result.agentHooks) {
+          console.log(result.agentHooks.summary);
+        }
+
+        console.log(`\nRepository Pollution Scan:`);
         if (!result.pollution.detected) {
           console.log(`  [CLEAN] No in-repo workflow residue found.`);
         } else {
