@@ -180,3 +180,63 @@ test('getActiveHandoffForContext returns branch-scoped pending baton', () => {
     cleanup();
   }
 });
+
+test('session_start claims eligible handoff baton', async () => {
+  const { vaultRoot, projectId, projectDir, cleanup } = createTempVault();
+  const owner = resolveOwner(process.cwd());
+  const branch = resolveGitBranch(process.cwd());
+  try {
+    createHandoff({
+      projectDir,
+      cwd: process.cwd(),
+      payload: { nextSteps: ['Continue refactor'], owner, branch },
+      sessionId: 'writer'
+    });
+    const start = await startSessionRecord({
+      vaultRoot,
+      projectId,
+      sessionId: 'incoming-s2',
+      cwd: process.cwd()
+    });
+    assert.ok(start.handoff);
+    assert.equal(start.handoff?.claimed, true);
+    const after = showHandoffRecord({ vaultRoot, projectId, cwd: process.cwd() });
+    assert.equal(after.handoff, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('bootstrap preserves handoff when trap trimming is required', async () => {
+  const { vaultRoot, projectId, projectDir, cleanup } = createTempVault();
+  const owner = resolveOwner(process.cwd());
+  const branch = resolveGitBranch(process.cwd());
+  try {
+    createHandoff({
+      projectDir,
+      cwd: process.cwd(),
+      payload: { nextSteps: ['Ship handoff slice'], owner, branch },
+      sessionId: 'writer'
+    });
+    for (let i = 0; i < 40; i++) {
+      const trapDir = path.join(projectDir, 'traps');
+      fs.mkdirSync(trapDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(trapDir, `trap-${i}.md`),
+        `---\nid: trap-${i}\nkind: trap\nstatus: active\nseverity: low\ntitle: Trap ${i}\nupdated: 2026-09-04T00:00:00.000Z\n---\n${'x'.repeat(400)}`,
+        'utf8'
+      );
+    }
+    const brief = await compileBootstrapBrief({
+      vaultRoot,
+      projectId,
+      cwd: process.cwd(),
+      maxBytes: 8192,
+      sessionId: 'budget-test'
+    });
+    assert.ok(brief.handoffMarkdown?.includes('Ship handoff slice'));
+    assert.ok(brief.handoff?.claimed);
+  } finally {
+    cleanup();
+  }
+});

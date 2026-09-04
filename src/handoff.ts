@@ -78,13 +78,17 @@ function objectiveFileName(owner: string, branch: string): string {
 }
 
 function readHandoffFile(filePath: string): HandoffRecord | null {
+  const parsed = readHandoffFileRaw(filePath);
+  if (!parsed || parsed.claimed) return null;
+  if (!Array.isArray(parsed.nextSteps) || parsed.nextSteps.length === 0) return null;
+  return parsed;
+}
+
+function readHandoffFileRaw(filePath: string): HandoffRecord | null {
   if (!fs.existsSync(filePath)) return null;
   try {
     const raw = fs.readFileSync(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as HandoffRecord;
-    if (!parsed || parsed.claimed) return null;
-    if (!Array.isArray(parsed.nextSteps) || parsed.nextSteps.length === 0) return null;
-    return parsed;
+    return JSON.parse(raw) as HandoffRecord;
   } catch {
     return null;
   }
@@ -226,9 +230,17 @@ export function claimHandoff(options: {
     throw new Error(`Handoff '${options.record.id}' not found or already claimed.`);
   }
 
+  const onDisk = readHandoffFileRaw(filePath);
+  if (!onDisk || onDisk.claimed) {
+    throw new Error(`Handoff '${options.record.id}' not found or already claimed.`);
+  }
+  if (onDisk.id !== options.record.id) {
+    throw new Error(`Handoff '${options.record.id}' was superseded by '${onDisk.id}'.`);
+  }
+
   const now = new Date().toISOString();
   const claimed: HandoffRecord = {
-    ...options.record,
+    ...onDisk,
     claimed: true,
     claimedAt: now,
     claimedBySession: options.claimedBySession

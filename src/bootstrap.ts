@@ -453,6 +453,15 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     64;
   const effectiveBudget = Math.max(512, budgetBytes - immutableReserve);
 
+  if (initialBrief.byteLength > effectiveBudget) {
+    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
+      currentTraps.pop();
+    }
+    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
+      currentDecisions.pop();
+    }
+  }
+
   if (initialBrief.byteLength > budgetBytes) {
     initialBrief.truncated = true;
 
