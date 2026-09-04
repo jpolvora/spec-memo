@@ -247,6 +247,7 @@ memo install-skills --global [--force] [--json]
 | `memo canvas` | Graph UI default port 3125 (configurable via `config.json` `ports.canvas`). `--project`, `--host`, `--json`. (Not available in remote mode). |
 | `memo doctor [productRoot]` | Vault + FTS + pollution + mode + remote health + hybrid state. `--rebuild` FTS. `--fix` delete leftover in-repo residue. `--json`. |
 | `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Proxies in remote mode. |
+| `memo wiki` | Print or regenerate vault `projects/{projectId}/WIKI.md`. `--project`, `--regenerate`, `--json`. Not available in remote mode. Not an MCP tool. |
 | `memo import` | Legacy `.agents` / `memory/` / plans → vault. `--from`. |
 | `memo hook install` | Pre-commit write-block. `--productRoot`. Bypass: `SKIP_MEMO_HOOK=1`. (Not available in remote mode). |
 | `memo sync` | Hybrid HTTP and/or vault-git. Dual-mode runs both in parallel. Batched vault-git (`atomic: false`, default) flushes on sync, session_end, and serve shutdown. |

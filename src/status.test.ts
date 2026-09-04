@@ -193,6 +193,50 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('activateTab("tab-backups")'));
   });
 
+  await t.test("generateStatusHtml includes data-tab=\"tab-wiki\" id=\"tab-wiki\" selector markdown region Regenerate", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('data-tab="tab-wiki"'));
+    assert.ok(html.includes('id="tab-wiki"'));
+    assert.ok(html.includes('id="wiki-vault-select"'));
+    assert.ok(html.includes('id="wiki-view"'));
+    assert.ok(html.includes('id="btn-wiki-regenerate"'));
+    assert.ok(html.includes("Regenerate"));
+  });
+
+  await t.test("Wiki tab script fetches GET /api/wiki?project= uses renderPromptMarkdownHtml and empty-state copy", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes("/api/wiki?project="));
+    assert.ok(html.includes("renderPromptMarkdownHtml"));
+    assert.ok(html.includes("No wiki has been generated"));
+  });
+
+  await t.test("Wiki tab wraps h2 in details/summary collapsed by default", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes("<details><summary><h2>"));
+    assert.ok(html.includes("wrapWikiH2"));
+  });
+
+  await t.test("Regenerate click POSTs /api/wiki/regenerate and disables button while in flight", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes("/api/wiki/regenerate"));
+    assert.ok(html.includes("wikiRegenBtn.disabled = true"));
+    assert.ok(html.includes('method: "POST"'));
+  });
+
+  await t.test("generateStatusHtml supports ?tab=wiki and project query deep link", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('tabParam === "wiki"'));
+    assert.ok(html.includes('activateTab("tab-wiki")'));
+    assert.ok(html.includes('urlParams.get("project")'));
+  });
+
+  await t.test("generateStatusHtml Wiki tab markers and tab=wiki deep-link analogous to Backups tests", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('data-tab="tab-wiki"'));
+    assert.ok(html.includes('id="tab-wiki"'));
+    assert.ok(html.includes('activateTab("tab-wiki")'));
+  });
+
   await t.test("generateStatusHtml loadVaults accepts GET /api/vaults array payload", () => {
     const html = generateStatusHtml(getPackageVersion());
     assert.match(
@@ -287,6 +331,103 @@ test("MCP status monitor", async (t) => {
     assert.strictEqual(vaultsRes.status, 200);
     const vaults = await vaultsRes.json() as Array<{ id: string; displayName?: string }>;
     assert.ok(vaults.some((v) => v.id === projectId));
+  });
+
+  await t.test("GET /api/wiki?project= returns 200 sanitized JSON; missing file exists:false markdown:\"\"", async () => {
+    const res = await fetch(`${baseUrl}/api/wiki?project=${encodeURIComponent(projectId)}`);
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as { projectId: string; markdown: string; exists: boolean; lastGenerated: string | null };
+    assert.strictEqual(body.projectId, projectId);
+    assert.strictEqual(body.exists, false);
+    assert.strictEqual(body.markdown, "");
+    assert.strictEqual(body.lastGenerated, null);
+    const serialized = JSON.stringify(body);
+    assert.ok(!serialized.includes(vaultRoot), "must not leak absolute vault paths");
+  });
+
+  await t.test("GET /api/wiki without project or project=all returns 400", async () => {
+    const missing = await fetch(`${baseUrl}/api/wiki`);
+    assert.strictEqual(missing.status, 400);
+    const missingBody = await missing.json() as { error: string };
+    assert.match(missingBody.error || "", /projectId/i);
+    const allRes = await fetch(`${baseUrl}/api/wiki?project=all`);
+    assert.strictEqual(allRes.status, 400);
+  });
+
+  await t.test("GET /api/wiki unknown projectId returns 404 and does not mkdir", async () => {
+    const unknown = "wiki-unknown-no-dir";
+    const res = await fetch(`${baseUrl}/api/wiki?project=${encodeURIComponent(unknown)}`);
+    assert.strictEqual(res.status, 404);
+    const body = await res.json() as { error: string };
+    assert.strictEqual(body.error, "Not found");
+    assert.ok(!fs.existsSync(path.join(vaultRoot, "projects", unknown)));
+  });
+
+  await t.test("GET/POST wiki rejects projectId path traversal with 400", async () => {
+    const getRes = await fetch(`${baseUrl}/api/wiki?project=${encodeURIComponent("../etc")}`);
+    assert.strictEqual(getRes.status, 400);
+    const postRes = await fetch(`${baseUrl}/api/wiki/regenerate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: "..\\\\..\\\\etc" })
+    });
+    assert.strictEqual(postRes.status, 400);
+  });
+
+  await t.test("POST /api/wiki/regenerate persists WIKI.md and returns 200 ok without absolute vault paths", async () => {
+    const res = await fetch(`${baseUrl}/api/wiki/regenerate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId })
+    });
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as { ok: boolean; projectId: string; lastGenerated: string; aiPolished: boolean };
+    assert.strictEqual(body.ok, true);
+    assert.strictEqual(body.projectId, projectId);
+    assert.strictEqual(body.aiPolished, false);
+    assert.ok(typeof body.lastGenerated === "string");
+    assert.ok(!JSON.stringify(body).includes(vaultRoot));
+    assert.ok(fs.existsSync(path.join(vaultRoot, "projects", projectId, "WIKI.md")));
+  });
+
+  await t.test("GET /api/wiki/section returns 200 for known h2 slug and 404 Not found for unknown id", async () => {
+    const okRes = await fetch(`${baseUrl}/api/wiki/section?project=${encodeURIComponent(projectId)}&id=overview`);
+    assert.strictEqual(okRes.status, 200);
+    const section = await okRes.json() as { id: string; title: string; markdown: string };
+    assert.strictEqual(section.id, "overview");
+    assert.ok(section.title.toLowerCase().includes("overview"));
+    const missing = await fetch(`${baseUrl}/api/wiki/section?project=${encodeURIComponent(projectId)}&id=not-a-section`);
+    assert.strictEqual(missing.status, 404);
+    const missBody = await missing.json() as { error: string };
+    assert.strictEqual(missBody.error, "Not found");
+  });
+
+  await t.test("POST regenerate without/empty/all projectId returns 400 and writes no files", async () => {
+    const marker = path.join(vaultRoot, "projects", projectId, "WIKI.md");
+    const before = fs.existsSync(marker) ? fs.readFileSync(marker, "utf8") : "";
+    for (const payload of [{}, { projectId: "" }, { projectId: "all" }]) {
+      const res = await fetch(`${baseUrl}/api/wiki/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      assert.strictEqual(res.status, 400, JSON.stringify(payload));
+    }
+    const after = fs.existsSync(marker) ? fs.readFileSync(marker, "utf8") : "";
+    assert.strictEqual(after, before);
+  });
+
+  await t.test("POST regenerate unknown projectId returns 404 and does not mkdir project", async () => {
+    const unknown = "wiki-missing-proj-dir";
+    const res = await fetch(`${baseUrl}/api/wiki/regenerate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: unknown })
+    });
+    assert.strictEqual(res.status, 404);
+    const body = await res.json() as { error: string };
+    assert.strictEqual(body.error, "Not found");
+    assert.ok(!fs.existsSync(path.join(vaultRoot, "projects", unknown)));
   });
 
   await t.test("status read-only routes do not mutate vault records", async () => {
@@ -450,10 +591,48 @@ test("MCP status monitor", async (t) => {
     try {
       const unauth = await fetch(`${authServer.url}/api/records`);
       assert.strictEqual(unauth.status, 401);
+      const wikiGet = await fetch(`${authServer.url}/api/wiki?project=${encodeURIComponent(projectId)}`);
+      assert.strictEqual(wikiGet.status, 401);
+      const wikiPost = await fetch(`${authServer.url}/api/wiki/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId })
+      });
+      assert.strictEqual(wikiPost.status, 401);
       const auth = await fetch(`${authServer.url}/api/records`, {
         headers: { Authorization: "Bearer records-secret" }
       });
       assert.strictEqual(auth.status, 200);
+    } finally {
+      authBus.close();
+      await authServer.close();
+    }
+  });
+
+  await t.test("unauthorized GET/POST wiki routes return 401 JSON when auth token configured", async () => {
+    const authBus = createActivityBus();
+    const authServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "wiki-secret",
+      activityBus: authBus
+    });
+    try {
+      const getUnauth = await fetch(`${authServer.url}/api/wiki?project=${encodeURIComponent(projectId)}`);
+      assert.strictEqual(getUnauth.status, 401);
+      const getBody = await getUnauth.json() as { error?: string };
+      assert.ok(getBody.error);
+      const postUnauth = await fetch(`${authServer.url}/api/wiki/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer wrong" },
+        body: JSON.stringify({ projectId })
+      });
+      assert.strictEqual(postUnauth.status, 401);
+      const okGet = await fetch(`${authServer.url}/api/wiki?project=${encodeURIComponent(projectId)}`, {
+        headers: { Authorization: "Bearer wiki-secret" }
+      });
+      assert.strictEqual(okGet.status, 200);
     } finally {
       authBus.close();
       await authServer.close();

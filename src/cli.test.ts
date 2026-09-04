@@ -1144,5 +1144,197 @@ describe('CLI Integration', () => {
   });
 });
 
+describe('CLI wiki extra', () => {
+  it('should print help for wiki', async () => {
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+    try {
+      const code = await runCli(['wiki', '--help']);
+      assert.equal(code, 0);
+      assert.ok(capturedLogs.includes('Usage: memo wiki'));
+      assert.ok(capturedLogs.includes('--regenerate'));
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('cli wiki --project prints body or empty stdout+stderr; exit 0 when project exists', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-wiki-get-'));
+    const tempVault = path.join(tempDir, 'vault');
+    const tempRepo = path.join(tempDir, 'product');
+    fs.mkdirSync(tempRepo, { recursive: true });
+    fs.mkdirSync(path.join(tempRepo, '.git'), { recursive: true });
+    let capturedLogs = '';
+    let capturedErr = '';
+    const origLog = console.log;
+    const origErr = console.error;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+    console.error = (...args) => {
+      capturedErr += args.join(' ') + '\n';
+    };
+    try {
+      await runCli([
+        'upsert',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--kind',
+        'trap',
+        '--slug',
+        'cli-wiki-trap',
+        '--title',
+        'CLI wiki trap',
+        '--body',
+        'wiki trap body',
+        '--json'
+      ]);
+      const projectId = fs.readdirSync(path.join(tempVault, 'projects'))[0];
+      capturedLogs = '';
+      capturedErr = '';
+      const missingCode = await runCli(['wiki', '--project', projectId, '--vaultRoot', tempVault]);
+      assert.equal(missingCode, 0);
+      assert.equal(capturedLogs.trim(), '');
+      assert.ok(capturedErr.includes('No WIKI.md'));
+
+      capturedLogs = '';
+      capturedErr = '';
+      const regen = await runCli(['wiki', '--project', projectId, '--regenerate', '--vaultRoot', tempVault, '--json']);
+      assert.equal(regen, 0);
+      const regenJson = JSON.parse(capturedLogs.trim());
+      assert.equal(regenJson.ok, true);
+
+      capturedLogs = '';
+      capturedErr = '';
+      const printCode = await runCli(['wiki', '--project', projectId, '--vaultRoot', tempVault]);
+      assert.equal(printCode, 0);
+      assert.ok(capturedLogs.includes('## Overview'));
+      assert.ok(capturedLogs.includes('AUTO-GENERATED'));
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      closeIndex(tempVault);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('cli wiki --project --regenerate persist path matches HTTP regenerate; exit 0', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-wiki-regen-'));
+    const tempVault = path.join(tempDir, 'vault');
+    const tempRepo = path.join(tempDir, 'product');
+    fs.mkdirSync(tempRepo, { recursive: true });
+    fs.mkdirSync(path.join(tempRepo, '.git'), { recursive: true });
+    let capturedLogs = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      capturedLogs += args.join(' ') + '\n';
+    };
+    try {
+      await runCli([
+        'upsert',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--kind',
+        'decision',
+        '--slug',
+        'cli-wiki-adr',
+        '--title',
+        'CLI wiki adr',
+        '--body',
+        'adr',
+        '--json'
+      ]);
+      const projectId = fs.readdirSync(path.join(tempVault, 'projects'))[0];
+      capturedLogs = '';
+      const code = await runCli(['wiki', '--project', projectId, '--regenerate', '--vaultRoot', tempVault]);
+      assert.equal(code, 0);
+      const wikiPath = path.join(tempVault, 'projects', projectId, 'WIKI.md');
+      assert.ok(fs.existsSync(wikiPath));
+      const body = fs.readFileSync(wikiPath, 'utf8');
+      assert.ok(body.includes('./INDEX.md'));
+      assert.ok(body.includes('./decisions/'));
+    } finally {
+      console.log = origLog;
+      closeIndex(tempVault);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('cli wiki without project or cwd identity exits non-zero and does not regen all', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-wiki-noproj-'));
+    const tempVault = path.join(tempDir, 'vault');
+    fs.mkdirSync(tempVault, { recursive: true });
+    const stray = path.join(tempDir, 'unbound');
+    fs.mkdirSync(stray, { recursive: true });
+    let capturedErr = '';
+    const origErr = console.error;
+    console.error = (...args) => {
+      capturedErr += args.join(' ') + '\n';
+    };
+    try {
+      const code = await runCli(['wiki', '--cwd', stray, '--vaultRoot', tempVault, '--regenerate']);
+      assert.notEqual(code, 0);
+      assert.match(capturedErr, /projectId|--project/i);
+      const projectsDir = path.join(tempVault, 'projects');
+      if (fs.existsSync(projectsDir)) {
+        for (const id of fs.readdirSync(projectsDir)) {
+          assert.ok(!fs.existsSync(path.join(projectsDir, id, 'WIKI.md')));
+        }
+      }
+    } finally {
+      console.error = origErr;
+      closeIndex(tempVault);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('cli wiki in remote mode exits non-zero without writing vault files', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-wiki-remote-'));
+    const tempVault = path.join(tempDir, 'vault');
+    fs.mkdirSync(path.join(tempVault, 'projects', 'remote-proj'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempVault, 'config.json'),
+      JSON.stringify({
+        version: '0.18.0',
+        defaultRemote: 'origin',
+        mode: 'remote',
+        ttl: { scratchDays: 7, reviewDays: 14 },
+        bootstrap: { maxBytes: 8192, maxTraps: 10 }
+      }),
+      'utf8'
+    );
+    let capturedErr = '';
+    const origErr = console.error;
+    console.error = (...args) => {
+      capturedErr += args.join(' ') + '\n';
+    };
+    try {
+      const code = await runCli([
+        'wiki',
+        '--project',
+        'remote-proj',
+        '--regenerate',
+        '--vaultRoot',
+        tempVault
+      ]);
+      assert.notEqual(code, 0);
+      assert.match(capturedErr, /remote mode/i);
+      assert.ok(!fs.existsSync(path.join(tempVault, 'projects', 'remote-proj', 'WIKI.md')));
+    } finally {
+      console.error = origErr;
+      closeIndex(tempVault);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+
 
 

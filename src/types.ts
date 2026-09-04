@@ -262,6 +262,10 @@ export interface VaultConfig {
     maxBytes: number;
     maxTraps: number;
   };
+  wiki?: {
+    aiEnabled?: boolean;
+    timeoutMs?: number;
+  };
 }
 
 export interface SearchOptions {
