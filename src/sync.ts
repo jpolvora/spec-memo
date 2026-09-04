@@ -710,6 +710,26 @@ export async function applyChangeset(
         );
       }
 
+      // AC20: durable audit trail for body-divergence conflicts under subsystem sync-reconcile.
+      if (!dryRun && conflictDetails.length > 0) {
+        try {
+          const { logErrorReport } = await import("./error-logger.js");
+          for (const detail of conflictDetails) {
+            logErrorReport(
+              {
+                level: "WARN",
+                subsystem: "sync-reconcile",
+                error: new Error(`Conflict ${detail.category}: ${detail.projectId}/${detail.kind}/${detail.id}`),
+                context: { ...detail }
+              },
+              { vaultRoot }
+            );
+          }
+        } catch {
+          // Best-effort logging must never fail the apply
+        }
+      }
+
       return {
         applied,
         skipped,

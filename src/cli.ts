@@ -1257,16 +1257,25 @@ async function runCliInner(
       const strategy = (parsed.options.strategy as import('./types.js').ConflictStrategy) || 'smart-merge';
       const cleanSidecars = parsed.options['clean-sidecars'] !== false && parsed.options['clean-sidecars'] !== 'false';
 
-      // 1. Clean conflict sidecars
+      // 1. Clean conflict sidecars (serialized under vault lock vs daemon auto-sync)
+      const { withVaultLock } = await import('./vault.js');
       const { cleanConflictSidecars } = await import('./sync.js');
-      const cleanResult = cleanConflictSidecars(root, {
-        prefer,
-        dryRun,
-        projectId: all ? undefined : identity.projectId
-      });
+      const cleanResult = await withVaultLock(root, async () =>
+        cleanConflictSidecars(root, {
+          prefer,
+          dryRun,
+          projectId: all ? undefined : identity.projectId
+        })
+      );
       if (!dryRun && cleanResult.cleaned > 0) {
-        const { rebuildIndex } = await import('./indexer.js');
-        await rebuildIndex(root);
+        await withVaultLock(root, async () => {
+          const { rebuildIndex } = await import('./indexer.js');
+          const { rebuildCompiledViews } = await import('./compiler.js');
+          await rebuildIndex(root);
+          for (const pid of new Set(cleanResult.filesCleaned.map((f) => f.split('/')[0]))) {
+            if (pid) rebuildCompiledViews(pid, root);
+          }
+        });
       }
 
       // 2. Perform synchronization if in hybrid mode

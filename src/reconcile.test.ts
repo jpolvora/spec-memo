@@ -476,6 +476,37 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     assert.strictEqual(fs.existsSync(sidecarB), false);
   });
 
+  await t.test("applyChangeset logs body-divergence conflicts under sync-reconcile (AC20)", async () => {
+    const logProj = "proj-ac20-logging";
+    initVault({ vaultRoot, projectId: logProj });
+    const record = await upsertRecord({
+      vaultRoot,
+      projectId: logProj,
+      kind: "trap",
+      slug: "trap-ac20",
+      body: "# AC20 Local Base"
+    });
+    const item = (await getRecord({ vaultRoot, projectId: logProj, kind: "trap", id: record.id }))!;
+    const { clearErrorLogs, readErrorLogs } = await import("./error-logger.js");
+    clearErrorLogs(vaultRoot);
+    const conflictChangeset: Changeset = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          project: logProj,
+          frontmatter: { ...item.frontmatter, updated: item.frontmatter.updated },
+          body: "# AC20 Remote Divergent Body"
+        }
+      ]
+    };
+    const res = await applyChangeset(vaultRoot, conflictChangeset, { strategy: "sidecar" });
+    assert.strictEqual(res.conflicts, 1);
+    assert.ok(res.conflictDetails && res.conflictDetails.length > 0);
+    const logs = readErrorLogs(vaultRoot);
+    assert.ok(logs.includes("sync-reconcile"));
+  });
+
   await t.test("dual-sync report.ok is false when hybrid channel fails even if vault-git succeeds", async () => {
     const dualVault = path.join(tempDir, "dual-vault");
     initVault({ vaultRoot: dualVault, projectId: "proj-dual" });
