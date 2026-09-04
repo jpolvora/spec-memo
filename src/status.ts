@@ -24,6 +24,12 @@ import { scheduleHybridPush } from "./hybrid-sync.js";
 import { TopologyInfo, TopologyRole, BackupFileInfo, BackupListFilters } from "./types.js";
 import { listMemoryRecords } from "./hits.js";
 import {
+  readWikiFile,
+  readWikiSection,
+  regenerateWiki,
+  WikiError
+} from "./wiki.js";
+import {
   listPrompts,
   searchPrompts,
   listSessions,
@@ -51,7 +57,7 @@ export function renderPromptMarkdownHtml(body: string): string {
   html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
 
   // Simple headings / paragraphs
-  const lines = html.split(/\n/);
+  const lines = html.split(/\r?\n/);
   const out: string[] = [];
   let inPara = false;
   for (const line of lines) {
@@ -91,6 +97,22 @@ export function renderPromptMarkdownHtml(body: string): string {
   if (inPara) out.push("</p>");
   return out.join("");
 }
+
+/** Collapse wiki h2 sections into details/summary for the status Wiki tab. */
+export function wrapWikiH2Html(html: string): string {
+  const parts = String(html || "").split("<h2>");
+  if (parts.length < 2) return html;
+  let out = parts[0];
+  for (let i = 1; i < parts.length; i++) {
+    const rest = parts[i];
+    const closeIdx = rest.indexOf("</h2>");
+    const title = closeIdx >= 0 ? rest.slice(0, closeIdx) : rest;
+    const body = closeIdx >= 0 ? rest.slice(closeIdx + 5) : "";
+    out += `<details><summary><h2>${title}</h2></summary>${body}</details>`;
+  }
+  return out;
+}
+
 
 export interface McpStatusSummary {
   host: string;
@@ -1095,6 +1117,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     <button class="tab-btn" data-tab="tab-invoicing">Activity & Invoicing</button>
     <button class="tab-btn" data-tab="tab-rules">Derived Rules</button>
     <button class="tab-btn" data-tab="tab-backups">Backups</button>
+    <button class="tab-btn" data-tab="tab-wiki">Wiki</button>
   </nav>
 
   <div class="banner-container" id="banner-container"></div>
@@ -1407,6 +1430,23 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           Click 'Derive Rules from Prompts' to analyze recent prompt history for anti-regression traps and constraints.
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- TAB: Wiki -->
+  <section id="tab-wiki" class="tab-content">
+    <div class="prompts-container">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <div class="filter-group" style="max-width: 280px;">
+            <label for="wiki-vault-select">Project:</label>
+            <select id="wiki-vault-select"><option value="">Select a project</option></select>
+          </div>
+          <button type="button" id="btn-wiki-regenerate" class="btn-primary" style="width:auto; margin-top:0; padding:6px 16px;">Regenerate</button>
+        </div>
+      </div>
+      <div class="helper-text" id="wiki-empty" style="margin-bottom:8px;">Select a project to view its wiki. Missing wiki shows an empty state; Regenerate is always available.</div>
+      <div id="wiki-view" class="wiki-view" style="padding:12px 4px;"></div>
     </div>
   </section>
 
@@ -1916,6 +1956,18 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           sel.appendChild(opt);
         }
       }
+      const wikiSel = document.getElementById("wiki-vault-select");
+      if (wikiSel) {
+        const currentVal = wikiSel.value;
+        wikiSel.innerHTML = '<option value="">Select a project</option>';
+        for (const v of vaults) {
+          const opt = document.createElement("option");
+          opt.value = v.id;
+          opt.textContent = v.displayName || v.id;
+          if (v.id === currentVal) opt.selected = true;
+          wikiSel.appendChild(opt);
+        }
+      }
     }
 
     function setProjectFilter(projectId) {
@@ -2057,6 +2109,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         loadActivityReport();
       } else if (tabId === "tab-backups") {
         loadBackups();
+      } else if (tabId === "tab-wiki") {
+        loadWiki();
       }
     }
 
@@ -3016,11 +3070,135 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       document.getElementById("activity-log").innerHTML = "";
     });
 
+    function renderPromptMarkdownHtml(body) {
+      const escaped = String(body || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+      const lines = escaped.split(String.fromCharCode(10));
+      const out = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.indexOf("## ") === 0) {
+          out.push("<h2>" + line.slice(3) + "</h2>");
+        } else if (line.indexOf("# ") === 0) {
+          out.push("<h1>" + line.slice(2) + "</h1>");
+        } else if (!line.trim()) {
+          out.push("");
+        } else {
+          out.push("<p>" + line + "</p>");
+        }
+      }
+      return out.join("");
+    }
+
+    function wrapWikiH2(html) {
+      const parts = String(html || "").split("<h2>");
+      if (parts.length < 2) return html;
+      let out = parts[0];
+      for (let i = 1; i < parts.length; i++) {
+        const rest = parts[i];
+        const closeIdx = rest.indexOf("</h2>");
+        const title = closeIdx >= 0 ? rest.slice(0, closeIdx) : rest;
+        const body = closeIdx >= 0 ? rest.slice(closeIdx + 5) : "";
+        out += "<details><summary><h2>" + title + "</h2></summary>" + body + "</details>";
+      }
+      return out;
+    }
+
+    async function loadWiki() {
+      const sel = document.getElementById("wiki-vault-select");
+      const view = document.getElementById("wiki-view");
+      const empty = document.getElementById("wiki-empty");
+      const projectId = sel ? sel.value : "";
+      if (!projectId || projectId === "all") {
+        if (view) view.innerHTML = "";
+        if (empty) {
+          empty.style.display = "block";
+          empty.textContent = "Select a project to view its wiki.";
+        }
+        return;
+      }
+      try {
+        const res = await apiFetch("/api/wiki?project=" + encodeURIComponent(projectId), { headers: apiHeaders() });
+        if (!res.ok) {
+          if (view) view.innerHTML = "";
+          if (empty) {
+            empty.style.display = "block";
+            empty.textContent = "Unable to load wiki for this project.";
+          }
+          return;
+        }
+        const data = await res.json();
+        if (!data.exists) {
+          if (view) view.innerHTML = "";
+          if (empty) {
+            empty.style.display = "block";
+            empty.textContent = "No wiki has been generated for this project yet. Click Regenerate to create one.";
+          }
+          return;
+        }
+        if (empty) empty.style.display = "none";
+        if (view) view.innerHTML = data.renderedHtml || wrapWikiH2(renderPromptMarkdownHtml(data.markdown || ""));
+      } catch {
+        if (view) view.innerHTML = "";
+        if (empty) {
+          empty.style.display = "block";
+          empty.textContent = "Unable to load wiki for this project.";
+        }
+      }
+    }
+
+    const wikiSelEl = document.getElementById("wiki-vault-select");
+    if (wikiSelEl) {
+      wikiSelEl.addEventListener("change", () => { loadWiki(); });
+    }
+    const wikiRegenBtn = document.getElementById("btn-wiki-regenerate");
+    if (wikiRegenBtn) {
+      wikiRegenBtn.addEventListener("click", async () => {
+        const sel = document.getElementById("wiki-vault-select");
+        const projectId = sel ? sel.value : "";
+        if (!projectId || projectId === "all") return;
+        wikiRegenBtn.disabled = true;
+        try {
+          const res = await apiFetch("/api/wiki/regenerate", {
+            method: "POST",
+            headers: Object.assign({ "Content-Type": "application/json" }, apiHeaders()),
+            body: JSON.stringify({ projectId: projectId })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            showBanner((data && data.error) || "Wiki regenerate failed", "error");
+            return;
+          }
+          if (data.aiError) {
+            showBanner("Wiki saved (AI polish skipped: " + data.aiError + ")", "info");
+          } else {
+            showBanner("Wiki regenerated for " + data.projectId, "success");
+          }
+          await loadWiki();
+        } catch (err) {
+          showBanner("Wiki regenerate failed: " + (err.message || String(err)), "error");
+        } finally {
+          wikiRegenBtn.disabled = false;
+        }
+      });
+    }
+
     loadVaults().then(() => {
       const tabParam = urlParams.get("tab");
       const hashTab = (window.location.hash || "").replace("#", "");
       if (tabParam === "backups" || hashTab === "tab-backups") {
         activateTab("tab-backups");
+      }
+      if (tabParam === "wiki" || hashTab === "tab-wiki") {
+        const wikiSel = document.getElementById("wiki-vault-select");
+        const projectParam = urlParams.get("project");
+        if (wikiSel && projectParam && vaults.some((v) => v.id === projectParam)) {
+          wikiSel.value = projectParam;
+        }
+        activateTab("tab-wiki");
       }
       reconnectStream(true);
       refreshStatus();
@@ -3335,6 +3513,79 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           limit: Number.isFinite(limit) && limit > 0 ? limit : 200
         });
         writeJson(res, 200, sanitizeToolOutput({ records }));
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/wiki") {
+        try {
+          const project = url.searchParams.get("project");
+          const payload = readWikiFile(project, vaultRoot);
+          const renderedHtml = payload.exists
+            ? wrapWikiH2Html(renderPromptMarkdownHtml(payload.markdown))
+            : "";
+          writeJson(res, 200, sanitizeToolOutput({ ...payload, renderedHtml }));
+        } catch (err: unknown) {
+          if (err instanceof WikiError) {
+            writeJson(res, err.httpStatus, sanitizeToolOutput({ error: err.message }));
+            return;
+          }
+          writeJson(res, 500, sanitizeToolOutput({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/wiki/section") {
+        try {
+          const project = url.searchParams.get("project");
+          const sectionId = url.searchParams.get("id");
+          const payload = readWikiSection(project, sectionId, vaultRoot);
+          writeJson(res, 200, sanitizeToolOutput(payload));
+        } catch (err: unknown) {
+          if (err instanceof WikiError) {
+            writeJson(res, err.httpStatus, sanitizeToolOutput({ error: err.message }));
+            return;
+          }
+          writeJson(res, 500, sanitizeToolOutput({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/wiki/regenerate") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 1024 * 1024);
+          let parsed: { projectId?: string } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          const result = await regenerateWiki({
+            projectId: parsed.projectId as string,
+            vaultRoot
+          });
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `wiki regenerated ${result.projectId}`,
+            projectId: result.projectId,
+            method: "POST",
+            path: "/api/wiki/regenerate",
+            statusCode: 200
+          });
+          writeJson(res, 200, sanitizeToolOutput(result));
+        } catch (err: unknown) {
+          if (err instanceof WikiError) {
+            writeJson(res, err.httpStatus, sanitizeToolOutput({ error: err.message }));
+            return;
+          }
+          writeJson(res, 500, sanitizeToolOutput({ error: err instanceof Error ? err.message : String(err) }));
+        }
         return;
       }
 

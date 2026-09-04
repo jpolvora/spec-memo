@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.18.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.19.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -397,7 +397,7 @@ curl -s http://127.0.0.1:3124/api/vaults
 # Live stream (SSE): GET http://127.0.0.1:3124/api/events/stream
 ```
 
-When a token is set, send `Authorization: Bearer <token>` (or a session cookie from `/login`). Diagnostic routes are read-only; vault mutation is limited to backup/reset HTTP endpoints (`POST /api/vaults/export`, `POST /api/vaults/import`, `POST /api/vaults/backups`, `POST /api/vaults/restore`, `DELETE /api/vaults/backups/{filename}`, `POST /api/vaults/reset`). Canvas (`:4100`) remains a separate graph UI.
+When a token is set, send `Authorization: Bearer <token>` (or a session cookie from `/login`). Diagnostic routes are read-only except explicit operator writes: backup/reset HTTP endpoints and `POST /api/wiki/regenerate`. Canvas remains a separate graph UI.
 
 ### Status monitor backup (Backups tab)
 
@@ -423,6 +423,22 @@ HTTP routes:
 > [!TIP]
 > **CLI parity:** `memo backups`, `memo restore --backup …`, and `memo export-vault` operate on the same `backups/` folder. UI zips contain `vault-backup.json` — extract and run `memo import-vault --archive vault-backup.json` for CLI restore.
 
+### Status monitor Wiki tab
+
+The **Wiki** tab (`?tab=wiki` or `?tab=wiki&project={id}`) shows the vault file `projects/{projectId}/WIKI.md`. It is not the consumer product README.
+
+- Select a project (All vaults is refused). Missing `WIKI.md` shows an empty state; **Regenerate** stays available.
+- **Regenerate** posts `POST /api/wiki/regenerate` with `{ "projectId" }` (collect → fill `template.md` → persist). Optional AI polish is off by default; set `wiki.aiEnabled` in vault `config.json` or `SPEC_MEMO_WIKI_AI=1`. Polish failures still save the deterministic page (`aiPolished: false`).
+- CLI extra (not an MCP tool): `memo wiki --project <id>` and `memo wiki --project <id> --regenerate`. Unavailable in remote mode.
+
+HTTP routes:
+
+| Method | Path | Role |
+|--------|------|------|
+| `GET` | `/api/wiki?project=` | Current markdown (`exists` false when missing) |
+| `GET` | `/api/wiki/section?project=&id=` | One `h2` section by slug |
+| `POST` | `/api/wiki/regenerate` | Collect, render, persist `WIKI.md` |
+
 ### How to diagnose
 
 ```bash
@@ -432,7 +448,7 @@ memo doctor --rebuild    # rebuild SQLite FTS5 from markdown
 memo doctor --fix       # delete leftover in-tree workflow residue
 ```
 
-Also useful: `memo rank` (trap recurrence), `memo gc --dry-run`, and the status page live log while the SSE daemon is up.
+Also useful: `memo rank` (trap recurrence), `memo wiki --regenerate` (vault project page), `memo gc --dry-run`, and the status page live log while the SSE daemon is up.
 
 ### Autoboot: run `memo serve --sse` as a service
 
@@ -769,6 +785,7 @@ memo reconcile --clean-sidecars
 | `backups` | List available timestamped backups in `$SPEC_MEMO_ROOT/backups/` | `--vaultRoot`, `--json` |
 | `reset` | Reset vault database and clear files with mandatory pre-wipe backup | `--all`, `--project`, `--force`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
+| `wiki` | Print or regenerate vault `projects/{id}/WIKI.md` (CLI extra; not an MCP tool) | `--project`, `--regenerate`, `--json` |
 | `serve` | Run stdio or SSE MCP server for agent hosts (SSE co-starts status on :3124; stdio opt-in via `--status`) | `--sse`, `--port`, `--status`, `--status-port`, `--no-status`, `--auth-token` |
 
 ### Operator Q&A

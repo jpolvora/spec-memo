@@ -175,6 +175,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 42 | [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md) | `[ ] todo` | Phase 8 | Memory Retrieval Feedback, Stale Flagging, and Salience Tuning |
 | 43 | [`capture-ignore-marker`](0040-capture-ignore-marker.spec.md) | `[ ] todo` | Phase 8 | Project-Local Capture Exclusions Marker and Safety Boundary |
 | 44 | [`agent-hooks-install`](0041-agent-hooks-install.spec.md) | `[ ] todo` | Phase 8 | Automatic Agent Lifecycle Hooks Installer (memo install-hooks) |
+| 45 | [`project-wiki`](0046-project-wiki.spec.md) | `[x] done` | Phase 7 | Per-project vault wiki, status Wiki tab, CLI memo wiki |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -236,6 +237,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode parallel hybrid+git sync, fail-open logging | npm test 406 pass |
 | 2026-09-02 | memory-hit-count | Retrieval hits/lastHit, status Memory list+drawer, canvas Hits; package 0.17.0 | npm test 435 pass |
 | 2026-09-04 | sync-conflict-reconciliation | Semantic auto-merge, memo reconcile, rollback journal, single conflict cap, dual-sync report.ok | npm test 451 pass |
+| 2026-09-04 | project-wiki | Per-project vault WIKI.md, status Wiki tab, CLI memo wiki | implement |
 
 ## Archive
 

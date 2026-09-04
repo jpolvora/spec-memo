@@ -413,6 +413,10 @@ function mergeParsedVaultConfig(parsed: Record<string, any>): VaultConfig {
     telemetry: { ...DEFAULT_VAULT_CONFIG.telemetry, ...(parsed.telemetry || {}) },
     ttl: { ...DEFAULT_VAULT_CONFIG.ttl, ...(parsed.ttl || {}) },
     bootstrap: { ...DEFAULT_VAULT_CONFIG.bootstrap, ...(parsed.bootstrap || {}) },
+    wiki:
+      parsed.wiki && typeof parsed.wiki === 'object' && !Array.isArray(parsed.wiki)
+        ? { ...parsed.wiki }
+        : DEFAULT_VAULT_CONFIG.wiki,
     ports: {
       sse: parsedSse ?? DEFAULT_VAULT_CONFIG.ports?.sse ?? 3123,
       status: parsedStatus ?? DEFAULT_VAULT_CONFIG.ports?.status ?? 3124,

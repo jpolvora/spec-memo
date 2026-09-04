@@ -6,7 +6,7 @@ import { startMcpServer } from './mcp.js';
 import { runDoctor } from './doctor.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
-import { ensureVaultStructure, getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot, readVaultConfig } from './vault.js';
 import { exportVault, importVault, resetVault, restoreVault, listBackups } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { sanitizeToolOutput } from './safety.js';
@@ -21,6 +21,7 @@ import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
 import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
 import { runStatusCheck, formatStatusDashboard } from './status-cmd.js';
+import { readWikiFile, regenerateWiki, WikiError, wikiProjectExists, WIKI_PROJECT_REQUIRED } from './wiki.js';
 import { getPackageVersion } from './version.js';
 import { assertSupportedNodeRuntime } from './sqlite.js';
 import * as path from 'node:path';
@@ -202,6 +203,7 @@ Utility Commands:
   backups       List available timestamped backups in $SPEC_MEMO_ROOT/backups/
   reset         Reset vault database and clear records with mandatory pre-wipe backup
   canvas        Start interactive Canvas visualizer and graph UI server
+  wiki          Print or regenerate the vault project wiki (WIKI.md)
   sync-vault    Synchronize delta changesets directly between vault instances
   serve         Run the stdio or SSE MCP server for agent integration
 
@@ -383,6 +385,21 @@ Options:
     return;
   }
 
+  if (cmd === 'wiki') {
+    console.log(`Usage: memo wiki [options]
+
+Print or regenerate the per-project vault wiki (projects/{projectId}/WIKI.md). Not an MCP tool.
+
+Options:
+  --project       Vault project id (defaults to cwd-bound identity when that project exists)
+  --regenerate    Collect vault memory, fill template.md, persist WIKI.md
+  --cwd           Product repository working directory
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
   if (cmd === 'doctor') {
     console.log(`Usage: memo doctor [productRoot] [options]
 
@@ -484,6 +501,14 @@ function resolveCliCommand(command: string | undefined): string | undefined {
   return CLI_TOOL_ALIASES[command] || command;
 }
 
+function isReadOnlyWikiGet(parsed: ParsedCliArgs): boolean {
+  return (
+    parsed.command === 'wiki' &&
+    parsed.options.regenerate !== true &&
+    parsed.options.regenerate !== 'true'
+  );
+}
+
 function isReadOnlyStatusCommand(parsed: ParsedCliArgs): boolean {
   return (
     parsed.command === 'status' ||
@@ -510,7 +535,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     exitCode = await runCliInner(argv, parsed, command, vaultRootArg);
     return exitCode;
   } finally {
-    if (!isReadOnlyStatusCommand({ ...parsed, command })) {
+    if (!isReadOnlyStatusCommand({ ...parsed, command }) && !isReadOnlyWikiGet({ ...parsed, command })) {
       const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
       recordTelemetry({
         category: 'cli_command',
@@ -606,13 +631,64 @@ async function runCliInner(
     }
   }
 
+  if (isReadOnlyWikiGet(parsed)) {
+    try {
+      const vaultRoot = getVaultRoot(vaultRootArg);
+      const { config } = readVaultConfig(vaultRoot);
+      if (config.mode === 'remote') {
+        const msg = `Command 'wiki' is not available in remote mode (data resides on remote daemon).`;
+        if (parsed.isJson) {
+          printJson({ isError: true, error: msg, code: 'REMOTE_MODE_RESTRICTION' });
+        } else {
+          console.error(msg);
+        }
+        return 1;
+      }
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const requested = (parsed.options.project as string) || undefined;
+      let projectId = requested;
+      if (!projectId) {
+        const identity = resolveProjectIdentity(cwd, { vaultRoot });
+        projectId = identity.projectId;
+        if (!wikiProjectExists(projectId, vaultRoot)) {
+          const msg = `${WIKI_PROJECT_REQUIRED} (pass --project or run from a bound cwd)`;
+          if (parsed.isJson) {
+            printJson({ isError: true, error: msg, code: 'PROJECT_REQUIRED' });
+          } else {
+            console.error(msg);
+          }
+          return 1;
+        }
+      }
+      const payload = readWikiFile(projectId, vaultRoot);
+      if (parsed.isJson) {
+        printJson(payload);
+      } else if (payload.exists) {
+        const safe = sanitizeToolOutput({ markdown: payload.markdown }) as { markdown: string };
+        console.log(safe.markdown);
+      } else {
+        console.error(`No WIKI.md for project ${payload.projectId}. Run memo wiki --regenerate.`);
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof WikiError ? err.message : err instanceof Error ? err.message : String(err);
+      const code = err instanceof WikiError ? err.code : 'WIKI_ERROR';
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code });
+      } else {
+        console.error(msg);
+      }
+      return 1;
+    }
+  }
+
   const activeVaultConfig = ensureVaultStructure(getVaultRoot(vaultRootArg));
   const isRemoteMode = activeVaultConfig.mode === 'remote';
 
   // Remote mode command restrictions (AC29)
   if (
     isRemoteMode &&
-    ['canvas', 'serve-canvas', 'sync-vault', 'export-vault', 'import-vault', 'hook'].includes(parsed.command || '')
+    ['canvas', 'serve-canvas', 'sync-vault', 'export-vault', 'import-vault', 'hook', 'wiki'].includes(parsed.command || '')
   ) {
     const msg = `Command '${parsed.command}' is not available in remote mode (data resides on remote daemon).`;
     if (parsed.isJson) {
@@ -621,6 +697,44 @@ async function runCliInner(
       console.error(msg);
     }
     return 1;
+  }
+
+  if (parsed.command === 'wiki') {
+    try {
+      const vaultRoot = getVaultRoot(vaultRootArg);
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const requested = (parsed.options.project as string) || undefined;
+      let projectId = requested;
+      if (!projectId) {
+        const identity = resolveProjectIdentity(cwd, { vaultRoot });
+        projectId = identity.projectId;
+        if (!wikiProjectExists(projectId, vaultRoot)) {
+          const msg = `${WIKI_PROJECT_REQUIRED} (pass --project or run from a bound cwd)`;
+          if (parsed.isJson) {
+            printJson({ isError: true, error: msg, code: 'PROJECT_REQUIRED' });
+          } else {
+            console.error(msg);
+          }
+          return 1;
+        }
+      }
+      const result = await regenerateWiki({ projectId, vaultRoot });
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(`Wrote WIKI.md for ${result.projectId} (${result.lastGenerated})`);
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof WikiError ? err.message : err instanceof Error ? err.message : String(err);
+      const code = err instanceof WikiError ? err.code : 'WIKI_ERROR';
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code });
+      } else {
+        console.error(msg);
+      }
+      return 1;
+    }
   }
 
   // Handle memo setup / memo config command
