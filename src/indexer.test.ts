@@ -358,6 +358,76 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
     assert.equal(hits.length, 1);
     assert.equal(hits[0].id, 'trap-vector-match');
   });
+
+  it('should attach explain breakdown when explain option is true', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'explain-trap',
+      frontmatter: {
+        id: 'trap-explain',
+        title: 'Explain scoring trap',
+        severity: 'critical',
+        pathPatterns: ['src/**/*.ts']
+      },
+      body: 'Explain scoring test body'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'scoring',
+      path: 'src/indexer.ts',
+      explain: true
+    });
+
+    assert.equal(hits.length, 1);
+    assert.ok(hits[0].explain);
+    assert.ok(typeof hits[0].explain!.ftsBm25 === 'number');
+    assert.ok(typeof hits[0].explain!.finalScore === 'number');
+    assert.equal(hits[0].explain!.pathPatternBoost, 1.25);
+  });
+
+  it('should return empty array with explain on zero hits', () => {
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'nonexistent-xyz-query-term',
+      explain: true
+    });
+    assert.equal(hits.length, 0);
+  });
+
+  it('should attach explain with positive ftsBm25 for hits sort full-scan path', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'hits-explain-a',
+      frontmatter: {
+        id: 'trap-hits-explain-a',
+        title: 'Hits explain trap',
+        hits: 10,
+        status: 'active'
+      },
+      body: 'Hits explain body'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      sort: 'hits',
+      explain: true,
+      kinds: ['trap']
+    });
+
+    const row = hits.find((h) => h.id === 'trap-hits-explain-a');
+    assert.ok(row, 'expected trap-hits-explain-a in hits sort results');
+    assert.ok(row!.explain);
+    assert.ok(row!.explain!.ftsBm25 > 0);
+    assert.ok(row!.explain!.finalScore > 0);
+  });
 });
 
 

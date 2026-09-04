@@ -185,6 +185,10 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes("/api/records"));
     assert.ok(html.includes("openMemoryDrawer"));
     assert.ok(html.includes('meta-label">Hits</span>') || html.includes("Hits</span>"));
+    assert.ok(html.includes('id="memory-explain-toggle"'));
+    assert.ok(html.includes('id="memory-query-input"'));
+    assert.ok(html.includes("/api/records/search"));
+    assert.ok(html.includes("score-bar"));
   });
 
   await t.test("generateStatusHtml supports ?tab=backups deep link", () => {
@@ -684,6 +688,37 @@ test("MCP status monitor", async (t) => {
     } finally {
       fs.rmSync(proj, { recursive: true, force: true });
     }
+  });
+
+  await t.test("GET /api/records/search returns FTS hits with explain", async () => {
+    await upsertRecord({
+      vaultRoot,
+      projectId,
+      kind: "trap",
+      slug: "status-search",
+      frontmatter: {
+        id: "trap-status-search",
+        title: "SQLite WAL locking trap",
+        severity: "high",
+        pathPatterns: ["src/**/*.ts"]
+      },
+      body: "Close SQLite before unlink on Windows to avoid WAL lock errors."
+    });
+
+    const res = await fetch(
+      `${baseUrl}/api/records/search?project=${encodeURIComponent(projectId)}&q=sqlite&explain=true&sort=relevance&limit=10`
+    );
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as {
+      hits: Array<{ id: string; explain?: { finalScore: number; ftsBm25: number } }>;
+    };
+    assert.ok(Array.isArray(body.hits));
+    assert.ok(body.hits.length >= 1);
+    const hit = body.hits.find((h) => h.id === "trap-status-search");
+    assert.ok(hit, "expected trap-status-search in search hits");
+    assert.ok(hit.explain);
+    assert.ok(typeof hit.explain!.finalScore === "number");
+    assert.ok(typeof hit.explain!.ftsBm25 === "number");
   });
 
   await t.test("GET /api/records returns 401 when auth token configured", async () => {

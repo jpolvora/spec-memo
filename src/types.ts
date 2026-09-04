@@ -306,9 +306,21 @@ export interface SearchOptions {
   hitIds?: string[];
   /** When set, at most one hit bump per (sessionId, record id). */
   sessionId?: string;
+  /** When true, attach ephemeral scoring breakdown per hit (no ranking side effects). */
+  explain?: boolean;
 }
 
 export type SearchSort = 'relevance' | 'occurrences' | 'updated' | 'hits';
+
+export interface SearchScoreExplain {
+  ftsBm25: number;
+  pathPatternBoost: number;
+  severityMultiplier: number;
+  hitsBoost: number;
+  occurrencesBoost: number;
+  feedbackMultiplier: number;
+  finalScore: number;
+}
 
 export interface SearchHit {
   id: string;
@@ -331,6 +343,7 @@ export interface SearchHit {
   helpfulCount?: number;
   staleCount?: number;
   flaggedStale?: boolean;
+  explain?: SearchScoreExplain;
 }
 
 export interface FeedbackOptions {
@@ -403,6 +416,27 @@ export interface BootstrapOptions {
   maxBytes?: number;
   /** When set, at most one hit bump per (sessionId, record id). */
   sessionId?: string;
+  /** When true, attach budget allocation diagnostics (stderr in CLI). */
+  explain?: boolean;
+}
+
+export type BudgetSelectionStatus = 'included' | 'excluded_expired' | 'truncated_budget_exhausted';
+
+export interface BudgetCandidateReport {
+  id: string;
+  kind: string;
+  title?: string;
+  score: number;
+  byteWeight: number;
+  status: BudgetSelectionStatus;
+}
+
+export interface BootstrapBudgetReport {
+  budgetBytes: number;
+  consumedBytes: number;
+  remainingBytes: number;
+  includedCount: number;
+  candidates: BudgetCandidateReport[];
 }
 
 export interface MemoryRecordListItem {
@@ -442,6 +476,7 @@ export interface BootstrapBrief {
   truncated: boolean;
   drift?: Array<{ specSlug: string; modifiedPaths: string[] }>;
   notices: string[];
+  budgetReport?: BootstrapBudgetReport;
 }
 
 export interface GcOptions {

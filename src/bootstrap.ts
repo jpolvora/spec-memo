@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { BootstrapBrief, BootstrapOptions, MemoRecord } from './types.js';
+import { BootstrapBrief, BootstrapOptions, MemoRecord, BootstrapBudgetReport, BudgetCandidateReport } from './types.js';
 import { getProjectMetadata, getVaultRoot, ensureVaultStructure, ensureProjectVault } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { scanProjectRecords } from './compiler.js';
@@ -10,6 +10,7 @@ import { matchesAnyPattern } from './indexer.js';
 import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { pullHybridProject } from './hybrid-sync.js';
 import { cloneRecordWithStaleBadge } from './salience.js';
+import { roundExplain } from './ranking-explain.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -122,6 +123,99 @@ export function scoreTrap(trap: MemoRecord, query?: string, pathFilter?: string)
   return score;
 }
 
+function recordByteWeight(record: MemoRecord): number {
+  return Buffer.byteLength(JSON.stringify(record), 'utf8');
+}
+
+function decisionBootstrapScore(decision: MemoRecord, index: number, total: number): number {
+  const updatedMs = Date.parse(String(decision.frontmatter.updated || '')) || 0;
+  return roundExplain(updatedMs / 1000 + (total - index) * 0.001);
+}
+
+function buildBudgetReport(
+  allTraps: MemoRecord[],
+  includedTraps: MemoRecord[],
+  allDecisions: MemoRecord[],
+  includedDecisions: MemoRecord[],
+  budgetBytes: number,
+  consumedBytes: number,
+  options: BootstrapOptions,
+  pathFilter?: string
+): BootstrapBudgetReport {
+  const includedIds = new Set([
+    ...includedTraps.map((r) => String(r.frontmatter.id)),
+    ...includedDecisions.map((r) => String(r.frontmatter.id))
+  ]);
+
+  const candidates: BudgetCandidateReport[] = [];
+
+  for (const trap of allTraps) {
+    const id = String(trap.frontmatter.id);
+    const status = trap.frontmatter.status !== 'active'
+      ? 'excluded_expired'
+      : includedIds.has(id)
+        ? 'included'
+        : 'truncated_budget_exhausted';
+    candidates.push({
+      id,
+      kind: 'trap',
+      title: typeof trap.frontmatter.title === 'string' ? trap.frontmatter.title : undefined,
+      score: roundExplain(scoreTrap(trap, options.query, pathFilter)),
+      byteWeight: recordByteWeight(trap),
+      status
+    });
+  }
+
+  for (let i = 0; i < allDecisions.length; i++) {
+    const decision = allDecisions[i];
+    const id = String(decision.frontmatter.id);
+    const status =
+      decision.frontmatter.status !== 'active' && decision.frontmatter.status !== 'shipped'
+        ? 'excluded_expired'
+        : includedIds.has(id)
+          ? 'included'
+          : 'truncated_budget_exhausted';
+    candidates.push({
+      id,
+      kind: 'decision',
+      title: typeof decision.frontmatter.title === 'string' ? decision.frontmatter.title : undefined,
+      score: decisionBootstrapScore(decision, i, allDecisions.length),
+      byteWeight: recordByteWeight(decision),
+      status
+    });
+  }
+
+  return {
+    budgetBytes,
+    consumedBytes,
+    remainingBytes: Math.max(0, budgetBytes - consumedBytes),
+    includedCount: includedIds.size,
+    candidates
+  };
+}
+
+export function formatBootstrapBudgetTable(report: BootstrapBudgetReport): string {
+  const header = [
+    'Bootstrap budget allocation',
+    `Budget: ${report.budgetBytes} bytes | Consumed: ${report.consumedBytes} | Remaining: ${report.remainingBytes} | Included: ${report.includedCount}`,
+    '',
+    'ID'.padEnd(28) + 'Kind'.padEnd(10) + 'Score'.padStart(8) + 'Bytes'.padStart(8) + '  Status',
+    '-'.repeat(72)
+  ];
+  const rows = report.candidates.map((c) => {
+    const title = c.title ? ` (${c.title.slice(0, 24)})` : '';
+    return (
+      (c.id + title).slice(0, 28).padEnd(28) +
+      c.kind.padEnd(10) +
+      String(c.score).padStart(8) +
+      String(c.byteWeight).padStart(8) +
+      '  ' +
+      c.status
+    );
+  });
+  return [...header, ...rows].join('\n');
+}
+
 /**
  * Compile a token-budgeted session brief for AI agents at session bootstrap.
  */
@@ -153,9 +247,10 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       ? options.path
       : undefined;
 
-  // 1. Gather & rank active traps
-  const activeTraps = allRecords
-    .filter((r) => r.frontmatter.kind === 'trap' && r.frontmatter.status === 'active')
+  // 1. Gather & rank traps (all for explain report; active for brief)
+  const allTrapsForReport = allRecords.filter((r) => r.frontmatter.kind === 'trap');
+  const activeTraps = allTrapsForReport
+    .filter((r) => r.frontmatter.status === 'active')
     .sort((a, b) => {
       const scoreA = scoreTrap(a, options.query, pathFilter);
       const scoreB = scoreTrap(b, options.query, pathFilter);
@@ -165,12 +260,12 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       return (b.frontmatter.updated || '').localeCompare(a.frontmatter.updated || '');
     });
 
-  // 2. Gather active/accepted decisions
-  const activeDecisions = allRecords
+  // 2. Gather decisions (all for explain report; active/shipped for brief)
+  const allDecisionsForReport = allRecords.filter((r) => r.frontmatter.kind === 'decision');
+  const activeDecisions = allDecisionsForReport
     .filter(
       (r) =>
-        r.frontmatter.kind === 'decision' &&
-        (r.frontmatter.status === 'active' || r.frontmatter.status === 'shipped')
+        r.frontmatter.status === 'active' || r.frontmatter.status === 'shipped'
     )
     .sort((a, b) => (b.frontmatter.updated || '').localeCompare(a.frontmatter.updated || ''));
 
@@ -350,10 +445,37 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
         minimal.notices = [];
         minimal.byteLength = calculatePayloadSize(minimal);
       }
+      if (options.explain) {
+        minimal.budgetReport = buildBudgetReport(
+          allTrapsForReport,
+          [],
+          allDecisionsForReport,
+          [],
+          budgetBytes,
+          minimal.byteLength,
+          options,
+          pathFilter
+        );
+      }
       return minimal;
     }
 
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
+  }
+
+  if (options.explain) {
+    // budgetReport is diagnostic metadata outside the token-budgeted brief payload (AC6–AC8).
+    // byteLength reflects only agent-facing brief fields, not explain diagnostics.
+    initialBrief.budgetReport = buildBudgetReport(
+      allTrapsForReport,
+      currentTraps,
+      allDecisionsForReport,
+      currentDecisions,
+      budgetBytes,
+      initialBrief.byteLength,
+      options,
+      pathFilter
+    );
   }
 
   return initialBrief;

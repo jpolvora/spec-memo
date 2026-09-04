@@ -24,7 +24,7 @@ import { scheduleHybridPush } from "./hybrid-sync.js";
 import { TopologyInfo, TopologyRole, BackupFileInfo, BackupListFilters } from "./types.js";
 import { listMemoryRecords } from "./hits.js";
 import { submitMemoryFeedback } from "./feedback.js";
-import { getRecordLinkGraph } from "./indexer.js";
+import { getRecordLinkGraph, searchIndex } from "./indexer.js";
 import {
   readWikiFile,
   readWikiSection,
@@ -862,6 +862,22 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
 
     /* Slide-out Side Details Panel (Drawer) */
+    .score-bar {
+      display: flex;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      background: var(--code-bg);
+      margin-top: 4px;
+    }
+    .score-bar span { display: block; height: 100%; }
+    .score-fts { background: #58a6ff; }
+    .score-path { background: #3fb950; }
+    .score-sev { background: #d29922; }
+    .score-occ { background: #bc8cff; }
+    .score-hits { background: #f778ba; }
+    .score-fb { background: #ff7b72; }
+    .explain-detail { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
     .drawer-overlay {
       position: fixed;
       inset: 0;
@@ -1228,9 +1244,19 @@ export function generateStatusHtml(version = getPackageVersion()): string {
             <label for="memory-sort-select">Sort:</label>
             <select id="memory-sort-select">
               <option value="hits" selected>Hits</option>
+              <option value="relevance">Relevance</option>
               <option value="occurrences">Occurrences</option>
               <option value="updated">Updated</option>
             </select>
+          </div>
+          <div class="filter-group" style="flex: 2;">
+            <label for="memory-query-input">Search:</label>
+            <input type="text" id="memory-query-input" placeholder="FTS search query…">
+          </div>
+          <div class="filter-group" style="max-width: 180px; display:flex; align-items:flex-end; gap:6px;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:0.78rem; cursor:pointer;">
+              <input type="checkbox" id="memory-explain-toggle"> Explain Scoring
+            </label>
           </div>
           <button type="button" id="btn-memory-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Refresh</button>
         </div>
@@ -2211,10 +2237,21 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         const sort = document.getElementById("memory-sort-select").value || "hits";
         params.set("sort", sort);
         params.set("limit", "200");
-
-        const res = await apiFetch("/api/records?" + params.toString(), { headers: apiHeaders() });
-        const data = await res.json();
-        const records = data.records || [];
+        const query = (document.getElementById("memory-query-input").value || "").trim();
+        const explainOn = document.getElementById("memory-explain-toggle").checked;
+        let records = [];
+        if (query) {
+          if (explainOn) params.set("explain", "true");
+          params.set("q", query);
+          params.set("sort", "relevance");
+          const res = await apiFetch("/api/records/search?" + params.toString(), { headers: apiHeaders() });
+          const data = await res.json();
+          records = data.hits || [];
+        } else {
+          const res = await apiFetch("/api/records?" + params.toString(), { headers: apiHeaders() });
+          const data = await res.json();
+          records = data.records || [];
+        }
         memoryRecordsCache = records;
         document.getElementById("memory-count-badge").textContent = records.length + " record(s)";
 
@@ -2228,9 +2265,35 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           const tr = document.createElement("tr");
           tr.className = "master-row";
           tr.dataset.id = r.id;
+          let explainHtml = "";
+          if (r.explain) {
+            const e = r.explain;
+            const factors = [
+              { cls: "score-fts", value: e.ftsBm25 },
+              { cls: "score-path", value: e.pathPatternBoost },
+              { cls: "score-sev", value: e.severityMultiplier },
+              { cls: "score-occ", value: e.occurrencesBoost },
+              { cls: "score-hits", value: e.hitsBoost },
+              { cls: "score-fb", value: e.feedbackMultiplier }
+            ];
+            const logSum = factors.reduce((s, f) => s + Math.log(Math.max(f.value, 0.01)), 0);
+            const pct = (v) => Math.max(1, Math.round((Math.log(Math.max(v, 0.01)) / logSum) * 100));
+            explainHtml =
+              '<div class="score-bar" title="log-weighted factor contributions">' +
+              factors.map((f) => '<span class="' + f.cls + '" style="width:' + pct(f.value) + '%"></span>').join("") +
+              '</div>' +
+              '<div class="explain-detail">score ' + escapeHtml(String(e.finalScore)) +
+              ' · FTS ' + escapeHtml(String(e.ftsBm25)) +
+              ' · path ×' + escapeHtml(String(e.pathPatternBoost)) +
+              ' · sev ×' + escapeHtml(String(e.severityMultiplier)) +
+              ' · occ ×' + escapeHtml(String(e.occurrencesBoost)) +
+              ' · hits ×' + escapeHtml(String(e.hitsBoost)) +
+              ' · fb ×' + escapeHtml(String(e.feedbackMultiplier)) +
+              '</div>';
+          }
           tr.innerHTML =
             "<td><code>" + escapeHtml(r.kind) + "</code></td>" +
-            "<td>" + escapeHtml(r.title || r.id) + "</td>" +
+            "<td>" + escapeHtml(r.title || r.id) + explainHtml + "</td>" +
             "<td>" + escapeHtml(String(r.hits != null ? r.hits : 0)) + "</td>" +
             "<td>" + escapeHtml(String(r.occurrences != null ? r.occurrences : 0)) + "</td>" +
             "<td>" + escapeHtml(formatIsoShort(r.lastHit)) + "</td>" +
@@ -2285,7 +2348,19 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
       linksEl.innerHTML = linksHtml;
       const bodyEl = document.getElementById("memory-drawer-body");
-      bodyEl.textContent = record.snippet || "(no body snippet)";
+      let bodyText = record.snippet || "(no body snippet)";
+      if (record.explain) {
+        const e = record.explain;
+        bodyText += "\\n\\nScore breakdown:\\n" +
+          "  FTS BM25: " + e.ftsBm25 + "\\n" +
+          "  Path affinity: ×" + e.pathPatternBoost + "\\n" +
+          "  Severity: ×" + e.severityMultiplier + "\\n" +
+          "  Recurrence: ×" + e.occurrencesBoost + "\\n" +
+          "  Hit frequency: ×" + e.hitsBoost + "\\n" +
+          "  Feedback: ×" + e.feedbackMultiplier + "\\n" +
+          "  Final: " + e.finalScore;
+      }
+      bodyEl.textContent = bodyText;
       document.getElementById("memory-drawer-overlay").classList.add("open");
       document.getElementById("memory-drawer").classList.add("open");
     }
@@ -2303,6 +2378,10 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     document.getElementById("memory-kind-select").addEventListener("change", () => loadMemoryRecords());
     document.getElementById("memory-sort-select").addEventListener("change", () => loadMemoryRecords());
     document.getElementById("memory-vault-select").addEventListener("change", () => loadMemoryRecords());
+    document.getElementById("memory-query-input").addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") loadMemoryRecords();
+    });
+    document.getElementById("memory-explain-toggle").addEventListener("change", () => loadMemoryRecords());
 
     // --- PROMPTS TAB LOGIC ---
     async function loadPrompts() {
@@ -3944,6 +4023,35 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           const msg = err instanceof Error ? err.message : String(err);
           writeJson(res, status, sanitizeToolOutput({ error: msg }));
         }
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/records/search") {
+        const project = url.searchParams.get("project") || undefined;
+        const kind = url.searchParams.get("kind") || undefined;
+        const sortRaw = url.searchParams.get("sort") || "relevance";
+        const sort =
+          sortRaw === "occurrences" || sortRaw === "updated" || sortRaw === "hits" || sortRaw === "relevance"
+            ? sortRaw
+            : "relevance";
+        const limit = url.searchParams.get("limit")
+          ? Number(url.searchParams.get("limit"))
+          : 50;
+        const query = url.searchParams.get("q") || "";
+        const explain = url.searchParams.get("explain") === "true";
+        const crossProject =
+          url.searchParams.get("crossProject") === "true" || !project || project === "all";
+        const hits = searchIndex({
+          vaultRoot,
+          projectId: project && project !== "all" ? project : undefined,
+          crossProject,
+          kinds: kind ? [kind as import("./types.js").RecordKind] : undefined,
+          sort: sort as import("./types.js").SearchSort,
+          limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
+          query,
+          explain
+        });
+        writeJson(res, 200, sanitizeToolOutput({ hits }));
         return;
       }
 
