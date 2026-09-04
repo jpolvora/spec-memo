@@ -32,15 +32,15 @@ Introduce an optional `explain` mode across `search` and `bootstrap`. The breakd
 ### Search Explainability Payload
 
 - AC1: The `search` MCP tool and `memo search` CLI accept an optional `explain: boolean` parameter (CLI flag `--explain`).
-- AC2: When `explain: true` is set, each hit item in the search response includes an `explain` object detailing `ftsBm25`, `pathPatternBoost`, `severityMultiplier`, `hitsBoost`, `occurrencesBoost`, and `finalScore`.
-- AC3: The CLI command `memo search <query> --explain` renders an indented diagnostic tree beneath each hit detailing the contributing scoring factors.
+- AC2: When `explain: true` is set, each hit item in the search response includes an `explain` object detailing `ftsBm25`, `pathPatternBoost`, `severityMultiplier`, `hitsBoost`, `occurrencesBoost`, `feedbackMultiplier`, and `finalScore`.
+- AC3: The CLI command `memo search <query> --explain` renders an indented diagnostic tree beneath each hit detailing the contributing scoring factors (including FTS score, path affinity, severity, recurrence, and feedback adjustments).
 - AC4: When `--json` is combined with `--explain`, the `explain` object is embedded directly into each hit element in the JSON array without breaking standard response consumers.
 
 ### Bootstrap Brief Explainability & Budget Breakdown
 
 - AC5: The `bootstrap` MCP tool and `memo bootstrap` CLI accept an optional `explain: boolean` parameter (CLI flag `--explain`).
 - AC6: When `explain: true` is passed to `bootstrap`, the response payload includes a `budgetReport` object detailing `budgetBytes`, `consumedBytes`, `remainingBytes`, and `includedCount`.
-- AC7: The `budgetReport` itemizes every candidate evaluated, its computed score, its UTF-8 byte weight, and whether it was `included` or `truncated_budget_exhausted`.
+- AC7: The `budgetReport` itemizes every candidate evaluated, its computed score, its UTF-8 byte weight, and selection status (`included`, `excluded_expired`, or `truncated_budget_exhausted`).
 - AC8: The CLI command `memo bootstrap --explain` prints a diagnostic budget allocation table to stderr while outputting the brief markdown to stdout.
 
 ### Robustness & Error Isolation

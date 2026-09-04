@@ -33,7 +33,7 @@ Support an optional `.spec-memo-ignore` marker file located at the consumer repo
 ### Ignore Marker Discovery & Parsing
 
 - AC1: `spec-memo` detects and parses an optional `.spec-memo-ignore` file located at the bound product repository root using standard `.gitignore` glob syntax (comments `#`, wildcards `*`, directory recursions `**`, negations `!`).
-- AC2: `spec-memo` includes built-in baseline ignore patterns (`DEFAULT_IGNORE_PATTERNS` covering `.git/**`, `node_modules/**`, `dist/**`, `build/**`, `.venv/**`, `.env`, `.env.*`, `**/*.key`, `**/*.pem`, binaries) that remain active by default even without a `.spec-memo-ignore` file.
+- AC2: `spec-memo` includes built-in baseline ignore patterns (`DEFAULT_IGNORE_PATTERNS` covering `.git/`, `node_modules/`, `dist/`, `build/`, `.venv/`, `.env`, `.env.*`, keys, certs, and binaries) that remain active by default even without a `.spec-memo-ignore` file.
 - AC3: Vault project configuration in `~/.spec-memo/config.json` supports an optional `projects.<id>.ignorePaths: string[]` array that is merged with `.spec-memo-ignore` and built-in rules.
 - AC4: The parsed ignore rules are cached per project session and refreshed whenever file modification time (`mtime`) on `.spec-memo-ignore` changes.
 

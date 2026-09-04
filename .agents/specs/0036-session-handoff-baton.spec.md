@@ -39,26 +39,27 @@ Introduce a first-class, single-use **Handoff Baton** mechanism with **owner and
 - AC3: The project vault stores active handoffs under `.sync/handoffs/` (or project vault root) partitioned by owner and branch key, ensuring personal working context never collides.
 - AC4: Writing a new handoff by the same owner on the same branch supersedes and expires any previous unclaimed handoff for that owner and branch combination, while preserving handoffs on sibling branches and from teammates.
 - AC5: Passing `shared: true` (or `--shared` CLI flag) marks the baton as project-wide, allowing any incoming session across any branch or teammate to inherit the handoff.
+- AC6: In addition to completed handoffs, `prompt` `action: 'session_start'` and `memo session start` accept an optional `objective: string` recording the session's in-flight focus slot; this slot is bound to the owner and branch, displayed in session listings, and retired on `session_end`, ensuring personal in-progress work never leaks into teammates' briefing context.
 
 ### Targeted Single-Use Delivery via Bootstrap Brief
 
-- AC6: When `bootstrap` compiles the session brief, it matches pending handoffs where `(handoff.shared === true || handoff.owner === currentOwner) && (!handoff.branch || handoff.branch === currentBranch)`.
-- AC7: If multiple eligible handoffs exist (e.g. an owner-specific handoff and a shared project handoff), the owner-specific branch-matching handoff takes strict precedence.
-- AC8: The matched handoff renders a prominent `## 🤝 Active Session Handoff` section at the top of the brief, itemizing originating harness, branch, `nextSteps`, `failedApproaches`, and `openQuestions`.
-- AC9: The handoff section byte size is accounted for within `maxBytes` (default 8 KB) and prioritized above standard traps and decisions so tactical continuity is never truncated.
-- AC10: Upon delivery in `bootstrap` (or `prompt` `action: 'session_start'`), the matched handoff is atomically marked as claimed (`claimed: true`, `claimedAt`, `claimedBySession`), preventing duplicate delivery in subsequent turns or accidental theft by other sessions.
+- AC7: When `bootstrap` compiles the session brief, it matches pending handoffs where `(handoff.shared === true || handoff.owner === currentOwner) && (!handoff.branch || handoff.branch === currentBranch)`.
+- AC8: If multiple eligible handoffs exist (e.g. an owner-specific handoff and a shared project handoff), the owner-specific branch-matching handoff takes strict precedence.
+- AC9: The matched handoff renders a prominent `## 🤝 Active Session Handoff` section at the top of the brief, itemizing originating harness, branch, `nextSteps`, `failedApproaches`, and `openQuestions`.
+- AC10: The handoff section byte size is accounted for within `maxBytes` (default 8 KB) and prioritized above standard traps and decisions so tactical continuity is never truncated.
+- AC11: Upon delivery in `bootstrap` (or `prompt` `action: 'session_start'`), the matched handoff is atomically marked as claimed (`claimed: true`, `claimedAt`, `claimedBySession`), preventing duplicate delivery in subsequent turns or accidental theft by other sessions.
 
 ### Dedicated CLI Management & Inspection
 
-- AC11: The `memo session handoff` CLI command displays the active pending handoff matching the current repository, user, and branch, or prints a message indicating no handoff is pending.
-- AC12: Running `memo session handoff --all` displays all pending handoffs across all branches and teammates for project auditability.
-- AC13: Running `memo session handoff --cancel` (or `prompt` `action: 'cancel_handoff'`) discards the active handoff for the current owner and branch before it is claimed.
-- AC14: CLI `memo session end --handoff-steps "Step 1,Step 2" --handoff-failed "Approach A" --handoff-questions "Question 1" [--shared]` supports ergonomic shell-based handoff authoring.
+- AC12: The `memo session handoff` CLI command displays the active pending handoff matching the current repository, user, and branch, or prints a message indicating no handoff is pending.
+- AC13: Running `memo session handoff --all` displays all pending handoffs across all branches and teammates for project auditability.
+- AC14: Running `memo session handoff --cancel` (or `prompt` `action: 'cancel_handoff'`) discards the active handoff for the current owner and branch before it is claimed.
+- AC15: CLI `memo session end --handoff-steps "Step 1,Step 2" --handoff-failed "Approach A" --handoff-questions "Question 1" [--shared]` supports ergonomic shell-based handoff authoring.
 
 ### Observability & Status Monitor Integration
 
-- AC15: The `:3124` Status Monitor dashboard displays an "Active Handoffs" panel in the Prompts/Sessions view, grouping batons by owner, branch, and shared status with one-click dismiss affordances.
-- AC16: Operational telemetry logs `operation: 'handoff_created'` and `operation: 'handoff_claimed'` events containing session, project, branch, and owner identifiers.
+- AC16: The `:3124` Status Monitor dashboard displays an "Active Handoffs" panel in the Prompts/Sessions view, grouping batons by owner, branch, and shared status with one-click dismiss affordances.
+- AC17: Operational telemetry logs `operation: 'handoff_created'` and `operation: 'handoff_claimed'` events containing session, project, branch, and owner identifiers.
 
 ---
 
