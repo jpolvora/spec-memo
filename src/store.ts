@@ -296,6 +296,22 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     delete (rawFrontmatter as Record<string, unknown>).path;
   }
 
+  if (rawFrontmatter.pathPatterns && rawFrontmatter.pathPatterns.length > 0) {
+    const { sanitizePathPatterns } = await import('./capture-ignore.js');
+    rawFrontmatter.pathPatterns = sanitizePathPatterns(rawFrontmatter.pathPatterns, identity.rootPath, {
+      projectId,
+      vaultRoot
+    });
+  }
+
+  if (rawFrontmatter.linkedPaths && rawFrontmatter.linkedPaths.length > 0) {
+    const { sanitizePathPatterns } = await import('./capture-ignore.js');
+    rawFrontmatter.linkedPaths = sanitizePathPatterns(rawFrontmatter.linkedPaths, identity.rootPath, {
+      projectId,
+      vaultRoot
+    });
+  }
+
   if (options.kind === 'trap') {
     const classified = applyTrapClassification(rawFrontmatter, options.body);
     rawFrontmatter.layer = classified.layer;

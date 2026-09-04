@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import { getVaultRoot } from './vault.js';
+export { isPathIgnored } from './capture-ignore.js';
 
 /**
  * Common regex signatures for sensitive credentials and keys.

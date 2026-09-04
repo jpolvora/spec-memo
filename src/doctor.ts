@@ -11,6 +11,11 @@ import { readHybridState } from './hybrid-state.js';
 import { readVaultGitState } from './vault-git-state.js';
 import { isPathInside } from './safety.js';
 import { inspectAgentHooks } from './hooks-install.js';
+import {
+  checkCapturePath,
+  formatCheckCaptureResult,
+  loadIgnoreRules
+} from './capture-ignore.js';
 
 export const DEFAULT_HEALTH_TIMEOUT_MS = 10000;
 
@@ -187,6 +192,44 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
 
   const warnings: string[] = [];
 
+  if (options.checkCapture) {
+    const captureCheck = checkCapturePath(options.checkCapture, identity.rootPath, {
+      projectId: identity.projectId,
+      vaultRoot
+    });
+    const boundary = loadIgnoreRules(identity.rootPath, {
+      projectId: identity.projectId,
+      vaultRoot
+    });
+    return {
+      healthy: captureCheck.status === 'CAPTURED',
+      vaultRoot,
+      vaultExists,
+      project: {
+        projectId: identity.projectId,
+        gitRemote: identity.normalizedRemote,
+        rootPath: identity.rootPath,
+        isGit: identity.isGit,
+        isFallback: identity.isFallback
+      },
+      fts: {
+        dbPath: path.join(vaultRoot, 'memo.sqlite'),
+        dbExists: fs.existsSync(path.join(vaultRoot, 'memo.sqlite')),
+        indexedRecordsCount: 0,
+        healthy: false
+      },
+      pollution: { detected: false, items: [] },
+      exclusionBoundary: {
+        activeRuleCount: boundary.activeRuleCount,
+        invalidLineCount: boundary.invalidLines.length,
+        invalidLines: boundary.invalidLines
+      },
+      captureCheck,
+      warnings,
+      summary: formatCheckCaptureResult(captureCheck)
+    };
+  }
+
   // Check vault directory
   if (!vaultExists) {
     warnings.push(`Vault root directory does not exist: ${vaultRoot}`);
@@ -349,6 +392,17 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     cwd: options.cwd,
     productRoot: identity.rootPath
   });
+  const exclusionBoundary = loadIgnoreRules(identity.rootPath, {
+    projectId: identity.projectId,
+    vaultRoot
+  });
+  if (exclusionBoundary.invalidLines.length > 0) {
+    for (const bad of exclusionBoundary.invalidLines) {
+      warnings.push(
+        `Exclusion boundary: invalid .spec-memo-ignore line ${bad.line}: ${bad.reason} (${bad.text.trim()})`
+      );
+    }
+  }
   if (agentHooks.installed) {
     for (const h of agentHooks.hosts) {
       if (h.outdated) {
@@ -400,6 +454,11 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       items: pollutionItems
     },
     agentHooks,
+    exclusionBoundary: {
+      activeRuleCount: exclusionBoundary.activeRuleCount,
+      invalidLineCount: exclusionBoundary.invalidLines.length,
+      invalidLines: exclusionBoundary.invalidLines
+    },
     warnings,
     summary
   };

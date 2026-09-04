@@ -4,6 +4,7 @@ import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 import { TOOL_NAMES, ToolName, MemoRecord } from './types.js';
 import { startMcpServer } from './mcp.js';
 import { runDoctor } from './doctor.js';
+import { formatCheckCaptureResult } from './capture-ignore.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
 import { ensureVaultStructure, getVaultRoot, readVaultConfig } from './vault.js';
@@ -81,6 +82,13 @@ export function isCliMainEntry(argv1: string | undefined = process.argv[1]): boo
 
 function printJson(payload: unknown): void {
   console.log(JSON.stringify(sanitizeToolOutput(payload), null, 2));
+}
+
+function formatCheckCaptureLine(result: Awaited<ReturnType<typeof runDoctor>>): string {
+  if (result.captureCheck) {
+    return `${result.captureCheck.relativePath}: ${formatCheckCaptureResult(result.captureCheck)}`;
+  }
+  return result.summary;
 }
 
 interface ParsedCliArgs {
@@ -433,6 +441,7 @@ Options:
   --cwd           Product repository working directory
   --vaultRoot     Override vault root directory
   --productRoot   Path to product repository root
+  --check-capture Evaluate whether a path is CAPTURED or IGNORED by exclusion rules
   --json          Output result as JSON
   -h, --help      Show this help message`);
     return;
@@ -1330,14 +1339,24 @@ async function runCliInner(
       const cwd = (parsed.options.cwd as string) || productRoot;
       const rebuild = parsed.options.rebuild === true || parsed.options.rebuild === 'true';
       const fix = parsed.options.fix === true || parsed.options.fix === 'true';
+      const checkCapture =
+        (parsed.options['check-capture'] as string) ||
+        (parsed.options.checkCapture as string) ||
+        parsed.positionals[1];
 
       const result = await runDoctor({
         cwd,
         productRoot,
         vaultRoot,
         rebuild,
-        fix
+        fix,
+        checkCapture
       });
+
+      if (checkCapture && !parsed.isJson) {
+        console.log(formatCheckCaptureLine(result));
+        return result.healthy ? 0 : 1;
+      }
 
       if (parsed.isJson) {
         printJson(result);
@@ -1369,6 +1388,17 @@ async function runCliInner(
 
         if (result.agentHooks) {
           console.log(result.agentHooks.summary);
+        }
+
+        if (result.exclusionBoundary) {
+          console.log(
+            `\nExclusion Boundary: Active (${result.exclusionBoundary.activeRuleCount} rules loaded)`
+          );
+          if (result.exclusionBoundary.invalidLineCount > 0) {
+            console.log(
+              `  Invalid glob syntax warnings: ${result.exclusionBoundary.invalidLineCount}`
+            );
+          }
         }
 
         console.log(`\nRepository Pollution Scan:`);

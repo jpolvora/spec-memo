@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordStatus, SearchHit, SearchOptions } from './types.js';
 import { getVaultRoot, withVaultLock, getVaultProjects } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
+import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { createSqliteDatabase } from './sqlite.js';
 import { parseRecord } from './schema.js';
 import {
@@ -337,6 +338,17 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   if (!targetProjectId && !options.crossProject) {
     const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
     targetProjectId = identity.projectId;
+  }
+
+  if (options.path) {
+    const root = resolveCaptureProductRoot({
+      cwd: options.cwd,
+      projectId: targetProjectId,
+      vaultRoot
+    });
+    if (isPathIgnored(options.path, root, { projectId: targetProjectId, vaultRoot })) {
+      return [];
+    }
   }
 
   const sortMode = options.sort || 'relevance';

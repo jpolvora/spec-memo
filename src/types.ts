@@ -268,6 +268,8 @@ export interface VaultConfig {
   };
   /** Operator-managed alias map: source project id → canonical project id */
   projectAliases?: Record<string, string>;
+  /** Per-project capture exclusion overrides merged with .spec-memo-ignore */
+  projects?: Record<string, { ignorePaths?: string[] }>;
 }
 
 export interface SearchOptions {
@@ -686,6 +688,7 @@ export interface DoctorOptions {
   productRoot?: string;
   rebuild?: boolean;
   fix?: boolean;
+  checkCapture?: string;
 }
 
 export interface HybridState {
@@ -873,6 +876,21 @@ export interface DoctorResult {
     items: DoctorPollutionItem[];
   };
   agentHooks?: AgentHooksInspection;
+  exclusionBoundary?: {
+    activeRuleCount: number;
+    invalidLineCount: number;
+    invalidLines: Array<{ line: number; text: string; reason: string }>;
+  };
+  captureCheck?: {
+    path: string;
+    relativePath: string;
+    status: 'CAPTURED' | 'IGNORED';
+    match?: {
+      pattern: string;
+      line?: number;
+      source: 'builtin' | '.spec-memo-ignore' | 'config.json';
+    };
+  };
   warnings: string[];
   summary: string;
 }

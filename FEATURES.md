@@ -91,6 +91,7 @@ Do not add an eleventh tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 - [x] **Log compact.** Monthly roll-up files; events remain searchable via FTS.
 - [x] **ADR promotion templates.** Format decisions into standard Nygard ADR or MADR Markdown on promotion. `format: skill` compiles ranked traps into one owner `SKILL.md`.
 - [x] **Redaction.** `upsert` / `append` reject bodies that look like secrets (PEM headers, `api_key=` assignments, known env-file patterns). Caller must omit the secret; spec-memo does not store a redacted copy of the secret value.
+- [x] **Project-local capture exclusions.** Optional consumer-owned `.spec-memo-ignore` (gitignore syntax) plus `config.json` `projects.<id>.ignorePaths`; built-in baseline ignores (`node_modules/`, `.env*`, keys, binaries). Enforced in `upsert` pathPatterns, prompt record redaction, bootstrap focus paths, and search `--path`. Diagnostic: `memo doctor --check-capture <path>` and Exclusion Boundary card.
 - [x] **Refuse product-tree write.** If `cwd` or `productRoot` is a git work tree, API/CLI refuse to write record files *under that tree*. Vault writes stay under `$SPEC_MEMO_ROOT`.
 - [x] **Trap dedup (Phase 3).** Same `pathPatterns` + similar DO NOT → bump `occurrences` on the surviving trap (explicit `supersedes` still creates a new file).
 
