@@ -132,6 +132,24 @@ describe('Capture ignore marker and safety boundary', () => {
     );
   });
 
+  it('rejects upsert when all linkedPaths are ignored (AC6)', async () => {
+    await assert.rejects(
+      () =>
+        upsertRecord({
+          vaultRoot,
+          cwd: productRepo,
+          kind: 'spec',
+          slug: 'ignored-linked',
+          frontmatter: {
+            title: 'Ignored linked',
+            linkedPaths: ['node_modules/vendor/sdk/index.js']
+          },
+          body: 'Should fail'
+        }),
+      /all pathPatterns match ignored paths/
+    );
+  });
+
   it('strips ignored pathPatterns but keeps valid ones (AC6)', async () => {
     const res = await upsertRecord({
       vaultRoot,

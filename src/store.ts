@@ -304,6 +304,14 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     });
   }
 
+  if (rawFrontmatter.linkedPaths && rawFrontmatter.linkedPaths.length > 0) {
+    const { sanitizePathPatterns } = await import('./capture-ignore.js');
+    rawFrontmatter.linkedPaths = sanitizePathPatterns(rawFrontmatter.linkedPaths, identity.rootPath, {
+      projectId,
+      vaultRoot
+    });
+  }
+
   if (options.kind === 'trap') {
     const classified = applyTrapClassification(rawFrontmatter, options.body);
     rawFrontmatter.layer = classified.layer;

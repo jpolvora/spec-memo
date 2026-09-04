@@ -1355,7 +1355,7 @@ async function runCliInner(
 
       if (checkCapture && !parsed.isJson) {
         console.log(formatCheckCaptureLine(result));
-        return result.healthy ? 0 : 0;
+        return result.healthy ? 0 : 1;
       }
 
       if (parsed.isJson) {
