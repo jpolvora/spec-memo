@@ -1,8 +1,21 @@
 name: Agentic Code Review (Cursor)
 
 on:
-  # Disabled; OpenCode workflow is the active PR reviewer. Trigger manually when needed.
+  pull_request:
+    branches: [main, master, develop]
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: false
+      source_branch:
+        description: 'Source branch (e.g. develop)'
+        required: false
+        default: 'develop'
+      target_branch:
+        description: 'Target branch (e.g. master)'
+        required: false
+        default: 'master'
 
 permissions:
   contents: read
@@ -28,6 +41,8 @@ jobs:
           AGENTIC_CODE_REVIEWERS_EXTRA_EXCLUDE_PATTERNS: ".agents/plans/**,.agents/specs/**"
         run: |
           set -euo pipefail
+          SOURCE_BRANCH="${{ github.head_ref || inputs.source_branch || 'develop' }}"
+          TARGET_BRANCH="${{ github.event.pull_request.base.ref || inputs.target_branch || 'master' }}"
           # Download to a file so BASH_SOURCE is bound (curl|bash leaves it unbound under set -u).
           curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/release/run.sh \
             -o /tmp/agentic-code-reviewers-run.sh
@@ -40,17 +55,23 @@ jobs:
             --custom-prompt .github/agentic-code-reviewers-prompt.md \
             --score-min 3 \
             --include-patterns "**/*.md,**/*.yml,**/*.yaml,**/*.json,**/*.sh,**/*.ps1,**/*.ts,**/*.js,**/*.cjs,**/*.prd" \
-            --source-branch "refs/heads/${{ github.head_ref }}" \
-            --target-branch "refs/heads/${{ github.event.pull_request.base.ref }}"
+            --source-branch "refs/heads/${SOURCE_BRANCH}" \
+            --target-branch "refs/heads/${TARGET_BRANCH}"
 
       - name: Check for unresolved threads
         id: check-threads
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ACTIVE=$(gh pr view ${{ github.event.pull_request.number }} --json comments --jq '[.comments[] | select(.isResolved == false and .author.login != "github-actions[bot]" and .author.login != "github-actions")] | length' 2>/dev/null || echo 0)
-          echo "active_threads=$ACTIVE" >> $GITHUB_OUTPUT
-          echo "Unresolved threads: $ACTIVE"
+          PR_NUM="${{ github.event.pull_request.number || inputs.pr_number || '' }}"
+          if [ -n "$PR_NUM" ]; then
+            ACTIVE=$(gh pr view "$PR_NUM" --json comments --jq '[.comments[] | select(.isResolved == false and .author.login != "github-actions[bot]" and .author.login != "github-actions")] | length' 2>/dev/null || echo 0)
+            echo "active_threads=$ACTIVE" >> $GITHUB_OUTPUT
+            echo "Unresolved threads: $ACTIVE"
+          else
+            echo "active_threads=0" >> $GITHUB_OUTPUT
+            echo "No PR number provided; skipping unresolved threads check."
+          fi
 
       - name: Block merge on unresolved threads
         if: ${{ steps.check-threads.outputs.active_threads != '0' }}
