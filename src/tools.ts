@@ -995,7 +995,6 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
             vaultRoot: promptOpts.vaultRoot,
             projectId: promptOpts.projectId
           });
-          scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
           return ok(result);
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);

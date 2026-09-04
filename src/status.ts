@@ -2180,7 +2180,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         const res = await fetch("/api/records/feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: memoryDrawerRecord.id, feedback })
+          body: JSON.stringify({ id: memoryDrawerRecord.id, feedback, projectId: memoryDrawerRecord.projectId })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Feedback failed");
@@ -3984,7 +3984,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const startTime = Date.now();
         try {
           const rawBody = await readBodyBuffer(req, 64 * 1024);
-          let parsed: { id?: string; feedback?: string } = {};
+          let parsed: { id?: string; feedback?: string; projectId?: string } = {};
           if (rawBody.length > 0) {
             parsed = JSON.parse(rawBody.toString("utf8"));
           }
@@ -3995,6 +3995,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           const result = await submitMemoryFeedback({
             id: parsed.id,
             feedback: parsed.feedback as import("./types.js").FeedbackType,
+            projectId: parsed.projectId,
             vaultRoot
           });
           recordTelemetry({

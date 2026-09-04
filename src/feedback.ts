@@ -20,6 +20,7 @@ import { openIndex, indexRecord } from './indexer.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { helpfulCountOf, staleCountOf } from './salience.js';
 import { recordTelemetry } from './telemetry.js';
+import { scheduleHybridPush } from './hybrid-sync.js';
 
 export const FEEDBACK_TYPES: readonly FeedbackType[] = [
   'helpful',
@@ -170,6 +171,8 @@ export async function submitMemoryFeedback(options: FeedbackOptions): Promise<Fe
         comment: options.comment || undefined
       }
     });
+
+    scheduleHybridPush(vaultRoot, found.projectId);
 
     return {
       id,

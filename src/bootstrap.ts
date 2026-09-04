@@ -202,9 +202,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     if (spec || plan || state) {
       activeSlice = {
         slug: options.slug,
-        spec: spec || undefined,
-        plan: plan || undefined,
-        state: state || undefined
+        spec: spec ? cloneRecordWithStaleBadge(spec) : undefined,
+        plan: plan ? cloneRecordWithStaleBadge(plan) : undefined,
+        state: state ? cloneRecordWithStaleBadge(state) : undefined
       };
     }
   }
@@ -228,8 +228,8 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       : configuredBudget && configuredBudget > 0
         ? configuredBudget
         : 8192;
-  const currentTraps = [...activeTraps];
-  const currentDecisions = [...activeDecisions];
+  const currentTraps = activeTraps.map(cloneRecordWithStaleBadge);
+  const currentDecisions = activeDecisions.map(cloneRecordWithStaleBadge);
 
   if (driftList.length > 0) {
     for (const d of driftList) {
@@ -356,23 +356,5 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
   }
 
-  return applyStaleBadgesToBrief(initialBrief);
-}
-
-function applyStaleBadgesToBrief(brief: BootstrapBrief): BootstrapBrief {
-  brief.traps = brief.traps.map(cloneRecordWithStaleBadge);
-  brief.decisions = brief.decisions.map(cloneRecordWithStaleBadge);
-  if (brief.activeSlice) {
-    if (brief.activeSlice.spec) {
-      brief.activeSlice.spec = cloneRecordWithStaleBadge(brief.activeSlice.spec);
-    }
-    if (brief.activeSlice.plan) {
-      brief.activeSlice.plan = cloneRecordWithStaleBadge(brief.activeSlice.plan);
-    }
-    if (brief.activeSlice.state) {
-      brief.activeSlice.state = cloneRecordWithStaleBadge(brief.activeSlice.state);
-    }
-  }
-  brief.byteLength = calculatePayloadSize(brief);
-  return brief;
+  return initialBrief;
 }
