@@ -878,6 +878,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     .score-hits { background: #f778ba; }
     .score-fb { background: #ff7b72; }
     .explain-detail { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+    .drawer-overlay {
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,0.5);
