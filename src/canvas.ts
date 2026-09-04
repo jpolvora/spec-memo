@@ -1,7 +1,8 @@
 import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
-import { getVaultRoot, RECORD_SUBDIRS, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
+import { getVaultProjectListEnriched } from "./vault-manager.js";
+import { getVaultRoot, RECORD_SUBDIRS, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
 import { getRecord } from "./store.js";
 import { parseRecord } from "./schema.js";
 import { searchIndex } from "./indexer.js";
@@ -89,23 +90,10 @@ export function listProjectRecordsInternal(vaultRoot: string, projectId: string)
   return records;
 }
 
-export function getVaultProjectList(vaultRoot: string): Array<{ id: string; displayName?: string }> {
-  const projectsDir = path.join(vaultRoot, "projects");
-  const list: Array<{ id: string; displayName?: string }> = [];
-  if (!fs.existsSync(projectsDir)) return list;
-
-  const entries = fs.readdirSync(projectsDir);
-  for (const entry of entries) {
-    const projPath = path.join(projectsDir, entry);
-    if (fs.statSync(projPath).isDirectory()) {
-      const meta = getProjectMetadata(entry, vaultRoot);
-      list.push({
-        id: entry,
-        displayName: meta?.displayName || entry
-      });
-    }
-  }
-  return list;
+export function getVaultProjectList(
+  vaultRoot: string
+): Array<{ id: string; displayName?: string; aliasOf?: string | null; recordCount?: number }> {
+  return getVaultProjectListEnriched(vaultRoot);
 }
 
 export function generateProjectGraph(

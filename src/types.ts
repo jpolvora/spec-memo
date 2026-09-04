@@ -266,6 +266,8 @@ export interface VaultConfig {
     aiEnabled?: boolean;
     timeoutMs?: number;
   };
+  /** Operator-managed alias map: source project id → canonical project id */
+  projectAliases?: Record<string, string>;
 }
 
 export interface SearchOptions {

@@ -230,6 +230,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-09-02 | memory-hit-count | Retrieval `hits`/`lastHit`, bootstrap/get/search.hitIds, status Memory list+drawer, canvas Hits; v0.17.0; npm test 435 pass |
 | 2026-09-04 | sync-conflict-reconciliation | Vault sync conflict reconciliation, semantic auto-merge, memo reconcile, rollback journal, single conflict cap; npm test 451 pass |
 | 2026-09-04 | project-wiki | Per-project vault wiki (WIKI.md), status Wiki tab, CLI memo wiki |
+| 2026-09-04 | vault-merge-alias | Vault alias map, canonical project resolution, status Vaults tab, memo vault CLI; npm test 514 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 
