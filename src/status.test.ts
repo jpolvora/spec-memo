@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import net from "node:net";
 import { createActivityBus } from "./activity.js";
-import { generateStatusHtml, generateLoginHtml, startStatusServer, safeStatusNextPath, renderPromptMarkdownHtml } from "./status.js";
+import { generateStatusHtml, generateLoginHtml, startStatusServer, safeStatusNextPath, renderPromptMarkdownHtml, wrapWikiH2Html } from "./status.js";
 import { getPackageVersion } from "./version.js";
 import { ensureProjectVault } from "./vault.js";
 import { closeIndex } from "./indexer.js";
@@ -203,10 +203,10 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes("Regenerate"));
   });
 
-  await t.test("Wiki tab script fetches GET /api/wiki?project= uses renderPromptMarkdownHtml and empty-state copy", () => {
+  await t.test("Wiki tab script fetches GET /api/wiki?project= uses renderedHtml from server", () => {
     const html = generateStatusHtml(getPackageVersion());
     assert.ok(html.includes("/api/wiki?project="));
-    assert.ok(html.includes("renderPromptMarkdownHtml"));
+    assert.ok(html.includes("data.renderedHtml"));
     assert.ok(html.includes("No wiki has been generated"));
   });
 
@@ -222,6 +222,12 @@ test("MCP status monitor", async (t) => {
     const out = renderPromptMarkdownHtml("## Overview\nHello");
     assert.ok(out.includes("<h2>Overview</h2>"));
     assert.ok(out.includes("Hello"));
+  });
+
+  await t.test("wrapWikiH2Html collapses h2 sections into details/summary", () => {
+    const wrapped = wrapWikiH2Html(renderPromptMarkdownHtml("## Overview\nHello\n## Traps\nWatch WAL"));
+    assert.ok(wrapped.includes("<details><summary><h2>Overview</h2></summary>"));
+    assert.ok(wrapped.includes("<details><summary><h2>Traps</h2></summary>"));
   });
 
   await t.test("Regenerate click POSTs /api/wiki/regenerate and disables button while in flight", () => {
@@ -351,6 +357,7 @@ test("MCP status monitor", async (t) => {
     assert.strictEqual(body.exists, false);
     assert.strictEqual(body.markdown, "");
     assert.strictEqual(body.lastGenerated, null);
+    assert.strictEqual((body as { renderedHtml?: string }).renderedHtml, "");
     const serialized = JSON.stringify(body);
     assert.ok(!serialized.includes(vaultRoot), "must not leak absolute vault paths");
   });
@@ -398,6 +405,15 @@ test("MCP status monitor", async (t) => {
     assert.ok(typeof body.lastGenerated === "string");
     assert.ok(!JSON.stringify(body).includes(vaultRoot));
     assert.ok(fs.existsSync(path.join(vaultRoot, "projects", projectId, "WIKI.md")));
+    const wikiRes = await fetch(`${baseUrl}/api/wiki?project=${encodeURIComponent(projectId)}`);
+    assert.strictEqual(wikiRes.status, 200);
+    const wikiBody = await wikiRes.json() as { exists: boolean; renderedHtml: string };
+    assert.strictEqual(wikiBody.exists, true);
+    assert.ok(
+      wikiBody.renderedHtml.includes("<details><summary><h2>"),
+      `expected wrapped h2 HTML, got: ${wikiBody.renderedHtml.slice(0, 400)}`
+    );
+    assert.ok(wikiBody.renderedHtml.includes("Overview"));
   });
 
   await t.test("GET /api/wiki/section returns 200 for known h2 slug and 404 Not found for unknown id", async () => {

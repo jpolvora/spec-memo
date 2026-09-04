@@ -664,7 +664,8 @@ async function runCliInner(
       if (parsed.isJson) {
         printJson(payload);
       } else if (payload.exists) {
-        console.log(payload.markdown);
+        const safe = sanitizeToolOutput({ markdown: payload.markdown }) as { markdown: string };
+        console.log(safe.markdown);
       } else {
         console.error(`No WIKI.md for project ${payload.projectId}. Run memo wiki --regenerate.`);
       }

@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-09-04 14:55] Agent: Cursor Grok 4.6
+- **Prompt**: bump, commit, push; ws-ship-pr (PR #39 review threads)
+- **Done**: Sanitize `memo wiki` stdout; GET `/api/wiki` `renderedHtml` via `renderPromptMarkdownHtml` + `wrapWikiH2Html`; CRLF heading parse
+- **Result**: Review threads on CLI sanitize and Wiki HTML helper
+
 ### [2026-09-04 14:51] Agent: Cursor Grok 4.6
 - **Prompt**: bump, commit, push; ws-ship-pr (project wiki)
 - **Done**: Version 0.18.0 → 0.19.0; per-project vault `WIKI.md`, status Wiki tab, `memo wiki` CLI

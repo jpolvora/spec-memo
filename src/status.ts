@@ -57,7 +57,7 @@ export function renderPromptMarkdownHtml(body: string): string {
   html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
 
   // Simple headings / paragraphs
-  const lines = html.split(/\n/);
+  const lines = html.split(/\r?\n/);
   const out: string[] = [];
   let inPara = false;
   for (const line of lines) {
@@ -97,6 +97,22 @@ export function renderPromptMarkdownHtml(body: string): string {
   if (inPara) out.push("</p>");
   return out.join("");
 }
+
+/** Collapse wiki h2 sections into details/summary for the status Wiki tab. */
+export function wrapWikiH2Html(html: string): string {
+  const parts = String(html || "").split("<h2>");
+  if (parts.length < 2) return html;
+  let out = parts[0];
+  for (let i = 1; i < parts.length; i++) {
+    const rest = parts[i];
+    const closeIdx = rest.indexOf("</h2>");
+    const title = closeIdx >= 0 ? rest.slice(0, closeIdx) : rest;
+    const body = closeIdx >= 0 ? rest.slice(closeIdx + 5) : "";
+    out += `<details><summary><h2>${title}</h2></summary>${body}</details>`;
+  }
+  return out;
+}
+
 
 export interface McpStatusSummary {
   host: string;
@@ -3124,7 +3140,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           return;
         }
         if (empty) empty.style.display = "none";
-        if (view) view.innerHTML = wrapWikiH2(renderPromptMarkdownHtml(data.markdown || ""));
+        if (view) view.innerHTML = data.renderedHtml || wrapWikiH2(renderPromptMarkdownHtml(data.markdown || ""));
       } catch {
         if (view) view.innerHTML = "";
         if (empty) {
@@ -3504,7 +3520,10 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         try {
           const project = url.searchParams.get("project");
           const payload = readWikiFile(project, vaultRoot);
-          writeJson(res, 200, sanitizeToolOutput(payload));
+          const renderedHtml = payload.exists
+            ? wrapWikiH2Html(renderPromptMarkdownHtml(payload.markdown))
+            : "";
+          writeJson(res, 200, sanitizeToolOutput({ ...payload, renderedHtml }));
         } catch (err: unknown) {
           if (err instanceof WikiError) {
             writeJson(res, err.httpStatus, sanitizeToolOutput({ error: err.message }));
