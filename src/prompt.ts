@@ -47,19 +47,18 @@ export function generateSessionId(): string {
 export async function recordPromptTurn(options: PromptOptions): Promise<PromptRecordResult> {
   const vaultRoot = getVaultRoot(options.vaultRoot);
   const cwd = options.cwd || process.cwd();
-  let projectId = options.projectId;
-
-  if (!projectId) {
-    const identity = resolveProjectIdentity(cwd, { vaultRoot });
-    projectId = identity.projectId;
-  }
+  const identity = resolveProjectIdentity(cwd, { vaultRoot });
+  let projectId = options.projectId || identity.projectId;
 
   const rawBody = options.body;
   if (!rawBody || typeof rawBody !== 'string' || !rawBody.trim()) {
     throw new Error("Parameter 'body' must be a non-empty string for prompt record.");
   }
   const { redactIgnoredPathsInText } = await import('./capture-ignore.js');
-  const redactedBody = redactIgnoredPathsInText(rawBody, cwd, { projectId, vaultRoot });
+  const redactedBody = redactIgnoredPathsInText(rawBody, identity.rootPath, {
+    projectId,
+    vaultRoot
+  });
   const body = (redactSecretsInPayload(redactedBody) as string).trim();
   const sessionId = options.sessionId;
 

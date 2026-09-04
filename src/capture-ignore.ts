@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { matchesPathPattern } from './indexer.js';
 import { isPathInside } from './safety.js';
-import { ensureVaultStructure, getVaultRoot } from './vault.js';
+import { ensureVaultStructure, getVaultRoot, getProjectMetadata } from './vault.js';
+import { resolveProjectIdentity } from './identity.js';
 
 export type IgnoreRuleSource = 'builtin' | '.spec-memo-ignore' | 'config.json';
 
@@ -76,11 +77,20 @@ interface IgnoreCacheEntry {
 
 const ignoreCache = new Map<string, IgnoreCacheEntry>();
 
+function configMtime(vaultRoot: string): number {
+  try {
+    return fs.statSync(path.join(vaultRoot, 'config.json')).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
 function cacheKey(productRoot: string, projectId?: string, vaultRoot?: string): string {
   const root = path.resolve(productRoot);
   const marker = path.join(root, IGNORE_MARKER);
-  const mtime = fs.existsSync(marker) ? fs.statSync(marker).mtimeMs : 0;
-  return `${root}|${projectId || ''}|${vaultRoot || ''}|${mtime}`;
+  const markerMtime = fs.existsSync(marker) ? fs.statSync(marker).mtimeMs : 0;
+  const cfgMtime = vaultRoot ? configMtime(vaultRoot) : 0;
+  return `${root}|${projectId || ''}|${vaultRoot || ''}|${markerMtime}|${cfgMtime}`;
 }
 
 function normalizeRelativePath(filePath: string, productRoot: string): string | null {
@@ -183,7 +193,7 @@ export function loadIgnoreRules(
   const markerMtime = fs.existsSync(markerPath) ? fs.statSync(markerPath).mtimeMs : 0;
 
   const cached = ignoreCache.get(key);
-  if (cached && cached.mtimeMs === markerMtime) {
+  if (cached) {
     return {
       activeRuleCount: cached.rules.length,
       invalidLines: cached.invalidLines,
@@ -417,4 +427,24 @@ export function formatCheckCaptureResult(result: CheckCaptureResult): string {
 
 export function clearIgnoreCacheForTests(): void {
   ignoreCache.clear();
+}
+
+/**
+ * Resolve the consumer product repository root for capture-boundary checks.
+ */
+export function resolveCaptureProductRoot(options: {
+  cwd?: string;
+  projectId?: string;
+  vaultRoot: string;
+}): string {
+  if (options.cwd) {
+    return resolveProjectIdentity(options.cwd, { vaultRoot: options.vaultRoot }).rootPath;
+  }
+  if (options.projectId) {
+    const lastSeen = getProjectMetadata(options.projectId, options.vaultRoot)?.lastSeenRoot;
+    if (lastSeen) {
+      return path.resolve(lastSeen);
+    }
+  }
+  return resolveProjectIdentity(process.cwd(), { vaultRoot: options.vaultRoot }).rootPath;
 }

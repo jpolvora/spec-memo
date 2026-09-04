@@ -7,7 +7,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { scanProjectRecords } from './compiler.js';
 import { getRecord } from './store.js';
 import { matchesAnyPattern } from './indexer.js';
-import { isPathIgnored } from './capture-ignore.js';
+import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { pullHybridProject } from './hybrid-sync.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
@@ -146,8 +146,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
   const metadata = getProjectMetadata(projectId, vaultRoot);
   const allRecords = scanProjectRecords(projectDir);
+  const captureRoot = resolveCaptureProductRoot({ cwd: options.cwd, projectId, vaultRoot });
   const pathFilter =
-    options.path && !isPathIgnored(options.path, identity.rootPath, { projectId, vaultRoot })
+    options.path && !isPathIgnored(options.path, captureRoot, { projectId, vaultRoot })
       ? options.path
       : undefined;
 

@@ -223,4 +223,34 @@ describe('Capture ignore marker and safety boundary', () => {
     assert.equal(result.captureCheck?.status, 'CAPTURED');
     assert.match(result.summary, /CAPTURED/);
   });
+
+  it('reloads ignore rules when config.json ignorePaths changes (AC3 cache)', () => {
+    const configPath = path.join(vaultRoot, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.projects = { 'test-project': { ignorePaths: ['private/**'] } };
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    clearIgnoreCacheForTests();
+    assert.ok(isPathIgnored('private/data.txt', productRepo, { vaultRoot, projectId: 'test-project' }));
+
+    config.projects = { 'test-project': { ignorePaths: ['other/**'] } };
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    assert.ok(!isPathIgnored('private/data.txt', productRepo, { vaultRoot, projectId: 'test-project' }));
+    assert.ok(isPathIgnored('other/data.txt', productRepo, { vaultRoot, projectId: 'test-project' }));
+  });
+
+  it('redacts ignored paths when cwd is a repo subdirectory (AC7)', async () => {
+    fs.writeFileSync(path.join(productRepo, '.spec-memo-ignore'), 'vendor/**\n');
+    const subDir = path.join(productRepo, 'packages', 'app');
+    fs.mkdirSync(subDir, { recursive: true });
+    clearIgnoreCacheForTests();
+
+    const res = await recordPromptTurn({
+      vaultRoot,
+      cwd: subDir,
+      body: 'Edited vendor/sdk/lib.ts',
+      sessionId: 's-subdir-cwd'
+    });
+    const content = fs.readFileSync(res.path, 'utf8');
+    assert.match(content, /\[PATH_IGNORED\]/);
+  });
 });

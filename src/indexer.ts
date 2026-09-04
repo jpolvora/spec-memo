@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { MemoRecord, RecordFrontmatter, RecordKind, RecordStatus, SearchHit, SearchOptions } from './types.js';
 import { getVaultRoot, withVaultLock, getVaultProjects } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
-import { isPathIgnored } from './capture-ignore.js';
+import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { createSqliteDatabase } from './sqlite.js';
 import { parseRecord } from './schema.js';
 import {
@@ -335,17 +335,17 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   const vaultRoot = options.vaultRoot || getVaultRoot();
 
   let targetProjectId = options.projectId;
-  let productRoot: string | undefined;
   if (!targetProjectId && !options.crossProject) {
     const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
     targetProjectId = identity.projectId;
-    productRoot = identity.rootPath;
-  } else if (options.cwd) {
-    productRoot = resolveProjectIdentity(options.cwd, { vaultRoot }).rootPath;
   }
 
   if (options.path) {
-    const root = productRoot || resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot }).rootPath;
+    const root = resolveCaptureProductRoot({
+      cwd: options.cwd,
+      projectId: targetProjectId,
+      vaultRoot
+    });
     if (isPathIgnored(options.path, root, { projectId: targetProjectId, vaultRoot })) {
       return [];
     }
