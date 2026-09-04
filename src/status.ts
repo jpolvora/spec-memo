@@ -3146,12 +3146,24 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         if (!projectId || projectId === "all") return;
         wikiRegenBtn.disabled = true;
         try {
-          await apiFetch("/api/wiki/regenerate", {
+          const res = await apiFetch("/api/wiki/regenerate", {
             method: "POST",
             headers: Object.assign({ "Content-Type": "application/json" }, apiHeaders()),
             body: JSON.stringify({ projectId: projectId })
           });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            showBanner((data && data.error) || "Wiki regenerate failed", "error");
+            return;
+          }
+          if (data.aiError) {
+            showBanner("Wiki saved (AI polish skipped: " + data.aiError + ")", "info");
+          } else {
+            showBanner("Wiki regenerated for " + data.projectId, "success");
+          }
           await loadWiki();
+        } catch (err) {
+          showBanner("Wiki regenerate failed: " + (err.message || String(err)), "error");
         } finally {
           wikiRegenBtn.disabled = false;
         }

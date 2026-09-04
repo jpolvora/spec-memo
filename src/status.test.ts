@@ -221,6 +221,8 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes("/api/wiki/regenerate"));
     assert.ok(html.includes("wikiRegenBtn.disabled = true"));
     assert.ok(html.includes('method: "POST"'));
+    assert.ok(html.includes("if (!res.ok || !data.ok)"));
+    assert.ok(html.includes('showBanner((data && data.error) || "Wiki regenerate failed", "error")'));
   });
 
   await t.test("generateStatusHtml supports ?tab=wiki and project query deep link", () => {
