@@ -55,16 +55,28 @@ When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a
 
 ### Vault / spec-memo runtime
 
-[`ws-memo`](.agents/skills/ws-memo/SKILL.md) and [`ws-session-tracking`](.agents/skills/ws-session-tracking/SKILL.md) are **Always-applied** in this repo (see Autoload table above). Use `ws-memo` for vault ops (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills, prompt + CLI extras). Use `ws-session-tracking` to record prompt turns and session start/end via MCP `prompt`. Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
+[`ws-memo`](.agents/skills/ws-memo/SKILL.md) and [`ws-session-tracking`](.agents/skills/ws-session-tracking/SKILL.md) are **Always-applied** in this repo with **separated, complementary roles**:
+- **`ws-memo` (Knowledge Continuity):** Vault operations (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills). Injects anti-regression traps, architectural decisions, and active specs.
+- **`ws-session-tracking` (Execution Continuity):** Session lifecycle boundaries (`session_start`, `session_end`), prompt turn ingestion, deliverable correlation (PRs, commits), and cross-agent handoff batons via MCP `prompt`.
+
+Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
 
 ---
 
-## 🚀 Session Start Protocol
+## 🚀 Session Start & Hook Detection Protocol
 
-1. **Invoke Bootstrap**: [`ws-memo`](.agents/skills/ws-memo/SKILL.md) is Always-applied. Call the `bootstrap` MCP tool or run `memo bootstrap` to retrieve active anti-regression traps, open architecture decisions, the active spec/plan slice, and code drift warnings.
-2. **Session tracking**: [`ws-session-tracking`](.agents/skills/ws-session-tracking/SKILL.md) is Always-applied. On meaningful work, `prompt` `session_start` / `record` turns; on completion, `session_end` with deliverables.
-3. **Review Product Docs**: Check [`PRODUCT.PRD`](PRODUCT.PRD), [`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), and [`.agents/specs/index.PRD`](.agents/specs/index.PRD) for active phase constraints and slice definitions.
-4. **Respect Git Boundaries**: Never create in-repo `.agents/plans/`, `MEMORY.md`, `.state.md`, or session log dumps in the product repository.
+Agents must detect whether host lifecycle hooks are installed and adapt their workflow:
+
+1. **Detect Operating Mode:**
+   - **Hook-Automated Mode (Hooks Installed):** Harness lifecycle hooks (Antigravity `hooks.json`, OpenCode plugin, Cursor `.cursor/rules/spec-memo.mdc`, or Claude hooks) have already executed `bootstrap` out-of-band and pre-injected the brief into the turn context.
+     - *Action:* Do **not** call `memo bootstrap` redundantly on Turn 1 unless changing focus `--path` or `--slug`. Inspect and apply active traps immediately.
+   - **Skill-Only Mode (Hooks Not Installed — Default):** No host hooks are installed.
+     - *Action:* The agent **MUST** proactively call `bootstrap` MCP tool or `memo bootstrap` on Turn 1 with `cwd = product root` to retrieve traps, decisions, and active spec slice before planning or coding. Skill-only mode is 100% first-class; never fail or warn about missing hooks.
+2. **Session Tracking & Handoffs:**
+   - On startup: Read and address any active handoff baton passed from previous sessions. In Skill-Only mode, invoke `prompt` `action: 'session_start'`.
+   - On completion: Always call `prompt` `action: 'session_end'` (or `memo session end`) with structured `deliverables` (PR URLs, commit SHAs) and tactical `handoff` for the next agent.
+3. **Review Product Docs:** Check [`PRODUCT.PRD`](PRODUCT.PRD), [`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), and [`.agents/specs/index.PRD`](.agents/specs/index.PRD) for active phase constraints and slice definitions.
+4. **Respect Git Boundaries:** Never create in-repo `.agents/plans/`, `MEMORY.md`, `.state.md`, or session log dumps in the product repository.
 
 ---
 
@@ -130,6 +142,9 @@ node --test dist/sync.test.js
 # Batched vault-git + dual-mode hybrid parallel dispatch
 node --test dist/vault-git-hybrid-sync.test.js
 
+# Vault sync conflict reconciliation, semantic auto-merge & rollback journal
+node --test dist/reconcile.test.js
+
 # Canvas Graph Viewer & REST API
 node --test dist/canvas.test.js
 
@@ -162,7 +177,8 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 | Recall | `search` → `get` |
 | Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git; hybrid schedules debounced push; batched vault-git does not commit until flush) |
 | Audit event | `append` |
-| Sync | `memo sync [--all] [--dry-run]` (hybrid HTTP, vault-git, or both in parallel when dual-mode) |
+| Sync | `memo sync [--all] [--dry-run] [--prefer local|remote]` (hybrid HTTP, vault-git, or both in parallel when dual-mode) |
+| Reconcile conflicts | `memo reconcile [--prefer local|remote] [--strategy smart-merge|local-wins|remote-wins|sidecar] [--clean-sidecars]` |
 | Session close flush | MCP/CLI `prompt` `session_end` (batched vault-git + hybrid when enabled; fail-open) |
 | Housekeep | `gc` (`dryRun` first when unsure); `forget` (purge only with explicit user confirm) |
 

@@ -1,7 +1,7 @@
 import http from "node:http";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createMcpServer } from "./mcp.js";
-import { getVaultRoot, withVaultLockSync, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
+import { getVaultRoot, withVaultLockSync, ensureVaultStructure, resolveConfiguredPorts, tryAcquireVaultLockSync, releaseVaultLockSync } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, createActivityBus } from "./activity.js";
 import { startStatusServer, StatusServerInstance } from "./status.js";
@@ -369,7 +369,13 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             projectId: targetProjectId,
             lastOperation: "sync_push"
           });
-          const result = await applyChangeset(vaultRoot, rawChangeset, { force, dryRun });
+          const result = await applyChangeset(vaultRoot, rawChangeset, {
+            force,
+            dryRun,
+            prefer: body.prefer,
+            strategy: body.strategy,
+            cleanSidecars: body.cleanSidecars
+          });
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err: unknown) {
@@ -398,7 +404,10 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             const rawChangeset = body.push.changeset || body.push;
             appliedResult = await applyChangeset(vaultRoot, rawChangeset, {
               force: Boolean(body.push.force),
-              dryRun: Boolean(body.push.dryRun ?? body.dryRun)
+              dryRun: Boolean(body.push.dryRun ?? body.dryRun),
+              prefer: body.push.prefer ?? body.prefer,
+              strategy: body.push.strategy ?? body.strategy,
+              cleanSidecars: body.push.cleanSidecars ?? body.cleanSidecars
             });
           }
           let pulledChangeset: import('./sync.js').Changeset | undefined;
@@ -645,6 +654,80 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         }
       }
 
+      let autoSyncTimer: NodeJS.Timeout | undefined;
+      let autoSyncInFlight: Promise<void> | undefined;
+      const autoSyncMinutes = config.sync?.autoSyncIntervalMinutes;
+      if (typeof autoSyncMinutes === 'number' && autoSyncMinutes > 0 && config.mode === 'hybrid') {
+        const intervalMs = autoSyncMinutes * 60 * 1000;
+        autoSyncTimer = setInterval(() => {
+          if (autoSyncInFlight) return;
+          // AC24: never stall MCP traffic behind a sync cycle — skip this
+          // tick when the vault is busy; the next tick retries. The single
+          // outer hold covers the whole multi-project cycle (inner syncDual
+          // locks re-enter safely in-process).
+          if (!tryAcquireVaultLockSync(vaultRoot)) return;
+          autoSyncInFlight = (async () => {
+            try {
+              const { syncDual } = await import("./dual-sync.js");
+              const strategy =
+                config.sync?.conflictStrategy ??
+                config.sync?.defaultStrategy ??
+                "smart-merge";
+              const cleanSidecars = config.sync?.cleanSidecars ?? false;
+              // Iterate projects so per-project hybrid cursors apply incrementally.
+              // A single unscoped syncDual would full-pull + full-push every tick.
+              let projectIds: string[] = [];
+              try {
+                const { getVaultProjects } = await import("./vault.js");
+                projectIds = getVaultProjects(vaultRoot).map((p) => p.id);
+              } catch {
+                projectIds = [];
+              }
+              if (projectIds.length > 0) {
+                for (const id of projectIds) {
+                  try {
+                    await syncDual({
+                      vaultRoot,
+                      projectId: id,
+                      trigger: "sync",
+                      strategy,
+                      cleanSidecars
+                    });
+                  } catch (err: unknown) {
+                    logErrorReport({
+                      subsystem: "sync-reconcile",
+                      error: err,
+                      level: "WARN",
+                      context: { phase: "background_autosync", projectId: id }
+                    }, { vaultRoot, logPath: errorLogPath });
+                  }
+                }
+              } else {
+                await syncDual({
+                  vaultRoot,
+                  trigger: "sync",
+                  strategy,
+                  cleanSidecars
+                });
+              }
+            } catch (err: unknown) {
+              logErrorReport({
+                subsystem: "sync-reconcile",
+                error: err,
+                level: "WARN",
+                context: { phase: "background_autosync" }
+              }, { vaultRoot, logPath: errorLogPath });
+            } finally {
+              releaseVaultLockSync(vaultRoot);
+              autoSyncInFlight = undefined;
+            }
+          })();
+        }, intervalMs);
+        if (typeof autoSyncTimer.unref === 'function') {
+          autoSyncTimer.unref();
+        }
+      }
+
       resolve({
         server,
         port: actualPort,
@@ -654,6 +737,17 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         statusPort,
         activityBus: bus,
         close: async () => {
+          if (autoSyncTimer) {
+            clearInterval(autoSyncTimer);
+            autoSyncTimer = undefined;
+          }
+          if (autoSyncInFlight) {
+            try {
+              await autoSyncInFlight;
+            } catch {
+              // ignore
+            }
+          }
           try {
             const { flushOnShutdown } = await import("./dual-sync.js");
             await flushOnShutdown(vaultRoot);

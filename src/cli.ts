@@ -40,6 +40,36 @@ async function confirmPrompt(message: string): Promise<boolean> {
   });
 }
 
+/**
+ * Parse an interactive reconcile source-of-truth choice (AC9).
+ * l/local → 'local', r/remote → 'remote', anything else (m/merge/skip/empty)
+ * keeps the non-interactive smart-merge default.
+ */
+export function parseReconcilePreference(input: string | undefined): 'local' | 'remote' | undefined {
+  const v = (input || '').trim().toLowerCase();
+  if (v === 'l' || v === 'local') return 'local';
+  if (v === 'r' || v === 'remote') return 'remote';
+  return undefined;
+}
+
+async function promptReconcilePreference(count: number): Promise<'local' | 'remote' | undefined> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  try {
+    const answer: string = await new Promise((resolve) => {
+      rl.question(
+        `${count} conflict(s) need review. Choose source of truth: [l]ocal / [r]emote / [m]erge smart-merge (default): `,
+        resolve
+      );
+    });
+    return parseReconcilePreference(answer);
+  } finally {
+    rl.close();
+  }
+}
+
 /** True when this process is a CLI invocation (dist/cli.js, src/cli.ts, or npm bin shim named memo). */
 export function isCliMainEntry(argv1: string | undefined = process.argv[1]): boolean {
   if (!argv1) return false;
@@ -1137,6 +1167,13 @@ async function runCliInner(
         parsed.options.dryRun === true;
       const cwd = (parsed.options.cwd as string) || process.cwd();
       const identity = resolveProjectIdentity(cwd, { vaultRoot: getVaultRoot(vaultRoot) });
+      const prefer = (parsed.options.prefer as 'local' | 'remote') || undefined;
+      const strategy = (parsed.options.strategy as import('./types.js').ConflictStrategy) || undefined;
+      const cleanSidecars =
+        parsed.options['clean-sidecars'] === true ||
+        parsed.options['clean-sidecars'] === 'true' ||
+        parsed.options.cleanSidecars === true;
+      const force = parsed.options.force === true || parsed.options.force === 'true';
 
       if (config.mode === 'remote') {
         throw new Error('memo sync is not available in remote mode (data resides on remote daemon).');
@@ -1152,7 +1189,11 @@ async function runCliInner(
           projectId: identity.projectId,
           all,
           dryRun,
-          trigger: 'sync'
+          trigger: 'sync',
+          force,
+          prefer,
+          strategy,
+          cleanSidecars
         });
         if (parsed.isJson) {
           printJson(report);
@@ -1161,7 +1202,9 @@ async function runCliInner(
           if (report.hybrid?.report) {
             const h = report.hybrid.report;
             console.log(`  Hybrid:   pulled applied=${h.pulled.applied} skipped=${h.pulled.skipped} conflicts=${h.pulled.conflicts}`);
+            if (h.pulled.autoMerged) console.log(`            pulled auto-merged=${h.pulled.autoMerged}`);
             console.log(`            pushed applied=${h.pushed.applied} skipped=${h.pushed.skipped} conflicts=${h.pushed.conflicts}`);
+            if (h.pushed.autoMerged) console.log(`            pushed auto-merged=${h.pushed.autoMerged}`);
             if (report.hybrid.error) console.log(`            error: ${report.hybrid.error}`);
           }
           if (report.vaultGit) {
@@ -1178,7 +1221,11 @@ async function runCliInner(
           vaultRoot,
           projectId: identity.projectId,
           all,
-          dryRun
+          dryRun,
+          force,
+          prefer,
+          strategy,
+          cleanSidecars
         });
         if (parsed.isJson) {
           printJson(report);
@@ -1186,13 +1233,16 @@ async function runCliInner(
           console.log(`spec-memo — Hybrid Synchronization Complete\n`);
           console.log(`  Scope:    ${report.all ? 'All Projects' : `Project ${report.projectId}`}`);
           console.log(
-            `  Pulled:   applied=${report.pulled.applied}, skipped=${report.pulled.skipped}, conflicts=${report.pulled.conflicts}`
+            `  Pulled:   applied=${report.pulled.applied}, skipped=${report.pulled.skipped}, conflicts=${report.pulled.conflicts}${report.pulled.autoMerged ? `, auto-merged=${report.pulled.autoMerged}` : ''}`
           );
           console.log(
-            `  Pushed:   applied=${report.pushed.applied}, skipped=${report.pushed.skipped}, conflicts=${report.pushed.conflicts}`
+            `  Pushed:   applied=${report.pushed.applied}, skipped=${report.pushed.skipped}, conflicts=${report.pushed.conflicts}${report.pushed.autoMerged ? `, auto-merged=${report.pushed.autoMerged}` : ''}`
           );
         }
-        return 0;
+        const { readHybridState } = await import('./hybrid-state.js');
+        const state = readHybridState(getVaultRoot(vaultRoot));
+        const hasConflicts = report.pulled.conflicts > 0 || report.pushed.conflicts > 0;
+        return hasConflicts || state.dirty ? 1 : 0;
       }
 
       if (gitEnabled) {
@@ -1215,6 +1265,175 @@ async function runCliInner(
         printJson({ isError: true, error: msg, code: 'SYNC_ERROR' });
       } else {
         console.error(`Sync failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo reconcile command (AC12, AC13, AC14, AC15)
+  if (parsed.command === 'reconcile') {
+    try {
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const root = getVaultRoot(vaultRoot);
+      const config = ensureVaultStructure(root);
+      const all = parsed.options.all === true || parsed.options.all === 'true';
+      const dryRun =
+        parsed.options['dry-run'] === true ||
+        parsed.options['dry-run'] === 'true' ||
+        parsed.options.dryRun === true;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const identity = resolveProjectIdentity(cwd, { vaultRoot: root });
+      const prefer = (parsed.options.prefer as 'local' | 'remote') || undefined;
+      const strategy = (parsed.options.strategy as import('./types.js').ConflictStrategy) || 'smart-merge';
+      const cleanSidecars = parsed.options['clean-sidecars'] !== false && parsed.options['clean-sidecars'] !== 'false';
+      const reconcileStarted = performance.now();
+
+      // 1. Clean conflict sidecars (serialized under vault lock vs daemon auto-sync)
+      const { withVaultLock } = await import('./vault.js');
+      const { cleanConflictSidecars } = await import('./sync.js');
+      const cleanAndRebuild = async (selected?: 'local' | 'remote') => {
+        const res = await withVaultLock(root, async () =>
+          cleanConflictSidecars(root, {
+            prefer: selected,
+            dryRun,
+            projectId: all ? undefined : identity.projectId
+          })
+        );
+        if (!dryRun && res.cleaned > 0) {
+          await withVaultLock(root, async () => {
+            const { rebuildIndex } = await import('./indexer.js');
+            const { rebuildCompiledViews } = await import('./compiler.js');
+            await rebuildIndex(root);
+            for (const pid of new Set(res.filesCleaned.map((f) => f.split('/')[0]))) {
+              if (pid) rebuildCompiledViews(pid, root);
+            }
+          });
+        }
+        return res;
+      };
+      let activePrefer = prefer;
+      let cleanResult = await cleanAndRebuild(activePrefer);
+
+      // AC9: interactive mode — TTY only, skipped in scripts/CI/dry-run
+      // and when the operator already passed --prefer.
+      if (
+        !dryRun &&
+        cleanResult.retained > 0 &&
+        !activePrefer &&
+        process.stdin.isTTY &&
+        process.stdout.isTTY
+      ) {
+        if (!parsed.isJson) {
+          console.log(`\n  Retained conflicts (${cleanResult.retained}):`);
+          for (const f of cleanResult.filesRetained.slice(0, 10)) {
+            console.log(`    - ${f}`);
+          }
+          if (cleanResult.filesRetained.length > 10) {
+            console.log(`    ... (${cleanResult.filesRetained.length - 10} more)`);
+          }
+        }
+        const choice = await promptReconcilePreference(cleanResult.retained);
+        if (choice) {
+          activePrefer = choice;
+          cleanResult = await cleanAndRebuild(activePrefer);
+        }
+      }
+
+      // 2. Perform synchronization when a sync channel is configured
+      // (hybrid and/or vault-git; mirrors memo sync channel selection so
+      // local+vaultGit deployments also flush sidecar-cleaned mutations).
+      const gitEnabled = Boolean(config.vaultGit?.enabled) && config.mode !== 'remote';
+      let syncResult: any = null;
+      if (config.mode === 'hybrid' || gitEnabled) {
+        const { syncDual } = await import('./dual-sync.js');
+        syncResult = await syncDual({
+          vaultRoot: root,
+          projectId: identity.projectId,
+          all,
+          dryRun,
+          trigger: 'sync',
+          prefer: activePrefer,
+          strategy,
+          cleanSidecars
+        });
+      }
+
+      const report = {
+        command: 'reconcile',
+        prefer: activePrefer || 'none',
+        strategy,
+        dryRun,
+        sidecarsCleaned: cleanResult.cleaned,
+        sidecarsRetained: cleanResult.retained,
+        filesCleaned: cleanResult.filesCleaned,
+        sync: syncResult
+      };
+
+      if (parsed.isJson) {
+        printJson(report);
+      } else {
+        console.log(`spec-memo — Vault Conflict Reconciliation Complete\n`);
+        console.log(`  Source of Truth:  ${activePrefer ? `Prefer ${activePrefer.toUpperCase()}` : 'None (Smart-Merge)'}`);
+        console.log(`  Strategy:         ${strategy}`);
+        console.log(`  Sidecars Cleaned: ${cleanResult.cleaned} (retained: ${cleanResult.retained})`);
+        if (cleanResult.filesCleaned.length > 0 && cleanResult.filesCleaned.length <= 10) {
+          for (const f of cleanResult.filesCleaned) {
+            console.log(`    - ${f}`);
+          }
+        } else if (cleanResult.filesCleaned.length > 10) {
+          console.log(`    - ${cleanResult.filesCleaned.slice(0, 5).join(', ')} ... (${cleanResult.filesCleaned.length} total)`);
+        }
+        if (syncResult?.hybrid?.report) {
+          const h = syncResult.hybrid.report;
+          console.log(`\n  Hybrid Sync:`);
+          console.log(
+            `    Pulled: applied=${h.pulled.applied} auto-merged=${h.pulled.autoMerged || 0} conflicts=${h.pulled.conflicts}`
+          );
+          console.log(
+            `    Pushed: applied=${h.pushed.applied} auto-merged=${h.pushed.autoMerged || 0} conflicts=${h.pushed.conflicts}`
+          );
+          if (syncResult.hybrid.error) {
+            console.log(`    Error:  ${syncResult.hybrid.error}`);
+          }
+        }
+        if (syncResult?.vaultGit && !syncResult.vaultGit.skipped) {
+          console.log(`\n  Vault Git:`);
+          console.log(
+            `    committed=${syncResult.vaultGit.committed} pulled=${syncResult.vaultGit.pulled} pushed=${syncResult.vaultGit.pushed}`
+          );
+          console.log(`    ${syncResult.vaultGit.message}`);
+        }
+      }
+      const syncFailed = Boolean(syncResult && !syncResult.ok);
+      const hasRetainedSidecars = cleanResult.retained > 0;
+      // AC21: dedicated reconcile telemetry (conflicts, auto-merged, strategy).
+      recordTelemetry({
+        category: 'sync_operation',
+        operation: 'sync_reconcile',
+        durationMs: Math.max(0, Math.round((performance.now() - reconcileStarted) * 10) / 10),
+        success: !(syncFailed || hasRetainedSidecars),
+        errorCode: syncFailed ? 'RECONCILE_SYNC_FAILED' : hasRetainedSidecars ? 'SIDECARS_RETAINED' : undefined,
+        projectId: all ? undefined : identity.projectId,
+        vaultRoot: root,
+        metadata: {
+          prefer: activePrefer || 'none',
+          strategy,
+          dryRun,
+          sidecarsCleaned: cleanResult.cleaned,
+          sidecarsRetained: cleanResult.retained,
+          pulledConflicts: syncResult?.hybrid?.report?.pulled?.conflicts ?? 0,
+          pushedConflicts: syncResult?.hybrid?.report?.pushed?.conflicts ?? 0,
+          pulledAutoMerged: syncResult?.hybrid?.report?.pulled?.autoMerged ?? 0,
+          pushedAutoMerged: syncResult?.hybrid?.report?.pushed?.autoMerged ?? 0
+        }
+      });
+      return syncFailed || hasRetainedSidecars ? 1 : 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'RECONCILE_ERROR' });
+      } else {
+        console.error(`Error reconciling vault: ${msg}`);
       }
       return 1;
     }

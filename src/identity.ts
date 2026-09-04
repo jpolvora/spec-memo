@@ -13,6 +13,64 @@ import { isPathInside } from './safety.js';
  *   - https://user:token@github.com/jpolvora/spec-memo.git -> github.com/jpolvora/spec-memo
  *   - ssh://git@gitlab.com/org/repo.git -> gitlab.com/org/repo
  */
+function cleanRepoPath(rawPath: string): string {
+  let cleaned = rawPath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+  if (cleaned.endsWith('.git')) {
+    cleaned = cleaned.slice(0, -4);
+  }
+  return cleaned.replace(/\/+$/, '').toLowerCase();
+}
+
+function canonicalizeHost(host: string): string {
+  let lower = host.toLowerCase().replace(/:\d+$/, '');
+  if (lower === 'ssh.github.com') return 'github.com';
+  if (lower === 'altssh.bitbucket.org') return 'bitbucket.org';
+  return lower;
+}
+
+function normalizeAzureDevOps(host: string, rawPath: string): string | null {
+  const lowerHost = host.toLowerCase().replace(/:\d+$/, '');
+  const isAzure =
+    lowerHost === 'dev.azure.com' ||
+    lowerHost === 'ssh.dev.azure.com' ||
+    lowerHost.endsWith('.visualstudio.com');
+  if (!isAzure) return null;
+
+  let cleaned = cleanRepoPath(rawPath);
+  cleaned = cleaned.replace(/^v3\//, '');
+  cleaned = cleaned.replace(/^defaultcollection\//, '');
+
+  const segments = cleaned.split('/').filter((s) => s && s !== '_git');
+  if (lowerHost.endsWith('.visualstudio.com') && lowerHost !== 'vs-ssh.visualstudio.com') {
+    const org = lowerHost.replace(/\.visualstudio\.com$/, '');
+    if (segments.length > 0 && segments[0] !== org) {
+      segments.unshift(org);
+    }
+  }
+  if (segments.length >= 2) {
+    return `dev.azure.com/${segments.join('/')}`;
+  }
+  return `dev.azure.com/${cleaned}`;
+}
+
+function normalizeAwsCodeCommit(host: string, rawPath: string): string | null {
+  const lowerHost = host.toLowerCase().replace(/:\d+$/, '');
+  if (!lowerHost.includes('git-codecommit') || !lowerHost.endsWith('.amazonaws.com')) {
+    return null;
+  }
+  let cleaned = cleanRepoPath(rawPath);
+  cleaned = cleaned.replace(/^v1\//, '');
+  return `${lowerHost}/${cleaned}`;
+}
+
+/**
+ * Normalize any Git remote URL into a canonical hostname/path identifier.
+ * Examples:
+ *   - git@github.com:jpolvora/spec-memo.git -> github.com/jpolvora/spec-memo
+ *   - https://user:token@github.com/jpolvora/spec-memo.git -> github.com/jpolvora/spec-memo
+ *   - ssh://git@gitlab.com/org/repo.git -> gitlab.com/org/repo
+ *   - https://dev.azure.com/org/proj/_git/repo -> dev.azure.com/org/proj/repo
+ */
 export function normalizeGitRemote(rawUrl: string): string {
   let url = rawUrl.trim();
 
@@ -21,35 +79,49 @@ export function normalizeGitRemote(rawUrl: string): string {
     url = url.slice(4);
   }
 
-  // Handle SSH scp-style: git@github.com:user/repo.git
-  const scpMatch = url.match(/^([a-zA-Z0-9._-]+)@([a-zA-Z0-9._-]+):(.+)$/);
-  if (scpMatch) {
-    const host = scpMatch[2].toLowerCase();
-    let repoPath = scpMatch[3].replace(/^\/+/, '');
-    if (repoPath.endsWith('.git')) {
-      repoPath = repoPath.slice(0, -4);
-    }
-    return `${host}/${repoPath}`;
-  }
-
-  // Handle standard URL protocol: https://, http://, ssh://, git://
+  // 1. Try standard URL protocol: https://, http://, ssh://, git://
   try {
     const parsed = new URL(url);
-    const host = parsed.hostname.toLowerCase();
-    let pathname = parsed.pathname.replace(/^\/+/, '');
-    if (pathname.endsWith('.git')) {
-      pathname = pathname.slice(0, -4);
-    }
-    // For GitHub, GitLab, Bitbucket, lower-case path for consistency
-    if (['github.com', 'gitlab.com', 'bitbucket.org'].includes(host)) {
-      pathname = pathname.toLowerCase();
-    }
-    return `${host}/${pathname}`;
+    const rawHost = parsed.hostname;
+    const rawPath = parsed.pathname;
+
+    const azure = normalizeAzureDevOps(rawHost, rawPath);
+    if (azure) return azure;
+
+    const aws = normalizeAwsCodeCommit(rawHost, rawPath);
+    if (aws) return aws;
+
+    const host = canonicalizeHost(rawHost);
+    const repoPath = cleanRepoPath(rawPath);
+    return `${host}/${repoPath}`;
   } catch {
-    // If not a standard URL, clean up trailing .git and slashes
-    let cleaned = url.replace(/\.git$/, '').replace(/^[a-zA-Z]+:\/\//, '');
+    // 2. Handle SSH scp-style: git@github.com:user/repo.git or user@host:path
+    // Avoid matching Windows drive letters (e.g. C:\ or C:/)
+    if (!/^[a-zA-Z]:[\\/]/.test(url)) {
+      const scpMatch = url.match(/^(?:ssh:\/\/)?(?:([a-zA-Z0-9._-]+)@)?([a-zA-Z0-9._-]+):(?!\/\/)(.+)$/);
+      if (scpMatch) {
+        const rawHost = scpMatch[2];
+        const rawPath = scpMatch[3];
+
+        const azure = normalizeAzureDevOps(rawHost, rawPath);
+        if (azure) return azure;
+
+        const aws = normalizeAwsCodeCommit(rawHost, rawPath);
+        if (aws) return aws;
+
+        const host = canonicalizeHost(rawHost);
+        const repoPath = cleanRepoPath(rawPath);
+        return `${host}/${repoPath}`;
+      }
+    }
+
+    // If not a standard URL or SCP, clean up trailing .git, slashes, and protocol
+    let cleaned = url.replace(/\\/g, '/');
+    cleaned = cleaned.replace(/\.git\/?$/, '');
+    cleaned = cleaned.replace(/^[a-zA-Z]+:\/\//, '');
     cleaned = cleaned.replace(/^[^@]+@/, ''); // remove user info
-    return cleaned.replace(/\\/g, '/');
+    cleaned = cleaned.replace(/^\/+/, '').replace(/\/+$/, '');
+    return cleaned.toLowerCase();
   }
 }
 
@@ -142,11 +214,74 @@ export function findGitRoot(startPath: string, vaultRoot?: string): string | nul
 }
 
 /**
- * Read the URL of a named remote from git config or git CLI.
+ * If candidateUrl points to a local directory or file:// URI that is a git repository,
+ * resolve its upstream remote URL recursively (up to 3 hops) so clones of local clones
+ * share the upstream remote identity.
  */
-export function getGitRemoteUrl(gitRoot: string, remoteName = 'origin'): string | null {
-  // Fast path: inspect .git/config directly
+export function resolveLocalRepoRemote(candidateUrl: string, currentGitRoot?: string, depth = 0): string | null {
+  if (depth > 3) return null;
+  let candidate = candidateUrl.trim();
+  if (candidate.startsWith('file://')) {
+    try {
+      candidate = new URL(candidate).pathname;
+      if (process.platform === 'win32' && candidate.startsWith('/') && candidate[2] === ':') {
+        candidate = candidate.slice(1);
+      }
+    } catch {
+      candidate = candidate.replace(/^file:\/\//, '');
+    }
+  }
+
+  // Check if candidate is a local path format
+  const isWindowsDrive = /^[a-zA-Z]:[\\/]/.test(candidate);
+  const isRelative = candidate.startsWith('.') || candidate.startsWith('..');
+  const isPosixAbsolute = candidate.startsWith('/');
+  if (!isWindowsDrive && !isRelative && !isPosixAbsolute) {
+    return null;
+  }
+
+  const resolvedPath = currentGitRoot && isRelative
+    ? path.resolve(currentGitRoot, candidate)
+    : path.resolve(candidate);
+
+  if (!fs.existsSync(resolvedPath)) {
+    return null;
+  }
+
+  const targetGitRoot = findGitRoot(resolvedPath);
+  if (!targetGitRoot) {
+    return null;
+  }
+
+  // Avoid cycle if pointing to self
+  if (currentGitRoot && path.resolve(currentGitRoot) === path.resolve(targetGitRoot)) {
+    return null;
+  }
+
+  // Inspect the target git repository's remotes
+  const upstreamUrl = getGitRemoteUrl(targetGitRoot, 'origin', depth + 1);
+  if (upstreamUrl) {
+    return upstreamUrl;
+  }
+
+  // If the target repository has no remotes (pure local repo), return its canonical root path
+  return targetGitRoot;
+}
+
+/**
+ * Read the URL of a named remote from git config or git CLI.
+ * If remoteName is 'origin' and not found, falls back to 'upstream' or first available remote.
+ * If the resulting URL is a local repository clone, resolves upstream remote identity recursively.
+ */
+export function getGitRemoteUrl(gitRoot: string, remoteName = 'origin', depth = 0): string | null {
+  if (depth > 3) {
+    return null;
+  }
+
+  let foundUrl: string | null = null;
   const gitDir = path.join(gitRoot, '.git');
+
+  // Fast path: inspect .git/config directly
   try {
     let configPath = path.join(gitDir, 'config');
     if (fs.existsSync(gitDir) && fs.statSync(gitDir).isFile()) {
@@ -156,32 +291,88 @@ export function getGitRemoteUrl(gitRoot: string, remoteName = 'origin'): string 
       if (match) {
         const resolvedGitDir = path.resolve(gitRoot, match[1].trim());
         configPath = path.join(resolvedGitDir, 'config');
+        if (!fs.existsSync(configPath)) {
+          // Check commondir for git worktrees
+          const commondirFile = path.join(resolvedGitDir, 'commondir');
+          if (fs.existsSync(commondirFile)) {
+            const commonDir = fs.readFileSync(commondirFile, 'utf8').trim();
+            const resolvedCommonDir = path.resolve(resolvedGitDir, commonDir);
+            configPath = path.join(resolvedCommonDir, 'config');
+          }
+        }
       }
     }
 
     if (fs.existsSync(configPath)) {
       const configText = fs.readFileSync(configPath, 'utf8');
-      const remoteRegex = new RegExp(`\\[remote\\s+"${remoteName}"\\][^\\[]*url\\s*=\\s*([^\\r\\n]+)`, 'i');
-      const match = configText.match(remoteRegex);
-      if (match && match[1]) {
-        return match[1].trim();
+      // 1. Try requested remoteName
+      const targetRegex = new RegExp(`\\[remote\\s+"${remoteName}"\\][^\\[]*url\\s*=\\s*([^\\r\\n]+)`, 'i');
+      const targetMatch = configText.match(targetRegex);
+      if (targetMatch && targetMatch[1]) {
+        foundUrl = targetMatch[1].trim();
+      } else if (remoteName === 'origin') {
+        // 2. Fallback to 'upstream'
+        const upstreamMatch = configText.match(/\[remote\s+"upstream"\][^\[]*url\s*=\s*([^\r\n]+)/i);
+        if (upstreamMatch && upstreamMatch[1]) {
+          foundUrl = upstreamMatch[1].trim();
+        } else {
+          // 3. Fallback to any configured remote
+          const anyRemoteMatch = configText.match(/\[remote\s+"[^"]+"\][^\[]*url\s*=\s*([^\r\n]+)/i);
+          if (anyRemoteMatch && anyRemoteMatch[1]) {
+            foundUrl = anyRemoteMatch[1].trim();
+          }
+        }
       }
     }
   } catch {
     // Ignore file read error and try CLI fallback
   }
 
-  // CLI fallback
-  try {
-    const out = execFileSync('git', ['remote', 'get-url', remoteName], {
-      cwd: gitRoot,
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    return out.trim() || null;
-  } catch {
+  // CLI fallback if fast-path did not find a URL
+  if (!foundUrl) {
+    try {
+      const out = execFileSync('git', ['remote', 'get-url', remoteName], {
+        cwd: gitRoot,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      });
+      foundUrl = out.trim() || null;
+    } catch {
+      if (remoteName === 'origin') {
+        try {
+          const remotesOut = execFileSync('git', ['remote'], {
+            cwd: gitRoot,
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'ignore']
+          });
+          const remotes = remotesOut.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
+          const fallbackName = remotes.includes('upstream') ? 'upstream' : remotes[0];
+          if (fallbackName) {
+            const out = execFileSync('git', ['remote', 'get-url', fallbackName], {
+              cwd: gitRoot,
+              encoding: 'utf8',
+              stdio: ['pipe', 'pipe', 'ignore']
+            });
+            foundUrl = out.trim() || null;
+          }
+        } catch {
+          // Ignore CLI fallback errors
+        }
+      }
+    }
+  }
+
+  if (!foundUrl) {
     return null;
   }
+
+  // Check if foundUrl points to a local repository (clone of a clone)
+  const localUpstream = resolveLocalRepoRemote(foundUrl, gitRoot, depth);
+  if (localUpstream) {
+    return localUpstream;
+  }
+
+  return foundUrl;
 }
 
 /**
@@ -216,9 +407,18 @@ export function resolveProjectIdentity(
     rootPath = path.resolve(gitRoot);
     const remoteUrl = getGitRemoteUrl(rootPath, remoteName);
     if (remoteUrl) {
-      normalizedRemote = normalizeGitRemote(remoteUrl);
-      projectId = generateProjectIdFromRemote(normalizedRemote);
-      isFallback = false;
+      const isLocalPath =
+        fs.existsSync(remoteUrl) &&
+        (path.isAbsolute(remoteUrl) || /^[a-zA-Z]:[\\/]/.test(remoteUrl));
+      if (isLocalPath) {
+        projectId = generateProjectIdFromPath(path.resolve(remoteUrl));
+        normalizedRemote = null;
+        isFallback = true;
+      } else {
+        normalizedRemote = normalizeGitRemote(remoteUrl);
+        projectId = generateProjectIdFromRemote(normalizedRemote);
+        isFallback = false;
+      }
     } else {
       projectId = generateProjectIdFromPath(rootPath);
     }

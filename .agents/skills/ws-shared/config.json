@@ -188,6 +188,7 @@
     "_comment_plansDir": "Resolve skill token {plansDir} from plans.dir (there is no separate plansDir key).",
     "_comment_specsDir": "Human-facing local specs dir. Skill token {specsDir} ← plans.specsDir (default .agents/specs). Prefer existing repo-root specs/ when already present. ws-write-spec writes here only; workflow step-00 copies under {plansDir}/{slug}/ come from providers or ws-local-spec-provider register.",
     "specsDir": ".agents/specs",
+    "enforceSpecPrefixOrdering": true,
     "diagnosticsDir": ".agents/plans/diagnostics",
     "worktreesDir": ".agents/plans/{slug}/worktrees",
     "useWorktrees": false

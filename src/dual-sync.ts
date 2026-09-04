@@ -20,6 +20,10 @@ export interface DualSyncOptions {
   dryRun?: boolean;
   trigger: DualSyncTrigger;
   sessionId?: string;
+  force?: boolean;
+  prefer?: 'local' | 'remote';
+  strategy?: import('./types.js').ConflictStrategy;
+  cleanSidecars?: boolean;
 }
 
 export interface DualSyncHybridChannel {
@@ -78,7 +82,11 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
             vaultRoot,
             projectId: options.projectId,
             all: options.all,
-            dryRun: options.dryRun
+            dryRun: options.dryRun,
+            force: options.force,
+            prefer: options.prefer,
+            strategy: options.strategy,
+            cleanSidecars: options.cleanSidecars
           });
           return { ok: isHybridReportSuccessful(report, vaultRoot), report };
         } catch (err: unknown) {
@@ -134,7 +142,7 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
   const enabledResults: boolean[] = [];
   if (hybrid) enabledResults.push(hybrid.ok);
   if (vaultGit) enabledResults.push(vaultGit.ok);
-  const ok = enabledResults.some(Boolean);
+  const ok = enabledResults.length > 0 && enabledResults.every(Boolean);
 
   const report: DualSyncReport = {
     trigger,

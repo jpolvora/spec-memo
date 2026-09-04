@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.17.1
+version: 0.18.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -34,6 +34,44 @@ If the product uses **workflow-skills** (`ws-shared/config.json` or skill `ws-sp
 | Runtime vault ops after MCP is registered | Stay on **this skill** (`bootstrap`, `search`, `upsert`, …) |
 
 Standalone spec-memo hosts (no workflow-skills) use CLI `memo setup` for **host MCP wiring and deployment mode** only — not as a substitute for `ws-spec-memo` harness config. Companion: [workflow-skills#253](https://github.com/jpolvora/workflow-skills/issues/253).
+
+---
+
+## 🤝 Complementary Architecture: ws-memo vs. ws-session-tracking
+
+`spec-memo` separates memory into two distinct, highly complementary runtime engines:
+
+| Dimension | `ws-memo` (This Skill) | `ws-session-tracking` (Companion Skill) |
+|---|---|---|
+| **Domain Focus** | **Knowledge Continuity** (What the codebase learned) | **Execution Continuity** (What the agent did) |
+| **Primary Records** | `trap`, `decision`, `spec`, `plan`, `review`, `scratch` | `prompt`, `session`, `log` |
+| **Tool Surface** | `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote` | `prompt` (`record`, `session_start`, `session_end`, `activity_report`, `derive_rules`, `export_story`) |
+| **Lifecycle Touchpoint** | Injects anti-regression traps & active decisions into brief | Demarcates session boundaries, correlates git commits/PRs, transfers handoff batons |
+
+---
+
+## 🔍 Hook Detection & Adaptive Execution Protocol
+
+Agents must detect the host operating mode at session start and adapt their workflow:
+
+### 1. Detection Check
+Inspect if harness lifecycle hooks are active in the environment:
+- **Antigravity:** `.agents/hooks.json` or `~/.gemini/config/hooks.json` defines `spec-memo` hooks.
+- **OpenCode:** `.opencode/plugins/spec-memo.js` or `~/.config/opencode/plugins/spec-memo.js` exists.
+- **Cursor:** `.cursor/rules/spec-memo.mdc` or `.cursor/hooks.json` exists.
+- **Claude Code:** `.claude/hooks/` or `~/.claude/config.json` configured.
+- *Or initial context:* If an `## Active Traps` / `## Active Session Handoff` section is already pre-injected into initial turn context, hooks are active.
+
+### 2. Adaptive Behavior
+
+- **Hook-Automated Mode (Hooks Installed):**
+  - The startup hook has **already** executed `memo bootstrap` out-of-band and injected the session brief.
+  - **Do NOT** call `memo bootstrap` redundantly on Turn 1 unless changing focus `--path` or `--slug`.
+  - Focus on respecting active traps, querying `search` on demand, and persisting new discoveries via `upsert`.
+- **Skill-Only Mode (Hooks Not Installed — Default):**
+  - The agent **MUST** proactively call `bootstrap` (or `memo bootstrap`) on Turn 1 of any non-trivial task.
+  - The agent takes full ownership of checking traps, applying path patterns, and loading domain decisions.
+  - Skill-only mode is 100% first-class; never fail, warn, or halt because hooks are absent.
 
 ---
 

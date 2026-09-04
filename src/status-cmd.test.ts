@@ -424,4 +424,34 @@ describe('status-cmd & CLI memo status', () => {
     const parsedSetupCheck = JSON.parse(outSetupCheck);
     assert.strictEqual(parsedSetupCheck.ok, true);
   });
+
+  it('should surface sync conflict visibility for AC22', async () => {
+    ensureVaultStructure(vaultRoot);
+    const { getRecord } = await import('./store.js');
+    const { serializeRecord } = await import('./schema.js');
+    const record = await upsertRecord({
+      vaultRoot,
+      projectId: 'status-sync-proj',
+      kind: 'trap',
+      slug: 'status-trap',
+      body: '# Status Base'
+    });
+    const item = (await getRecord({ vaultRoot, projectId: 'status-sync-proj', kind: 'trap', id: record.id }))!;
+    fs.writeFileSync(
+      path.join(path.dirname(record.path), 'status-trap.conflict.md'),
+      serializeRecord({
+        frontmatter: { ...item.frontmatter, id: 'status-trap-c' },
+        body: '# Divergent Status Body'
+      }),
+      'utf8'
+    );
+
+    const status = await runStatusCheck({ vaultRoot, cwd: repoDir });
+    assert.strictEqual(status.operational.sync.conflictStrategy, 'smart-merge');
+    assert.strictEqual(status.operational.sync.hybridDirty, false);
+    assert.strictEqual(status.operational.sync.conflictSidecars, 1);
+    const formatted = formatStatusDashboard(status);
+    assert.strictEqual(formatted.includes('Sync Conflicts:'), true);
+    assert.strictEqual(formatted.includes('sidecars=1'), true);
+  });
 });

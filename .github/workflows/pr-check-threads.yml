@@ -1,0 +1,96 @@
+name: PR Unresolved Comments Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [master, main, develop]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to check'
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-threads:
+    name: Check Unresolved Comments
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify All PR Review Comments Resolved
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR_NUM="${{ github.event.pull_request.number || inputs.pr_number || '' }}"
+          REPO="${{ github.repository }}"
+          OWNER="${REPO%/*}"
+          NAME="${REPO#*/}"
+
+          if [ -z "$PR_NUM" ]; then
+            echo "No PR number detected (event: ${{ github.event_name }}). Skipping check."
+            exit 0
+          fi
+
+          echo "Checking unresolved review threads for PR #${PR_NUM} in ${REPO}..."
+
+          QUERY='query($owner: String!, $name: String!, $pr: Int!) {
+            repository(owner: $owner, name: $name) {
+              pullRequest(number: $pr) {
+                title
+                url
+                reviewThreads(first: 100) {
+                  totalCount
+                  nodes {
+                    id
+                    isResolved
+                    isOutdated
+                    path
+                    line
+                    comments(first: 1) {
+                      nodes {
+                        author { login }
+                        url
+                        body
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }'
+
+          RESPONSE=$(gh api graphql -f query="$QUERY" -F owner="$OWNER" -F name="$NAME" -F pr="$PR_NUM")
+
+          UNRESOLVED=$(echo "$RESPONSE" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)]')
+          COUNT=$(echo "$UNRESOLVED" | jq 'length')
+          TOTAL=$(echo "$RESPONSE" | jq '.data.repository.pullRequest.reviewThreads.totalCount')
+
+          echo "Total review threads: $TOTAL"
+          echo "Unresolved threads: $COUNT"
+
+          if [ "$COUNT" -gt 0 ]; then
+            echo "### ❌ PR Unresolved Comments Check Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "PR #${PR_NUM} has **${COUNT}** unresolved review thread(s). All review comments must be resolved before merging." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Path | Line | Author | Comment Link |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| --- | --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+
+            echo "$UNRESOLVED" | jq -r '.[] | "| `" + (.path // "N/A") + "` | " + ((.line // "N/A") | tostring) + " | @" + (.comments.nodes[0].author.login // "unknown") + " | [View Discussion](" + (.comments.nodes[0].url // "#") + ") |"' >> "$GITHUB_STEP_SUMMARY"
+
+            echo ""
+            echo "::error::PR #${PR_NUM} has ${COUNT} unresolved review thread(s). Merge is blocked until all comments are resolved."
+            exit 1
+          else
+            echo "### ✅ All Review Comments Resolved" >> "$GITHUB_STEP_SUMMARY"
+            echo "PR #${PR_NUM} has 0 unresolved review threads (total: ${TOTAL}). Ready to merge!" >> "$GITHUB_STEP_SUMMARY"
+            echo "All review threads resolved. Check passed."
+          fi

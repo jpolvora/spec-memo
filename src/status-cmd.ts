@@ -285,6 +285,25 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
 
   // 6. Operational Settings
   const gitState = readVaultGitState(root);
+  // AC22: conflict reconciliation visibility (best-effort; never fails status).
+  let hybridDirty = false;
+  let dirtyProjects: Record<string, boolean> | undefined;
+  let conflictSidecars = 0;
+  try {
+    const { readHybridState } = await import('./hybrid-state.js');
+    const hybrid = readHybridState(root);
+    hybridDirty = Boolean(hybrid.dirty);
+    dirtyProjects = hybrid.dirtyProjects;
+  } catch {
+    // ignore hybrid-state read errors
+  }
+  try {
+    const { cleanConflictSidecars } = await import('./sync.js');
+    const sidecarScan = cleanConflictSidecars(root, { dryRun: true });
+    conflictSidecars = sidecarScan.cleaned + sidecarScan.retained;
+  } catch {
+    // ignore sidecar scan errors
+  }
   const operational: OperationalStatus = {
     telemetry: {
       enabled: Boolean(config.enableTelemetry),
@@ -303,6 +322,13 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
       dirty: gitState.dirty,
       lastError: gitState.lastError,
       lastSyncAt: gitState.lastSyncAt
+    },
+    sync: {
+      conflictStrategy: config.sync?.conflictStrategy ?? config.sync?.defaultStrategy ?? 'smart-merge',
+      autoSyncIntervalMinutes: config.sync?.autoSyncIntervalMinutes,
+      hybridDirty,
+      dirtyProjects,
+      conflictSidecars
     }
   };
 
@@ -394,6 +420,13 @@ export function formatStatusDashboard(result: StatusResult, options: StatusOptio
         ? `Enabled (${result.operational.vaultGit.atomic ? 'atomic' : 'batched'}) (${result.operational.vaultGit.remoteUrl || 'local'})`
         : 'Disabled'
     }`
+  );
+  const sync = result.operational.sync;
+  const dirtyList = sync.dirtyProjects
+    ? Object.entries(sync.dirtyProjects).filter(([, v]) => Boolean(v)).map(([k]) => k)
+    : [];
+  lines.push(
+    `  Sync Conflicts:     strategy=${sync.conflictStrategy}, sidecars=${sync.conflictSidecars}, hybridDirty=${sync.hybridDirty ? 'yes' : 'no'}${dirtyList.length > 0 ? ` [${dirtyList.join(', ')}]` : ''}${sync.autoSyncIntervalMinutes ? `, autoSync=${sync.autoSyncIntervalMinutes}m` : ''}`
   );
 
   // Issues & Warnings

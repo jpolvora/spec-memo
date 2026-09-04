@@ -132,6 +132,7 @@ export interface ProjectMetadata {
   gitRemote: string | null;
   displayName: string;
   lastSeenRoot: string;
+  knownRoots?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -203,6 +204,30 @@ export interface PortsConfig {
   canvas?: number;
 }
 
+export type ConflictStrategy = 'smart-merge' | 'local-wins' | 'remote-wins' | 'sidecar';
+
+export interface SyncConfig {
+  /** Primary conflict resolution strategy (spec AC5). */
+  conflictStrategy?: ConflictStrategy;
+  /** @deprecated Use conflictStrategy */
+  defaultStrategy?: ConflictStrategy;
+  cleanSidecars?: boolean;
+  autoSyncIntervalMinutes?: number;
+}
+
+export type ConflictCategory = 'body_divergence' | 'metadata_divergence' | 'timestamp_collision';
+
+export interface ConflictRecordDetail {
+  id: string;
+  kind: RecordKind;
+  projectId: string;
+  category: ConflictCategory;
+  resolution: 'merged' | 'local-applied' | 'remote-applied' | 'sidecar-written' | 'skipped';
+  localTime?: string;
+  remoteTime?: string;
+  message?: string;
+}
+
 export interface VaultConfig {
   version: string;
   defaultRemote: string;
@@ -215,6 +240,7 @@ export interface VaultConfig {
   remote?: {
     url: string;
   };
+  sync?: SyncConfig;
   vaultGit?: {
     enabled: boolean;
     remoteUrl?: string;
@@ -733,6 +759,13 @@ export interface OperationalStatus {
     dirty?: boolean;
     lastError?: string | null;
     lastSyncAt?: string | null;
+  };
+  sync: {
+    conflictStrategy: string;
+    autoSyncIntervalMinutes?: number;
+    hybridDirty: boolean;
+    dirtyProjects?: Record<string, boolean>;
+    conflictSidecars: number;
   };
 }
 

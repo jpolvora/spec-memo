@@ -1,6 +1,6 @@
 ---
 name: ws-session-tracking
-version: 0.17.1
+version: 0.18.0
 description: >-
   Session-level deliverable and prompt intent tracking engine. Automatically correlates turn-level
   prompt instructions with git commits, PR deliverables, and task lifecycle boundaries.
@@ -27,6 +27,47 @@ invocation_names:
 5. **Activity & Invoicing Reports**: Compute billable hours, session counts, and deliverable summaries aggregated by client and project.
 
 **Memory hit de-dupe:** When consulting the vault during a tracked session, pass the same `sessionId` to `bootstrap` / `search` (`hitIds`) / `get` so retrieval hits increment at most once per record per session. Bare `search` without `hitIds` does not count as a hit.
+
+---
+
+## 🤝 Complementary Architecture: ws-session-tracking vs. ws-memo
+
+`spec-memo` separates memory into two distinct, highly complementary runtime engines:
+
+| Dimension | `ws-session-tracking` (This Skill) | `ws-memo` (Companion Skill) |
+|---|---|---|
+| **Domain Focus** | **Execution Continuity** (What the agent did) | **Knowledge Continuity** (What the codebase learned) |
+| **Primary Records** | `prompt`, `session`, `log` | `trap`, `decision`, `spec`, `plan`, `review`, `scratch` |
+| **Tool Surface** | `prompt` (`record`, `session_start`, `session_end`, `activity_report`, `derive_rules`, `export_story`) | `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote` |
+| **Lifecycle Touchpoint** | Ingests prompts, correlates PR/git deliverables, manages task handoffs | Injects traps & architecture decisions into brief, validates git boundaries |
+
+---
+
+## 🔍 Hook Detection & Execution Continuity Protocol
+
+Agents must detect the host operating mode at session start and adapt their tracking behavior:
+
+### 1. Detection Check
+Inspect if harness lifecycle hooks are active in the environment:
+- **Antigravity:** `.agents/hooks.json` or `~/.gemini/config/hooks.json` defines `spec-memo` hooks.
+- **OpenCode:** `.opencode/plugins/spec-memo.js` or `~/.config/opencode/plugins/spec-memo.js` exists.
+- **Cursor:** `.cursor/rules/spec-memo.mdc` or `.cursor/hooks.json` exists.
+- **Claude Code:** `.claude/hooks/` or `~/.claude/config.json` configured.
+- *Or prompt context:* If an `## Active Session Handoff` or session brief was already pre-injected into initial context, hooks are active.
+
+### 2. Adaptive Tracking Behavior
+
+- **Hook-Automated Mode (Hooks Installed):**
+  - Harness hooks silently intercept raw prompt turns, compaction events, and process boundaries out-of-band.
+  - The agent's responsibility shifts entirely to **high-value tactical synthesis**:
+    1. **Session Start:** Read and address the pre-injected handoff baton (`failedApproaches`, `nextSteps`, `openQuestions`).
+    2. **Session Completion:** Proactively invoke `prompt` `action: 'session_end'` (or `memo session end`) with structured `deliverables` (PR URLs, commit SHAs) and pass forward tactical handoffs for the next agent.
+- **Skill-Only Mode (Hooks Not Installed — Default):**
+  - The agent takes **explicit responsibility** for session lifecycle management:
+    1. **Session Start:** Proactively call `prompt` `action: 'session_start'` at task intake with `--task-slug` and `--client`.
+    2. **Turn Recording:** Call `prompt` `action: 'record'` on substantive user requirements and pivotal architectural shifts.
+    3. **Session Completion:** Call `prompt` `action: 'session_end'` with deliverables upon task completion.
+  - Skill-only mode is 100% first-class; never fail, warn, or halt because hooks are absent.
 
 ---
 

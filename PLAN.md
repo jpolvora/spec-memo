@@ -182,7 +182,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 
 **Proof.** `npm test` exit 0 including `activity.test.ts` and `status.test.ts`; status page at `http://127.0.0.1:3001/` shows vault list + live stream; read-only (no vault writes from status routes).
 
-**Spec.** [`.agents/specs/mcp-status-monitor.spec.md`](.agents/specs/mcp-status-monitor.spec.md) — 49 ACs.
+**Spec.** [`.agents/specs/0023-mcp-status-monitor.spec.md`](.agents/specs/0023-mcp-status-monitor.spec.md) — 49 ACs.
 
 ---
 
@@ -194,7 +194,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 
 **Proof.** `npm test` exit 0 (28 suites, 215 tests pass) including comprehensive `deployment-modes.test.ts`.
 
-**Spec.** [`.agents/specs/deployment-modes.spec.md`](.agents/specs/deployment-modes.spec.md) — 32 ACs.
+**Spec.** [`.agents/specs/0025-deployment-modes.spec.md`](.agents/specs/0025-deployment-modes.spec.md) — 32 ACs.
 
 | 2026-08-26 | mcp-status-monitor | MCP status monitor with Activity Event Bus, :3001 companion, live SSE log; npm test 178 pass |
 | 2026-08-26 | release-0.2.0 | Package, MCP server, and vault config version bumped to 0.2.0 for Phase 6 |
@@ -228,6 +228,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-08-31 | status-backup-page | Dedicated Backups tab with full-backup confirm, complete archives, inventory filters, restore/delete/download; npm test 380 pass |
 | 2026-09-01 | vault-git-hybrid-sync | Batched vault-git + dual-mode hybrid parallel dispatch; npm test 406 pass |
 | 2026-09-02 | memory-hit-count | Retrieval `hits`/`lastHit`, bootstrap/get/search.hitIds, status Memory list+drawer, canvas Hits; v0.17.0; npm test 435 pass |
+| 2026-09-04 | sync-conflict-reconciliation | Vault sync conflict reconciliation, semantic auto-merge, memo reconcile, rollback journal, single conflict cap; npm test 451 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

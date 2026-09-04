@@ -1,8 +1,22 @@
 name: Agentic Code Review (Cursor)
 
 on:
-  # Disabled; OpenCode workflow is the active PR reviewer. Trigger manually when needed.
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master, develop]
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: false
+      source_branch:
+        description: 'Source branch (e.g. develop)'
+        required: false
+        default: 'develop'
+      target_branch:
+        description: 'Target branch (e.g. master)'
+        required: false
+        default: 'master'
 
 permissions:
   contents: read
@@ -28,6 +42,8 @@ jobs:
           AGENTIC_CODE_REVIEWERS_EXTRA_EXCLUDE_PATTERNS: ".agents/plans/**,.agents/specs/**"
         run: |
           set -euo pipefail
+          SOURCE_BRANCH="${{ github.head_ref || inputs.source_branch || 'develop' }}"
+          TARGET_BRANCH="${{ github.event.pull_request.base.ref || inputs.target_branch || 'master' }}"
           # Download to a file so BASH_SOURCE is bound (curl|bash leaves it unbound under set -u).
           curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/release/run.sh \
             -o /tmp/agentic-code-reviewers-run.sh
@@ -40,20 +56,40 @@ jobs:
             --custom-prompt .github/agentic-code-reviewers-prompt.md \
             --score-min 3 \
             --include-patterns "**/*.md,**/*.yml,**/*.yaml,**/*.json,**/*.sh,**/*.ps1,**/*.ts,**/*.js,**/*.cjs,**/*.prd" \
-            --source-branch "refs/heads/${{ github.head_ref }}" \
-            --target-branch "refs/heads/${{ github.event.pull_request.base.ref }}"
+            --source-branch "refs/heads/${SOURCE_BRANCH}" \
+            --target-branch "refs/heads/${TARGET_BRANCH}"
 
       - name: Check for unresolved threads
         id: check-threads
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ACTIVE=$(gh pr view ${{ github.event.pull_request.number }} --json comments --jq '[.comments[] | select(.isResolved == false and .author.login != "github-actions[bot]" and .author.login != "github-actions")] | length' 2>/dev/null || echo 0)
-          echo "active_threads=$ACTIVE" >> $GITHUB_OUTPUT
-          echo "Unresolved threads: $ACTIVE"
+          set -euo pipefail
+          PR_NUM="${{ github.event.pull_request.number || inputs.pr_number || '' }}"
+          REPO="${{ github.repository }}"
+          OWNER="${REPO%/*}"
+          NAME="${REPO#*/}"
+
+          if [ -n "$PR_NUM" ]; then
+            QUERY='query($owner: String!, $name: String!, $pr: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pr) { reviewThreads(first: 100) { nodes { id isResolved isOutdated path line comments(first: 1) { nodes { author { login } url } } } } } } }'
+            RESPONSE=$(gh api graphql -f query="$QUERY" -F owner="$OWNER" -F name="$NAME" -F pr="$PR_NUM")
+            UNRESOLVED=$(echo "$RESPONSE" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)]')
+            ACTIVE=$(echo "$UNRESOLVED" | jq 'length')
+            echo "active_threads=$ACTIVE" >> "$GITHUB_OUTPUT"
+            echo "Unresolved threads: $ACTIVE"
+
+            if [ "$ACTIVE" -gt 0 ]; then
+              echo "### ⚠️ Agentic Code Review Found Unresolved Issues" >> "$GITHUB_STEP_SUMMARY"
+              echo "PR #${PR_NUM} has **${ACTIVE}** unresolved review thread(s):" >> "$GITHUB_STEP_SUMMARY"
+              echo "$UNRESOLVED" | jq -r '.[] | "- `" + (.path // "N/A") + ":" + ((.line // "N/A") | tostring) + "` ([View Discussion](" + (.comments.nodes[0].url // "#") + "))"' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            echo "active_threads=0" >> "$GITHUB_OUTPUT"
+            echo "No PR number provided; skipping unresolved threads check."
+          fi
 
       - name: Block merge on unresolved threads
         if: ${{ steps.check-threads.outputs.active_threads != '0' }}
         run: |
-          echo "::error::PR has ${{ steps.check-threads.outputs.active_threads }} unresolved review thread(s). Resolve them before merging."
+          echo "::error::PR has ${{ steps.check-threads.outputs.active_threads }} unresolved review thread(s). Resolve all review comments before merging."
           exit 1

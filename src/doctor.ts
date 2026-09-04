@@ -236,19 +236,56 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
   let fixedCount = 0;
 
   // Optional fix execution (AC3)
-  if (options.fix && pollutionItems.length > 0) {
-    for (const item of pollutionItems) {
-      try {
-        if (fs.existsSync(item.absolutePath)) {
-          fs.unlinkSync(item.absolutePath);
-          fixedCount++;
+  if (options.fix) {
+    if (pollutionItems.length > 0) {
+      for (const item of pollutionItems) {
+        try {
+          if (fs.existsSync(item.absolutePath)) {
+            fs.unlinkSync(item.absolutePath);
+            fixedCount++;
+          }
+        } catch {
+          // Ignore file delete errors
         }
-      } catch {
-        // Ignore file delete errors
       }
+      // Rescan after fix
+      pollutionItems = scanForRepoPollution(identity.rootPath, vaultRoot);
     }
-    // Rescan after fix
-    pollutionItems = scanForRepoPollution(identity.rootPath, vaultRoot);
+
+    try {
+      const { withVaultLock } = await import('./vault.js');
+      const { cleanConflictSidecars } = await import('./sync.js');
+      // Only auto-clean semantically identical sidecars during --fix.
+      // Divergent sidecars require explicit 'memo reconcile --prefer local|remote --clean-sidecars'.
+      // Serialized under vault lock vs concurrent daemon auto-sync.
+      const cleanRes = await withVaultLock(vaultRoot, async () => cleanConflictSidecars(vaultRoot));
+      fixedCount += cleanRes.cleaned;
+      if (cleanRes.cleaned > 0) {
+        await withVaultLock(vaultRoot, async () => {
+          const { rebuildIndex } = await import('./indexer.js');
+          const { rebuildCompiledViews } = await import('./compiler.js');
+          await rebuildIndex(vaultRoot);
+          for (const pid of new Set(cleanRes.filesCleaned.map((f) => f.split('/')[0]))) {
+            if (pid) rebuildCompiledViews(pid, vaultRoot);
+          }
+        });
+      }
+    } catch {
+      // Ignore sidecar cleanup errors
+    }
+  } else {
+    try {
+      const { cleanConflictSidecars } = await import('./sync.js');
+      const dryScan = cleanConflictSidecars(vaultRoot, { dryRun: true });
+      const totalConflicts = dryScan.cleaned + dryScan.retained;
+      if (totalConflicts > 0) {
+        warnings.push(
+          `Detected ${totalConflicts} conflict sidecar file${totalConflicts === 1 ? '' : 's'} in vault. Run 'memo reconcile --clean-sidecars' or 'memo doctor --fix' to clean.`
+        );
+      }
+    } catch {
+      // Ignore sidecar scan errors
+    }
   }
 
   if (pollutionItems.length > 0) {
