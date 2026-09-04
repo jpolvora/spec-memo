@@ -105,9 +105,12 @@ export function mergeRecordMetadata(
 
   if (localFm.status === "superseded" || incomingFm.status === "superseded") {
     merged.status = "superseded";
-  } else if (localFm.status === "archived" || incomingFm.status === "archived") {
+  } else if (localFm.status === "archived" && incomingFm.status === "archived") {
     merged.status = "archived";
+  } else if (localFm.status === "active" || incomingFm.status === "active") {
+    merged.status = "active";
   }
+  // else: keep spread result (incoming precedence already applied above).
 
   const tLocalUp = new Date(localFm.updated || localFm.created).getTime();
   const tIncomingUp = new Date(incomingFm.updated || incomingFm.created).getTime();
@@ -459,6 +462,7 @@ export async function applyChangeset(
     const recordsApplied: string[] = [];
     const conflictDetails: ConflictRecordDetail[] = [];
     const touchedProjects = new Set<string>();
+    const sidecarProjects = new Set<string>();
 
     const journal: Array<{ filePath: string; originalContent: string | null }> = [];
 
@@ -690,7 +694,6 @@ export async function applyChangeset(
       }
 
       let sidecarsCleaned = 0;
-      const sidecarProjects = new Set<string>();
       if (options.cleanSidecars && !dryRun) {
         const cleanRes = cleanConflictSidecars(vaultRoot, { prefer: options.prefer, journal });
         sidecarsCleaned = cleanRes.cleaned;
@@ -756,6 +759,17 @@ export async function applyChangeset(
           } catch {
             // Best effort rollback
           }
+        }
+        // FTS + compiled views were incrementally mutated during the loop
+        // (upsertRecord indexes per write), so rebuild them best-effort from
+        // restored markdown. doctor --rebuild remains the escape hatch.
+        try {
+          await rebuildIndex(vaultRoot);
+          for (const projId of new Set<string>([...touchedProjects, ...sidecarProjects])) {
+            rebuildCompiledViews(projId, vaultRoot);
+          }
+        } catch {
+          // Best effort — rollback of markdown already completed above
         }
       }
       throw err;

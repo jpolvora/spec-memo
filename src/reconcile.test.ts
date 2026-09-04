@@ -686,7 +686,7 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     assert.ok(parsed.sidecarsRetained > 0);
   });
 
-  await t.test("applyChangeset rolls back created conflict sidecars when index throws", async () => {
+  await t.test("applyChangeset rolls back post-mutation writes and rebuilds FTS on abort", async () => {
     const rbProj = "proj-sidecar-rollback";
     initVault({ vaultRoot, projectId: rbProj });
     const record = await upsertRecord({
@@ -699,10 +699,13 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     const item = (await getRecord({ vaultRoot, projectId: rbProj, kind: "trap", id: record.id }))!;
     const sidecarPath = path.join(path.dirname(record.path), "trap-rb-sidecar.conflict.md");
 
-    // Force sidecar strategy with divergent body and equal timestamp
+    // Records loop applies (sidecar write + new record upsert with FTS
+    // indexing) before the deletions loop throws on traversal — genuine
+    // post-mutation rollback, not a pre-validation abort.
+    const now = new Date().toISOString();
     const sidecarChangeset: Changeset = {
       schemaVersion: 1,
-      generatedAt: new Date().toISOString(),
+      generatedAt: now,
       records: [
         {
           project: rbProj,
@@ -710,9 +713,17 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
           body: "# Divergent Remote Body"
         },
         {
-          project: "../../traversal-fail", // Trigger rollback after sidecar write
-          frontmatter: { id: "fail", kind: "trap", project: "../../traversal-fail", created: "", updated: "", status: "active", source: "agent" },
-          body: "# Fail"
+          project: rbProj,
+          frontmatter: { ...item.frontmatter, id: "trap-rb-rollback-new", slug: "trap-rb-rollback-new", updated: now },
+          body: "# Rollback Probe Unique Content ABCXYZ"
+        }
+      ],
+      deletions: [
+        {
+          project: "../../traversal-fail", // Throws mid-loop after records applied
+          kind: "trap",
+          id: "fail",
+          slug: "fail"
         }
       ]
     };
@@ -723,5 +734,44 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
 
     // Sidecar must not remain on disk after rollback
     assert.strictEqual(fs.existsSync(sidecarPath), false);
+    // New record file must be removed by rollback
+    const newPath = path.join(path.dirname(record.path), "trap-rb-rollback-new.md");
+    assert.strictEqual(fs.existsSync(newPath), false);
+    // Original base record must be untouched
+    const check = await getRecord({ vaultRoot, projectId: rbProj, kind: "trap", id: record.id });
+    assert.strictEqual(check?.body, "# Original Base");
+    // FTS must not index aborted writes (no ghost hits)
+    const ghosts = searchIndex({ query: "Rollback Probe Unique Content ABCXYZ", projectId: rbProj, vaultRoot });
+    assert.strictEqual(ghosts.length, 0);
+  });
+
+  await t.test("mergeRecordMetadata preserves active status unless both sides agree", async () => {
+    const baseFm = {
+      id: "trap-status",
+      kind: "trap" as const,
+      project: projectId,
+      created: "2026-09-01T00:00:00.000Z",
+      updated: "2026-09-01T10:00:00.000Z",
+      status: "active" as const,
+      source: "agent" as const
+    };
+    // Active + archived (either order) stays active so bootstrap keeps the trap
+    assert.strictEqual(
+      mergeRecordMetadata(baseFm, { ...baseFm, status: "archived" }).status,
+      "active"
+    );
+    assert.strictEqual(
+      mergeRecordMetadata({ ...baseFm, status: "archived" }, baseFm).status,
+      "active"
+    );
+    // Both archived stays archived; superseded stays sticky from either side
+    assert.strictEqual(
+      mergeRecordMetadata({ ...baseFm, status: "archived" }, { ...baseFm, status: "archived" }).status,
+      "archived"
+    );
+    assert.strictEqual(
+      mergeRecordMetadata(baseFm, { ...baseFm, status: "superseded" }).status,
+      "superseded"
+    );
   });
 });
