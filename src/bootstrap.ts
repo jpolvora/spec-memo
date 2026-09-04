@@ -127,6 +127,11 @@ function recordByteWeight(record: MemoRecord): number {
   return Buffer.byteLength(JSON.stringify(record), 'utf8');
 }
 
+function decisionBootstrapScore(decision: MemoRecord, index: number, total: number): number {
+  const updatedMs = Date.parse(String(decision.frontmatter.updated || '')) || 0;
+  return roundExplain(updatedMs / 1000 + (total - index) * 0.001);
+}
+
 function buildBudgetReport(
   allTraps: MemoRecord[],
   includedTraps: MemoRecord[],
@@ -174,7 +179,7 @@ function buildBudgetReport(
       id,
       kind: 'decision',
       title: typeof decision.frontmatter.title === 'string' ? decision.frontmatter.title : undefined,
-      score: roundExplain(allDecisions.length - i),
+      score: decisionBootstrapScore(decision, i, allDecisions.length),
       byteWeight: recordByteWeight(decision),
       status
     });

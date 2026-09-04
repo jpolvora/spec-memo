@@ -469,5 +469,37 @@ describe('Bootstrap Brief Engine', () => {
     const briefOnly = { ...brief, budgetReport: undefined };
     assert.ok(calculatePayloadSize(briefOnly) <= brief.budgetBytes);
   });
+
+  it('budgetReport marks truncated traps when explain is true', async () => {
+    const budgetBytes = 1200;
+    for (let i = 1; i <= 15; i++) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: `trap-trunc-${i}`,
+        frontmatter: {
+          id: `trap-trunc-${i}`,
+          title: `Trap ${i}`,
+          severity: 'high',
+          status: 'active'
+        },
+        body: 'x'.repeat(600)
+      });
+    }
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      explain: true,
+      maxBytes: budgetBytes
+    });
+    assert.equal(brief.truncated, true);
+    assert.ok(brief.budgetReport);
+    const truncated = brief.budgetReport!.candidates.filter(
+      (c) => c.status === 'truncated_budget_exhausted'
+    );
+    assert.ok(truncated.length > 0);
+    assert.ok(brief.budgetReport!.includedCount < brief.budgetReport!.candidates.length);
+  });
 });
 

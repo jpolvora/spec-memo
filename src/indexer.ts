@@ -439,8 +439,9 @@ function searchIndexByFullScanRank(
       };
       enrichHitSalience(hit, fm);
       if (options.explain) {
+        const rawRank = hit.rank;
         hit.explain = computeSearchExplain(fm, {
-          ftsRank: 0,
+          ftsRank: rawRank,
           pathFilter: options.path,
           pathPatterns: patterns
         });
@@ -700,10 +701,11 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         hit.lastHit = lastHitOf(record.frontmatter) || null;
         hit.occurrences = occurrenceOf(record.frontmatter);
         hit.lastSeen = lastSeenOf(record.frontmatter) || undefined;
+        const rawRank = hit.rank;
         enrichHitSalience(hit, record.frontmatter);
         if (options.explain) {
           hit.explain = computeSearchExplain(record.frontmatter, {
-            ftsRank: hit.rank,
+            ftsRank: rawRank,
             pathFilter: options.path,
             pathPatterns: hit.pathPatterns
           });

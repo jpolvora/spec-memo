@@ -55,7 +55,10 @@ export function computeSearchExplain(
   fm: RecordFrontmatter | Record<string, unknown>,
   options: { ftsRank?: number; pathFilter?: string; pathPatterns?: string[] } = {}
 ): SearchScoreExplain {
-  const ftsBm25 = roundExplain(Math.abs(safeExplainNum(options.ftsRank, 0)));
+  const rawRank = safeExplainNum(options.ftsRank, 0);
+  const feedbackMultiplier = roundExplain(salienceMultiplier(fm));
+  const effectiveRank = rawRank * (feedbackMultiplier < 1 ? feedbackMultiplier : 1);
+  const ftsBm25 = roundExplain(Math.abs(rawRank));
   const pathPatternBoost = roundExplain(
     pathPatternBoostOf(options.pathFilter, options.pathPatterns)
   );
@@ -64,10 +67,7 @@ export function computeSearchExplain(
   );
   const hitsBoost = hitsBoostOf(fm);
   const occurrencesBoost = occurrencesBoostOf(fm);
-  const feedbackMultiplier = roundExplain(salienceMultiplier(fm));
-  const finalScore = roundExplain(
-    ftsBm25 * pathPatternBoost * severityMultiplier * hitsBoost * occurrencesBoost * feedbackMultiplier
-  );
+  const finalScore = roundExplain(Math.abs(effectiveRank));
   return {
     ftsBm25,
     pathPatternBoost,
