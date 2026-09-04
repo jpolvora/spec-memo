@@ -33,26 +33,28 @@ Support an optional `.spec-memo-ignore` marker file located at the consumer repo
 ### Ignore Marker Discovery & Parsing
 
 - AC1: `spec-memo` detects and parses an optional `.spec-memo-ignore` file located at the bound product repository root using standard `.gitignore` glob syntax (comments `#`, wildcards `*`, directory recursions `**`, negations `!`).
-- AC2: Vault project configuration in `~/.spec-memo/config.json` supports an optional `projects.<id>.ignorePaths: string[]` array that is merged with `.spec-memo-ignore` rules.
-- AC3: The parsed ignore rules are cached per project session and refreshed whenever file modification time (`mtime`) on `.spec-memo-ignore` changes.
+- AC2: `spec-memo` includes built-in baseline ignore patterns (`DEFAULT_IGNORE_PATTERNS` covering `.git/**`, `node_modules/**`, `dist/**`, `build/**`, `.venv/**`, `.env`, `.env.*`, `**/*.key`, `**/*.pem`, binaries) that remain active by default even without a `.spec-memo-ignore` file.
+- AC3: Vault project configuration in `~/.spec-memo/config.json` supports an optional `projects.<id>.ignorePaths: string[]` array that is merged with `.spec-memo-ignore` and built-in rules.
+- AC4: The parsed ignore rules are cached per project session and refreshed whenever file modification time (`mtime`) on `.spec-memo-ignore` changes.
 
 ### Safety Boundary Enforcement
 
-- AC4: `src/safety.ts` exports `isPathIgnored(filePath: string, productRoot: string): boolean` that evaluates a relative or absolute file path against active ignore rules.
-- AC5: When `upsert` processes a record with `pathPatterns`, any pattern that matches an ignored directory or file is automatically stripped; if all patterns are ignored, `upsert` rejects the operation with a safety validation error.
-- AC6: When `prompt` `action: 'record'` receives turn bodies, citations, or tool excerpts, references to files matching ignored patterns are redacted with `[PATH_IGNORED]`.
-- AC7: In `src/bootstrap.ts`, focus path matching (`path: string`) ignores evaluation if the target path matches an active ignore rule, falling back to clean project-wide brief compilation.
+- AC5: `src/safety.ts` exports `isPathIgnored(filePath: string, productRoot: string): boolean` that evaluates a relative or absolute file path against active ignore rules (respecting `!` un-ignore negation rules).
+- AC6: When `upsert` processes a record with `pathPatterns`, any pattern that matches an ignored directory or file is automatically stripped; if all patterns are ignored, `upsert` rejects the operation with a safety validation error.
+- AC7: When `prompt` `action: 'record'` receives turn bodies, citations, or tool excerpts, references to files matching ignored patterns are redacted with `[PATH_IGNORED]`.
+- AC8: In `src/bootstrap.ts`, focus path matching (`path: string`) ignores evaluation if the target path matches an active ignore rule, falling back to clean project-wide brief compilation.
+- AC9: In `src/indexer.ts`, targeted searches with `--path <path>` evaluate the path against ignore rules, suppressing irrelevant matches if the target path is strictly ignored.
 
 ### Read-Only Git Boundary Guarantee
 
-- AC8: Under no circumstances does `spec-memo` create, edit, or delete `.spec-memo-ignore` within the consumer product repository; the file is strictly authored and controlled by repository owners.
-- AC9: If `.spec-memo-ignore` does not exist in the consumer repository root, `spec-memo` continues normal operation without warnings or default-creation side effects.
+- AC10: Under no circumstances does `spec-memo` create, edit, or delete `.spec-memo-ignore` within the consumer product repository; the file is strictly authored and controlled by repository owners.
+- AC11: If `.spec-memo-ignore` does not exist in the consumer repository root, `spec-memo` continues normal operation using built-in baseline rules without warnings or default-creation side effects.
 
 ### Diagnostics & Capture Verification
 
-- AC10: The CLI command `memo doctor --check-capture <relativeOrAbsolutePath>` evaluates the specified path against active ignore rules and prints whether the path is `CAPTURED` or `IGNORED`, displaying the exact line and pattern that matched.
-- AC11: `memo doctor` reports the number of active ignore rules loaded and lists any invalid glob syntax warnings under an "Exclusion Boundary" diagnostic card.
-- AC12: Malformed or unparseable lines in `.spec-memo-ignore` emit a warning to stderr but do not cause daemon crash or prevent valid rules from operating.
+- AC12: The CLI command `memo doctor --check-capture <relativeOrAbsolutePath>` evaluates the specified path against active ignore rules and prints whether the path is `CAPTURED` or `IGNORED`, displaying the matching pattern, line, and source layer (`builtin`, `.spec-memo-ignore`, or `config.json`).
+- AC13: `memo doctor` reports the number of active ignore rules loaded and lists any invalid glob syntax warnings under an "Exclusion Boundary" diagnostic card.
+- AC14: Malformed or unparseable lines in `.spec-memo-ignore` emit a warning to stderr but do not cause daemon crash or prevent valid rules from operating.
 
 ---
 
