@@ -1,16 +1,16 @@
 ---
 id: null
 slug: memory-feedback-salience
-title: "Memory Retrieval Feedback, Stale Flagging, and Salience Tuning"
+title: "Memory Feedback, Typed Graph Links, and Zero-LLM Contradiction Detection"
 source: local
 specDate: 2026-09-04
 ---
 
-# Specification — Memory Retrieval Feedback, Stale Flagging, and Salience Tuning
+# Specification — Memory Feedback, Typed Graph Links, and Zero-LLM Contradiction Detection
 
 ## Description
 
-Establish an explicit qualitative feedback mechanism for memory records in `spec-memo`. Enable agents and human operators to mark retrieved traps, decisions, and specs as `helpful`, `not_helpful`, `stale`, or `wrong`. Track feedback counts in record frontmatter, dynamically penalize the ranking score of records flagged as stale, surface warning badges in `bootstrap` for obsolete rules, and highlight stale candidates in `memo doctor` and the Status Monitor dashboard.
+Establish an explicit qualitative feedback and semantic link mechanism for memory records in `spec-memo`. Enable agents and human operators to mark retrieved records as `helpful`, `not_helpful`, `stale`, or `wrong`. Expand record frontmatter with typed relationship links (`fixes`, `contradicts`, `causes`). Track feedback counts in frontmatter, dynamically penalize the retrieval score of records flagged as stale, surface warning badges in `bootstrap` for obsolete rules, and empower `memo doctor` to detect conflicting active decisions or traps via pure SQLite graph traversal without requiring external LLM API calls.
 
 ### Problem Analysis & Real-World Evidence
 
@@ -19,20 +19,21 @@ Establish an explicit qualitative feedback mechanism for memory records in `spec
    - However, retrieval frequency does not indicate accuracy. A trap written for an obsolete framework version (e.g. before an architectural rewrite) will continue accumulating hits whenever matching file paths are touched, giving it an artificially inflated ranking score.
 2. **High Friction for Stale Annotations:**
    - Currently, if an agent discovers a trap is no longer valid, it must either invoke `memo forget` (which archives or purges the record entirely) or write a full replacement via `memo upsert`. There is no lightweight affordance to signal *"this trap was misleading or stale"* without rewriting the file.
-3. **No Automatic Salience Demotion:**
-   - Obsolete traps continue competing for top positions in the 8 KB bootstrap brief without any algorithmic dampening.
+3. **Undetected Semantic Contradictions:**
+   - As documented in `ai-memory 2.0`, as codebases evolve, newer architectural decisions frequently contradict older decisions. If both remain `status: 'active'`, agents receive conflicting instructions in the `bootstrap` brief.
+   - Using LLMs to continuously review memory for contradictions is expensive, slow, and non-deterministic. A structural, typed link system (`contradicts`, `fixes`) allows SQLite to detect contradictions deterministically at zero token cost.
 
 ### Design Intent
 
-Introduce atomic feedback tracking (`helpfulCount`, `staleCount`) in frontmatter. Integrate feedback reporting into the existing `prompt` MCP tool (`action: 'feedback'`) and a dedicated `memo feedback` CLI command. Adjust retrieval ranking to penalize stale records, surface visual stale warnings in session briefs, and report obsolete records in `memo doctor`.
+Introduce atomic feedback tracking (`helpfulCount`, `staleCount`) and typed semantic links (`links: [{ target: string, type: 'fixes' | 'contradicts' | 'causes' }]`) in frontmatter. Integrate feedback reporting into `prompt` (`action: 'feedback'`) and `memo feedback`. Adjust retrieval ranking to penalize stale records, surface visual stale warnings in session briefs, and run zero-LLM contradiction checks in `memo doctor`.
 
 ---
 
 ## Acceptance Criteria
 
-### Frontmatter Schema & Feedback Storage
+### Frontmatter Schema, Feedback & Semantic Links
 
-- AC1: `RecordFrontmatter` and `FrontmatterSchema` accept optional numeric fields `helpfulCount?: number` and `staleCount?: number`, both defaulting to 0 when absent.
+- AC1: `RecordFrontmatter` and `FrontmatterSchema` accept optional numeric fields `helpfulCount?: number` and `staleCount?: number` (both defaulting to 0) and an optional `links?: Array<{ target: string; type: 'fixes' | 'contradicts' | 'causes' }>`.
 - AC2: Feedback mutations update frontmatter fields atomically in place without rewriting or altering the markdown body.
 - AC3: The `lastFeedback` ISO timestamp is updated on the record whenever feedback is submitted.
 
@@ -49,16 +50,20 @@ Introduce atomic feedback tracking (`helpfulCount`, `staleCount`) in frontmatter
 - AC9: When `staleCount >= 3` and `staleCount > helpfulCount`, the record is marked with `flaggedStale: true` in search result objects.
 - AC10: When a record with `staleCount >= 3` and `staleCount > helpfulCount` is included in the `bootstrap` brief, `src/bootstrap.ts` prepends a warning badge `⚠️ [POSSIBLY STALE]` to its title heading.
 
-### Diagnostics & Status Monitor Management
+### Zero-LLM Contradiction Detection & Diagnostics
 
-- AC11: `memo doctor` scans the vault for records where `staleCount >= 3` and `staleCount > helpfulCount`, listing them in a dedicated "Potentially Obsolete Traps & Decisions" diagnostic warning section with recommendations to review or archive.
-- AC12: The `:3124` Status Monitor Memory explorer details drawer provides "Mark Helpful" and "Flag Stale" buttons that trigger atomic feedback updates via `/api/records/{id}/feedback`.
-- AC13: Operational telemetry logs `operation: 'memory_feedback'` containing record ID, feedback type, and updated counts.
+- AC11: In `src/indexer.ts`, typed links (`fixes`, `contradicts`, `causes`) are indexed into a lightweight SQLite table `record_links (source_id, target_id, link_type)` auto-synchronized during record indexing.
+- AC12: `memo doctor` executes a deterministic SQL graph query to detect active contradictions: records where Record A has `type: 'contradicts'` targeting Record B, while both Record A and Record B maintain `status: 'active'`.
+- AC13: When active contradictions are discovered, `memo doctor` outputs an "Active Semantic Contradictions" section listing the conflicting record pairs and recommending archival or supersession.
+- AC14: `memo doctor` scans the vault for records where `staleCount >= 3` and `staleCount > helpfulCount`, listing them under "Potentially Obsolete Traps & Decisions".
+- AC15: The `:3124` Status Monitor Memory explorer details drawer provides "Mark Helpful" and "Flag Stale" buttons and visualizes incoming/outgoing typed relationship links (`fixes`, `contradicts`).
+- AC16: Operational telemetry logs `operation: 'memory_feedback'` containing record ID, feedback type, and updated counts.
 
 ---
 
 ## Notes
 
+- **Zero LLM Token Cost:** Contradiction checks run entirely in SQLite using relational integrity queries, eliminating external API calls and latency.
 - **Zero MCP Tool Count Impact:** Reuses the existing `prompt` tool with `action: 'feedback'`, strictly complying with the 11-tool ceiling.
 - **Fail-Open Resilience:** If feedback is submitted for a non-existent record ID, the command returns an informative error without mutating vault state.
 
@@ -80,7 +85,7 @@ Introduce atomic feedback tracking (`helpfulCount`, `staleCount`) in frontmatter
 |------------|----------------|-----------|-----------|
 | Threshold for `[POSSIBLY STALE]` badge | 3 stale marks exceeding helpful marks | Prevents a single accidental click from degrading visibility while catching genuinely obsolete records. | y |
 | Score penalty formula | Score multiplied by `1 / (1 + staleCount - helpfulCount)` | Provides smooth, proportional demotion without binary drop-off. | y |
-| Feedback on archived records | Disallowed | Feedback is intended for active and paused records. | y |
+| Contradiction severity | Warning in doctor and status monitor | Does not hard-block queries; alerts developers to conflicting policies. | y |
 
 ---
 
@@ -88,9 +93,9 @@ Introduce atomic feedback tracking (`helpfulCount`, `staleCount`) in frontmatter
 
 | Readiness Item | Requirement | Verification Method |
 |----------------|-------------|---------------------|
+| Zero-LLM Contradiction Engine | Relational link table in SQLite indexed from markdown frontmatter | SQLite query test with conflicting records |
 | Architectural Alignment | Integrates into `src/schema.ts`, `src/hits.ts`, `src/indexer.ts`, `src/prompt.ts`, `src/doctor.ts` | Codebase inspection and schema verification |
 | Tool Ceiling Compliance | Zero new MCP tools created; extends `prompt` tool actions | Tool schema audit |
-| Atomic Mutation Safety | Frontmatter update uses file locking and atomic write | Concurrency test with Node test runner |
 | Validation Pass | Complies with canonical specification schema | Passes `validate_spec.cjs --mode=authoring` |
 
 ---
@@ -100,9 +105,8 @@ Introduce atomic feedback tracking (`helpfulCount`, `staleCount`) in frontmatter
 ### Telemetry & Observable Signals
 
 - `memo feedback trap-test --stale`: frontmatter updates to `staleCount: 1`.
-- `memo feedback trap-test --helpful`: frontmatter updates to `helpfulCount: 1`.
-- `memo search "test"`: hit item shows updated `helpfulCount` and `staleCount`.
-- `memo doctor`: displays warning if any trap exceeds stale threshold.
+- `memo upsert --kind decision --title "New auth" --body "..." --links '[{"target":"decision-old-auth","type":"contradicts"}]'`: stores relationship in frontmatter and SQLite links table.
+- `memo doctor`: outputs "Active Semantic Contradictions: decision-new-auth contradicts decision-old-auth (both active)".
 
 ### Negative & Failing Test Scenarios
 

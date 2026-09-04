@@ -1,16 +1,16 @@
 ---
 id: null
 slug: session-handoff-baton
-title: "Cross-Agent Session Handoff Baton via Prompt and Bootstrap"
+title: "Cross-Agent Session Handoff Baton with Owner and Branch Isolation"
 source: local
 specDate: 2026-09-04
 ---
 
-# Specification — Cross-Agent Session Handoff Baton via Prompt and Bootstrap
+# Specification — Cross-Agent Session Handoff Baton with Owner and Branch Isolation
 
 ## Description
 
-Enable seamless, zero-ceremony task handoffs between different coding agent CLIs (Claude Code, OpenAI Codex, Antigravity, Cursor, OpenCode) operating in the same repository. When an agent concludes an interactive turn or completes a task slice via `prompt` `action: 'session_end'`, it records a structured handoff payload (active objective, next steps, failed dead-ends, open questions). On subsequent agent startup in the same repository via `bootstrap` or `prompt` `action: 'session_start'`, `spec-memo` injects the pending handoff baton into the brief and marks it claimed/delivered exactly once, eliminating repetitive tactical re-explanation across diverse agent harnesses.
+Enable seamless, zero-ceremony task handoffs between different coding agent CLIs (Claude Code, OpenAI Codex, Antigravity, Cursor, OpenCode) operating in the same repository. When an agent concludes an interactive turn or completes a task slice via `prompt` `action: 'session_end'`, it records a structured handoff payload (active objective, next steps, failed dead-ends, open questions, working branch, and owner). On subsequent agent startup in the same repository via `bootstrap` or `prompt` `action: 'session_start'`, `spec-memo` matches and injects the pending handoff baton into the brief and marks it claimed/delivered exactly once. Crucially, handoff batons feature strict **owner and branch isolation by default**: an individual developer's or branch's tactical baton cannot be stolen or consumed by concurrent sessions or teammates unless explicitly marked as shared.
 
 ### Problem Analysis & Real-World Evidence
 
@@ -19,48 +19,54 @@ Enable seamless, zero-ceremony task handoffs between different coding agent CLIs
    - While `spec-memo` successfully persists static domain traps and architectural decisions, the immediate tactical continuity—what approach failed 5 minutes ago, what remaining tests need fixing, and what open question was left unanswered—is lost at session boundary.
 2. **Current `session_end` Limitations:**
    - In `src/prompt.ts`, `session_end` records `summary` and `deliverables` (PR URLs, commit SHAs). However, these are historical retrospective records rather than forward-looking transfer batons for the incoming agent.
-3. **Redundant Explanation Overhead:**
-   - The user or incoming agent spends valuable initial context tokens and human prompting cycles reconstructing the exact state of work that the preceding agent already understood.
+3. **The Multi-Agent / Multi-Branch Collision Pitfall:**
+   - As observed in `ai-memory 2.0`, if a handoff baton is purely global per project without ownership boundaries, severe context leakage occurs:
+     - When developer Alice finishes on branch `feat/auth` and leaves a handoff, developer Bob starting a new session on branch `fix/db` in a shared/hybrid vault would have Alice's tactical baton injected and consumed!
+     - Even on a single workstation, running two concurrent agent sessions on different branches would cause one agent to inadvertently steal and clear the other agent's handoff baton.
 
 ### Design Intent
 
-Introduce a first-class, single-use **Handoff Baton** mechanism integrated into `prompt` (`session_end`, `session_start`) and `bootstrap`. The handoff is stored in the project vault, delivered with top priority in the token-budgeted brief, and automatically retired upon receipt so it never clutters future turns.
+Introduce a first-class, single-use **Handoff Baton** mechanism with **owner and branch isolation**. The handoff is stored in the project vault, matched against the receiving session's user identity and git branch, delivered with top priority in the token-budgeted brief, and automatically retired upon receipt. A `--shared` flag allows deliberate team-wide or branch-agnostic handoffs when explicitly intended.
 
 ---
 
 ## Acceptance Criteria
 
-### Handoff Ingestion at Session Close
+### Handoff Ingestion with Ownership & Branch Binding
 
-- AC1: The `prompt` MCP tool and `memo session end` CLI accept an optional `handoff` parameter containing `nextSteps` (array of strings, required if handoff present), optional `failedApproaches` (array of strings), and optional `openQuestions` (array of strings).
-- AC2: When `handoff` is provided to `session_end`, the session record stores the payload in frontmatter and atomically writes an active baton file `handoff.json` under the project vault root.
-- AC3: The project vault maintains at most one active handoff baton at any time; writing a new handoff supersedes and expires any previous unclaimed handoff for that project.
-- AC4: The handoff payload includes originating metadata including `sessionId`, `agent` or `ide`, timestamp, and git branch name.
+- AC1: The `prompt` MCP tool and `memo session end` CLI accept an optional `handoff` parameter containing `nextSteps` (array of strings, required if handoff present), optional `failedApproaches` (array of strings), optional `openQuestions` (array of strings), optional `branch` (string), and optional `shared` (boolean, default `false`).
+- AC2: When `branch` is omitted from `handoff`, `spec-memo` automatically resolves the current git branch name via repository detection; when `owner` is omitted, it resolves the current git user identity or system username.
+- AC3: The project vault stores active handoffs under `.sync/handoffs/` (or project vault root) partitioned by owner and branch key, ensuring personal working context never collides.
+- AC4: Writing a new handoff by the same owner on the same branch supersedes and expires any previous unclaimed handoff for that owner and branch combination, while preserving handoffs on sibling branches and from teammates.
+- AC5: Passing `shared: true` (or `--shared` CLI flag) marks the baton as project-wide, allowing any incoming session across any branch or teammate to inherit the handoff.
 
-### Single-Use Delivery via Bootstrap Brief
+### Targeted Single-Use Delivery via Bootstrap Brief
 
-- AC5: When `bootstrap` compiles the token-budgeted session brief for a project with an active unclaimed handoff, it prepends a prominent `## 🤝 Active Session Handoff` section at the top of the brief.
-- AC6: The handoff section renders originating agent/IDE, `nextSteps` list, `failedApproaches` list, and `openQuestions` list formatted for direct agent consumption.
-- AC7: The handoff section byte size is accounted for within `maxBytes` (default 8 KB) and prioritized above standard traps and decisions so tactical continuity is never truncated.
-- AC8: Upon delivery in `bootstrap` (or `prompt` `action: 'session_start'`), the handoff is atomically marked as claimed with timestamp and recipient session ID, removing it from subsequent `bootstrap` briefs.
+- AC6: When `bootstrap` compiles the session brief, it matches pending handoffs where `(handoff.shared === true || handoff.owner === currentOwner) && (!handoff.branch || handoff.branch === currentBranch)`.
+- AC7: If multiple eligible handoffs exist (e.g. an owner-specific handoff and a shared project handoff), the owner-specific branch-matching handoff takes strict precedence.
+- AC8: The matched handoff renders a prominent `## 🤝 Active Session Handoff` section at the top of the brief, itemizing originating harness, branch, `nextSteps`, `failedApproaches`, and `openQuestions`.
+- AC9: The handoff section byte size is accounted for within `maxBytes` (default 8 KB) and prioritized above standard traps and decisions so tactical continuity is never truncated.
+- AC10: Upon delivery in `bootstrap` (or `prompt` `action: 'session_start'`), the matched handoff is atomically marked as claimed (`claimed: true`, `claimedAt`, `claimedBySession`), preventing duplicate delivery in subsequent turns or accidental theft by other sessions.
 
 ### Dedicated CLI Management & Inspection
 
-- AC9: The `memo session handoff` CLI command displays the active pending handoff for the current repository, or prints a message indicating no handoff is pending.
-- AC10: Running `memo session handoff --cancel` (or `prompt` `action: 'cancel_handoff'`) permits an operator or agent to discard an unwanted handoff before it is claimed.
-- AC11: CLI `memo session end --handoff-steps "Step 1,Step 2" --handoff-failed "Approach A" --handoff-questions "Question 1"` supports ergonomic shell-based handoff authoring.
+- AC11: The `memo session handoff` CLI command displays the active pending handoff matching the current repository, user, and branch, or prints a message indicating no handoff is pending.
+- AC12: Running `memo session handoff --all` displays all pending handoffs across all branches and teammates for project auditability.
+- AC13: Running `memo session handoff --cancel` (or `prompt` `action: 'cancel_handoff'`) discards the active handoff for the current owner and branch before it is claimed.
+- AC14: CLI `memo session end --handoff-steps "Step 1,Step 2" --handoff-failed "Approach A" --handoff-questions "Question 1" [--shared]` supports ergonomic shell-based handoff authoring.
 
 ### Observability & Status Monitor Integration
 
-- AC12: The `:3124` Status Monitor dashboard displays an "Active Handoff" status badge and details drawer in the Prompts/Sessions view with a one-click dismiss button.
-- AC13: Operational telemetry logs `operation: 'handoff_created'` and `operation: 'handoff_claimed'` events with session and project identifiers.
+- AC15: The `:3124` Status Monitor dashboard displays an "Active Handoffs" panel in the Prompts/Sessions view, grouping batons by owner, branch, and shared status with one-click dismiss affordances.
+- AC16: Operational telemetry logs `operation: 'handoff_created'` and `operation: 'handoff_claimed'` events containing session, project, branch, and owner identifiers.
 
 ---
 
 ## Notes
 
-- **Zero MCP Tool Count Impact:** Reuses the existing `prompt` (actions: `session_end`, `session_start`, `cancel_handoff`) and `bootstrap` tools, strictly complying with the PRD 11-tool ceiling.
-- **Fail-Safe Delivery:** If the handoff file is corrupted or unparseable, `bootstrap` logs a non-fatal warning to stderr, falls open, and generates the standard brief without crashing.
+- **Zero MCP Tool Count Impact:** Reuses existing `prompt` (actions: `session_end`, `session_start`, `cancel_handoff`) and `bootstrap` tools, strictly complying with the PRD 11-tool ceiling.
+- **Fail-Safe Isolation:** If ownership resolution fails, the baton falls back to machine-local checkout identity without crashing.
+- **Team Vault Protection:** Teammates pointing their agents at a central daemon cannot accidentally consume or overwrite each other's pending handoff batons.
 
 ---
 
@@ -78,9 +84,9 @@ Introduce a first-class, single-use **Handoff Baton** mechanism integrated into 
 
 | Assumption | Chosen default | Rationale | Confirmed |
 |------------|----------------|-----------|-----------|
-| Single-use vs multi-turn visibility | Single-use on initial brief | Prevents stale tactical instructions from lingering across multi-hour sessions. | y |
-| Concurrency conflict resolution | First bootstrap claims baton | The first agent to start working inherits the baton; subsequent concurrent agents see standard brief. | y |
-| Retention of claimed handoffs | Archived in session frontmatter | Preserves audit trail and session story without keeping `handoff.json` active. | y |
+| Default handoff visibility | Private to owner & branch | Prevents context collisions across teammates and multi-branch workflows. | y |
+| Explicit team sharing | `shared: true` | Allows deliberate baton passing to coworkers during shift changes or PR handoffs. | y |
+| Retention of claimed handoffs | Archived in session frontmatter | Preserves audit trail and session story without leaving active handoff files open. | y |
 
 ---
 
@@ -88,9 +94,9 @@ Introduce a first-class, single-use **Handoff Baton** mechanism integrated into 
 
 | Readiness Item | Requirement | Verification Method |
 |----------------|-------------|---------------------|
+| Multi-Agent / Branch Isolation | Handoff matching validates owner, branch, and shared flags | Concurrency unit tests with simulated multi-user sessions |
 | Architectural Alignment | Integrates into `src/prompt.ts`, `src/bootstrap.ts`, and `src/types.ts` | Source code inspection and data flow verification |
 | Tool Ceiling Compliance | Zero new MCP tools created; extends `prompt` and `bootstrap` | Tool schema audit |
-| Single-Use Durability | Atomic write and claim transaction in project vault | Node test runner verification with concurrent reads |
 | Validation Pass | Complies with canonical specification schema | Passes `validate_spec.cjs --mode=authoring` |
 
 ---
@@ -99,13 +105,14 @@ Introduce a first-class, single-use **Handoff Baton** mechanism integrated into 
 
 ### Telemetry & Observable Signals
 
-- `memo session end s1 --summary "Refactor done" --handoff-steps "Run tests,Fix styling"`: writes `handoff.json` in project vault.
-- `memo session handoff`: prints the pending handoff details to stdout.
-- `memo bootstrap`: brief output includes `## 🤝 Active Session Handoff` and marks `handoff.json` claimed.
-- Second run of `memo bootstrap`: brief output omits the handoff section.
+- `memo session end s1 --handoff-steps "Fix cookie test" --branch feat/auth`: writes owner/branch-scoped handoff.
+- `memo bootstrap` on `feat/auth` under same user: injects handoff and marks it claimed.
+- `memo bootstrap` on `fix/db` under same user: does NOT inject the `feat/auth` handoff.
+- `memo bootstrap` under different user: does NOT inject Alice's private handoff.
+- `memo session end s2 --handoff-steps "Deploy staging" --shared`: injects for any user on any branch.
 
 ### Negative & Failing Test Scenarios
 
+- Session attempting to claim a handoff owned by a different user without `shared: true` leaves the handoff untouched.
 - Malformed handoff JSON in vault does not crash `bootstrap`; logs warning and outputs standard brief.
-- Attempting to claim an already-claimed or expired handoff returns a clean no-op without error.
 - Invoking `memo session handoff --cancel` when no handoff exists exits cleanly with exit code 0.
