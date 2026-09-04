@@ -2267,7 +2267,20 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           let explainHtml = "";
           if (r.explain) {
             const e = r.explain;
+            const factors = [
+              { cls: "score-fts", value: e.ftsBm25 },
+              { cls: "score-path", value: e.pathPatternBoost },
+              { cls: "score-sev", value: e.severityMultiplier },
+              { cls: "score-occ", value: e.occurrencesBoost },
+              { cls: "score-hits", value: e.hitsBoost },
+              { cls: "score-fb", value: e.feedbackMultiplier }
+            ];
+            const logSum = factors.reduce((s, f) => s + Math.log(Math.max(f.value, 0.01)), 0);
+            const pct = (v) => Math.max(1, Math.round((Math.log(Math.max(v, 0.01)) / logSum) * 100));
             explainHtml =
+              '<div class="score-bar" title="log-weighted factor contributions">' +
+              factors.map((f) => '<span class="' + f.cls + '" style="width:' + pct(f.value) + '%"></span>').join("") +
+              '</div>' +
               '<div class="explain-detail">score ' + escapeHtml(String(e.finalScore)) +
               ' · FTS ' + escapeHtml(String(e.ftsBm25)) +
               ' · path ×' + escapeHtml(String(e.pathPatternBoost)) +

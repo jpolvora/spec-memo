@@ -161,7 +161,8 @@ function buildBudgetReport(
     });
   }
 
-  for (const decision of allDecisions) {
+  for (let i = 0; i < allDecisions.length; i++) {
+    const decision = allDecisions[i];
     const id = String(decision.frontmatter.id);
     const status =
       decision.frontmatter.status !== 'active' && decision.frontmatter.status !== 'shipped'
@@ -173,7 +174,7 @@ function buildBudgetReport(
       id,
       kind: 'decision',
       title: typeof decision.frontmatter.title === 'string' ? decision.frontmatter.title : undefined,
-      score: roundExplain(0),
+      score: roundExplain(allDecisions.length - i),
       byteWeight: recordByteWeight(decision),
       status
     });

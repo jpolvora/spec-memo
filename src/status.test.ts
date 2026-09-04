@@ -185,6 +185,10 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes("/api/records"));
     assert.ok(html.includes("openMemoryDrawer"));
     assert.ok(html.includes('meta-label">Hits</span>') || html.includes("Hits</span>"));
+    assert.ok(html.includes('id="memory-explain-toggle"'));
+    assert.ok(html.includes('id="memory-query-input"'));
+    assert.ok(html.includes("/api/records/search"));
+    assert.ok(html.includes("score-bar"));
   });
 
   await t.test("generateStatusHtml supports ?tab=backups deep link", () => {
