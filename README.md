@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.20.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.21.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -776,6 +776,7 @@ memo reconcile --clean-sidecars
 | `promote` | Safe export of record to product repo | `--id`, `--to`, `--format` (`raw`/`adr`/`madr`/`skill`), `--force`, `--limit` |
 | `check_version` / `check-version` | Compare running version to npm latest | `--json` |
 | `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into a consumer repo or global skills roots | `--product-root`, `--global`, `--skill`, `--force`, `--json` |
+| `install_hooks` / `install-hooks` | Optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Claude (CLI-only) | `--host`, `--global`, `--apply`, `--dry-run`, `--force`, `--remove`, `--json` |
 | `prompt` / `prompts` | Ingest & query prompt history; derive rules; export stories | `record`/`list`/`search`/`show`/`session`/`export`/`derive-rules` |
 | `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`show`/`export`, `--summary`, `--pr` |
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |

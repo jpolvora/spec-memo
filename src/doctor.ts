@@ -6,9 +6,11 @@ import { resolveProjectIdentity } from './identity.js';
 import { openIndex, rebuildIndex } from './indexer.js';
 import { wrapSqliteOpenError } from './sqlite.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
+import { getPackageVersion } from './version.js';
 import { readHybridState } from './hybrid-state.js';
 import { readVaultGitState } from './vault-git-state.js';
 import { isPathInside } from './safety.js';
+import { inspectAgentHooks } from './hooks-install.js';
 
 export const DEFAULT_HEALTH_TIMEOUT_MS = 10000;
 
@@ -343,6 +345,20 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       pollutionItems.length === 0;
   }
 
+  const agentHooks = inspectAgentHooks({
+    cwd: options.cwd,
+    productRoot: identity.rootPath
+  });
+  if (agentHooks.installed) {
+    for (const h of agentHooks.hosts) {
+      if (h.outdated) {
+        warnings.push(
+          `Agent hook templates for ${h.host} may be outdated (installed: ${h.version || 'unknown'}, running: ${getPackageVersion()}). Re-run 'memo install-hooks --apply --force'.`
+        );
+      }
+    }
+  }
+
   const summary = healthy
     ? `spec-memo vault is healthy and product repository is clean (${indexedRecordsCount} records indexed, mode: ${effectiveMode}).`
     : `spec-memo doctor detected issues (${warnings.length} warning${warnings.length === 1 ? '' : 's'}, mode: ${effectiveMode}).`;
@@ -383,6 +399,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       fixedCount,
       items: pollutionItems
     },
+    agentHooks,
     warnings,
     summary
   };

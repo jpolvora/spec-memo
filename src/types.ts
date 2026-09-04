@@ -496,6 +496,46 @@ export interface InstallSkillsResult {
   skippedTargets?: Array<{ kind: string; path: string; reason: string }>;
 }
 
+export interface InstallHooksOptions {
+  host?: string;
+  global?: boolean;
+  apply?: boolean;
+  dryRun?: boolean;
+  force?: boolean;
+  remove?: boolean;
+  cwd?: string;
+  productRoot?: string;
+  homeDir?: string;
+  packageVersion?: string;
+}
+
+export interface InstallHooksRow {
+  host: string;
+  path: string;
+  status: 'installed' | 'removed' | 'unchanged' | 'preview';
+  diff?: string;
+}
+
+export interface InstallHooksResult {
+  mode: 'local' | 'global';
+  productRoot: string;
+  results: InstallHooksRow[];
+}
+
+export interface AgentHookHostStatus {
+  host: string;
+  paths: string[];
+  version?: string;
+  outdated?: boolean;
+  active: boolean;
+}
+
+export interface AgentHooksInspection {
+  installed: boolean;
+  hosts: AgentHookHostStatus[];
+  summary: string;
+}
+
 export interface ExportVaultOptions {
   vaultRoot?: string;
   projectId?: string;
@@ -832,6 +872,7 @@ export interface DoctorResult {
     fixedCount?: number;
     items: DoctorPollutionItem[];
   };
+  agentHooks?: AgentHooksInspection;
   warnings: string[];
   summary: string;
 }
