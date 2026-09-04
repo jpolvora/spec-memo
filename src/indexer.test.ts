@@ -398,6 +398,36 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
     });
     assert.equal(hits.length, 0);
   });
+
+  it('should attach explain with positive ftsBm25 for hits sort full-scan path', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'hits-explain-a',
+      frontmatter: {
+        id: 'trap-hits-explain-a',
+        title: 'Hits explain trap',
+        hits: 10,
+        status: 'active'
+      },
+      body: 'Hits explain body'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      sort: 'hits',
+      explain: true,
+      kinds: ['trap']
+    });
+
+    const row = hits.find((h) => h.id === 'trap-hits-explain-a');
+    assert.ok(row, 'expected trap-hits-explain-a in hits sort results');
+    assert.ok(row!.explain);
+    assert.ok(row!.explain!.ftsBm25 > 0);
+    assert.ok(row!.explain!.finalScore > 0);
+  });
 });
 
 

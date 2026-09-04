@@ -1,17 +1,9 @@
-import { RecordFrontmatter } from './types.js';
+import { RecordFrontmatter, SearchHit, SearchSort, SearchScoreExplain } from './types.js';
 import { hitCountOf, occurrenceOf } from './recurrence.js';
 import { salienceMultiplier } from './salience.js';
 import { matchesAnyPattern } from './indexer.js';
 
-export interface SearchScoreExplain {
-  ftsBm25: number;
-  pathPatternBoost: number;
-  severityMultiplier: number;
-  hitsBoost: number;
-  occurrencesBoost: number;
-  feedbackMultiplier: number;
-  finalScore: number;
-}
+export type { SearchScoreExplain };
 
 export function roundExplain(n: number): number {
   if (!Number.isFinite(n)) return 1;
@@ -53,9 +45,20 @@ export function occurrencesBoostOf(fm: RecordFrontmatter | Record<string, unknow
  */
 export function computeSearchExplain(
   fm: RecordFrontmatter | Record<string, unknown>,
-  options: { ftsRank?: number; pathFilter?: string; pathPatterns?: string[] } = {}
+  options: {
+    ftsRank?: number;
+    pathFilter?: string;
+    pathPatterns?: string[];
+    sort?: SearchSort;
+    hit?: Pick<SearchHit, 'hits' | 'occurrences'>;
+  } = {}
 ): SearchScoreExplain {
-  const rawRank = safeExplainNum(options.ftsRank, 0);
+  let rawRank = safeExplainNum(options.ftsRank, 0);
+  if (rawRank === 0 && options.sort === 'hits') {
+    rawRank = -(options.hit?.hits ?? 0);
+  } else if (rawRank === 0 && options.sort === 'occurrences') {
+    rawRank = -(options.hit?.occurrences ?? 1);
+  }
   const feedbackMultiplier = roundExplain(salienceMultiplier(fm));
   const effectiveRank = rawRank * (feedbackMultiplier < 1 ? feedbackMultiplier : 1);
   const ftsBm25 = roundExplain(Math.abs(rawRank));

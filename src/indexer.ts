@@ -443,7 +443,9 @@ function searchIndexByFullScanRank(
         hit.explain = computeSearchExplain(fm, {
           ftsRank: rawRank,
           pathFilter: options.path,
-          pathPatterns: patterns
+          pathPatterns: patterns,
+          sort: options.sort,
+          hit
         });
       }
       hits.push(hit);
@@ -707,7 +709,9 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
           hit.explain = computeSearchExplain(record.frontmatter, {
             ftsRank: rawRank,
             pathFilter: options.path,
-            pathPatterns: hit.pathPatterns
+            pathPatterns: hit.pathPatterns,
+            sort: options.sort,
+            hit
           });
         }
       } else {
@@ -717,7 +721,9 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
           hit.explain = computeSearchExplain({}, {
             ftsRank: hit.rank,
             pathFilter: options.path,
-            pathPatterns: hit.pathPatterns
+            pathPatterns: hit.pathPatterns,
+            sort: options.sort,
+            hit
           });
         }
       }
@@ -728,7 +734,9 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         hit.explain = computeSearchExplain({}, {
           ftsRank: hit.rank,
           pathFilter: options.path,
-          pathPatterns: hit.pathPatterns
+          pathPatterns: hit.pathPatterns,
+          sort: options.sort,
+          hit
         });
       }
     }
