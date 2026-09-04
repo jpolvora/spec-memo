@@ -244,6 +244,26 @@ describe('Record TTL expiration', () => {
     );
   });
 
+  it('invalid asOf falls back to current-time expiration filtering', async () => {
+    const past = new Date(Date.now() - 86400000).toISOString();
+    await upsertRecord({
+      cwd: productRepo,
+      vaultRoot,
+      kind: 'trap',
+      slug: 'invalid-asof-trap',
+      frontmatter: { title: 'Invalid asOf trap unique', expires_at: past },
+      body: 'Hidden on bad asOf'
+    });
+
+    const hits = searchIndex({
+      vaultRoot,
+      cwd: productRepo,
+      query: 'Invalid asOf trap unique',
+      asOf: 'not-a-date'
+    });
+    assert.equal(hits.length, 0);
+  });
+
   it('MCP search tool accepts includeExpired and asOf', async () => {
     const past = new Date(Date.now() - 1000).toISOString();
     await upsertRecord({

@@ -138,7 +138,11 @@ export function applySearchExpirationFilter(
   if (ctx.asOf) {
     const asOfMs = parseExpiresAt(ctx.asOf) ?? Date.parse(ctx.asOf);
     if (Number.isNaN(asOfMs)) {
-      return { include: true, expired: false };
+      const expired = isRecordExpiredAt(fm, ctx.now ?? Date.now(), defaultDays);
+      if (expired && !ctx.includeExpired) {
+        return { include: false, expired: true };
+      }
+      return { include: true, expired };
     }
     const active = isRecordActiveAt(fm, asOfMs, defaultDays);
     const hadExpiry = resolveExpiresAtMs(fm, defaultDays) !== null;
