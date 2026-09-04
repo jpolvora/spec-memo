@@ -376,6 +376,106 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     assert.strictEqual(fs.existsSync(sidecarPath), false);
   });
 
+  await t.test("memo doctor --fix retains divergent sidecars for explicit reconcile", async () => {
+    const divProj = "proj-doctor-divergent";
+    initVault({ vaultRoot, projectId: divProj });
+    const record = await upsertRecord({
+      vaultRoot,
+      projectId: divProj,
+      kind: "trap",
+      slug: "trap-doctor-divergent",
+      body: "# Local Base Body"
+    });
+    const item = (await getRecord({ vaultRoot, projectId: divProj, kind: "trap", id: record.id }))!;
+    const sidecarPath = path.join(path.dirname(record.path), "trap-doctor-divergent.conflict.md");
+    fs.writeFileSync(
+      sidecarPath,
+      serializeRecord({
+        frontmatter: { ...item.frontmatter, id: "trap-doctor-divergent-c" },
+        body: "# Remote Divergent Body"
+      }),
+      "utf8"
+    );
+    const docAfter = await runDoctor({ vaultRoot, fix: true });
+    assert.strictEqual(fs.existsSync(sidecarPath), true);
+    assert.strictEqual(fs.existsSync(record.path), true);
+    void docAfter;
+  });
+
+  await t.test("cleanConflictSidecars journals base and sidecar mutations for rollback", async () => {
+    const jProj = "proj-journal-sidecars";
+    initVault({ vaultRoot, projectId: jProj });
+    const record = await upsertRecord({
+      vaultRoot,
+      projectId: jProj,
+      kind: "trap",
+      slug: "trap-journal-me",
+      body: "# Journal Base"
+    });
+    const item = (await getRecord({ vaultRoot, projectId: jProj, kind: "trap", id: record.id }))!;
+    const sidecarPath = path.join(path.dirname(record.path), "trap-journal-me.conflict.md");
+    fs.writeFileSync(
+      sidecarPath,
+      serializeRecord({
+        frontmatter: { ...item.frontmatter, id: "trap-journal-me-c" },
+        body: "# Journal Base"
+      }),
+      "utf8"
+    );
+    const journal: Array<{ filePath: string; originalContent: string | null }> = [];
+    const res = cleanConflictSidecars(vaultRoot, { projectId: jProj, journal });
+    assert.strictEqual(res.cleaned, 1);
+    assert.ok(journal.length >= 2);
+    assert.ok(journal.some((j) => j.filePath === record.path));
+    assert.ok(journal.some((j) => j.filePath === sidecarPath));
+  });
+
+  await t.test("applyChangeset with cleanSidecars covers cross-project sidecar projects", async () => {
+    const projA = "proj-xs-a";
+    const projB = "proj-xs-b";
+    initVault({ vaultRoot, projectId: projA });
+    initVault({ vaultRoot, projectId: projB });
+    const recA = await upsertRecord({
+      vaultRoot,
+      projectId: projA,
+      kind: "trap",
+      slug: "trap-xs-a",
+      body: "# Proj A Base"
+    });
+    const recB = await upsertRecord({
+      vaultRoot,
+      projectId: projB,
+      kind: "trap",
+      slug: "trap-xs-b",
+      body: "# Proj B Base"
+    });
+    const itemB = (await getRecord({ vaultRoot, projectId: projB, kind: "trap", id: recB.id }))!;
+    const sidecarB = path.join(path.dirname(recB.path), "trap-xs-b.conflict.md");
+    fs.writeFileSync(
+      sidecarB,
+      serializeRecord({
+        frontmatter: { ...itemB.frontmatter, id: "trap-xs-b-c" },
+        body: "# Proj B Base"
+      }),
+      "utf8"
+    );
+    const itemA = (await getRecord({ vaultRoot, projectId: projA, kind: "trap", id: recA.id }))!;
+    const changeset: Changeset = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          project: projA,
+          frontmatter: { ...itemA.frontmatter, updated: new Date(Date.now() + 1000).toISOString() },
+          body: "# Proj A Base"
+        }
+      ]
+    };
+    const res = await applyChangeset(vaultRoot, changeset, { cleanSidecars: true });
+    assert.strictEqual(res.sidecarsCleaned, 1);
+    assert.strictEqual(fs.existsSync(sidecarB), false);
+  });
+
   await t.test("dual-sync report.ok is false when hybrid channel fails even if vault-git succeeds", async () => {
     const dualVault = path.join(tempDir, "dual-vault");
     initVault({ vaultRoot: dualVault, projectId: "proj-dual" });

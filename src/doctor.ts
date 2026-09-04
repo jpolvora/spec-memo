@@ -254,11 +254,17 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
 
     try {
       const { cleanConflictSidecars } = await import('./sync.js');
-      const cleanRes = cleanConflictSidecars(vaultRoot, { prefer: 'local' });
+      // Only auto-clean semantically identical sidecars during --fix.
+      // Divergent sidecars require explicit 'memo reconcile --prefer local|remote --clean-sidecars'.
+      const cleanRes = cleanConflictSidecars(vaultRoot);
       fixedCount += cleanRes.cleaned;
       if (cleanRes.cleaned > 0) {
         const { rebuildIndex } = await import('./indexer.js');
+        const { rebuildCompiledViews } = await import('./compiler.js');
         await rebuildIndex(vaultRoot);
+        for (const pid of new Set(cleanRes.filesCleaned.map((f) => f.split('/')[0]))) {
+          if (pid) rebuildCompiledViews(pid, vaultRoot);
+        }
       }
     } catch {
       // Ignore sidecar cleanup errors

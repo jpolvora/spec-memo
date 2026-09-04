@@ -120,6 +120,7 @@ export interface CleanSidecarsOptions {
   prefer?: 'local' | 'remote';
   dryRun?: boolean;
   projectId?: string;
+  journal?: Array<{ filePath: string; originalContent: string | null }>;
 }
 
 export interface CleanSidecarsResult {
@@ -141,6 +142,13 @@ export function cleanConflictSidecars(
   let cleaned = 0;
   let retained = 0;
   const filesCleaned: string[] = [];
+  const journal = options.journal;
+  const recordJournal = (filePath: string, originalContent: string | null): void => {
+    if (!journal || options.dryRun) return;
+    if (!journal.some((j) => j.filePath === filePath)) {
+      journal.push({ filePath, originalContent });
+    }
+  };
 
   const targetProjects = options.projectId
     ? [options.projectId]
@@ -181,6 +189,7 @@ export function cleanConflictSidecars(
             if (areBodiesSemanticallyEqual(baseRecord.body, sidecarRecord.body)) {
               if (!options.dryRun) {
                 const mergedFm = mergeRecordMetadata(baseRecord.frontmatter, sidecarRecord.frontmatter);
+                recordJournal(baseFilePath, baseContent);
                 fs.writeFileSync(
                   baseFilePath,
                   serializeRecord({ frontmatter: mergedFm, body: baseRecord.body }),
@@ -192,6 +201,7 @@ export function cleanConflictSidecars(
               canClean = true;
             } else if (options.prefer === "remote") {
               if (!options.dryRun) {
+                recordJournal(baseFilePath, baseContent);
                 fs.copyFileSync(sidecarFilePath, baseFilePath);
               }
               canClean = true;
@@ -205,6 +215,11 @@ export function cleanConflictSidecars(
           if (canClean) {
             if (!options.dryRun) {
               try {
+                try {
+                  recordJournal(sidecarFilePath, fs.readFileSync(sidecarFilePath, "utf8"));
+                } catch {
+                  recordJournal(sidecarFilePath, null);
+                }
                 fs.unlinkSync(sidecarFilePath);
               } catch {
                 // Ignore unlink errors
@@ -218,6 +233,12 @@ export function cleanConflictSidecars(
         } else {
           if (!options.dryRun) {
             try {
+              try {
+                recordJournal(sidecarFilePath, fs.readFileSync(sidecarFilePath, "utf8"));
+              } catch {
+                recordJournal(sidecarFilePath, null);
+              }
+              recordJournal(baseFilePath, null);
               fs.renameSync(sidecarFilePath, baseFilePath);
             } catch {
               // Ignore
@@ -666,20 +687,26 @@ export async function applyChangeset(
       }
 
       let sidecarsCleaned = 0;
+      const sidecarProjects = new Set<string>();
       if (options.cleanSidecars && !dryRun) {
-        const cleanRes = cleanConflictSidecars(vaultRoot, { prefer: options.prefer });
+        const cleanRes = cleanConflictSidecars(vaultRoot, { prefer: options.prefer, journal });
         sidecarsCleaned = cleanRes.cleaned;
+        for (const f of cleanRes.filesCleaned) {
+          const pid = f.split("/")[0];
+          if (pid) sidecarProjects.add(pid);
+        }
       }
 
+      const projectsToRebuild = new Set<string>([...touchedProjects, ...sidecarProjects]);
       if (!dryRun && (applied > 0 || autoMerged > 0 || sidecarsCleaned > 0)) {
-        for (const projId of touchedProjects) {
+        for (const projId of projectsToRebuild) {
           rebuildCompiledViews(projId, vaultRoot);
         }
         await rebuildIndex(vaultRoot);
         commitVaultChange(
           "sync changeset applied",
           vaultRoot,
-          Array.from(touchedProjects).map((p) => path.join("projects", p))
+          Array.from(projectsToRebuild).map((p) => path.join("projects", p))
         );
       }
 
