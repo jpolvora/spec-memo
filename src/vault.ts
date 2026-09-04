@@ -131,7 +131,7 @@ function acquireVaultLockSync(vaultRoot: string): void {
   vaultLockDepth.set(key, 1);
 }
 
-function releaseVaultLockSync(vaultRoot: string): void {
+export function releaseVaultLockSync(vaultRoot: string): void {
   const key = path.resolve(vaultRoot);
   const depth = (vaultLockDepth.get(key) || 1) - 1;
   if (depth > 0) {
@@ -153,6 +153,62 @@ function releaseVaultLockSync(vaultRoot: string): void {
   } catch {
     // ignore
   }
+}
+
+/**
+ * Non-blocking vault lock attempt for background workers (AC24).
+ * Returns true when the lock is held (re-entrant in-process), false when
+ * another process holds a fresh lock — the caller must skip and retry later
+ * instead of stalling foreground traffic behind the 8s acquire deadline.
+ */
+export function tryAcquireVaultLockSync(vaultRoot: string): boolean {
+  const key = path.resolve(vaultRoot);
+  const depth = vaultLockDepth.get(key) || 0;
+  if (depth > 0) {
+    vaultLockDepth.set(key, depth + 1);
+    return true;
+  }
+  try {
+    if (!fs.existsSync(key)) {
+      fs.mkdirSync(key, { recursive: true });
+    }
+  } catch {
+    return false;
+  }
+  const lockPath = path.join(key, '.memo.lock');
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(lockPath, 'wx');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') return false;
+    // Single stale-steal attempt mirroring acquireVaultLockSync; a fresh
+    // foreign lock means busy — return false without waiting.
+    try {
+      const st = fs.statSync(lockPath);
+      if (Date.now() - st.mtimeMs <= 10000) return false;
+      fs.unlinkSync(lockPath);
+    } catch {
+      return false;
+    }
+    try {
+      fd = fs.openSync(lockPath, 'wx');
+    } catch {
+      return false;
+    }
+  }
+  try {
+    fs.writeSync(fd, String(process.pid));
+  } catch {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      // ignore
+    }
+    return false;
+  }
+  vaultLockFds.set(key, fd);
+  vaultLockDepth.set(key, 1);
+  return true;
 }
 
 /**

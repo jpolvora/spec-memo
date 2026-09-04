@@ -20,7 +20,10 @@ import {
   writeBootstrapVaultRoot,
   probeVaultRootFromCwd,
   getDefaultVaultRoot,
-  isUsableVaultRoot
+  isUsableVaultRoot,
+  tryAcquireVaultLockSync,
+  releaseVaultLockSync,
+  withVaultLockSync
 } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getPackageVersion } from './version.js';
@@ -299,6 +302,41 @@ describe('Vault Management & Project Binding', () => {
     assert.equal(resolved.sse, 8888);
     assert.equal(resolved.status, 8889);
     assert.equal(resolved.canvas, 3125);
+  });
+
+  it('tryAcquireVaultLockSync acquires free lock and releases cleanly', () => {
+    assert.equal(tryAcquireVaultLockSync(tempVaultRoot), true);
+    assert.ok(fs.existsSync(path.join(tempVaultRoot, '.memo.lock')));
+    releaseVaultLockSync(tempVaultRoot);
+    assert.equal(fs.existsSync(path.join(tempVaultRoot, '.memo.lock')), false);
+  });
+
+  it('tryAcquireVaultLockSync is re-entrant within the holding process', () => {
+    withVaultLockSync(tempVaultRoot, () => {
+      assert.equal(tryAcquireVaultLockSync(tempVaultRoot), true);
+      releaseVaultLockSync(tempVaultRoot);
+    });
+    assert.equal(fs.existsSync(path.join(tempVaultRoot, '.memo.lock')), false);
+  });
+
+  it('tryAcquireVaultLockSync returns false on a fresh foreign lock without waiting', () => {
+    fs.mkdirSync(tempVaultRoot, { recursive: true });
+    fs.writeFileSync(path.join(tempVaultRoot, '.memo.lock'), 'foreign-pid', 'utf8');
+    const started = Date.now();
+    assert.equal(tryAcquireVaultLockSync(tempVaultRoot), false);
+    assert.ok(Date.now() - started < 2000, 'try-lock must not spin the 8s deadline');
+    fs.unlinkSync(path.join(tempVaultRoot, '.memo.lock'));
+  });
+
+  it('tryAcquireVaultLockSync steals a stale foreign lock', () => {
+    fs.mkdirSync(tempVaultRoot, { recursive: true });
+    const lockPath = path.join(tempVaultRoot, '.memo.lock');
+    fs.writeFileSync(lockPath, 'stale-pid', 'utf8');
+    const stale = new Date(Date.now() - 20000);
+    fs.utimesSync(lockPath, stale, stale);
+    assert.equal(tryAcquireVaultLockSync(tempVaultRoot), true);
+    releaseVaultLockSync(tempVaultRoot);
+    assert.equal(fs.existsSync(lockPath), false);
   });
 });
 

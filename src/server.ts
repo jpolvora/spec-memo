@@ -1,7 +1,7 @@
 import http from "node:http";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createMcpServer } from "./mcp.js";
-import { getVaultRoot, withVaultLockSync, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
+import { getVaultRoot, withVaultLockSync, ensureVaultStructure, resolveConfiguredPorts, tryAcquireVaultLockSync, releaseVaultLockSync } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, createActivityBus } from "./activity.js";
 import { startStatusServer, StatusServerInstance } from "./status.js";
@@ -661,6 +661,11 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
         const intervalMs = autoSyncMinutes * 60 * 1000;
         autoSyncTimer = setInterval(() => {
           if (autoSyncInFlight) return;
+          // AC24: never stall MCP traffic behind a sync cycle — skip this
+          // tick when the vault is busy; the next tick retries. The single
+          // outer hold covers the whole multi-project cycle (inner syncDual
+          // locks re-enter safely in-process).
+          if (!tryAcquireVaultLockSync(vaultRoot)) return;
           autoSyncInFlight = (async () => {
             try {
               const { syncDual } = await import("./dual-sync.js");
@@ -713,6 +718,7 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
                 context: { phase: "background_autosync" }
               }, { vaultRoot, logPath: errorLogPath });
             } finally {
+              releaseVaultLockSync(vaultRoot);
               autoSyncInFlight = undefined;
             }
           })();
