@@ -686,6 +686,37 @@ test("MCP status monitor", async (t) => {
     }
   });
 
+  await t.test("GET /api/records/search returns FTS hits with explain", async () => {
+    await upsertRecord({
+      vaultRoot,
+      projectId,
+      kind: "trap",
+      slug: "status-search",
+      frontmatter: {
+        id: "trap-status-search",
+        title: "SQLite WAL locking trap",
+        severity: "high",
+        pathPatterns: ["src/**/*.ts"]
+      },
+      body: "Close SQLite before unlink on Windows to avoid WAL lock errors."
+    });
+
+    const res = await fetch(
+      `${baseUrl}/api/records/search?project=${encodeURIComponent(projectId)}&q=sqlite&explain=true&sort=relevance&limit=10`
+    );
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as {
+      hits: Array<{ id: string; explain?: { finalScore: number; ftsBm25: number } }>;
+    };
+    assert.ok(Array.isArray(body.hits));
+    assert.ok(body.hits.length >= 1);
+    const hit = body.hits.find((h) => h.id === "trap-status-search");
+    assert.ok(hit, "expected trap-status-search in search hits");
+    assert.ok(hit.explain);
+    assert.ok(typeof hit.explain!.finalScore === "number");
+    assert.ok(typeof hit.explain!.ftsBm25 === "number");
+  });
+
   await t.test("GET /api/records returns 401 when auth token configured", async () => {
     const authBus = createActivityBus();
     const authServer = await startStatusServer({

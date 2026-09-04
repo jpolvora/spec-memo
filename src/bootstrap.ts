@@ -457,6 +457,8 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
   }
 
   if (options.explain) {
+    // budgetReport is diagnostic metadata outside the token-budgeted brief payload (AC6–AC8).
+    // byteLength reflects only agent-facing brief fields, not explain diagnostics.
     initialBrief.budgetReport = buildBudgetReport(
       activeTraps,
       currentTraps,

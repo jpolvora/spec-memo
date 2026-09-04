@@ -1243,6 +1243,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
             <label for="memory-sort-select">Sort:</label>
             <select id="memory-sort-select">
               <option value="hits" selected>Hits</option>
+              <option value="relevance">Relevance</option>
               <option value="occurrences">Occurrences</option>
               <option value="updated">Updated</option>
             </select>
@@ -2241,6 +2242,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         if (query) {
           if (explainOn) params.set("explain", "true");
           params.set("q", query);
+          params.set("sort", "relevance");
           const res = await apiFetch("/api/records/search?" + params.toString(), { headers: apiHeaders() });
           const data = await res.json();
           records = data.hits || [];
@@ -2265,18 +2267,15 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           let explainHtml = "";
           if (r.explain) {
             const e = r.explain;
-            const total = Math.max(e.finalScore, 0.01);
-            const pct = (v) => Math.max(2, Math.round((v / total) * 100));
             explainHtml =
-              '<div class="score-bar" title="FTS/path/severity/occ/hits/feedback">' +
-              '<span class="score-fts" style="width:' + pct(e.ftsBm25) + '%"></span>' +
-              '<span class="score-path" style="width:' + pct(e.pathPatternBoost) + '%"></span>' +
-              '<span class="score-sev" style="width:' + pct(e.severityMultiplier) + '%"></span>' +
-              '<span class="score-occ" style="width:' + pct(e.occurrencesBoost) + '%"></span>' +
-              '<span class="score-hits" style="width:' + pct(e.hitsBoost) + '%"></span>' +
-              '<span class="score-fb" style="width:' + pct(e.feedbackMultiplier) + '%"></span>' +
-              '</div>' +
-              '<div class="explain-detail">score ' + escapeHtml(String(e.finalScore)) + '</div>';
+              '<div class="explain-detail">score ' + escapeHtml(String(e.finalScore)) +
+              ' · FTS ' + escapeHtml(String(e.ftsBm25)) +
+              ' · path ×' + escapeHtml(String(e.pathPatternBoost)) +
+              ' · sev ×' + escapeHtml(String(e.severityMultiplier)) +
+              ' · occ ×' + escapeHtml(String(e.occurrencesBoost)) +
+              ' · hits ×' + escapeHtml(String(e.hitsBoost)) +
+              ' · fb ×' + escapeHtml(String(e.feedbackMultiplier)) +
+              '</div>';
           }
           tr.innerHTML =
             "<td><code>" + escapeHtml(r.kind) + "</code></td>" +

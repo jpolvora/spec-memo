@@ -466,6 +466,8 @@ describe('Bootstrap Brief Engine', () => {
     assert.ok(brief.budgetReport!.includedCount >= 1);
     const included = brief.budgetReport!.candidates.filter((c) => c.status === 'included');
     assert.ok(included.length >= 1);
+    const briefOnly = { ...brief, budgetReport: undefined };
+    assert.ok(calculatePayloadSize(briefOnly) <= brief.budgetBytes);
   });
 });
 
