@@ -369,7 +369,13 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             projectId: targetProjectId,
             lastOperation: "sync_push"
           });
-          const result = await applyChangeset(vaultRoot, rawChangeset, { force, dryRun });
+          const result = await applyChangeset(vaultRoot, rawChangeset, {
+            force,
+            dryRun,
+            prefer: body.prefer,
+            strategy: body.strategy,
+            cleanSidecars: body.cleanSidecars
+          });
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err: unknown) {
@@ -398,7 +404,10 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
             const rawChangeset = body.push.changeset || body.push;
             appliedResult = await applyChangeset(vaultRoot, rawChangeset, {
               force: Boolean(body.push.force),
-              dryRun: Boolean(body.push.dryRun ?? body.dryRun)
+              dryRun: Boolean(body.push.dryRun ?? body.dryRun),
+              prefer: body.push.prefer ?? body.prefer,
+              strategy: body.push.strategy ?? body.strategy,
+              cleanSidecars: body.push.cleanSidecars ?? body.cleanSidecars
             });
           }
           let pulledChangeset: import('./sync.js').Changeset | undefined;
