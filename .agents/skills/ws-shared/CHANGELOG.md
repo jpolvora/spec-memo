@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-09-04 14:51] Agent: Cursor Grok 4.6
+- **Prompt**: bump, commit, push; ws-ship-pr (project wiki)
+- **Done**: Version 0.18.0 → 0.19.0; per-project vault `WIKI.md`, status Wiki tab, `memo wiki` CLI
+- **Result**: Ship `develop` → `master`
+
 ### [2026-09-01 15:00] Agent: Cursor Grok 4.6
 - **Prompt**: /ws-spec-to-pr vault-git-hybrid-sync.spec.md TDD through PR
 - **Done**: `vaultGit.atomic` (default false); dual `memo sync`; session_end/shutdown flush; async git I/O; fail-open `vault-git` error logs; 20 new tests
