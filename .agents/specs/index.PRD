@@ -116,7 +116,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 ### Phase 8: Agent Continuity & Knowledge Lifecycle
 
-- [ ] [`session-handoff-baton`](0036-session-handoff-baton.spec.md): Cross-Agent Session Handoff Baton via Prompt and Bootstrap
+- [x] [`session-handoff-baton`](0036-session-handoff-baton.spec.md): Cross-Agent Session Handoff Baton via Prompt and Bootstrap
 - [x] [`record-ttl-expiration`](0037-record-ttl-expiration.spec.md): Universal Record Time-To-Live and Expiration Engine
 - [x] [`search-ranking-explain`](0038-search-ranking-explain.spec.md): Retrieval Ranking and Bootstrap Brief Explainability
 - [x] [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md): Memory Retrieval Feedback, Stale Flagging, and Salience Tuning
@@ -171,7 +171,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 36 | [`vault-git-hybrid-sync`](0033-vault-git-hybrid-sync.spec.md) | `[x] done` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
 | 37 | `memory-hit-count` | `[x]` done | Phase 7: Deployment modes | Memory retrieval hit count and status-monitor list |
 | 38 | [`sync-conflict-reconciliation`](0035-sync-conflict-reconciliation.spec.md) | `[x] done` | Phase 7: Deployment modes | Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience |
-| 39 | [`session-handoff-baton`](0036-session-handoff-baton.spec.md) | `[ ] todo` | Phase 8 | Cross-Agent Session Handoff Baton via Prompt and Bootstrap |
+| 39 | [`session-handoff-baton`](0036-session-handoff-baton.spec.md) | `[x] done` | Phase 8 | Cross-Agent Session Handoff Baton via Prompt and Bootstrap |
 | 40 | [`record-ttl-expiration`](0037-record-ttl-expiration.spec.md) | `[x] done` | Phase 8 | Universal Record Time-To-Live and Expiration Engine |
 | 41 | [`search-ranking-explain`](0038-search-ranking-explain.spec.md) | `[x] done` | Phase 8 | Retrieval Ranking and Bootstrap Brief Explainability |
 | 42 | [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md) | `[x] done` | Phase 8 | Memory Retrieval Feedback, Stale Flagging, and Salience Tuning |
@@ -248,6 +248,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-04 | memory-feedback-salience | Memory feedback, typed links, salience dampening, doctor contradictions, status Memory actions | v0.23.0; npm test 561 pass |
 | 2026-09-04 | search-ranking-explain | Search/bootstrap explain scoring breakdown, budgetReport, status Memory explain toggle | v0.24.0; npm test 571 pass |
 | 2026-09-04 | record-ttl-expiration | Universal record TTL/expiration, `--include-expired`/`--as-of` search, bootstrap/GC sweeps, status Memory filters | v0.25.0; npm test 583 pass |
+| 2026-09-04 | session-handoff-baton | Owner/branch-isolated session handoff batons via prompt/bootstrap, memo session handoff CLI, status Active Handoffs panel | v0.26.0; npm test 591 pass |
 
 ## Archive
 

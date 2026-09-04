@@ -1349,6 +1349,14 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         </div>
       </div>
 
+      <div class="metadata-card" id="handoffs-panel" style="margin: 0 0 12px 0; display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <strong>Active Handoffs</strong>
+          <button type="button" id="btn-handoffs-refresh" class="btn-secondary" style="width:auto; margin:0; padding:4px 10px;">Refresh</button>
+        </div>
+        <div id="handoffs-list" style="font-size:0.85rem; color:var(--text);"></div>
+      </div>
+
       <div class="data-table-container">
         <table class="data-table" id="prompts-table">
           <thead>
@@ -2403,6 +2411,48 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     document.getElementById("memory-asof-input").addEventListener("change", () => loadMemoryRecords());
 
     // --- PROMPTS TAB LOGIC ---
+    async function loadHandoffs() {
+      const panel = document.getElementById("handoffs-panel");
+      const list = document.getElementById("handoffs-list");
+      if (!panel || !list) return;
+      const vault = document.getElementById("prompt-vault-select").value;
+      if (!vault || vault === "all") {
+        panel.style.display = "none";
+        return;
+      }
+      try {
+        const res = await apiFetch("/api/handoffs?project=" + encodeURIComponent(vault), { headers: apiHeaders() });
+        const data = await res.json();
+        const items = data.items || [];
+        panel.style.display = "block";
+        if (items.length === 0) {
+          list.innerHTML = '<span style="color:var(--muted);">No pending handoffs.</span>';
+          return;
+        }
+        list.innerHTML = items.map(function(h) {
+          const shared = h.shared ? ' <span class="chip">shared</span>' : '';
+          return '<div style="border:1px solid var(--border); border-radius:6px; padding:8px; margin-bottom:6px;">'
+            + '<div><strong>' + escapeHtml(h.owner) + '</strong> @ ' + escapeHtml(h.branch) + shared + '</div>'
+            + '<div style="color:var(--muted); margin:4px 0;">' + escapeHtml((h.nextSteps || []).join(' · ')) + '</div>'
+            + '<button type="button" class="btn-secondary handoff-dismiss" data-id="' + escapeHtml(h.id) + '" style="width:auto; margin:0; padding:2px 8px; font-size:0.75rem;">Dismiss</button>'
+            + '</div>';
+        }).join('');
+        list.querySelectorAll(".handoff-dismiss").forEach(function(btn) {
+          btn.addEventListener("click", async function() {
+            const id = btn.getAttribute("data-id");
+            await apiFetch("/api/handoffs/" + encodeURIComponent(id) + "?project=" + encodeURIComponent(vault), {
+              method: "DELETE",
+              headers: apiHeaders()
+            });
+            loadHandoffs();
+          });
+        });
+      } catch (err) {
+        panel.style.display = "block";
+        list.innerHTML = '<span style="color:var(--err);">Failed to load handoffs.</span>';
+      }
+    }
+
     async function loadPrompts() {
       const tbody = document.getElementById("prompts-tbody");
       tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--muted);">Loading prompts…</td></tr>';
@@ -2493,6 +2543,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       } catch (err) {
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--err);">Failed to load prompts: ' + escapeHtml(err.message || String(err)) + '</td></tr>';
       }
+      loadHandoffs();
     }
 
     async function openDrawer(record) {
@@ -2621,6 +2672,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       promptOffset = 0;
       loadPrompts();
     });
+
+    const btnHandoffsRefresh = document.getElementById("btn-handoffs-refresh");
+    if (btnHandoffsRefresh) {
+      btnHandoffsRefresh.addEventListener("click", () => loadHandoffs());
+    }
 
     document.getElementById("btn-prompts-clear").addEventListener("click", () => {
       document.getElementById("prompt-query-input").value = "";
@@ -4918,6 +4974,39 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         req.on("close", () => {
           unsubscribe();
         });
+        return;
+      }
+
+      // --- Handoff endpoints (AC16) ---
+      if (req.method === "GET" && pathname === "/api/handoffs") {
+        const project = url.searchParams.get("project") || undefined;
+        if (!project || project === "all") {
+          writeJson(res, 400, { error: "project query parameter is required for handoffs" });
+          return;
+        }
+        const meta = getProjectMetadata(project, vaultRoot);
+        const projectDir = path.join(vaultRoot, "projects", project);
+        const { listPendingHandoffs } = await import("./handoff.js");
+        const items = fs.existsSync(projectDir) ? listPendingHandoffs(projectDir) : [];
+        writeJson(
+          res,
+          200,
+          sanitizeToolOutput({ items, total: items.length, projectId: project, lastSeenRoot: meta?.lastSeenRoot })
+        );
+        return;
+      }
+
+      if (req.method === "DELETE" && pathname.startsWith("/api/handoffs/")) {
+        const handoffId = decodeURIComponent(pathname.slice("/api/handoffs/".length));
+        const project = url.searchParams.get("project") || undefined;
+        if (!project || project === "all") {
+          writeJson(res, 400, { error: "project query parameter is required for handoff dismiss" });
+          return;
+        }
+        const projectDir = path.join(vaultRoot, "projects", project);
+        const { dismissHandoffById } = await import("./handoff.js");
+        const dismissed = dismissHandoffById(projectDir, handoffId);
+        writeJson(res, 200, sanitizeToolOutput({ dismissed, id: handoffId }));
         return;
       }
 

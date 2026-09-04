@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { BootstrapBrief, BootstrapOptions, MemoRecord, BootstrapBudgetReport, BudgetCandidateReport } from './types.js';
-import { getProjectMetadata, getVaultRoot, ensureVaultStructure, ensureProjectVault } from './vault.js';
+import { getProjectMetadata, getVaultRoot, ensureVaultStructure, ensureProjectVault, withVaultLockSync } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { scanProjectRecords } from './compiler.js';
 import { getRecord } from './store.js';
@@ -12,6 +12,13 @@ import { pullHybridProject } from './hybrid-sync.js';
 import { cloneRecordWithStaleBadge } from './salience.js';
 import { roundExplain } from './ranking-explain.js';
 import { isRecordExpiredAt, defaultTtlDaysForKind } from './expiration.js';
+import {
+  claimHandoff,
+  getSessionObjective,
+  peekEligibleHandoff,
+  renderHandoffMarkdown
+} from './handoff.js';
+import { HandoffRecord, SessionObjective } from './types.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -256,6 +263,23 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
   const metadata = getProjectMetadata(projectId, vaultRoot);
   const allRecords = scanProjectRecords(projectDir);
+  const cwd = options.cwd || process.cwd();
+
+  // Handoff delivery (AC7-AC11): peek before budget pass; claim only after brief fits
+  let handoffCandidate: HandoffRecord | null = null;
+  let handoffMarkdown: string | undefined;
+  let sessionObjective: SessionObjective | undefined;
+  try {
+    sessionObjective = getSessionObjective({ projectDir, cwd }) || undefined;
+    handoffCandidate = peekEligibleHandoff({ projectDir, cwd });
+    if (handoffCandidate) {
+      handoffMarkdown = renderHandoffMarkdown(handoffCandidate);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    notices.push(`Handoff delivery warning: ${msg}`);
+  }
+
   const captureRoot = resolveCaptureProductRoot({ cwd: options.cwd, projectId, vaultRoot });
   const pathFilter =
     options.path && !isPathIgnored(options.path, captureRoot, { projectId, vaultRoot })
@@ -367,6 +391,8 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     projectId,
     gitRemote: metadata?.gitRemote || identity.normalizedRemote,
     lastSeenRoot: identity.rootPath,
+    handoffMarkdown,
+    sessionObjective,
     activeSlice,
     traps: currentTraps,
     decisions: currentDecisions,
@@ -381,6 +407,61 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
   initialBrief.byteLength = calculatePayloadSize(initialBrief);
 
+  const finalizeBrief = (brief: BootstrapBrief): BootstrapBrief => {
+    if (!handoffCandidate || !handoffMarkdown) {
+      brief.byteLength = calculatePayloadSize(brief);
+      return brief;
+    }
+    const deliverable: BootstrapBrief = {
+      ...brief,
+      handoffMarkdown,
+      sessionObjective: brief.sessionObjective ?? sessionObjective
+    };
+    if (calculatePayloadSize(deliverable) > budgetBytes) {
+      delete brief.handoff;
+      delete brief.handoffMarkdown;
+      brief.byteLength = calculatePayloadSize(brief);
+      return brief;
+    }
+    try {
+      deliverable.handoff = withVaultLockSync(vaultRoot, () =>
+        claimHandoff({
+          projectDir,
+          record: handoffCandidate!,
+          claimedBySession: options.sessionId,
+          vaultRoot,
+          projectId
+        })
+      );
+      deliverable.byteLength = calculatePayloadSize(deliverable);
+      return deliverable;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notices.push(`Handoff claim warning: ${msg}`);
+      delete brief.handoff;
+      delete brief.handoffMarkdown;
+      brief.byteLength = calculatePayloadSize(brief);
+      return brief;
+    }
+  };
+
+  // Reserve immutable handoff/objective bytes before trap/decision trimming (AC10)
+  const immutableReserve =
+    (handoffMarkdown ? Buffer.byteLength(handoffMarkdown, 'utf8') : 0) +
+    (sessionObjective ? Buffer.byteLength(JSON.stringify(sessionObjective), 'utf8') : 0) +
+    (handoffCandidate ? Buffer.byteLength(JSON.stringify(handoffCandidate), 'utf8') : 0) +
+    64;
+  const effectiveBudget = Math.max(512, budgetBytes - immutableReserve);
+
+  if (initialBrief.byteLength > effectiveBudget) {
+    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
+      currentTraps.pop();
+    }
+    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
+      currentDecisions.pop();
+    }
+  }
+
   if (initialBrief.byteLength > budgetBytes) {
     initialBrief.truncated = true;
 
@@ -388,17 +469,17 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     notices.push(`Context brief truncated to fit ${budgetBytes} byte budget.`);
 
     // Drop lower-ranked traps first
-    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentTraps.pop();
     }
 
     // If still over budget, drop older decisions
-    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentDecisions.pop();
     }
 
     // Then trim activeSlice (state → plan → spec) so the byte cap is fail-closed
-    while (calculatePayloadSize(initialBrief) > budgetBytes && initialBrief.activeSlice) {
+    while (calculatePayloadSize(initialBrief) > effectiveBudget && initialBrief.activeSlice) {
       const slice = initialBrief.activeSlice;
       if (slice.state) {
         delete slice.state;
@@ -416,7 +497,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     }
 
     if (initialBrief.drift) {
-      while (initialBrief.drift.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+      while (initialBrief.drift.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
         initialBrief.drift.pop();
       }
       if (initialBrief.drift.length === 0) {
@@ -430,10 +511,10 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       `Context brief truncated to fit ${budgetBytes} byte budget (dropped ${droppedTraps} trap(s), ${droppedDecisions} decision(s)).`;
 
     // If updating the notice message slightly increased payload size, trim one more item if needed
-    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentTraps.pop();
     }
-    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentDecisions.pop();
     }
 
@@ -462,6 +543,8 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     if (calculatePayloadSize(initialBrief) > budgetBytes) {
       const minimal: BootstrapBrief = {
         projectId: initialBrief.projectId,
+        handoffMarkdown,
+        sessionObjective,
         traps: [],
         decisions: [],
         totalTrapsCount: initialBrief.totalTrapsCount,
@@ -490,7 +573,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
           reviewTtlDays
         );
       }
-      return minimal;
+      return finalizeBrief(minimal);
     }
 
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
@@ -513,5 +596,5 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     );
   }
 
-  return initialBrief;
+  return finalizeBrief(initialBrief);
 }

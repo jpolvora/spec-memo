@@ -38,7 +38,9 @@ import {
   listPrompts,
   searchPrompts,
   deriveRulesFromPrompts,
-  generateActivityReport
+  generateActivityReport,
+  cancelHandoffRecord,
+  showHandoffRecord
 } from './prompt.js';
 import { submitMemoryFeedback } from './feedback.js';
 import { sanitizeToolOutput } from './safety.js';
@@ -432,6 +434,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
             'session',
             'session_start',
             'session_end',
+            'cancel_handoff',
             'activity_report',
             'derive_rules',
             'export_story'
@@ -473,6 +476,20 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         format: { type: 'string', description: 'Format for rule export (cursor, copilot, claude, gemini, markdown)' },
         feedback: { type: 'string', enum: ['helpful', 'not_helpful', 'stale', 'wrong'], description: 'Feedback type (for feedback action)' },
         comment: { type: 'string', description: 'Optional feedback comment' },
+        handoff: {
+          type: 'object',
+          description: 'Forward-looking handoff baton for the next agent session',
+          properties: {
+            nextSteps: { type: 'array', items: { type: 'string' } },
+            failedApproaches: { type: 'array', items: { type: 'string' } },
+            openQuestions: { type: 'array', items: { type: 'string' } },
+            branch: { type: 'string' },
+            owner: { type: 'string' },
+            shared: { type: 'boolean' }
+          }
+        },
+        objective: { type: 'string', description: 'In-flight session focus recorded on session_start' },
+        shared: { type: 'boolean', description: 'Mark handoff as project-wide (session_end)' },
         cwd: { type: 'string', description: 'Product repository working directory' },
         projectId: { type: 'string', description: 'Specific project ID override' },
         crossProject: { type: 'boolean', description: 'Query across all vaults' }
@@ -487,6 +504,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         'session',
         'session_start',
         'session_end',
+        'cancel_handoff',
         'activity_report',
         'derive_rules',
         'export_story',
@@ -523,6 +541,16 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       format: z.string().optional(),
       feedback: z.enum(['helpful', 'not_helpful', 'stale', 'wrong']).optional(),
       comment: z.string().optional(),
+      handoff: z.object({
+        nextSteps: z.array(z.string()),
+        failedApproaches: z.array(z.string()).optional(),
+        openQuestions: z.array(z.string()).optional(),
+        branch: z.string().optional(),
+        owner: z.string().optional(),
+        shared: z.boolean().optional()
+      }).optional(),
+      objective: z.string().optional(),
+      shared: z.boolean().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
       projectId: z.string().optional(),
@@ -893,6 +921,12 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           return fail('INVALID_ARGUMENTS', "Parameter 'sessionId' is required for session_end action.");
         }
         const result = await endSessionRecord(promptOpts);
+        scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
+        return ok(result);
+      }
+
+      if (action === 'cancel_handoff') {
+        const result = cancelHandoffRecord(promptOpts);
         scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
         return ok(result);
       }

@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.25.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.26.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -779,7 +779,7 @@ memo reconcile --clean-sidecars
 | `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into a consumer repo or global skills roots | `--product-root`, `--global`, `--skill`, `--force`, `--json` |
 | `install_hooks` / `install-hooks` | Optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Claude (CLI-only) | `--host`, `--global`, `--apply`, `--dry-run`, `--force`, `--remove`, `--json` |
 | `prompt` / `prompts` | Ingest & query prompt history; derive rules; export stories; record memory feedback | `record`/`list`/`search`/`show`/`session`/`export`/`derive-rules`/`feedback` |
-| `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`show`/`export`, `--summary`, `--pr` |
+| `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`handoff`/`show`/`export`, `--summary`, `--pr`, `--handoff-steps`, `--shared`, `--objective` |
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
 | `feedback` | Submit helpful/stale/wrong feedback on a memory record (CLI extra) | `<id>`, `--helpful`/`--stale`/`--wrong`, `--comment` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
