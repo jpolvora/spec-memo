@@ -584,52 +584,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const limit = options.limit && options.limit > 0 ? options.limit : 50;
   const sort = options.sort || 'relevance';
-  const candidateCap = limit * 2;
-  const limitSql = `LIMIT ${candidateCap}`;
-
-  let querySql: string;
-  if (hasFtsQuery && ftsQuery) {
-    querySql = `
-      SELECT
-        id,
-        projectId,
-        kind,
-        status,
-        title,
-        tags,
-        pathPatterns,
-        body,
-        filepath,
-        updated,
-        snippet(records_fts, 7, '', '', '...', 24) AS snippet,
-        rank
-      FROM records_fts
-      ${whereSql}
-      ORDER BY rank
-      ${limitSql}
-    `;
-  } else {
-    const orderSql = sort === 'updated' ? 'ORDER BY updated DESC' : 'ORDER BY updated DESC';
-    querySql = `
-      SELECT
-        id,
-        projectId,
-        kind,
-        status,
-        title,
-        tags,
-        pathPatterns,
-        body,
-        filepath,
-        updated,
-        '' AS snippet,
-        0 AS rank
-      FROM records_fts
-      ${whereSql}
-      ${orderSql}
-      ${limitSql}
-    `;
-  }
+  const batchSize = Math.max(limit * 4, 100);
 
   interface SqlRow {
     id: string;
@@ -646,33 +601,82 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
     rank: number;
   }
 
-  let rows: SqlRow[] = [];
-  try {
-    const stmt = db.prepare(querySql);
-    rows = stmt.all(...params) as SqlRow[];
-  } catch {
-    // If MATCH query fails due to complex syntax, fallback to unranked scan
-    try {
-      const fallbackClauses = clauses.filter((c) => !c.includes('MATCH'));
-      const fallbackParams = params.filter((p) => p !== ftsQuery);
-      const fallbackWhere = fallbackClauses.length > 0 ? `WHERE ${fallbackClauses.join(' AND ')}` : '';
-      const fallbackSql = `
-        SELECT id, projectId, kind, status, title, tags, pathPatterns, body, filepath, updated, '' AS snippet, 0 AS rank
+  function buildQuerySql(fetchLimit: number, offset: number): string {
+    if (hasFtsQuery && ftsQuery) {
+      return `
+        SELECT
+          id,
+          projectId,
+          kind,
+          status,
+          title,
+          tags,
+          pathPatterns,
+          body,
+          filepath,
+          updated,
+          snippet(records_fts, 7, '', '', '...', 24) AS snippet,
+          rank
         FROM records_fts
-        ${fallbackWhere}
-        ORDER BY updated DESC
-        LIMIT ${candidateCap}
+        ${whereSql}
+        ORDER BY rank
+        LIMIT ${fetchLimit} OFFSET ${offset}
       `;
-      rows = db.prepare(fallbackSql).all(...fallbackParams) as SqlRow[];
+    }
+    const orderSql = sort === 'updated' ? 'ORDER BY updated DESC' : 'ORDER BY updated DESC';
+    return `
+      SELECT
+        id,
+        projectId,
+        kind,
+        status,
+        title,
+        tags,
+        pathPatterns,
+        body,
+        filepath,
+        updated,
+        '' AS snippet,
+        0 AS rank
+      FROM records_fts
+      ${whereSql}
+      ${orderSql}
+      LIMIT ${fetchLimit} OFFSET ${offset}
+    `;
+  }
+
+  function fetchRows(offset: number, fetchLimit: number): SqlRow[] {
+    try {
+      return db.prepare(buildQuerySql(fetchLimit, offset)).all(...params) as SqlRow[];
     } catch {
-      rows = [];
+      if (!hasFtsQuery || !ftsQuery) return [];
+      try {
+        const fallbackClauses = clauses.filter((c) => !c.includes('MATCH'));
+        const fallbackParams = params.filter((p) => p !== ftsQuery);
+        const fallbackWhere = fallbackClauses.length > 0 ? `WHERE ${fallbackClauses.join(' AND ')}` : '';
+        const fallbackSql = `
+          SELECT id, projectId, kind, status, title, tags, pathPatterns, body, filepath, updated, '' AS snippet, 0 AS rank
+          FROM records_fts
+          ${fallbackWhere}
+          ORDER BY updated DESC
+          LIMIT ${fetchLimit} OFFSET ${offset}
+        `;
+        return db.prepare(fallbackSql).all(...fallbackParams) as SqlRow[];
+      } catch {
+        return [];
+      }
     }
   }
 
   const results: SearchHit[] = [];
   const expCtx = resolveExpirationContext(options, vaultRoot);
+  let offset = 0;
 
-  for (const row of rows) {
+  while (results.length < limit) {
+    const rows = fetchRows(offset, batchSize);
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
     const tagsArr = row.tags ? row.tags.split(/\s+/).filter(Boolean) : [];
     const patternsArr = row.pathPatterns ? row.pathPatterns.split(/\s+/).filter(Boolean) : [];
 
@@ -732,6 +736,10 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
     if (results.length >= limit) {
       break;
     }
+    }
+
+    offset += rows.length;
+    if (rows.length < batchSize) break;
   }
 
   for (const hit of results) {

@@ -229,6 +229,21 @@ describe('Record TTL expiration', () => {
     );
   });
 
+  it('rejects invalid expires_at on upsert', async () => {
+    await assert.rejects(
+      () =>
+        upsertRecord({
+          cwd: productRepo,
+          vaultRoot,
+          kind: 'trap',
+          slug: 'bad-expires',
+          frontmatter: { title: 'Bad date', expires_at: 'not-a-date' },
+          body: 'Should fail'
+        }),
+      /Invalid ttl duration or date/
+    );
+  });
+
   it('MCP search tool accepts includeExpired and asOf', async () => {
     const past = new Date(Date.now() - 1000).toISOString();
     await upsertRecord({

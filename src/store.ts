@@ -301,10 +301,17 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     if (!ttlValidation.ok) {
       throw new Error(ttlValidation.error);
     }
-    const computed = computeExpiresAt(String(rawFrontmatter.created), ttlInput, expiresAtInput);
-    if (computed) {
-      rawFrontmatter.expires_at = computed;
+    if (expiresAtInput) {
+      const expValidation = validateTtlInput(expiresAtInput);
+      if (!expValidation.ok) {
+        throw new Error(expValidation.error);
+      }
     }
+    const computed = computeExpiresAt(String(rawFrontmatter.created), ttlInput, expiresAtInput);
+    if (!computed) {
+      throw new Error(`Invalid ttl duration or date: "${expiresAtInput ?? ttlInput}"`);
+    }
+    rawFrontmatter.expires_at = computed;
   }
 
   if (rawFrontmatter.path && typeof rawFrontmatter.path === 'string') {

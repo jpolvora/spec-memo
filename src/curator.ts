@@ -141,7 +141,20 @@ function sweepExpiredRecords(
           }
         }
       } catch {
-        // skip unreadable records
+        if (subdir === 'scratch') {
+          try {
+            const stat = fs.statSync(filePath);
+            if (options.now - stat.mtimeMs >= options.scratchTtlDays * 86400 * 1000) {
+              purgedScratchCount++;
+              purgedFiles.push(filePath);
+              if (!options.dryRun) {
+                fs.unlinkSync(filePath);
+              }
+            }
+          } catch {
+            // ignore stat errors
+          }
+        }
       }
     }
   }
