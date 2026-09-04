@@ -88,6 +88,10 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         sessionId: {
           type: 'string',
           description: 'Optional session id for hit de-dupe (at most one bump per record per session)'
+        },
+        explain: {
+          type: 'boolean',
+          description: 'When true, include budget allocation diagnostics in the response'
         }
       }
     },
@@ -99,7 +103,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       maxBytes: z.number().int().positive().optional(),
       vaultRoot: z.string().optional(),
       projectId: z.string().optional(),
-      sessionId: z.string().optional()
+      sessionId: z.string().optional(),
+      explain: z.boolean().optional()
     })
   },
   search: {
@@ -146,6 +151,10 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
           type: 'string',
           description: 'Optional session id for hit de-dupe when recording hitIds'
         },
+        explain: {
+          type: 'boolean',
+          description: 'When true, attach ephemeral scoring breakdown per hit'
+        },
         cwd: { type: 'string', description: 'Product repository working directory' }
       }
     },
@@ -163,7 +172,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       vaultRoot: z.string().optional(),
       sort: z.enum(['relevance', 'occurrences', 'updated', 'hits']).optional(),
       hitIds: z.array(z.string()).optional(),
-      sessionId: z.string().optional()
+      sessionId: z.string().optional(),
+      explain: z.boolean().optional()
     })
   },
   get: {

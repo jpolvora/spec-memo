@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.23.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.24.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -767,8 +767,8 @@ memo reconcile --clean-sidecars
 |---|---|---|
 | `status` | Query read-only operational dashboard, daemon reachability, configuration, and storage statistics (aliases: `info`, `state`, `setup --check`) | `--check`, `--cwd`, `--vaultRoot`, `--json` |
 | `setup` | Configure deployment mode & agent host MCP wiring | `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json` |
-| `bootstrap` | Compile token-budgeted session brief | `--maxBytes` (overrides `config.json` `bootstrap.maxBytes`, default 8192), `--query`, `--path`, `--slug`, `--session-id` |
-| `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` (`relevance`\|`occurrences`\|`updated`\|`hits`), `--hit-ids`, `--session-id` |
+| `bootstrap` | Compile token-budgeted session brief | `--maxBytes` (overrides `config.json` `bootstrap.maxBytes`, default 8192), `--query`, `--path`, `--slug`, `--session-id`, `--explain` |
+| `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` (`relevance`\|`occurrences`\|`updated`\|`hits`), `--hit-ids`, `--session-id`, `--explain` |
 | `get` | Read one record by id or kind+slug (eligible kinds bump `hits`) | `--id` or `--kind`+`--slug`, `--session-id` |
 | `upsert` | Create or update typed memory record | `--kind`, `--title`, `--severity`, `--path-patterns`, `--body` |
 | `append` | Append chronological event log | `--event`, `--kind` |

@@ -358,6 +358,46 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
     assert.equal(hits.length, 1);
     assert.equal(hits[0].id, 'trap-vector-match');
   });
+
+  it('should attach explain breakdown when explain option is true', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'explain-trap',
+      frontmatter: {
+        id: 'trap-explain',
+        title: 'Explain scoring trap',
+        severity: 'critical',
+        pathPatterns: ['src/**/*.ts']
+      },
+      body: 'Explain scoring test body'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'scoring',
+      path: 'src/indexer.ts',
+      explain: true
+    });
+
+    assert.equal(hits.length, 1);
+    assert.ok(hits[0].explain);
+    assert.ok(typeof hits[0].explain!.ftsBm25 === 'number');
+    assert.ok(typeof hits[0].explain!.finalScore === 'number');
+    assert.equal(hits[0].explain!.pathPatternBoost, 1.25);
+  });
+
+  it('should return empty array with explain on zero hits', () => {
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'nonexistent-xyz-query-term',
+      explain: true
+    });
+    assert.equal(hits.length, 0);
+  });
 });
 
 

@@ -2447,6 +2447,10 @@ async function runCliInner(
         console.error(`Error [${response.code}]: ${response.error}`);
       } else if (parsed.command === 'bootstrap' && response.data) {
         const b = response.data as import('./types.js').BootstrapBrief;
+        if (b.budgetReport && parsed.options.explain) {
+          const { formatBootstrapBudgetTable } = await import('./bootstrap.js');
+          console.error(formatBootstrapBudgetTable(b.budgetReport));
+        }
         console.log(`spec-memo — Bootstrap Context Brief (${b.byteLength} / ${b.budgetBytes} bytes)\n`);
         console.log(`Project: ${b.projectId} (remote: ${b.gitRemote || 'local-only'})`);
         if (b.activeSlice) {
@@ -2489,11 +2493,13 @@ async function runCliInner(
           title?: string;
           pathPatterns?: string[];
           snippet?: string;
+          explain?: import('./types.js').SearchScoreExplain;
         }>;
         if (hits.length === 0) {
           console.log('No matching records found.');
         } else {
           console.log(`Found ${hits.length} record${hits.length === 1 ? '' : 's'}:\n`);
+          const { formatSearchExplainTree } = await import('./ranking-explain.js');
           for (const hit of hits) {
             const statusStr = hit.status ? `:${hit.status.toUpperCase()}` : '';
             const kindStr = `[${hit.kind.toUpperCase()}${statusStr}]`;
@@ -2503,6 +2509,9 @@ async function runCliInner(
             console.log(`${kindStr} ${hit.id}${titleStr}${patternsStr}${timeStr}`);
             if (hit.snippet) {
               console.log(`  ${hit.snippet.trim()}`);
+            }
+            if (hit.explain) {
+              console.log(formatSearchExplainTree(hit.explain));
             }
           }
         }

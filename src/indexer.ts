@@ -23,6 +23,7 @@ import {
   isFlaggedStale,
   parseRecordLinks
 } from './salience.js';
+import { computeSearchExplain } from './ranking-explain.js';
 
 const dbPool = new Map<string, Database.Database>();
 
@@ -437,6 +438,13 @@ function searchIndexByFullScanRank(
         severity: fm.severity
       };
       enrichHitSalience(hit, fm);
+      if (options.explain) {
+        hit.explain = computeSearchExplain(fm, {
+          ftsRank: 0,
+          pathFilter: options.path,
+          pathPatterns: patterns
+        });
+      }
       hits.push(hit);
     }
   }
@@ -693,13 +701,34 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         hit.occurrences = occurrenceOf(record.frontmatter);
         hit.lastSeen = lastSeenOf(record.frontmatter) || undefined;
         enrichHitSalience(hit, record.frontmatter);
+        if (options.explain) {
+          hit.explain = computeSearchExplain(record.frontmatter, {
+            ftsRank: hit.rank,
+            pathFilter: options.path,
+            pathPatterns: hit.pathPatterns
+          });
+        }
       } else {
         hit.hits = 0;
         hit.lastHit = null;
+        if (options.explain) {
+          hit.explain = computeSearchExplain({}, {
+            ftsRank: hit.rank,
+            pathFilter: options.path,
+            pathPatterns: hit.pathPatterns
+          });
+        }
       }
     } catch {
       hit.hits = hit.hits ?? 0;
       hit.lastHit = hit.lastHit ?? null;
+      if (options.explain) {
+        hit.explain = computeSearchExplain({}, {
+          ftsRank: hit.rank,
+          pathFilter: options.path,
+          pathPatterns: hit.pathPatterns
+        });
+      }
     }
   }
 

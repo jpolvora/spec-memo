@@ -438,5 +438,34 @@ describe('Bootstrap Brief Engine', () => {
     assert.ok(brief.byteLength <= budgetBytes);
     assert.ok(calculatePayloadSize(brief) <= budgetBytes);
   });
+
+  it('should attach budgetReport when explain is true', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'trap-explain-a',
+      frontmatter: {
+        id: 'trap-explain-a',
+        title: 'Explain trap A',
+        severity: 'high',
+        status: 'active'
+      },
+      body: 'Trap A body'
+    });
+
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      explain: true
+    });
+
+    assert.ok(brief.budgetReport);
+    assert.equal(brief.budgetReport!.budgetBytes, brief.budgetBytes);
+    assert.ok(brief.budgetReport!.candidates.length >= 1);
+    assert.ok(brief.budgetReport!.includedCount >= 1);
+    const included = brief.budgetReport!.candidates.filter((c) => c.status === 'included');
+    assert.ok(included.length >= 1);
+  });
 });
 

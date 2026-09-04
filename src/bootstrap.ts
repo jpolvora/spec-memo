@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { BootstrapBrief, BootstrapOptions, MemoRecord } from './types.js';
+import { BootstrapBrief, BootstrapOptions, MemoRecord, BootstrapBudgetReport, BudgetCandidateReport } from './types.js';
 import { getProjectMetadata, getVaultRoot, ensureVaultStructure, ensureProjectVault } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { scanProjectRecords } from './compiler.js';
@@ -10,6 +10,7 @@ import { matchesAnyPattern } from './indexer.js';
 import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { pullHybridProject } from './hybrid-sync.js';
 import { cloneRecordWithStaleBadge } from './salience.js';
+import { roundExplain } from './ranking-explain.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -120,6 +121,93 @@ export function scoreTrap(trap: MemoRecord, query?: string, pathFilter?: string)
   }
 
   return score;
+}
+
+function recordByteWeight(record: MemoRecord): number {
+  return Buffer.byteLength(JSON.stringify(record), 'utf8');
+}
+
+function buildBudgetReport(
+  allTraps: MemoRecord[],
+  includedTraps: MemoRecord[],
+  allDecisions: MemoRecord[],
+  includedDecisions: MemoRecord[],
+  budgetBytes: number,
+  consumedBytes: number,
+  options: BootstrapOptions,
+  pathFilter?: string
+): BootstrapBudgetReport {
+  const includedIds = new Set([
+    ...includedTraps.map((r) => String(r.frontmatter.id)),
+    ...includedDecisions.map((r) => String(r.frontmatter.id))
+  ]);
+
+  const candidates: BudgetCandidateReport[] = [];
+
+  for (const trap of allTraps) {
+    const id = String(trap.frontmatter.id);
+    const status = trap.frontmatter.status !== 'active'
+      ? 'excluded_expired'
+      : includedIds.has(id)
+        ? 'included'
+        : 'truncated_budget_exhausted';
+    candidates.push({
+      id,
+      kind: 'trap',
+      title: typeof trap.frontmatter.title === 'string' ? trap.frontmatter.title : undefined,
+      score: roundExplain(scoreTrap(trap, options.query, pathFilter)),
+      byteWeight: recordByteWeight(trap),
+      status
+    });
+  }
+
+  for (const decision of allDecisions) {
+    const id = String(decision.frontmatter.id);
+    const status =
+      decision.frontmatter.status !== 'active' && decision.frontmatter.status !== 'shipped'
+        ? 'excluded_expired'
+        : includedIds.has(id)
+          ? 'included'
+          : 'truncated_budget_exhausted';
+    candidates.push({
+      id,
+      kind: 'decision',
+      title: typeof decision.frontmatter.title === 'string' ? decision.frontmatter.title : undefined,
+      score: roundExplain(0),
+      byteWeight: recordByteWeight(decision),
+      status
+    });
+  }
+
+  return {
+    budgetBytes,
+    consumedBytes,
+    remainingBytes: Math.max(0, budgetBytes - consumedBytes),
+    includedCount: includedIds.size,
+    candidates
+  };
+}
+
+export function formatBootstrapBudgetTable(report: BootstrapBudgetReport): string {
+  const header = [
+    'Bootstrap budget allocation',
+    `Budget: ${report.budgetBytes} bytes | Consumed: ${report.consumedBytes} | Remaining: ${report.remainingBytes} | Included: ${report.includedCount}`,
+    '',
+    'ID'.padEnd(28) + 'Kind'.padEnd(10) + 'Score'.padStart(8) + 'Bytes'.padStart(8) + '  Status',
+    '-'.repeat(72)
+  ];
+  const rows = report.candidates.map((c) => {
+    const title = c.title ? ` (${c.title.slice(0, 24)})` : '';
+    return (
+      (c.id + title).slice(0, 28).padEnd(28) +
+      c.kind.padEnd(10) +
+      String(c.score).padStart(8) +
+      String(c.byteWeight).padStart(8) +
+      '  ' +
+      c.status
+    );
+  });
+  return [...header, ...rows].join('\n');
 }
 
 /**
@@ -350,10 +438,35 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
         minimal.notices = [];
         minimal.byteLength = calculatePayloadSize(minimal);
       }
+      if (options.explain) {
+        minimal.budgetReport = buildBudgetReport(
+          activeTraps,
+          [],
+          activeDecisions,
+          [],
+          budgetBytes,
+          minimal.byteLength,
+          options,
+          pathFilter
+        );
+      }
       return minimal;
     }
 
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
+  }
+
+  if (options.explain) {
+    initialBrief.budgetReport = buildBudgetReport(
+      activeTraps,
+      currentTraps,
+      activeDecisions,
+      currentDecisions,
+      budgetBytes,
+      initialBrief.byteLength,
+      options,
+      pathFilter
+    );
   }
 
   return initialBrief;
