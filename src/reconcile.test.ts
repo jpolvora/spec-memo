@@ -530,6 +530,32 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     assert.strictEqual(found, true);
   });
 
+  await t.test("memo reconcile flushes vault-git in local mode when enabled", async () => {
+    const gitDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-reconcile-git-test-"));
+    const gitVault = path.join(gitDir, "vault");
+    t.after(() => {
+      closeIndex(gitVault);
+      fs.rmSync(gitDir, { recursive: true, force: true });
+    });
+    initVault({ vaultRoot: gitVault, projectId: "proj-git-local" });
+    const configPath = path.join(gitVault, "config.json");
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    cfg.vaultGit = { enabled: true, atomic: false };
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf8");
+
+    const { spawnSync } = await import("node:child_process");
+    const cliPath = path.resolve("dist/cli.js");
+    const res = spawnSync(
+      process.execPath,
+      [cliPath, "reconcile", "--vaultRoot", gitVault, "--all", "--json"],
+      { encoding: "utf8" }
+    );
+    assert.strictEqual(res.status, 0);
+    const parsed = JSON.parse(res.stdout);
+    assert.strictEqual(parsed.command, "reconcile");
+    assert.ok(parsed.sync && parsed.sync.vaultGit, "expected vaultGit channel in local mode");
+  });
+
   await t.test("dual-sync report.ok is false when hybrid channel fails even if vault-git succeeds", async () => {
     const dualVault = path.join(tempDir, "dual-vault");
     initVault({ vaultRoot: dualVault, projectId: "proj-dual" });

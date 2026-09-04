@@ -1279,9 +1279,12 @@ async function runCliInner(
         });
       }
 
-      // 2. Perform synchronization if in hybrid mode
+      // 2. Perform synchronization when a sync channel is configured
+      // (hybrid and/or vault-git; mirrors memo sync channel selection so
+      // local+vaultGit deployments also flush sidecar-cleaned mutations).
+      const gitEnabled = Boolean(config.vaultGit?.enabled) && config.mode !== 'remote';
       let syncResult: any = null;
-      if (config.mode === 'hybrid') {
+      if (config.mode === 'hybrid' || gitEnabled) {
         const { syncDual } = await import('./dual-sync.js');
         syncResult = await syncDual({
           vaultRoot: root,
@@ -1332,6 +1335,13 @@ async function runCliInner(
           if (syncResult.hybrid.error) {
             console.log(`    Error:  ${syncResult.hybrid.error}`);
           }
+        }
+        if (syncResult?.vaultGit && !syncResult.vaultGit.skipped) {
+          console.log(`\n  Vault Git:`);
+          console.log(
+            `    committed=${syncResult.vaultGit.committed} pulled=${syncResult.vaultGit.pulled} pushed=${syncResult.vaultGit.pushed}`
+          );
+          console.log(`    ${syncResult.vaultGit.message}`);
         }
       }
       const syncFailed = Boolean(syncResult && !syncResult.ok);
