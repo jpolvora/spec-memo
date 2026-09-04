@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.17.1**.
+**Local working memory for coding agents outside the product repository.** Version **0.18.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -714,6 +714,30 @@ Vault records can be selectively promoted into the product repository with ADR t
 memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 ```
 
+### 6. Vault Conflict Reconciliation & Automated Resilience (`reconcile`)
+
+Resolve synchronization differences between local and remote vaults with automatic semantic auto-merging:
+
+```bash
+# Preview reconciliation changes (dry-run)
+memo reconcile --dry-run
+
+# Reconcile preferring local vault as the authoritative source of truth
+memo reconcile --prefer local
+
+# Reconcile preferring remote daemon
+memo reconcile --prefer remote
+
+# Automatic cleanup of identical conflict sidecars
+memo reconcile --clean-sidecars
+```
+
+- **Smart Auto-Merge (`smart-merge`):** When record bodies match, divergent retrieval counts (`hits`, `lastHit`, `occurrences`, `tags`, `linkedPaths`) merge cleanly in place with zero conflict files generated.
+- **Single Sidecar Cap:** If true body conflicts exist under `--strategy sidecar`, a single deterministic `${slug}.conflict.md` sidecar is maintained rather than proliferating timestamped files.
+- **Doctor Cleanup:** `memo doctor --fix` automatically cleans obsolete sidecars whose bodies match the base record.
+- **Transactional Rollback:** Multi-record changeset applications use copy-on-write staging rollback journals; errors cleanly revert state without partial writes.
+
+
 ---
 
 ## 📋 Command & Tool Reference
@@ -736,8 +760,9 @@ memo promote decision-sqlite-fts5 --to docs/adr/001-sqlite-fts5.md --format adr
 | `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`show`/`export`, `--summary`, `--pr` |
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
-| `doctor` | Diagnose health, mode, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
-| `sync` | Synchronize vault records (hybrid HTTP, vault-git, or both in parallel) | `--all`, `--dry-run`, `--json` |
+| `doctor` | Diagnose health, mode, conflict sidecars, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
+| `sync` | Synchronize vault records (hybrid HTTP, vault-git, or both in parallel) | `--all`, `--dry-run`, `--prefer` (`local`\|`remote`), `--strategy`, `--clean-sidecars`, `--force`, `--json` |
+| `reconcile` | Reconcile sync conflicts, apply smart semantic auto-merge, and clean conflict sidecars | `--prefer` (`local`\|`remote`), `--strategy` (`smart-merge`\|`local-wins`\|`remote-wins`\|`sidecar`), `--clean-sidecars`, `--dry-run`, `--all`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |
 | `export-vault` | Export encrypted portable archive | `--password`, `--output`, `--project` |
 | `import-vault` / `restore` | Restore portable archive (.zip or .json) into vault | `<file>`, `--backup`, `--latest`, `--password` |

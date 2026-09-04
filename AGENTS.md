@@ -142,6 +142,9 @@ node --test dist/sync.test.js
 # Batched vault-git + dual-mode hybrid parallel dispatch
 node --test dist/vault-git-hybrid-sync.test.js
 
+# Vault sync conflict reconciliation, semantic auto-merge & rollback journal
+node --test dist/reconcile.test.js
+
 # Canvas Graph Viewer & REST API
 node --test dist/canvas.test.js
 
@@ -174,7 +177,8 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 | Recall | `search` → `get` |
 | Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git; hybrid schedules debounced push; batched vault-git does not commit until flush) |
 | Audit event | `append` |
-| Sync | `memo sync [--all] [--dry-run]` (hybrid HTTP, vault-git, or both in parallel when dual-mode) |
+| Sync | `memo sync [--all] [--dry-run] [--prefer local|remote]` (hybrid HTTP, vault-git, or both in parallel when dual-mode) |
+| Reconcile conflicts | `memo reconcile [--prefer local|remote] [--strategy smart-merge|local-wins|remote-wins|sidecar] [--clean-sidecars]` |
 | Session close flush | MCP/CLI `prompt` `session_end` (batched vault-git + hybrid when enabled; fail-open) |
 | Housekeep | `gc` (`dryRun` first when unsure); `forget` (purge only with explicit user confirm) |
 
