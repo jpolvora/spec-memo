@@ -4039,9 +4039,12 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           : 50;
         const query = url.searchParams.get("q") || "";
         const explain = url.searchParams.get("explain") === "true";
+        const crossProject =
+          url.searchParams.get("crossProject") === "true" || !project || project === "all";
         const hits = searchIndex({
           vaultRoot,
           projectId: project && project !== "all" ? project : undefined,
+          crossProject,
           kinds: kind ? [kind as import("./types.js").RecordKind] : undefined,
           sort: sort as import("./types.js").SearchSort,
           limit: Number.isFinite(limit) && limit > 0 ? limit : 50,

@@ -247,9 +247,10 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       ? options.path
       : undefined;
 
-  // 1. Gather & rank active traps
-  const activeTraps = allRecords
-    .filter((r) => r.frontmatter.kind === 'trap' && r.frontmatter.status === 'active')
+  // 1. Gather & rank traps (all for explain report; active for brief)
+  const allTrapsForReport = allRecords.filter((r) => r.frontmatter.kind === 'trap');
+  const activeTraps = allTrapsForReport
+    .filter((r) => r.frontmatter.status === 'active')
     .sort((a, b) => {
       const scoreA = scoreTrap(a, options.query, pathFilter);
       const scoreB = scoreTrap(b, options.query, pathFilter);
@@ -259,12 +260,12 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       return (b.frontmatter.updated || '').localeCompare(a.frontmatter.updated || '');
     });
 
-  // 2. Gather active/accepted decisions
-  const activeDecisions = allRecords
+  // 2. Gather decisions (all for explain report; active/shipped for brief)
+  const allDecisionsForReport = allRecords.filter((r) => r.frontmatter.kind === 'decision');
+  const activeDecisions = allDecisionsForReport
     .filter(
       (r) =>
-        r.frontmatter.kind === 'decision' &&
-        (r.frontmatter.status === 'active' || r.frontmatter.status === 'shipped')
+        r.frontmatter.status === 'active' || r.frontmatter.status === 'shipped'
     )
     .sort((a, b) => (b.frontmatter.updated || '').localeCompare(a.frontmatter.updated || ''));
 
@@ -446,9 +447,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       }
       if (options.explain) {
         minimal.budgetReport = buildBudgetReport(
-          activeTraps,
+          allTrapsForReport,
           [],
-          activeDecisions,
+          allDecisionsForReport,
           [],
           budgetBytes,
           minimal.byteLength,
@@ -466,9 +467,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     // budgetReport is diagnostic metadata outside the token-budgeted brief payload (AC6–AC8).
     // byteLength reflects only agent-facing brief fields, not explain diagnostics.
     initialBrief.budgetReport = buildBudgetReport(
-      activeTraps,
+      allTrapsForReport,
       currentTraps,
-      activeDecisions,
+      allDecisionsForReport,
       currentDecisions,
       budgetBytes,
       initialBrief.byteLength,
