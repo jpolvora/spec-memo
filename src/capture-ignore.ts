@@ -70,7 +70,8 @@ export const DEFAULT_IGNORE_PATTERNS: string[] = [
 ];
 
 interface IgnoreCacheEntry {
-  mtimeMs: number;
+  markerMtime: number;
+  cfgMtime: number;
   rules: IgnoreRule[];
   invalidLines: Array<{ line: number; text: string; reason: string }>;
 }
@@ -85,12 +86,8 @@ function configMtime(vaultRoot: string): number {
   }
 }
 
-function cacheKey(productRoot: string, projectId?: string, vaultRoot?: string): string {
-  const root = path.resolve(productRoot);
-  const marker = path.join(root, IGNORE_MARKER);
-  const markerMtime = fs.existsSync(marker) ? fs.statSync(marker).mtimeMs : 0;
-  const cfgMtime = vaultRoot ? configMtime(vaultRoot) : 0;
-  return `${root}|${projectId || ''}|${vaultRoot || ''}|${markerMtime}|${cfgMtime}`;
+function logicalCacheKey(productRoot: string, projectId?: string, vaultRoot?: string): string {
+  return `${path.resolve(productRoot)}|${projectId || ''}|${vaultRoot || ''}`;
 }
 
 function normalizeRelativePath(filePath: string, productRoot: string): string | null {
@@ -188,12 +185,13 @@ export function loadIgnoreRules(
 ): IgnoreBoundaryDiagnostics {
   const resolvedRoot = path.resolve(productRoot);
   const vaultRoot = options.vaultRoot || getVaultRoot();
-  const key = cacheKey(resolvedRoot, options.projectId, vaultRoot);
   const markerPath = path.join(resolvedRoot, IGNORE_MARKER);
   const markerMtime = fs.existsSync(markerPath) ? fs.statSync(markerPath).mtimeMs : 0;
+  const cfgMtime = configMtime(vaultRoot);
+  const key = logicalCacheKey(resolvedRoot, options.projectId, vaultRoot);
 
   const cached = ignoreCache.get(key);
-  if (cached) {
+  if (cached && cached.markerMtime === markerMtime && cached.cfgMtime === cfgMtime) {
     return {
       activeRuleCount: cached.rules.length,
       invalidLines: cached.invalidLines,
@@ -228,7 +226,7 @@ export function loadIgnoreRules(
 
   rules.push(...loadConfigIgnorePaths(options.projectId, vaultRoot));
 
-  ignoreCache.set(key, { mtimeMs: markerMtime, rules, invalidLines });
+  ignoreCache.set(key, { markerMtime, cfgMtime, rules, invalidLines });
   return { activeRuleCount: rules.length, invalidLines, rules };
 }
 
