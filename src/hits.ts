@@ -21,6 +21,8 @@ import { logErrorReport } from './error-logger.js';
 import { occurrenceOf, lastSeenOf, hitCountOf, lastHitOf } from './recurrence.js';
 import { helpfulCountOf, staleCountOf, parseRecordLinks, isFlaggedStale } from './salience.js';
 import { rebuildCompiledViews } from './compiler.js';
+import { applySearchExpirationFilter } from './expiration.js';
+import { ensureVaultStructure } from './vault.js';
 
 /** Overridable for fail-open tests. */
 let writeRecordFile: typeof fs.writeFileSync = fs.writeFileSync.bind(fs);
@@ -452,6 +454,10 @@ export interface ListMemoryRecordsOptions {
   limit?: number;
   /** When true, include prompt/session/log/scratch. Default excludes them. */
   includeEphemeral?: boolean;
+  /** When false, omit expired records (default true = hide expired). */
+  hideExpired?: boolean;
+  /** Point-in-time ISO date for historical listing. */
+  asOf?: string;
 }
 
 const DEFAULT_EXCLUDED_KINDS = new Set(['prompt', 'session', 'log', 'scratch']);
@@ -461,6 +467,13 @@ const DEFAULT_EXCLUDED_KINDS = new Set(['prompt', 'session', 'log', 'scratch']);
  */
 export function listMemoryRecords(options: ListMemoryRecordsOptions = {}): MemoryRecordListItem[] {
   const vaultRoot = options.vaultRoot || getVaultRoot();
+  const config = ensureVaultStructure(vaultRoot);
+  const expCtx = {
+    includeExpired: options.hideExpired === false,
+    asOf: options.asOf,
+    scratchDays: config.ttl?.scratchDays ?? 7,
+    reviewDays: config.ttl?.reviewDays ?? 14
+  };
   const projectIds = options.projectId
     ? [options.projectId]
     : getVaultProjects(vaultRoot).map((p) => p.id);
@@ -482,6 +495,8 @@ export function listMemoryRecords(options: ListMemoryRecordsOptions = {}): Memor
           const kind = record.frontmatter.kind;
           if (options.kind && kind !== options.kind) continue;
           if (!options.includeEphemeral && DEFAULT_EXCLUDED_KINDS.has(kind)) continue;
+          const exp = applySearchExpirationFilter(record.frontmatter, expCtx);
+          if (!exp.include) continue;
 
           const body = record.body || '';
           const snippet = body.replace(/\s+/g, ' ').trim().slice(0, 400);
@@ -503,7 +518,8 @@ export function listMemoryRecords(options: ListMemoryRecordsOptions = {}): Memor
             helpfulCount: helpfulCountOf(record.frontmatter),
             staleCount: staleCountOf(record.frontmatter),
             links: parseRecordLinks(record.frontmatter),
-            flaggedStale: isFlaggedStale(record.frontmatter)
+            flaggedStale: isFlaggedStale(record.frontmatter),
+            expired: exp.expired || undefined
           });
         } catch {
           // skip malformed

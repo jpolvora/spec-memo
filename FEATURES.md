@@ -57,7 +57,7 @@ One stdio MCP server. Tool descriptions are the interface; vault paths are not.
 | `upsert` | [x] | Write/update trap, decision, spec, plan, state, review, scratch | id, whether it superseded another; schema errors fail closed |
 | `append` | [x] | Changelog / audit event | New event id; never rewrites prior events |
 | `forget` | [x] | Supersede or archive | New status. Traps archive unless the caller passes an explicit purge confirmed by the user |
-| `gc` | [x] | Apply TTL, compact shipped plans, rebuild FTS | Counts archived/compacted/deleted (scratch only) |
+| `gc` | [x] | Apply TTL, compact shipped plans, rebuild FTS | Expired scratch/review purged; expired trap/decision/plan archived (`--purge` unlinks all) |
 | `promote` | [x] | Copy one record into the product repo | Product-relative path. **Default deny** without `destination` inside the product root |
 | `check_version` | [x] | Compare running package version to npm `latest` | `current`, `latest`, `updateAvailable`, `source` (soft-fail offline) |
 | `install_skills` | [x] | Install packaged runtime skill(s) (default `ws-memo` + `ws-session-tracking`) into consumer `{skillsRoot}`, or `--global` / `global: true` into `$HOME/.agents/skills` (+ Antigravity if present) | Destination path(s); default-deny outside product root (local); `force` to overwrite; skill frontmatter version tracks `package.json` |
@@ -88,7 +88,7 @@ Do not add an eleventh tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 ## 6. Policy and curator
 
 - [x] **Schema gate.** Invalid kind/status/frontmatter → error, no write.
-- [x] **TTL.** `scratch` 7 days; `review` 14 days after `relatedSlug` PR merged or 14 days from `updated` if unknown. `gc` applies this.
+- [x] **TTL.** `scratch` 7 days; `review` 14 days after `relatedSlug` PR merged or 14 days from `updated` if unknown. Any record may set `expires_at` or `ttl` in frontmatter. `search` excludes expired by default (`--include-expired`, `--as-of`). `bootstrap` omits expired traps/decisions. `gc` archives expired trap/decision/plan or purges with `--purge`.
 - [x] **Plan compact.** `status=shipped` plans reduce to a short result record; detail files become `scratch` then expire.
 - [x] **Log compact.** Monthly roll-up files; events remain searchable via FTS.
 - [x] **ADR promotion templates.** Format decisions into standard Nygard ADR or MADR Markdown on promotion. `format: skill` compiles ranked traps into one owner `SKILL.md`.

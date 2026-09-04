@@ -155,6 +155,14 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
           type: 'boolean',
           description: 'When true, attach ephemeral scoring breakdown per hit'
         },
+        includeExpired: {
+          type: 'boolean',
+          description: 'Include expired records in results (default false)'
+        },
+        asOf: {
+          type: 'string',
+          description: 'Point-in-time ISO date (YYYY-MM-DD or RFC3339) for time-travel search'
+        },
         cwd: { type: 'string', description: 'Product repository working directory' }
       }
     },
@@ -173,7 +181,9 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       sort: z.enum(['relevance', 'occurrences', 'updated', 'hits']).optional(),
       hitIds: z.array(z.string()).optional(),
       sessionId: z.string().optional(),
-      explain: z.boolean().optional()
+      explain: z.boolean().optional(),
+      includeExpired: z.boolean().optional(),
+      asOf: z.string().optional()
     })
   },
   get: {
@@ -305,14 +315,16 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       properties: {
         cwd: { type: 'string', description: 'Product repository working directory' },
         projectId: { type: 'string', description: 'Specific project ID to clean' },
-        dryRun: { type: 'boolean', description: 'Check what would be cleaned without modifying files (defaults to false)' }
+        dryRun: { type: 'boolean', description: 'Check what would be cleaned without modifying files (defaults to false)' },
+        purge: { type: 'boolean', description: 'Permanently unlink expired records instead of archiving traps/decisions/plans' }
       }
     },
     zodSchema: z.object({
       cwd: z.string().optional(),
       projectId: z.string().optional(),
       vaultRoot: z.string().optional(),
-      dryRun: z.boolean().optional()
+      dryRun: z.boolean().optional(),
+      purge: z.boolean().optional()
     })
   },
   promote: {

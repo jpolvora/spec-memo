@@ -2129,6 +2129,14 @@ async function runCliInner(
         payload.sessionId = String(payload['session-id']);
         delete payload['session-id'];
       }
+      if (payload['include-expired'] === true || payload['include-expired'] === 'true') {
+        payload.includeExpired = true;
+        delete payload['include-expired'];
+      }
+      if (payload['as-of'] && !payload.asOf) {
+        payload.asOf = String(payload['as-of']);
+        delete payload['as-of'];
+      }
     }
 
     // Normalization for get command
@@ -2185,6 +2193,17 @@ async function runCliInner(
         fm.rationale = payload.rationale;
         delete payload.rationale;
       }
+      if (payload.ttl) {
+        fm.ttl = String(payload.ttl);
+        delete payload.ttl;
+      }
+      if (payload['expires-at']) {
+        fm.expires_at = String(payload['expires-at']);
+        delete payload['expires-at'];
+      } else if (payload.expires_at) {
+        fm.expires_at = String(payload.expires_at);
+        delete payload.expires_at;
+      }
       if (Object.keys(fm).length > 0) {
         payload.frontmatter = fm;
       }
@@ -2231,6 +2250,9 @@ async function runCliInner(
       if (payload.project) {
         payload.projectId = String(payload.project);
         delete payload.project;
+      }
+      if (payload.purge === true || payload.purge === 'true') {
+        payload.purge = true;
       }
     }
 
@@ -2494,6 +2516,7 @@ async function runCliInner(
           pathPatterns?: string[];
           snippet?: string;
           explain?: import('./types.js').SearchScoreExplain;
+          expired?: boolean;
         }>;
         if (hits.length === 0) {
           console.log('No matching records found.');
@@ -2506,7 +2529,8 @@ async function runCliInner(
             const titleStr = hit.title ? `: ${hit.title}` : '';
             const patternsStr = hit.pathPatterns ? ` (paths: ${hit.pathPatterns.join(', ')})` : '';
             const timeStr = (hit as any).updated ? ` [${(hit as any).updated}]` : ((hit as any).lastSeen ? ` [${(hit as any).lastSeen}]` : '');
-            console.log(`${kindStr} ${hit.id}${titleStr}${patternsStr}${timeStr}`);
+            const expiredStr = hit.expired ? ' [EXPIRED]' : '';
+            console.log(`${kindStr} ${hit.id}${titleStr}${patternsStr}${timeStr}${expiredStr}`);
             if (hit.snippet) {
               console.log(`  ${hit.snippet.trim()}`);
             }
@@ -2530,6 +2554,15 @@ async function runCliInner(
         console.log(`spec-memo — Curator GC completed for project: ${g.projectId}${dryNotice}\n`);
         console.log(`  Purged expired scratch records: ${g.purgedScratchCount}`);
         console.log(`  Purged stale review records:   ${g.purgedReviewCount}`);
+        if (g.trapsArchivedCount != null && g.trapsArchivedCount > 0) {
+          console.log(`  Archived expired traps:        ${g.trapsArchivedCount}`);
+        }
+        if (g.decisionsArchivedCount != null && g.decisionsArchivedCount > 0) {
+          console.log(`  Archived expired decisions:    ${g.decisionsArchivedCount}`);
+        }
+        if (g.plansArchivedCount != null && g.plansArchivedCount > 0) {
+          console.log(`  Archived expired plans:        ${g.plansArchivedCount}`);
+        }
         console.log(`  Compacted shipped plans:       ${g.compactedPlansCount}`);
         console.log(`  Compacted historical logs:     ${g.compactedLogsCount || 0}`);
         console.log(`  Rebuilt FTS index:             ${g.rebuiltFts}`);

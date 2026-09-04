@@ -315,6 +315,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-09-04 | agent-hooks-install | memo install-hooks CLI, host hook adapters, doctor hook status; package 0.21.0 | npm test 533 pass |
 | 2026-09-04 | memory-feedback-salience | Memory feedback, typed graph links, salience dampening, doctor contradictions; package 0.23.0 | npm test 561 pass |
 | 2026-09-04 | search-ranking-explain | Search/bootstrap explain scoring breakdown, budgetReport, status Memory explain toggle; package 0.24.0 | npm test 571 pass |
+| 2026-09-04 | record-ttl-expiration | Universal record TTL/expiration, time-travel search, GC archive/purge, status Memory expired filters; package 0.25.0 | npm test 583 pass |
 
 
 ## 12. Related docs

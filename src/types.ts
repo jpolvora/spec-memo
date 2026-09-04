@@ -45,6 +45,10 @@ export interface RecordFrontmatter {
   updated: string;
   source: RecordSource;
   ttl?: string;
+  expires_at?: string;
+  archivedReason?: string;
+  /** Ephemeral annotation when record is past expires_at (not persisted). */
+  expired?: boolean;
   pathPatterns?: string[];
   tags?: string[];
   supersedes?: string;
@@ -308,6 +312,10 @@ export interface SearchOptions {
   sessionId?: string;
   /** When true, attach ephemeral scoring breakdown per hit (no ranking side effects). */
   explain?: boolean;
+  /** Include expired records in results (default false). */
+  includeExpired?: boolean;
+  /** Point-in-time ISO date for time-travel search. */
+  asOf?: string;
 }
 
 export type SearchSort = 'relevance' | 'occurrences' | 'updated' | 'hits';
@@ -344,6 +352,7 @@ export interface SearchHit {
   staleCount?: number;
   flaggedStale?: boolean;
   explain?: SearchScoreExplain;
+  expired?: boolean;
 }
 
 export interface FeedbackOptions {
@@ -455,6 +464,7 @@ export interface MemoryRecordListItem {
   staleCount?: number;
   links?: RecordLink[];
   flaggedStale?: boolean;
+  expired?: boolean;
 }
 
 export interface BootstrapBrief {
@@ -486,12 +496,17 @@ export interface GcOptions {
   dryRun?: boolean;
   /** Test/clock override for deterministic TTL and log roll-up boundaries. */
   now?: number;
+  /** Permanently unlink expired records instead of archiving traps/decisions/plans. */
+  purge?: boolean;
 }
 
 export interface GcResult {
   projectId: string;
   purgedScratchCount: number;
   purgedReviewCount: number;
+  trapsArchivedCount?: number;
+  decisionsArchivedCount?: number;
+  plansArchivedCount?: number;
   compactedPlansCount: number;
   compactedLogsCount?: number;
   rebuiltFts: boolean;

@@ -793,6 +793,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
     .chip:hover { border-color: var(--accent); color: var(--bright); }
     .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+    .chip-expired { background: rgba(248, 81, 73, 0.12); border-color: rgba(248, 81, 73, 0.45); color: #ffb4b0; cursor: default; font-size: 0.65rem; padding: 2px 6px; }
 
     .data-table-container {
       flex: 1;
@@ -1256,6 +1257,15 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           <div class="filter-group" style="max-width: 180px; display:flex; align-items:flex-end; gap:6px;">
             <label style="display:flex; align-items:center; gap:6px; font-size:0.78rem; cursor:pointer;">
               <input type="checkbox" id="memory-explain-toggle"> Explain Scoring
+            </label>
+          </div>
+          <div class="filter-group" style="max-width: 160px;">
+            <label for="memory-asof-input">As Of:</label>
+            <input type="date" id="memory-asof-input" title="Point-in-time memory view">
+          </div>
+          <div class="filter-group" style="max-width: 160px; display:flex; align-items:flex-end;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:0.78rem; cursor:pointer;">
+              <input type="checkbox" id="memory-hide-expired" checked> Hide Expired
             </label>
           </div>
           <button type="button" id="btn-memory-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Refresh</button>
@@ -2244,10 +2254,16 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           if (explainOn) params.set("explain", "true");
           params.set("q", query);
           params.set("sort", "relevance");
+          const asOf = document.getElementById("memory-asof-input").value;
+          if (asOf) params.set("asOf", asOf);
+          if (!document.getElementById("memory-hide-expired").checked) params.set("includeExpired", "true");
           const res = await apiFetch("/api/records/search?" + params.toString(), { headers: apiHeaders() });
           const data = await res.json();
           records = data.hits || [];
         } else {
+          const asOf = document.getElementById("memory-asof-input").value;
+          if (asOf) params.set("asOf", asOf);
+          if (!document.getElementById("memory-hide-expired").checked) params.set("hideExpired", "false");
           const res = await apiFetch("/api/records?" + params.toString(), { headers: apiHeaders() });
           const data = await res.json();
           records = data.records || [];
@@ -2292,7 +2308,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
               '</div>';
           }
           tr.innerHTML =
-            "<td><code>" + escapeHtml(r.kind) + "</code></td>" +
+            "<td><code>" + escapeHtml(r.kind) + "</code>" + (r.expired ? ' <span class="chip chip-expired" title="Expired">Expired</span>' : "") + "</td>" +
             "<td>" + escapeHtml(r.title || r.id) + explainHtml + "</td>" +
             "<td>" + escapeHtml(String(r.hits != null ? r.hits : 0)) + "</td>" +
             "<td>" + escapeHtml(String(r.occurrences != null ? r.occurrences : 0)) + "</td>" +
@@ -2328,6 +2344,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         '<div class="meta-item"><span class="meta-label">Helpful</span><span class="meta-val">' + escapeHtml(String(record.helpfulCount != null ? record.helpfulCount : 0)) + "</span></div>" +
         '<div class="meta-item"><span class="meta-label">Stale flags</span><span class="meta-val">' + escapeHtml(String(record.staleCount != null ? record.staleCount : 0)) + "</span></div>" +
         (record.flaggedStale ? '<div class="meta-item"><span class="meta-label">Salience</span><span class="meta-val" style="color:var(--warn);">Possibly stale</span></div>' : "") +
+        (record.expired ? '<div class="meta-item"><span class="meta-label">Expiration</span><span class="meta-val"><span class="chip chip-expired">Expired</span></span></div>' : "") +
         '<div class="meta-item"><span class="meta-label">Occurrences</span><span class="meta-val">' + escapeHtml(String(record.occurrences != null ? record.occurrences : 0)) + "</span></div>" +
         '<div class="meta-item"><span class="meta-label">Last hit</span><span class="meta-val">' + escapeHtml(record.lastHit || "-") + "</span></div>" +
         '<div class="meta-item"><span class="meta-label">Updated</span><span class="meta-val">' + escapeHtml(record.updated || "-") + "</span></div>" +
@@ -2382,6 +2399,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (ev.key === "Enter") loadMemoryRecords();
     });
     document.getElementById("memory-explain-toggle").addEventListener("change", () => loadMemoryRecords());
+    document.getElementById("memory-hide-expired").addEventListener("change", () => loadMemoryRecords());
+    document.getElementById("memory-asof-input").addEventListener("change", () => loadMemoryRecords());
 
     // --- PROMPTS TAB LOGIC ---
     async function loadPrompts() {
@@ -4041,6 +4060,8 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const explain = url.searchParams.get("explain") === "true";
         const crossProject =
           url.searchParams.get("crossProject") === "true" || !project || project === "all";
+        const includeExpired = url.searchParams.get("includeExpired") === "true";
+        const asOf = url.searchParams.get("asOf") || undefined;
         const hits = searchIndex({
           vaultRoot,
           projectId: project && project !== "all" ? project : undefined,
@@ -4049,7 +4070,9 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           sort: sort as import("./types.js").SearchSort,
           limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
           query,
-          explain
+          explain,
+          includeExpired,
+          asOf
         });
         writeJson(res, 200, sanitizeToolOutput({ hits }));
         return;
@@ -4066,12 +4089,16 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const limit = url.searchParams.get("limit")
           ? Number(url.searchParams.get("limit"))
           : 200;
+        const hideExpired = url.searchParams.get("hideExpired") !== "false";
+        const asOf = url.searchParams.get("asOf") || undefined;
         const records = listMemoryRecords({
           vaultRoot,
           projectId: project && project !== "all" ? project : undefined,
           kind: kind || undefined,
           sort,
-          limit: Number.isFinite(limit) && limit > 0 ? limit : 200
+          limit: Number.isFinite(limit) && limit > 0 ? limit : 200,
+          hideExpired,
+          asOf
         });
         writeJson(res, 200, sanitizeToolOutput({ records }));
         return;
