@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import net from "node:net";
 import { createActivityBus } from "./activity.js";
-import { generateStatusHtml, generateLoginHtml, startStatusServer, safeStatusNextPath } from "./status.js";
+import { generateStatusHtml, generateLoginHtml, startStatusServer, safeStatusNextPath, renderPromptMarkdownHtml } from "./status.js";
 import { getPackageVersion } from "./version.js";
 import { ensureProjectVault } from "./vault.js";
 import { closeIndex } from "./indexer.js";
@@ -214,6 +214,14 @@ test("MCP status monitor", async (t) => {
     const html = generateStatusHtml(getPackageVersion());
     assert.ok(html.includes("<details><summary><h2>"));
     assert.ok(html.includes("wrapWikiH2"));
+  });
+
+  await t.test("embedded wiki markdown helper splits on real newlines (fromCharCode 10)", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes("escaped.split(String.fromCharCode(10))"));
+    const out = renderPromptMarkdownHtml("## Overview\nHello");
+    assert.ok(out.includes("<h2>Overview</h2>"));
+    assert.ok(out.includes("Hello"));
   });
 
   await t.test("Regenerate click POSTs /api/wiki/regenerate and disables button while in flight", () => {

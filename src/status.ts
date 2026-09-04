@@ -3060,7 +3060,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
-      const lines = escaped.split("\\n");
+      const lines = escaped.split(String.fromCharCode(10));
       const out = [];
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
