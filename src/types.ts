@@ -132,6 +132,7 @@ export interface ProjectMetadata {
   gitRemote: string | null;
   displayName: string;
   lastSeenRoot: string;
+  knownRoots?: string[];
   createdAt: string;
   updatedAt: string;
 }

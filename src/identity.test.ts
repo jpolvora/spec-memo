@@ -8,7 +8,8 @@ import {
   generateProjectIdFromRemote,
   generateProjectIdFromPath,
   findGitRoot,
-  resolveProjectIdentity
+  resolveProjectIdentity,
+  getGitRemoteUrl
 } from './identity.js';
 
 describe('Git Remote and Project Identity', () => {
@@ -27,6 +28,14 @@ describe('Git Remote and Project Identity', () => {
         expected: 'github.com/jpolvora/spec-memo'
       },
       {
+        input: 'https://github.com/jpolvora/spec-memo/',
+        expected: 'github.com/jpolvora/spec-memo'
+      },
+      {
+        input: 'https://github.com/jpolvora/spec-memo.git/',
+        expected: 'github.com/jpolvora/spec-memo'
+      },
+      {
         input: 'https://user:token@github.com/jpolvora/spec-memo.git',
         expected: 'github.com/jpolvora/spec-memo'
       },
@@ -41,6 +50,56 @@ describe('Git Remote and Project Identity', () => {
       {
         input: 'https://GitHub.com/JPolvora/Spec-Memo.git',
         expected: 'github.com/jpolvora/spec-memo'
+      },
+      {
+        input: 'git@github.com:JPolvora/Spec-Memo.git',
+        expected: 'github.com/jpolvora/spec-memo'
+      },
+      {
+        input: 'ssh://git@ssh.github.com:443/jpolvora/spec-memo.git',
+        expected: 'github.com/jpolvora/spec-memo'
+      },
+      {
+        input: 'ssh://git@altssh.bitbucket.org:443/org/repo.git',
+        expected: 'bitbucket.org/org/repo'
+      },
+      // Azure DevOps diverse formats
+      {
+        input: 'https://dev.azure.com/myorg/myproject/_git/myrepo',
+        expected: 'dev.azure.com/myorg/myproject/myrepo'
+      },
+      {
+        input: 'https://user@dev.azure.com/myorg/myproject/_git/myrepo',
+        expected: 'dev.azure.com/myorg/myproject/myrepo'
+      },
+      {
+        input: 'https://myorg.visualstudio.com/myproject/_git/myrepo',
+        expected: 'dev.azure.com/myorg/myproject/myrepo'
+      },
+      {
+        input: 'https://myorg.visualstudio.com/DefaultCollection/myproject/_git/myrepo',
+        expected: 'dev.azure.com/myorg/myproject/myrepo'
+      },
+      {
+        input: 'git@ssh.dev.azure.com:v3/myorg/myproject/myrepo',
+        expected: 'dev.azure.com/myorg/myproject/myrepo'
+      },
+      {
+        input: 'ssh://git@ssh.dev.azure.com:v3/myorg/myproject/myrepo',
+        expected: 'dev.azure.com/myorg/myproject/myrepo'
+      },
+      {
+        input: 'myorg@vs-ssh.visualstudio.com:v3/myorg/myproject/myrepo',
+        expected: 'dev.azure.com/myorg/myproject/myrepo'
+      },
+      // AWS CodeCommit
+      {
+        input: 'https://git-codecommit.us-east-1.amazonaws.com/v1/repos/myrepo',
+        expected: 'git-codecommit.us-east-1.amazonaws.com/repos/myrepo'
+      },
+      {
+        input: 'ssh://APKAEI123@git-codecommit.us-east-1.amazonaws.com/v1/repos/myrepo',
+        expected: 'git-codecommit.us-east-1.amazonaws.com/repos/myrepo'
       }
     ];
 
@@ -121,6 +180,102 @@ describe('Git Remote and Project Identity', () => {
       assert.equal(identity.isGit, false);
       assert.equal(identity.isFallback, true);
       assert.equal(identity.projectId, 'p1');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should fall back to upstream or first available remote when origin is absent', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-test-upstream-'));
+    const gitDir = path.join(tempDir, '.git');
+    fs.mkdirSync(gitDir, { recursive: true });
+    // Write git config with upstream and custom remote, but no origin
+    const gitConfig = `[core]
+\trepositoryformatversion = 0
+\tfilemode = true
+\tbare = false
+\tlogallrefupdates = true
+[remote "upstream"]
+\turl = https://github.com/upstream-org/upstream-repo.git
+\tfetch = +refs/heads/*:refs/remotes/upstream/*
+`;
+    fs.writeFileSync(path.join(gitDir, 'config'), gitConfig, 'utf8');
+
+    try {
+      const identity = resolveProjectIdentity(tempDir);
+      assert.equal(identity.isGit, true);
+      assert.equal(identity.isFallback, false);
+      assert.equal(identity.normalizedRemote, 'github.com/upstream-org/upstream-repo');
+      assert.equal(identity.projectId, 'github.com-upstream-org-upstream-repo');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should resolve remote URL from Git worktree via commondir', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-test-worktree-'));
+    const mainRepo = path.join(tempDir, 'main-repo');
+    const mainGit = path.join(mainRepo, '.git');
+    const worktreeDir = path.join(tempDir, 'worktree-1');
+    const worktreeGitDir = path.join(mainGit, 'worktrees', 'worktree-1');
+
+    fs.mkdirSync(mainGit, { recursive: true });
+    fs.mkdirSync(worktreeDir, { recursive: true });
+    fs.mkdirSync(worktreeGitDir, { recursive: true });
+
+    // Main repo config
+    fs.writeFileSync(
+      path.join(mainGit, 'config'),
+      `[remote "origin"]\n\turl = git@github.com:myorg/myrepo.git\n`,
+      'utf8'
+    );
+
+    // Worktree pointer (.git file pointing to worktrees/worktree-1)
+    fs.writeFileSync(path.join(worktreeDir, '.git'), `gitdir: ${worktreeGitDir}\n`, 'utf8');
+    // Worktree commondir pointing to main .git
+    fs.writeFileSync(path.join(worktreeGitDir, 'commondir'), `../..\n`, 'utf8');
+
+    try {
+      const identity = resolveProjectIdentity(worktreeDir);
+      assert.equal(identity.isGit, true);
+      assert.equal(identity.isFallback, false);
+      assert.equal(identity.normalizedRemote, 'github.com/myorg/myrepo');
+      assert.equal(identity.projectId, 'github.com-myorg-myrepo');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should resolve upstream remote URL for local clones of clones', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-test-local-clone-'));
+    const parentRepo = path.join(tempDir, 'parent-repo');
+    const cloneRepo = path.join(tempDir, 'clone-repo');
+
+    fs.mkdirSync(path.join(parentRepo, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(cloneRepo, '.git'), { recursive: true });
+
+    // Parent repo cloned from GitHub
+    fs.writeFileSync(
+      path.join(parentRepo, '.git', 'config'),
+      `[remote "origin"]\n\turl = https://github.com/shared-org/shared-repo.git\n`,
+      'utf8'
+    );
+
+    // Clone repo cloned locally from parentRepo
+    fs.writeFileSync(
+      path.join(cloneRepo, '.git', 'config'),
+      `[remote "origin"]\n\turl = ${parentRepo}\n`,
+      'utf8'
+    );
+
+    try {
+      const parentIdentity = resolveProjectIdentity(parentRepo);
+      const cloneIdentity = resolveProjectIdentity(cloneRepo);
+
+      assert.equal(parentIdentity.projectId, 'github.com-shared-org-shared-repo');
+      assert.equal(cloneIdentity.projectId, 'github.com-shared-org-shared-repo');
+      assert.equal(parentIdentity.projectId, cloneIdentity.projectId);
+      assert.equal(parentIdentity.normalizedRemote, cloneIdentity.normalizedRemote);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

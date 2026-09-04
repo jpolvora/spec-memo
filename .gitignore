@@ -27,4 +27,5 @@ credentials.json
 .agents/codereviews/
 .agents/skills/ws-shared/MEMORY.md
 .agents/skills/ws-shared/memory/
+.agents/skills/**/runs/
 

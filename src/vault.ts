@@ -544,15 +544,24 @@ export function ensureProjectVault(
   const now = new Date().toISOString();
 
   let metadata: ProjectMetadata;
+  const normalizedCurrentRoot = path.resolve(identity.rootPath);
 
   if (fs.existsSync(projectJsonPath)) {
     try {
       const existing = JSON.parse(fs.readFileSync(projectJsonPath, 'utf8'));
+      const existingRoots: string[] = Array.isArray(existing.knownRoots)
+        ? existing.knownRoots
+        : existing.lastSeenRoot
+          ? [existing.lastSeenRoot]
+          : [];
+      const knownRoots = Array.from(new Set([...existingRoots, normalizedCurrentRoot]));
+
       metadata = {
         projectId: identity.projectId,
         gitRemote: identity.normalizedRemote || existing.gitRemote || null,
         displayName: existing.displayName || path.basename(identity.rootPath),
-        lastSeenRoot: identity.rootPath,
+        lastSeenRoot: normalizedCurrentRoot,
+        knownRoots,
         createdAt: existing.createdAt || now,
         updatedAt: now
       };
@@ -561,7 +570,8 @@ export function ensureProjectVault(
         projectId: identity.projectId,
         gitRemote: identity.normalizedRemote,
         displayName: path.basename(identity.rootPath),
-        lastSeenRoot: identity.rootPath,
+        lastSeenRoot: normalizedCurrentRoot,
+        knownRoots: [normalizedCurrentRoot],
         createdAt: now,
         updatedAt: now
       };
@@ -571,7 +581,8 @@ export function ensureProjectVault(
       projectId: identity.projectId,
       gitRemote: identity.normalizedRemote,
       displayName: path.basename(identity.rootPath),
-      lastSeenRoot: identity.rootPath,
+      lastSeenRoot: normalizedCurrentRoot,
+      knownRoots: [normalizedCurrentRoot],
       createdAt: now,
       updatedAt: now
     };

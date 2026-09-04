@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { BootstrapBrief, BootstrapOptions, MemoRecord } from './types.js';
-import { getProjectMetadata, getVaultRoot, ensureVaultStructure } from './vault.js';
+import { getProjectMetadata, getVaultRoot, ensureVaultStructure, ensureProjectVault } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { scanProjectRecords } from './compiler.js';
 import { getRecord } from './store.js';
@@ -126,6 +126,7 @@ export function scoreTrap(trap: MemoRecord, query?: string, pathFilter?: string)
 export async function compileBootstrapBrief(options: BootstrapOptions = {}): Promise<BootstrapBrief> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
   const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
+  ensureProjectVault(identity, vaultRoot);
   const projectId = options.projectId || identity.projectId;
   const projectDir = path.join(vaultRoot, 'projects', projectId);
 
@@ -232,7 +233,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
   const initialBrief: BootstrapBrief = {
     projectId,
     gitRemote: metadata?.gitRemote || identity.normalizedRemote,
-    lastSeenRoot: metadata?.lastSeenRoot || identity.rootPath,
+    lastSeenRoot: identity.rootPath,
     activeSlice,
     traps: currentTraps,
     decisions: currentDecisions,
