@@ -144,59 +144,59 @@ See [`FEATURES.md`](FEATURES.md) § MCP tools for arguments and returns.
 
 ### Phase 0 — Dogfood remap (optional, outside this repo)
 
-- [x] Point a **throwaway clone** of a consumer (e.g. workflow-skills) `plans.dir` / `specsDir` at a directory under `~/.spec-memo-test` (`.agents/specs/dogfood-remap.spec.md`)
+- [x] Point a **throwaway clone** of a consumer (e.g. workflow-skills) `plans.dir` / `specsDir` at a directory under `~/.spec-memo-test` (`.agents/specs/0011-dogfood-remap.spec.md`)
 
 Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. Not a spec-memo runtime.
 
 ### Phase 1 — spec-memo MVP (this repository)
 
-- [x] Vault + project identity from git remote (`.agents/specs/vault-and-identity.spec.md`)
-- [x] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`.agents/specs/record-schema-and-indexes.spec.md`)
-- [x] SQLite FTS disposable index (`.agents/specs/fts-index.spec.md`)
-- [x] Remaining kinds, append-only logs, and forget archiving (`.agents/specs/remaining-kinds-and-events.spec.md`)
-- [x] `bootstrap` token budget and default filters (`.agents/specs/bootstrap-brief.spec.md`)
-- [x] `gc` TTL + shipped-plan compact (`.agents/specs/curator-gc-and-safety.spec.md`)
-- [x] Refuse upsert payload written into a known product working tree (`.agents/specs/curator-gc-and-safety.spec.md`)
-- [x] Secret redaction on write (`.agents/specs/curator-gc-and-safety.spec.md`)
-- [x] CLI parity, `memo import`, `memo promote`, and `memo doctor` (`.agents/specs/import-and-doctor.spec.md`)
+- [x] Vault + project identity from git remote (`.agents/specs/0002-vault-and-identity.spec.md`)
+- [x] Record schema, kinds, compiled INDEX/TRAPS/DECISIONS (`.agents/specs/0008-record-schema-and-indexes.spec.md`)
+- [x] SQLite FTS disposable index (`.agents/specs/0004-fts-index.spec.md`)
+- [x] Remaining kinds, append-only logs, and forget archiving (`.agents/specs/0006-remaining-kinds-and-events.spec.md`)
+- [x] `bootstrap` token budget and default filters (`.agents/specs/0007-bootstrap-brief.spec.md`)
+- [x] `gc` TTL + shipped-plan compact (`.agents/specs/0003-curator-gc-and-safety.spec.md`)
+- [x] Refuse upsert payload written into a known product working tree (`.agents/specs/0003-curator-gc-and-safety.spec.md`)
+- [x] Secret redaction on write (`.agents/specs/0003-curator-gc-and-safety.spec.md`)
+- [x] CLI parity, `memo import`, `memo promote`, and `memo doctor` (`.agents/specs/0005-import-and-doctor.spec.md`)
 
 ### Phase 2 — Harness adapter (workflow-skills, not this repo’s core)
 
-- [x] Relocatable consumer hub (MEMORY / changelog) (`.agents/specs/relocatable-hub.spec.md`)
-- [x] `{memoRoot}` / MCP as `read-memory` / `update-memory` (`.agents/specs/memory-adapter-mcp.spec.md`)
-- [x] Hook or skill rule blocking in-repo workflow writes (`.agents/specs/write-block-hook.spec.md`)
+- [x] Relocatable consumer hub (MEMORY / changelog) (`.agents/specs/0012-relocatable-hub.spec.md`)
+- [x] `{memoRoot}` / MCP as `read-memory` / `update-memory` (`.agents/specs/0017-memory-adapter-mcp.spec.md`)
+- [x] Hook or skill rule blocking in-repo workflow writes (`.agents/specs/0016-write-block-hook.spec.md`)
 
 ### Phase 3 — Curator hardening
 
-- [x] Trap dedup on upsert (`.agents/specs/trap-dedup.spec.md`)
-- [x] Spec SHA drift on bootstrap (`.agents/specs/spec-drift.spec.md`)
-- [x] Optional private git remote on the vault (`.agents/specs/vault-git.spec.md`)
-- [x] Cross-project search opt-in (`.agents/specs/cross-project-search.spec.md`)
-- [x] Embeddings as an optional search backend (`.agents/specs/embeddings-search.spec.md`)
-- [x] Monthly log roll-up compaction and archiving (`.agents/specs/log-compaction.spec.md`)
+- [x] Trap dedup on upsert (`.agents/specs/0014-trap-dedup.spec.md`)
+- [x] Spec SHA drift on bootstrap (`.agents/specs/0013-spec-drift.spec.md`)
+- [x] Optional private git remote on the vault (`.agents/specs/0018-vault-git.spec.md`)
+- [x] Cross-project search opt-in (`.agents/specs/0010-cross-project-search.spec.md`)
+- [x] Embeddings as an optional search backend (`.agents/specs/0001-embeddings-search.spec.md`)
+- [x] Monthly log roll-up compaction and archiving (`.agents/specs/0019-log-compaction.spec.md`)
 
 ### Phase 4 — Human viewers (optional)
 
-- [x] Polished interactive CLI doctor and health inspection (`.agents/specs/cli-doctor.spec.md`)
-- [x] Optional IDE plugin or Obsidian vault as **viewer only** (`.agents/specs/viewer.spec.md`)
-- [x] Promote-to-ADR formatting templates and directory resolution (`.agents/specs/promote-adr.spec.md`)
-- [x] Encrypted vault backup, export, and restoration engine (`.agents/specs/vault-backup.spec.md`)
+- [x] Polished interactive CLI doctor and health inspection (`.agents/specs/0009-cli-doctor.spec.md`)
+- [x] Optional IDE plugin or Obsidian vault as **viewer only** (`.agents/specs/0015-viewer.spec.md`)
+- [x] Promote-to-ADR formatting templates and directory resolution (`.agents/specs/0020-promote-adr.spec.md`)
+- [x] Encrypted vault backup, export, and restoration engine (`.agents/specs/0021-vault-backup.spec.md`)
 
 ### Phase 5 — Advanced Ecosystem & Connectivity
 
-- [x] Interactive Canvas UI and Visual Graph Viewer (`.agents/specs/canvas-viewer.spec.md`)
-- [x] Multi-Machine Vault Synchronization and Delta Engine (`.agents/specs/multi-machine-sync.spec.md`)
-- [x] HTTP and Server-Sent Events (SSE) MCP Transport (`.agents/specs/mcp-sse-transport.spec.md`)
+- [x] Interactive Canvas UI and Visual Graph Viewer (`.agents/specs/0042-canvas-viewer.spec.md`)
+- [x] Multi-Machine Vault Synchronization and Delta Engine (`.agents/specs/0044-multi-machine-sync.spec.md`)
+- [x] HTTP and Server-Sent Events (SSE) MCP Transport (`.agents/specs/0043-mcp-sse-transport.spec.md`)
 
 ### Phase 7 — Deployment modes & advanced reliability
 
-- [x] Deployment modes, memo setup, daemon HTTP sync routes (`.agents/specs/deployment-modes.spec.md`)
-- [x] Operational telemetry & rolling usage logging (`.agents/specs/operational-telemetry.spec.md`)
-- [x] Prompt, session, activity ingestion, rule derivation (`.agents/specs/prompt-history-and-query.spec.md`)
-- [x] Vault reset with pre-wipe backup, full restore, proxy monitor (`.agents/specs/vault-reset-and-proxy-monitor.spec.md`)
-- [x] Batched vault-git sync with dual-mode hybrid dispatch (`.agents/specs/vault-git-hybrid-sync.spec.md`)
-- [x] Memory retrieval hit count and status-monitor list (`.agents/specs/memory-hit-count.spec.md`)
-- [x] Vault sync conflict reconciliation, semantic auto-merge, and resilience (`.agents/specs/sync-conflict-reconciliation.spec.md`)
+- [x] Deployment modes, memo setup, daemon HTTP sync routes (`.agents/specs/0025-deployment-modes.spec.md`)
+- [x] Operational telemetry & rolling usage logging (`.agents/specs/0028-operational-telemetry.spec.md`)
+- [x] Prompt, session, activity ingestion, rule derivation (`.agents/specs/0029-prompt-history-and-query.spec.md`)
+- [x] Vault reset with pre-wipe backup, full restore, proxy monitor (`.agents/specs/0030-vault-reset-and-proxy-monitor.spec.md`)
+- [x] Batched vault-git sync with dual-mode hybrid dispatch (`.agents/specs/0033-vault-git-hybrid-sync.spec.md`)
+- [x] Memory retrieval hit count and status-monitor list (`.agents/specs/0034-memory-hit-count.spec.md`)
+- [x] Vault sync conflict reconciliation, semantic auto-merge, and resilience (`.agents/specs/0035-sync-conflict-reconciliation.spec.md`)
 
 ## 9. Next specs
 

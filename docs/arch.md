@@ -1,6 +1,6 @@
-# Implementation Plan — Local, Hybrid, and Remote Deployment Modes (`deployment-modes.spec.md`)
+# Implementation Plan — Local, Hybrid, and Remote Deployment Modes (`0025-deployment-modes.spec.md`)
 
-This plan covers the implementation of **Local, Hybrid, and Remote deployment modes** with portable MCP wiring as specified in [`.agents/specs/deployment-modes.spec.md`](file:///l:/source/spec-memo/.agents/specs/deployment-modes.spec.md).
+This plan covers the implementation of **Local, Hybrid, and Remote deployment modes** with portable MCP wiring as specified in [`.agents/specs/0025-deployment-modes.spec.md`](file:///l:/source/spec-memo/.agents/specs/0025-deployment-modes.spec.md).
 
 spec-memo will support three deployment modes without requiring agent host MCP configuration rewrites:
 1. **Local**: Default MCP stdio reading/writing local vault at `~/.spec-memo` (or `$SPEC_MEMO_ROOT`). No network required.

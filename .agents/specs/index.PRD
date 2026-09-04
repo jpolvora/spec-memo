@@ -55,73 +55,73 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 ### Phase 0: Dogfood remap (optional, outside this repo)
 
-- [x] [`dogfood-remap`](dogfood-remap.spec.md): Consumer configuration remap proof under `~/.spec-memo-test`
+- [x] [`dogfood-remap`](0011-dogfood-remap.spec.md): Consumer configuration remap proof under `~/.spec-memo-test`
 
 ### Phase 1: spec-memo MVP (this repository)
 
-- [x] [`vault-and-identity`](vault-and-identity.spec.md): Vault root and project identity from normalized git remote
-- [x] [`record-schema-and-indexes`](record-schema-and-indexes.spec.md): Record schema validation, upsert engine, and compiled index views
-- [x] [`fts-index`](fts-index.spec.md): SQLite FTS5 disposable index and search engine
-- [x] [`remaining-kinds-and-events`](remaining-kinds-and-events.spec.md): Full record kinds matrix, append-only logs, and forget archiving
-- [x] [`bootstrap-brief`](bootstrap-brief.spec.md): Bootstrap session brief generation with 8 KB token budget and trap ranking
-- [x] [`curator-gc-and-safety`](curator-gc-and-safety.spec.md): Curator GC, secret redaction, and product-tree write guard
-- [x] [`import-and-doctor`](import-and-doctor.spec.md): CLI parity, workflow tree importer, promote, and doctor diagnostics
+- [x] [`vault-and-identity`](0002-vault-and-identity.spec.md): Vault root and project identity from normalized git remote
+- [x] [`record-schema-and-indexes`](0008-record-schema-and-indexes.spec.md): Record schema validation, upsert engine, and compiled index views
+- [x] [`fts-index`](0004-fts-index.spec.md): SQLite FTS5 disposable index and search engine
+- [x] [`remaining-kinds-and-events`](0006-remaining-kinds-and-events.spec.md): Full record kinds matrix, append-only logs, and forget archiving
+- [x] [`bootstrap-brief`](0007-bootstrap-brief.spec.md): Bootstrap session brief generation with 8 KB token budget and trap ranking
+- [x] [`curator-gc-and-safety`](0003-curator-gc-and-safety.spec.md): Curator GC, secret redaction, and product-tree write guard
+- [x] [`import-and-doctor`](0005-import-and-doctor.spec.md): CLI parity, workflow tree importer, promote, and doctor diagnostics
 
 ### Phase 2: Harness adapter (workflow-skills, not this repo’s core)
 
-- [x] [`relocatable-hub`](relocatable-hub.spec.md): Relocatable consumer hub data (MEMORY / changelog)
-- [x] [`memory-adapter-mcp`](memory-adapter-mcp.spec.md): Consumer memory adapter for spec-memo MCP tools
-- [x] [`write-block-hook`](write-block-hook.spec.md): Consumer hook and skill rule blocking in-repo workflow writes
+- [x] [`relocatable-hub`](0012-relocatable-hub.spec.md): Relocatable consumer hub data (MEMORY / changelog)
+- [x] [`memory-adapter-mcp`](0017-memory-adapter-mcp.spec.md): Consumer memory adapter for spec-memo MCP tools
+- [x] [`write-block-hook`](0016-write-block-hook.spec.md): Consumer hook and skill rule blocking in-repo workflow writes
 
 ### Phase 3: Curator hardening
 
-- [x] [`trap-dedup`](trap-dedup.spec.md): Anti-regression trap deduplication and automatic superseding
-- [x] [`spec-drift`](spec-drift.spec.md): Specification git SHA drift detection on bootstrap
-- [x] [`vault-git`](vault-git.spec.md): Optional private git remote sync for vault persistence
-- [x] [`cross-project-search`](cross-project-search.spec.md): Opt-in cross-project search across local vault repositories
-- [x] [`embeddings-search`](embeddings-search.spec.md): Embeddings as optional search backend
-- [x] [`log-compaction`](log-compaction.spec.md): Monthly log roll-up compaction and archiving
+- [x] [`trap-dedup`](0014-trap-dedup.spec.md): Anti-regression trap deduplication and automatic superseding
+- [x] [`spec-drift`](0013-spec-drift.spec.md): Specification git SHA drift detection on bootstrap
+- [x] [`vault-git`](0018-vault-git.spec.md): Optional private git remote sync for vault persistence
+- [x] [`cross-project-search`](0010-cross-project-search.spec.md): Opt-in cross-project search across local vault repositories
+- [x] [`embeddings-search`](0001-embeddings-search.spec.md): Embeddings as optional search backend
+- [x] [`log-compaction`](0019-log-compaction.spec.md): Monthly log roll-up compaction and archiving
 
 ### Phase 4: Human viewers (optional)
 
-- [x] [`cli-doctor`](cli-doctor.spec.md): CLI doctor diagnostic and repository health inspection UX
-- [x] [`viewer`](viewer.spec.md): Human viewer compatibility and Obsidian vault layout support
-- [x] [`promote-adr`](promote-adr.spec.md): Promote-to-ADR formatting templates and directory resolution
-- [x] [`vault-backup`](vault-backup.spec.md): Encrypted vault backup, export, and restoration engine
+- [x] [`cli-doctor`](0009-cli-doctor.spec.md): CLI doctor diagnostic and repository health inspection UX
+- [x] [`viewer`](0015-viewer.spec.md): Human viewer compatibility and Obsidian vault layout support
+- [x] [`promote-adr`](0020-promote-adr.spec.md): Promote-to-ADR formatting templates and directory resolution
+- [x] [`vault-backup`](0021-vault-backup.spec.md): Encrypted vault backup, export, and restoration engine
 
 ### Phase 5: Advanced Ecosystem & Connectivity
 
-- [x] [`canvas-viewer`](canvas-viewer.spec.md): Interactive Canvas UI and Visual Graph Viewer
-- [x] [`multi-machine-sync`](multi-machine-sync.spec.md): Multi-Machine Vault Synchronization and Delta Engine
-- [x] [`mcp-sse-transport`](mcp-sse-transport.spec.md): HTTP and Server-Sent Events (SSE) MCP Transport
+- [x] [`canvas-viewer`](0042-canvas-viewer.spec.md): Interactive Canvas UI and Visual Graph Viewer
+- [x] [`multi-machine-sync`](0044-multi-machine-sync.spec.md): Multi-Machine Vault Synchronization and Delta Engine
+- [x] [`mcp-sse-transport`](0043-mcp-sse-transport.spec.md): HTTP and Server-Sent Events (SSE) MCP Transport
 
 ### Phase 6: Recurrence learning
 
-- [x] [`trap-recurrence`](trap-recurrence.spec.md): Trap recurrence ranking and owner-skill export
-- [x] [`mcp-status-monitor`](mcp-status-monitor.spec.md): MCP status monitor page with live activity log
-- [x] MCP tools: check_version and install_skills (+ docs surface) (`spec: mcp-version-and-skill-install.spec.md`)
+- [x] [`trap-recurrence`](0022-trap-recurrence.spec.md): Trap recurrence ranking and owner-skill export
+- [x] [`mcp-status-monitor`](0023-mcp-status-monitor.spec.md): MCP status monitor page with live activity log
+- [x] MCP tools: check_version and install_skills (+ docs surface) (`spec: 0024-mcp-version-and-skill-install.spec.md`)
 
 ### Phase 7: Deployment modes
 
-- [x] [`deployment-modes`](deployment-modes.spec.md): Local, hybrid, and remote deployment modes with portable MCP wiring
-- [x] [`status-vault-backup-ui`](status-vault-backup-ui.spec.md): Status monitor vault export and import UI
-- [x] [`operational-telemetry`](operational-telemetry.spec.md): Operational Telemetry & Structured Rolling Usage Logging
-- [ ] Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) (`spec: virtual-file-system-over-mcp.spec.md`)
-- [x] [`prompt-history-and-query`](prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
-- [x] [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md): Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI
-- [x] [`status-backup-page`](status-backup-page.spec.md): Dedicated status-monitor backup page with complete archives and inventory management
-- [x] Batched vault-git sync with dual-mode hybrid parallel dispatch (`spec: vault-git-hybrid-sync.spec.md`)
-- [x] Memory retrieval hit count and status-monitor list (`spec: memory-hit-count.spec.md`)
-- [x] [`sync-conflict-reconciliation`](sync-conflict-reconciliation.spec.md): Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience
+- [x] [`deployment-modes`](0025-deployment-modes.spec.md): Local, hybrid, and remote deployment modes with portable MCP wiring
+- [x] [`status-vault-backup-ui`](0026-status-vault-backup-ui.spec.md): Status monitor vault export and import UI
+- [x] [`operational-telemetry`](0028-operational-telemetry.spec.md): Operational Telemetry & Structured Rolling Usage Logging
+- [ ] Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) (`spec: 0027-virtual-file-system-over-mcp.spec.md`)
+- [x] [`prompt-history-and-query`](0029-prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
+- [x] [`vault-reset-and-proxy-monitor`](0030-vault-reset-and-proxy-monitor.spec.md): Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI
+- [x] [`status-backup-page`](0032-status-backup-page.spec.md): Dedicated status-monitor backup page with complete archives and inventory management
+- [x] Batched vault-git sync with dual-mode hybrid parallel dispatch (`spec: 0033-vault-git-hybrid-sync.spec.md`)
+- [x] Memory retrieval hit count and status-monitor list (`spec: 0034-memory-hit-count.spec.md`)
+- [x] [`sync-conflict-reconciliation`](0035-sync-conflict-reconciliation.spec.md): Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience
 
 ### Phase 8: Agent Continuity & Knowledge Lifecycle
 
-- [ ] [`session-handoff-baton`](session-handoff-baton.spec.md): Cross-Agent Session Handoff Baton via Prompt and Bootstrap
-- [ ] [`record-ttl-expiration`](record-ttl-expiration.spec.md): Universal Record Time-To-Live and Expiration Engine
-- [ ] [`search-ranking-explain`](search-ranking-explain.spec.md): Retrieval Ranking and Bootstrap Brief Explainability
-- [ ] [`memory-feedback-salience`](memory-feedback-salience.spec.md): Memory Retrieval Feedback, Stale Flagging, and Salience Tuning
-- [ ] [`capture-ignore-marker`](capture-ignore-marker.spec.md): Project-Local Capture Exclusions Marker and Safety Boundary
-- [ ] [`agent-hooks-install`](agent-hooks-install.spec.md): Automatic Agent Lifecycle Hooks Installer (memo install-hooks)
+- [ ] [`session-handoff-baton`](0036-session-handoff-baton.spec.md): Cross-Agent Session Handoff Baton via Prompt and Bootstrap
+- [ ] [`record-ttl-expiration`](0037-record-ttl-expiration.spec.md): Universal Record Time-To-Live and Expiration Engine
+- [ ] [`search-ranking-explain`](0038-search-ranking-explain.spec.md): Retrieval Ranking and Bootstrap Brief Explainability
+- [ ] [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md): Memory Retrieval Feedback, Stale Flagging, and Salience Tuning
+- [ ] [`capture-ignore-marker`](0040-capture-ignore-marker.spec.md): Project-Local Capture Exclusions Marker and Safety Boundary
+- [ ] [`agent-hooks-install`](0041-agent-hooks-install.spec.md): Automatic Agent Lifecycle Hooks Installer (memo install-hooks)
 
 
 
@@ -130,51 +130,51 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | # | Spec | Status | Target Phase | Summary |
 |---|------|--------|--------------|---------|
-| 0 | [`dogfood-remap`](dogfood-remap.spec.md) | `[x] done` | Phase 0 | Consumer configuration remap proof |
-| 1 | [`vault-and-identity`](vault-and-identity.spec.md) | `[x] done` | Phase 1 | Remote normalization, fallback path id, vault layout |
-| 2 | [`record-schema-and-indexes`](record-schema-and-indexes.spec.md) | `[x] done` | Phase 1 | Frontmatter validation, kinds, compiled md views |
-| 3 | [`fts-index`](fts-index.spec.md) | `[x] done` | Phase 1 | SQLite FTS5 index (`memo.sqlite`), rebuild from vault |
-| 4 | [`remaining-kinds-and-events`](remaining-kinds-and-events.spec.md) | `[x] done` | Phase 1 | Matrix kinds (`spec`/`plan`/`state`/`log`/`scratch`/`review`), append, forget |
-| 5 | [`bootstrap-brief`](bootstrap-brief.spec.md) | `[x] done` | Phase 1 | 8 KB cap brief, trap ranking, cwd binding |
-| 6 | [`curator-gc-and-safety`](curator-gc-and-safety.spec.md) | `[x] done` | Phase 1 | TTL, compaction, secret redaction, refuse product write |
-| 7 | [`import-and-doctor`](import-and-doctor.spec.md) | `[x] done` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
-| 8 | [`relocatable-hub`](relocatable-hub.spec.md) | `[x] done` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
-| 9 | [`memory-adapter-mcp`](memory-adapter-mcp.spec.md) | `[x] done` | Phase 2 | Route consumer `read-memory`/`update-memory` to MCP |
-| 10 | [`write-block-hook`](write-block-hook.spec.md) | `[x] done` | Phase 2 | Git hook & skill rules blocking in-repo workflow writes |
-| 11 | [`trap-dedup`](trap-dedup.spec.md) | `[x] done` | Phase 3 | Deduplicate traps with matching paths & rules |
-| 12 | [`spec-drift`](spec-drift.spec.md) | `[x] done` | Phase 3 | Flag SHA drift between specs and code during bootstrap |
-| 13 | [`vault-git`](vault-git.spec.md) | `[x] done` | Phase 3 | Optional private git remote sync for vault persistence |
-| 14 | [`cross-project-search`](cross-project-search.spec.md) | `[x] done` | Phase 3 | Opt-in multi-project search across local vault |
-| 15 | [`embeddings-search`](embeddings-search.spec.md) | `[x] done` | Phase 3 | Optional embeddings search backend after kinds/TTL |
-| 16 | [`cli-doctor`](cli-doctor.spec.md) | `[x] done` | Phase 4 | Polished interactive CLI doctor and health inspection |
-| 17 | [`viewer`](viewer.spec.md) | `[x] done` | Phase 4 | Obsidian and markdown viewer passive compatibility |
-| 18 | [`log-compaction`](log-compaction.spec.md) | `[x] done` | Phase 3 | Monthly log roll-up compaction and archiving |
-| 19 | [`promote-adr`](promote-adr.spec.md) | `[x] done` | Phase 4 | Promote-to-ADR formatting templates and directory resolution |
-| 20 | [`vault-backup`](vault-backup.spec.md) | `[x] done` | Phase 4 | Encrypted vault backup, export, and restoration engine |
-| 21 | [`canvas-viewer`](canvas-viewer.spec.md) | `[x] done` | Phase 5 | Interactive Canvas UI and Visual Graph Viewer |
-| 22 | [`multi-machine-sync`](multi-machine-sync.spec.md) | `[x] done` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
-| 23 | [`mcp-sse-transport`](mcp-sse-transport.spec.md) | `[x] done` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
-| 24 | [`trap-recurrence`](trap-recurrence.spec.md) | `[x] done` | Phase 6 | Trap recurrence ranking and owner-skill export |
-| 25 | [`mcp-status-monitor`](mcp-status-monitor.spec.md) | `[x] done` | Phase 6 | MCP status monitor page with live activity log |
+| 0 | [`dogfood-remap`](0011-dogfood-remap.spec.md) | `[x] done` | Phase 0 | Consumer configuration remap proof |
+| 1 | [`vault-and-identity`](0002-vault-and-identity.spec.md) | `[x] done` | Phase 1 | Remote normalization, fallback path id, vault layout |
+| 2 | [`record-schema-and-indexes`](0008-record-schema-and-indexes.spec.md) | `[x] done` | Phase 1 | Frontmatter validation, kinds, compiled md views |
+| 3 | [`fts-index`](0004-fts-index.spec.md) | `[x] done` | Phase 1 | SQLite FTS5 index (`memo.sqlite`), rebuild from vault |
+| 4 | [`remaining-kinds-and-events`](0006-remaining-kinds-and-events.spec.md) | `[x] done` | Phase 1 | Matrix kinds (`spec`/`plan`/`state`/`log`/`scratch`/`review`), append, forget |
+| 5 | [`bootstrap-brief`](0007-bootstrap-brief.spec.md) | `[x] done` | Phase 1 | 8 KB cap brief, trap ranking, cwd binding |
+| 6 | [`curator-gc-and-safety`](0003-curator-gc-and-safety.spec.md) | `[x] done` | Phase 1 | TTL, compaction, secret redaction, refuse product write |
+| 7 | [`import-and-doctor`](0005-import-and-doctor.spec.md) | `[x] done` | Phase 1 | CLI parity, `memo import`, `memo doctor`, `memo promote` |
+| 8 | [`relocatable-hub`](0012-relocatable-hub.spec.md) | `[x] done` | Phase 2 | Relocate consumer hub out of `{sharedDir}` |
+| 9 | [`memory-adapter-mcp`](0017-memory-adapter-mcp.spec.md) | `[x] done` | Phase 2 | Route consumer `read-memory`/`update-memory` to MCP |
+| 10 | [`write-block-hook`](0016-write-block-hook.spec.md) | `[x] done` | Phase 2 | Git hook & skill rules blocking in-repo workflow writes |
+| 11 | [`trap-dedup`](0014-trap-dedup.spec.md) | `[x] done` | Phase 3 | Deduplicate traps with matching paths & rules |
+| 12 | [`spec-drift`](0013-spec-drift.spec.md) | `[x] done` | Phase 3 | Flag SHA drift between specs and code during bootstrap |
+| 13 | [`vault-git`](0018-vault-git.spec.md) | `[x] done` | Phase 3 | Optional private git remote sync for vault persistence |
+| 14 | [`cross-project-search`](0010-cross-project-search.spec.md) | `[x] done` | Phase 3 | Opt-in multi-project search across local vault |
+| 15 | [`embeddings-search`](0001-embeddings-search.spec.md) | `[x] done` | Phase 3 | Optional embeddings search backend after kinds/TTL |
+| 16 | [`cli-doctor`](0009-cli-doctor.spec.md) | `[x] done` | Phase 4 | Polished interactive CLI doctor and health inspection |
+| 17 | [`viewer`](0015-viewer.spec.md) | `[x] done` | Phase 4 | Obsidian and markdown viewer passive compatibility |
+| 18 | [`log-compaction`](0019-log-compaction.spec.md) | `[x] done` | Phase 3 | Monthly log roll-up compaction and archiving |
+| 19 | [`promote-adr`](0020-promote-adr.spec.md) | `[x] done` | Phase 4 | Promote-to-ADR formatting templates and directory resolution |
+| 20 | [`vault-backup`](0021-vault-backup.spec.md) | `[x] done` | Phase 4 | Encrypted vault backup, export, and restoration engine |
+| 21 | [`canvas-viewer`](0042-canvas-viewer.spec.md) | `[x] done` | Phase 5 | Interactive Canvas UI and Visual Graph Viewer |
+| 22 | [`multi-machine-sync`](0044-multi-machine-sync.spec.md) | `[x] done` | Phase 5 | Multi-Machine Vault Synchronization and Delta Engine |
+| 23 | [`mcp-sse-transport`](0043-mcp-sse-transport.spec.md) | `[x] done` | Phase 5 | HTTP and Server-Sent Events (SSE) MCP Transport |
+| 24 | [`trap-recurrence`](0022-trap-recurrence.spec.md) | `[x] done` | Phase 6 | Trap recurrence ranking and owner-skill export |
+| 25 | [`mcp-status-monitor`](0023-mcp-status-monitor.spec.md) | `[x] done` | Phase 6 | MCP status monitor page with live activity log |
 | 26 | `mcp-version-and-skill-install` | `[x]` done | Phase 6: Recurrence learning | MCP tools: check_version and install_skills (+ docs surface) |
-| 27 | [`deployment-modes`](deployment-modes.spec.md) | `[x] done` | Phase 7 | Local, hybrid, and remote deployment modes with portable MCP wiring |
-| 28 | [`status-vault-backup-ui`](status-vault-backup-ui.spec.md) | `[x] done` | Phase 7 | Status monitor vault export and import UI |
+| 27 | [`deployment-modes`](0025-deployment-modes.spec.md) | `[x] done` | Phase 7 | Local, hybrid, and remote deployment modes with portable MCP wiring |
+| 28 | [`status-vault-backup-ui`](0026-status-vault-backup-ui.spec.md) | `[x] done` | Phase 7 | Status monitor vault export and import UI |
 | 29 | `virtual-file-system-over-mcp` | `[ ]` todo | Phase 7: Deployment modes | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
-| 30 | [`operational-telemetry`](operational-telemetry.spec.md) | `[x] done` | Phase 7 | Operational Telemetry & Structured Rolling Usage Logging |
-| 31 | [`prompt-history-and-query`](prompt-history-and-query.spec.md) | `[x]` done | Phase 7 | Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer |
-| 32 | [`vault-reset-and-proxy-monitor`](vault-reset-and-proxy-monitor.spec.md) | `[x]` done | Phase 7: Deployment modes | Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI |
+| 30 | [`operational-telemetry`](0028-operational-telemetry.spec.md) | `[x] done` | Phase 7 | Operational Telemetry & Structured Rolling Usage Logging |
+| 31 | [`prompt-history-and-query`](0029-prompt-history-and-query.spec.md) | `[x]` done | Phase 7 | Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer |
+| 32 | [`vault-reset-and-proxy-monitor`](0030-vault-reset-and-proxy-monitor.spec.md) | `[x]` done | Phase 7: Deployment modes | Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI |
 | 33 | `configurable-daemon-ports` | `[x]` done | Phase 7: Deployment modes | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas) and CLI fallback |
-| 34 | [`memo-status`](memo-status.spec.md) | `[x]` done | Phase 7: Deployment modes | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard |
-| 35 | [`status-backup-page`](status-backup-page.spec.md) | `[x]` done | Phase 7 | Dedicated status-monitor backup page with complete archives and inventory management |
-| 36 | [`vault-git-hybrid-sync`](vault-git-hybrid-sync.spec.md) | `[x] done` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
+| 34 | [`memo-status`](0031-memo-status.spec.md) | `[x]` done | Phase 7: Deployment modes | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard |
+| 35 | [`status-backup-page`](0032-status-backup-page.spec.md) | `[x]` done | Phase 7 | Dedicated status-monitor backup page with complete archives and inventory management |
+| 36 | [`vault-git-hybrid-sync`](0033-vault-git-hybrid-sync.spec.md) | `[x] done` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
 | 37 | `memory-hit-count` | `[x]` done | Phase 7: Deployment modes | Memory retrieval hit count and status-monitor list |
-| 38 | [`sync-conflict-reconciliation`](sync-conflict-reconciliation.spec.md) | `[~] in progress` | Phase 7: Deployment modes | Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience |
-| 39 | [`session-handoff-baton`](session-handoff-baton.spec.md) | `[ ] todo` | Phase 8 | Cross-Agent Session Handoff Baton via Prompt and Bootstrap |
-| 40 | [`record-ttl-expiration`](record-ttl-expiration.spec.md) | `[ ] todo` | Phase 8 | Universal Record Time-To-Live and Expiration Engine |
-| 41 | [`search-ranking-explain`](search-ranking-explain.spec.md) | `[ ] todo` | Phase 8 | Retrieval Ranking and Bootstrap Brief Explainability |
-| 42 | [`memory-feedback-salience`](memory-feedback-salience.spec.md) | `[ ] todo` | Phase 8 | Memory Retrieval Feedback, Stale Flagging, and Salience Tuning |
-| 43 | [`capture-ignore-marker`](capture-ignore-marker.spec.md) | `[ ] todo` | Phase 8 | Project-Local Capture Exclusions Marker and Safety Boundary |
-| 44 | [`agent-hooks-install`](agent-hooks-install.spec.md) | `[ ] todo` | Phase 8 | Automatic Agent Lifecycle Hooks Installer (memo install-hooks) |
+| 38 | [`sync-conflict-reconciliation`](0035-sync-conflict-reconciliation.spec.md) | `[x] done` | Phase 7: Deployment modes | Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience |
+| 39 | [`session-handoff-baton`](0036-session-handoff-baton.spec.md) | `[ ] todo` | Phase 8 | Cross-Agent Session Handoff Baton via Prompt and Bootstrap |
+| 40 | [`record-ttl-expiration`](0037-record-ttl-expiration.spec.md) | `[ ] todo` | Phase 8 | Universal Record Time-To-Live and Expiration Engine |
+| 41 | [`search-ranking-explain`](0038-search-ranking-explain.spec.md) | `[ ] todo` | Phase 8 | Retrieval Ranking and Bootstrap Brief Explainability |
+| 42 | [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md) | `[ ] todo` | Phase 8 | Memory Retrieval Feedback, Stale Flagging, and Salience Tuning |
+| 43 | [`capture-ignore-marker`](0040-capture-ignore-marker.spec.md) | `[ ] todo` | Phase 8 | Project-Local Capture Exclusions Marker and Safety Boundary |
+| 44 | [`agent-hooks-install`](0041-agent-hooks-install.spec.md) | `[ ] todo` | Phase 8 | Automatic Agent Lifecycle Hooks Installer (memo install-hooks) |
 
 ## 9. Inbox (unscheduled ideas)
 
