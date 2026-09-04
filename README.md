@@ -790,7 +790,7 @@ memo reconcile --clean-sidecars
 | `reset` | Reset vault database and clear files with mandatory pre-wipe backup | `--all`, `--project`, `--force`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
 | `wiki` | Print or regenerate vault `projects/{id}/WIKI.md` (CLI extra; not an MCP tool) | `--project`, `--regenerate`, `--json` |
-| `vault` | Manage vault projects (alias redirect, merge, CRUD; CLI extra; not an MCP tool) | `list`, `alias --from --to`, `merge --source --target [--copy-records]`, `create`, `update`, `delete --confirm` |
+| `vault` | Manage vault projects (alias redirect, merge, CRUD; CLI extra; not an MCP tool) | `list`, `alias --from --to`, `unalias --from`, `merge --source --target [--copy-records]`, `create`, `update`, `delete --confirm` |
 | `serve` | Run stdio or SSE MCP server for agent hosts (SSE co-starts status on :3124; stdio opt-in via `--status`) | `--sse`, `--port`, `--status`, `--status-port`, `--no-status`, `--auth-token` |
 
 ### Operator Q&A

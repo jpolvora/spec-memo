@@ -743,6 +743,7 @@ async function runCliInner(
       VaultManagerError,
       getVaultProjectListEnriched,
       setProjectAlias,
+      removeProjectAlias,
       mergeVaultProjects,
       createVaultProject,
       updateVaultProject,
@@ -782,6 +783,14 @@ async function runCliInner(
         const result = await setProjectAlias(from, to, vaultRoot);
         if (parsed.isJson) printJson({ ok: true, ...result });
         else console.log(`Alias set: ${result.from} -> ${result.to}`);
+        return 0;
+      }
+
+      if (sub === 'unalias' || sub === 'remove-alias') {
+        const from = String(parsed.options.from || parsed.positionals[1] || '');
+        const result = await removeProjectAlias(from, vaultRoot);
+        if (parsed.isJson) printJson({ ok: true, ...result });
+        else console.log(`Alias removed: ${result.from}`);
         return 0;
       }
 

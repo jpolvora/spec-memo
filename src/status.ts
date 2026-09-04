@@ -3236,10 +3236,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       });
     }
 
-    async function vaultManagerApi(path, body) {
+    async function vaultManagerApi(path, body, method) {
+      const httpMethod = method || (body ? "POST" : "GET");
       const res = await apiFetch(path, {
-        method: body ? "POST" : "GET",
-        headers: { ...apiHeaders(), ...(body ? { "Content-Type": "application/json" } : {}) },
+        method: httpMethod,
+        headers: Object.assign({}, apiHeaders(), body ? { "Content-Type": "application/json" } : {}),
         body: body ? JSON.stringify(body) : undefined
       });
       const data = await res.json().catch(() => ({}));
@@ -3269,6 +3270,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
             '<button type="button" class="btn-secondary" data-vault-action="edit" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Edit</button>' +
             '<button type="button" class="btn-secondary" data-vault-action="alias" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Alias</button>' +
             '<button type="button" class="btn-secondary" data-vault-action="merge" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Merge</button>' +
+            (v.aliasOf ? '<button type="button" class="btn-secondary" data-vault-action="unalias" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Remove alias</button>' : '') +
             '<button type="button" class="btn-secondary" data-vault-action="delete" data-id="' + safeId + '" style="padding:4px 8px;">Delete</button>' +
           '</td>' +
         '</tr>';
@@ -3300,6 +3302,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
             if (!to) return;
             await vaultManagerApi("/api/vaults/alias", { from: id, to });
             showBanner("Alias set: " + id + " → " + to, "success");
+          } else if (action === "unalias") {
+            await vaultManagerApi("/api/vaults/alias", { from: id }, "DELETE");
+            showBanner("Alias removed for " + id, "success");
           } else if (action === "merge") {
             const sourcesRaw = window.prompt("Source ids to merge into " + id + " (comma-separated):");
             if (!sourcesRaw) return;

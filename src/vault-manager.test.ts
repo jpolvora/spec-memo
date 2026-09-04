@@ -9,6 +9,8 @@ import {
   mergeVaultProjects,
   createVaultProject,
   readProjectAliases,
+  removeProjectAlias,
+  deleteVaultProject,
   VaultManagerError,
   getVaultProjectListEnriched
 } from './vault-manager.js';
@@ -70,21 +72,40 @@ describe('vault-manager', () => {
     assert.deepEqual(after, before);
   });
 
-  it('resolveProjectIdentity uses canonical vault path after alias', async () => {
+  it('resolveProjectIdentity follows projectAliases to canonical vault path (AC2/AC4)', async () => {
     scaffoldProject('canonical');
     scaffoldProject('alias-src');
     await setProjectAlias('alias-src', 'canonical', tempVault);
-    const identity = resolveProjectIdentity(process.cwd(), { vaultRoot: tempVault });
-    // Force alias-src id path simulation via projectIdFromVaultPath is separate;
-    // when cwd resolves to alias-src id, canonical should win once aliased in map
-    const aliases = readProjectAliases(tempVault);
-    aliases['fake-clone-id'] = 'canonical';
-    const configPath = path.join(tempVault, 'config.json');
-    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    cfg.projectAliases = aliases;
-    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8');
-    assert.equal(resolveCanonicalProjectId('fake-clone-id', tempVault), 'canonical');
-    assert.ok(identity.vaultProjectPath.includes(path.join('projects', identity.projectId)));
+    const aliasCwd = path.join(tempVault, 'projects', 'alias-src');
+    const identity = resolveProjectIdentity(aliasCwd, { vaultRoot: tempVault });
+    assert.equal(identity.projectId, 'canonical');
+    assert.equal(identity.vaultProjectPath, path.join(tempVault, 'projects', 'canonical'));
+  });
+
+  it('removeProjectAlias clears alias row (AC17)', async () => {
+    scaffoldProject('canonical');
+    scaffoldProject('alias-src');
+    await setProjectAlias('alias-src', 'canonical', tempVault);
+    await removeProjectAlias('alias-src', tempVault);
+    assert.equal(readProjectAliases(tempVault)['alias-src'], undefined);
+  });
+
+  it('deleteVaultProject requires confirm (AC18)', async () => {
+    scaffoldProject('doomed');
+    await assert.rejects(
+      () => deleteVaultProject({ id: 'doomed', confirm: false, vaultRoot: tempVault }),
+      (err: unknown) => err instanceof VaultManagerError
+    );
+  });
+
+  it('deleteVaultProject blocks canonical target with incoming aliases unless force (AC19)', async () => {
+    scaffoldProject('canonical');
+    scaffoldProject('alias-src');
+    await setProjectAlias('alias-src', 'canonical', tempVault);
+    await assert.rejects(
+      () => deleteVaultProject({ id: 'canonical', confirm: true, vaultRoot: tempVault }),
+      (err: unknown) => err instanceof VaultManagerError && (err as VaultManagerError).httpStatus === 409
+    );
   });
 
   it('merge with copyRecords copies active records into target', async () => {
