@@ -26,6 +26,8 @@ import { runStatusCheck, formatStatusDashboard } from './status-cmd.js';
 import { readWikiFile, regenerateWiki, WikiError, wikiProjectExists, WIKI_PROJECT_REQUIRED } from './wiki.js';
 import { getPackageVersion } from './version.js';
 import { assertSupportedNodeRuntime } from './sqlite.js';
+import { submitMemoryFeedback } from './feedback.js';
+import type { FeedbackType } from './types.js';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 
@@ -206,6 +208,7 @@ Utility Commands:
   doctor        Diagnose vault integrity and check product tree pollution
   sync          Synchronize vault records (hybrid mode or vault-git)
   rank          List traps by recurrence (occurrences)
+  feedback      Submit helpful/stale/wrong feedback on a memory record
   import        Import legacy .agents tree into external vault
   export-vault  Export vault records into portable archive (optional AES-256-GCM)
   import-vault  Import vault archive into local vault
@@ -1203,6 +1206,55 @@ async function runCliInner(
     }
   }
 
+  // Handle memo feedback command
+  if (parsed.command === 'feedback') {
+    try {
+      const recordId = parsed.positionals[0];
+      if (!recordId) {
+        throw new Error('Usage: memo feedback <id> --helpful|--not-helpful|--stale|--wrong [--comment "reason"]');
+      }
+      let feedback: FeedbackType | undefined;
+      if (parsed.options.helpful === true || parsed.options.helpful === 'true') {
+        feedback = 'helpful';
+      } else if (parsed.options['not-helpful'] === true || parsed.options['not-helpful'] === 'true') {
+        feedback = 'not_helpful';
+      } else if (parsed.options.stale === true || parsed.options.stale === 'true') {
+        feedback = 'stale';
+      } else if (parsed.options.wrong === true || parsed.options.wrong === 'true') {
+        feedback = 'wrong';
+      }
+      if (!feedback) {
+        throw new Error('Specify one of --helpful, --not-helpful, --stale, or --wrong');
+      }
+      const vaultRoot = parsed.options.vaultRoot as string | undefined;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const comment = (parsed.options.comment as string) || undefined;
+      const result = await submitMemoryFeedback({
+        id: recordId,
+        feedback,
+        comment,
+        cwd,
+        vaultRoot
+      });
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(
+          `Feedback recorded for '${result.id}': ${result.feedback} (helpful=${result.helpfulCount}, stale=${result.staleCount})`
+        );
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'FEEDBACK_ERROR' });
+      } else {
+        console.error(msg);
+      }
+      return 1;
+    }
+  }
+
   // Handle memo rank command (CLI-only; not an MCP tool)
   if (parsed.command === 'rank') {
     try {
@@ -1415,6 +1467,25 @@ async function runCliInner(
           console.log(`\nWarnings:`);
           for (const w of result.warnings) {
             console.log(`  - ${w}`);
+          }
+        }
+
+        if (result.semanticContradictions && result.semanticContradictions.length > 0) {
+          console.log(`\nActive Semantic Contradictions:`);
+          for (const c of result.semanticContradictions) {
+            const src = c.sourceTitle ? `${c.sourceId} (${c.sourceTitle})` : c.sourceId;
+            const tgt = c.targetTitle ? `${c.targetId} (${c.targetTitle})` : c.targetId;
+            console.log(`  - ${src} contradicts ${tgt} (both active)`);
+          }
+          console.log(`  Recommendation: archive or supersede one of the conflicting records.`);
+        }
+
+        if (result.potentiallyObsolete && result.potentiallyObsolete.length > 0) {
+          console.log(`\nPotentially Obsolete Traps & Decisions:`);
+          for (const o of result.potentiallyObsolete) {
+            console.log(
+              `  - ${o.id}${o.title ? ` (${o.title})` : ''} [stale=${o.staleCount}, helpful=${o.helpfulCount}]`
+            );
           }
         }
 
@@ -2269,7 +2340,8 @@ async function runCliInner(
           'derive-rules': 'derive_rules',
           export_story: 'export_story',
           'export-story': 'export_story',
-          export: 'export_story'
+          export: 'export_story',
+          feedback: 'feedback'
         };
 
         if (pos0 && ACTION_MAP[pos0]) {

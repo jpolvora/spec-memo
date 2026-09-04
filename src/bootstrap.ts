@@ -9,6 +9,7 @@ import { getRecord } from './store.js';
 import { matchesAnyPattern } from './indexer.js';
 import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { pullHybridProject } from './hybrid-sync.js';
+import { cloneRecordWithStaleBadge } from './salience.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -355,5 +356,22 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     initialBrief.byteLength = calculatePayloadSize(initialBrief);
   }
 
-  return initialBrief;
+  return applyStaleBadgesToBrief(initialBrief);
+}
+
+function applyStaleBadgesToBrief(brief: BootstrapBrief): BootstrapBrief {
+  brief.traps = brief.traps.map(cloneRecordWithStaleBadge);
+  brief.decisions = brief.decisions.map(cloneRecordWithStaleBadge);
+  if (brief.activeSlice) {
+    if (brief.activeSlice.spec) {
+      brief.activeSlice.spec = cloneRecordWithStaleBadge(brief.activeSlice.spec);
+    }
+    if (brief.activeSlice.plan) {
+      brief.activeSlice.plan = cloneRecordWithStaleBadge(brief.activeSlice.plan);
+    }
+    if (brief.activeSlice.state) {
+      brief.activeSlice.state = cloneRecordWithStaleBadge(brief.activeSlice.state);
+    }
+  }
+  return brief;
 }

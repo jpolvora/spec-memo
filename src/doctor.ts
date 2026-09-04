@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
 import { ensureVaultStructure, getVaultRoot, resolveVaultGitAtomic, redactVaultGitRemoteUrl } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
-import { openIndex, rebuildIndex } from './indexer.js';
+import { openIndex, rebuildIndex, findActiveSemanticContradictions } from './indexer.js';
 import { wrapSqliteOpenError } from './sqlite.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { getPackageVersion } from './version.js';
@@ -16,6 +16,9 @@ import {
   formatCheckCaptureResult,
   loadIgnoreRules
 } from './capture-ignore.js';
+import { parseRecord } from './schema.js';
+import { RECORD_SUBDIRS } from './vault.js';
+import { helpfulCountOf, staleCountOf, isFlaggedStale } from './salience.js';
 
 export const DEFAULT_HEALTH_TIMEOUT_MS = 10000;
 
@@ -82,6 +85,39 @@ function findFilesRecursive(dir: string, maxDepth = 6, currentDepth = 0): string
   }
 
   return results;
+}
+
+function scanPotentiallyObsoleteRecords(
+  vaultRoot: string
+): Array<{ id: string; title?: string; helpfulCount: number; staleCount: number }> {
+  const obsolete: Array<{ id: string; title?: string; helpfulCount: number; staleCount: number }> = [];
+  const projectsDir = path.join(vaultRoot, 'projects');
+  if (!fs.existsSync(projectsDir)) return obsolete;
+
+  for (const project of fs.readdirSync(projectsDir, { withFileTypes: true })) {
+    if (!project.isDirectory()) continue;
+    const projectDir = path.join(projectsDir, project.name);
+    for (const sub of RECORD_SUBDIRS) {
+      const dir = path.join(projectDir, sub);
+      if (!fs.existsSync(dir)) continue;
+      for (const file of fs.readdirSync(dir)) {
+        if (!file.endsWith('.md') || file.includes('.conflict.')) continue;
+        try {
+          const record = parseRecord(fs.readFileSync(path.join(dir, file), 'utf8'));
+          if (!isFlaggedStale(record.frontmatter)) continue;
+          obsolete.push({
+            id: String(record.frontmatter.id),
+            title: typeof record.frontmatter.title === 'string' ? record.frontmatter.title : undefined,
+            helpfulCount: helpfulCountOf(record.frontmatter),
+            staleCount: staleCountOf(record.frontmatter)
+          });
+        } catch {
+          // skip
+        }
+      }
+    }
+  }
+  return obsolete;
 }
 
 /**
@@ -417,6 +453,27 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     ? `spec-memo vault is healthy and product repository is clean (${indexedRecordsCount} records indexed, mode: ${effectiveMode}).`
     : `spec-memo doctor detected issues (${warnings.length} warning${warnings.length === 1 ? '' : 's'}, mode: ${effectiveMode}).`;
 
+  let semanticContradictions: import('./types.js').SemanticContradiction[] = [];
+  let potentiallyObsolete: Array<{ id: string; title?: string; helpfulCount: number; staleCount: number }> = [];
+  if (ftsHealthy) {
+    try {
+      semanticContradictions = findActiveSemanticContradictions(vaultRoot);
+      potentiallyObsolete = scanPotentiallyObsoleteRecords(vaultRoot);
+      for (const c of semanticContradictions) {
+        warnings.push(
+          `Active semantic contradiction: ${c.sourceId} contradicts ${c.targetId} (both active). Consider archival or supersession.`
+        );
+      }
+      for (const o of potentiallyObsolete) {
+        warnings.push(
+          `Potentially obsolete record: ${o.id} (stale=${o.staleCount}, helpful=${o.helpfulCount}).`
+        );
+      }
+    } catch {
+      // fail-open
+    }
+  }
+
   return {
     healthy,
     vaultRoot,
@@ -460,6 +517,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       invalidLines: exclusionBoundary.invalidLines
     },
     warnings,
-    summary
+    summary,
+    semanticContradictions,
+    potentiallyObsolete
   };
 }

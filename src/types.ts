@@ -27,6 +27,15 @@ export interface SessionDeliverable {
   title?: string;
 }
 
+export type RecordLinkType = 'fixes' | 'contradicts' | 'causes';
+
+export interface RecordLink {
+  target: string;
+  type: RecordLinkType;
+}
+
+export type FeedbackType = 'helpful' | 'not_helpful' | 'stale' | 'wrong';
+
 export interface RecordFrontmatter {
   id: string;
   kind: RecordKind;
@@ -52,6 +61,14 @@ export interface RecordFrontmatter {
   hits?: number;
   /** ISO timestamp of the most recent retrieval hit. */
   lastHit?: string;
+  /** Aggregate helpful feedback count (default 0). */
+  helpfulCount?: number;
+  /** Aggregate stale/wrong feedback count (default 0). */
+  staleCount?: number;
+  /** ISO timestamp of the most recent feedback submission. */
+  lastFeedback?: string;
+  /** Typed semantic relationship links to other record ids. */
+  links?: RecordLink[];
   // Prompt & Session extended fields
   ide?: string;
   model?: string;
@@ -311,6 +328,34 @@ export interface SearchHit {
   lastHit?: string | null;
   layer?: TrapLayer;
   severity?: 'low' | 'medium' | 'high' | 'critical';
+  helpfulCount?: number;
+  staleCount?: number;
+  flaggedStale?: boolean;
+}
+
+export interface FeedbackOptions {
+  id: string;
+  feedback: FeedbackType;
+  comment?: string;
+  cwd?: string;
+  projectId?: string;
+  vaultRoot?: string;
+}
+
+export interface FeedbackResult {
+  id: string;
+  feedback: FeedbackType;
+  helpfulCount: number;
+  staleCount: number;
+  lastFeedback: string;
+  projectId: string;
+}
+
+export interface SemanticContradiction {
+  sourceId: string;
+  targetId: string;
+  sourceTitle?: string;
+  targetTitle?: string;
 }
 
 export interface AppendOptions {
@@ -372,6 +417,10 @@ export interface MemoryRecordListItem {
   lastSeen?: string | null;
   updated: string;
   snippet?: string;
+  helpfulCount?: number;
+  staleCount?: number;
+  links?: RecordLink[];
+  flaggedStale?: boolean;
 }
 
 export interface BootstrapBrief {
@@ -893,6 +942,8 @@ export interface DoctorResult {
   };
   warnings: string[];
   summary: string;
+  semanticContradictions?: SemanticContradiction[];
+  potentiallyObsolete?: Array<{ id: string; title?: string; helpfulCount: number; staleCount: number }>;
 }
 
 export interface ImportItem {
@@ -936,7 +987,8 @@ export type PromptAction =
   | 'session_end'
   | 'activity_report'
   | 'derive_rules'
-  | 'export_story';
+  | 'export_story'
+  | 'feedback';
 
 export interface PaginatedResult<T> {
   total: number;
@@ -976,6 +1028,8 @@ export interface PromptOptions {
   saveTraps?: boolean;
   promote?: string;
   format?: string;
+  feedback?: FeedbackType;
+  comment?: string;
 }
 
 export interface PromptRecordResult {

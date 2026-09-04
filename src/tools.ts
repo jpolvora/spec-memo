@@ -40,6 +40,7 @@ import {
   deriveRulesFromPrompts,
   generateActivityReport
 } from './prompt.js';
+import { submitMemoryFeedback } from './feedback.js';
 import { sanitizeToolOutput } from './safety.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
@@ -448,6 +449,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         saveTraps: { type: 'boolean', description: 'Save derived rules as traps in vault (for derive_rules)' },
         promote: { type: 'string', description: 'Destination path to promote derived rules to' },
         format: { type: 'string', description: 'Format for rule export (cursor, copilot, claude, gemini, markdown)' },
+        feedback: { type: 'string', enum: ['helpful', 'not_helpful', 'stale', 'wrong'], description: 'Feedback type (for feedback action)' },
+        comment: { type: 'string', description: 'Optional feedback comment' },
         cwd: { type: 'string', description: 'Product repository working directory' },
         projectId: { type: 'string', description: 'Specific project ID override' },
         crossProject: { type: 'boolean', description: 'Query across all vaults' }
@@ -464,7 +467,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         'session_end',
         'activity_report',
         'derive_rules',
-        'export_story'
+        'export_story',
+        'feedback'
       ]).default('record'),
       body: z.string().optional(),
       id: z.string().optional(),
@@ -495,6 +499,8 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       saveTraps: z.boolean().optional(),
       promote: z.string().optional(),
       format: z.string().optional(),
+      feedback: z.enum(['helpful', 'not_helpful', 'stale', 'wrong']).optional(),
+      comment: z.string().optional(),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
       projectId: z.string().optional(),
@@ -971,6 +977,33 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           outputPath: promptOpts.promote
         });
         return ok(result);
+      }
+
+      if (action === 'feedback') {
+        if (!promptOpts.id) {
+          return fail('INVALID_ARGUMENTS', "Parameter 'id' is required for feedback action.");
+        }
+        if (!promptOpts.feedback) {
+          return fail('INVALID_ARGUMENTS', "Parameter 'feedback' is required for feedback action.");
+        }
+        try {
+          const result = await submitMemoryFeedback({
+            id: promptOpts.id,
+            feedback: promptOpts.feedback,
+            comment: promptOpts.comment,
+            cwd: promptOpts.cwd,
+            vaultRoot: promptOpts.vaultRoot,
+            projectId: promptOpts.projectId
+          });
+          scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
+          return ok(result);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('Record not found')) {
+            return fail('RECORD_NOT_FOUND', msg);
+          }
+          return fail('FEEDBACK_FAILED', err);
+        }
       }
 
       return fail('INVALID_ARGUMENTS', `Unsupported prompt action: ${action}`);
