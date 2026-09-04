@@ -71,10 +71,18 @@ jobs:
           NAME="${REPO#*/}"
 
           if [ -n "$PR_NUM" ]; then
-            QUERY='query($owner: String!, $name: String!, $pr: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pr) { reviewThreads(first: 100) { nodes { id isResolved isOutdated } } } } }'
-            ACTIVE=$(gh api graphql -f query="$QUERY" -F owner="$OWNER" -F name="$NAME" -F pr="$PR_NUM" --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' 2>/dev/null || echo 0)
+            QUERY='query($owner: String!, $name: String!, $pr: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pr) { reviewThreads(first: 100) { nodes { id isResolved isOutdated path line comments(first: 1) { nodes { author { login } url } } } } } } }'
+            RESPONSE=$(gh api graphql -f query="$QUERY" -F owner="$OWNER" -F name="$NAME" -F pr="$PR_NUM")
+            UNRESOLVED=$(echo "$RESPONSE" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)]')
+            ACTIVE=$(echo "$UNRESOLVED" | jq 'length')
             echo "active_threads=$ACTIVE" >> "$GITHUB_OUTPUT"
             echo "Unresolved threads: $ACTIVE"
+
+            if [ "$ACTIVE" -gt 0 ]; then
+              echo "### ⚠️ Agentic Code Review Found Unresolved Issues" >> "$GITHUB_STEP_SUMMARY"
+              echo "PR #${PR_NUM} has **${ACTIVE}** unresolved review thread(s):" >> "$GITHUB_STEP_SUMMARY"
+              echo "$UNRESOLVED" | jq -r '.[] | "- `" + (.path // "N/A") + ":" + ((.line // "N/A") | tostring) + "` ([View Discussion](" + (.comments.nodes[0].url // "#") + "))"' >> "$GITHUB_STEP_SUMMARY"
+            fi
           else
             echo "active_threads=0" >> "$GITHUB_OUTPUT"
             echo "No PR number provided; skipping unresolved threads check."

@@ -45,7 +45,7 @@ Standalone spec-memo hosts (no workflow-skills) use CLI `memo setup` for **host 
 |---|---|---|
 | **Domain Focus** | **Knowledge Continuity** (What the codebase learned) | **Execution Continuity** (What the agent did) |
 | **Primary Records** | `trap`, `decision`, `spec`, `plan`, `review`, `scratch` | `prompt`, `session`, `log` |
-| **Tool Surface** | `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote` | `prompt` (`record`, `session_start`, `session_end`, `handoff`, `activity_report`, `derive_rules`) |
+| **Tool Surface** | `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote` | `prompt` (`record`, `session_start`, `session_end`, `activity_report`, `derive_rules`, `export_story`) |
 | **Lifecycle Touchpoint** | Injects anti-regression traps & active decisions into brief | Demarcates session boundaries, correlates git commits/PRs, transfers handoff batons |
 
 ---

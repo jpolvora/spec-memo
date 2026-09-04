@@ -412,4 +412,77 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     assert.strictEqual(parsed.strategy, "smart-merge");
     assert.strictEqual(typeof parsed.sidecarsCleaned, "number");
   });
+
+  await t.test("CLI memo reconcile returns exit code 1 when sidecars are retained", async () => {
+    const retainedProj = "proj-reconcile-retained";
+    initVault({ vaultRoot, projectId: retainedProj });
+    const record = await upsertRecord({
+      vaultRoot,
+      projectId: retainedProj,
+      kind: "trap",
+      slug: "trap-retained-test",
+      body: "# Base Version"
+    });
+    const item = (await getRecord({ vaultRoot, projectId: retainedProj, kind: "trap", id: record.id }))!;
+    const sidecarPath = path.join(path.dirname(record.path), "trap-retained-test.conflict.md");
+    fs.writeFileSync(
+      sidecarPath,
+      serializeRecord({
+        frontmatter: { ...item.frontmatter, id: "trap-retained-test-c" },
+        body: "# Divergent Body That Will Not Auto Merge"
+      }),
+      "utf8"
+    );
+
+    const { spawnSync } = await import("node:child_process");
+    const cliPath = path.resolve("dist/cli.js");
+    // With smart-merge and no prefer, divergent sidecar is retained -> must exit 1
+    const res = spawnSync(
+      process.execPath,
+      [cliPath, "reconcile", "--vaultRoot", vaultRoot, "--clean-sidecars", "--all", "--json"],
+      { encoding: "utf8" }
+    );
+    assert.strictEqual(res.status, 1);
+    const parsed = JSON.parse(res.stdout);
+    assert.ok(parsed.sidecarsRetained > 0);
+  });
+
+  await t.test("applyChangeset rolls back created conflict sidecars when index throws", async () => {
+    const rbProj = "proj-sidecar-rollback";
+    initVault({ vaultRoot, projectId: rbProj });
+    const record = await upsertRecord({
+      vaultRoot,
+      projectId: rbProj,
+      kind: "trap",
+      slug: "trap-rb-sidecar",
+      body: "# Original Base"
+    });
+    const item = (await getRecord({ vaultRoot, projectId: rbProj, kind: "trap", id: record.id }))!;
+    const sidecarPath = path.join(path.dirname(record.path), "trap-rb-sidecar.conflict.md");
+
+    // Force sidecar strategy with divergent body and equal timestamp
+    const sidecarChangeset: Changeset = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          project: rbProj,
+          frontmatter: { ...item.frontmatter },
+          body: "# Divergent Remote Body"
+        },
+        {
+          project: "../../traversal-fail", // Trigger rollback after sidecar write
+          frontmatter: { id: "fail", kind: "trap", project: "../../traversal-fail", created: "", updated: "", status: "active", source: "agent" },
+          body: "# Fail"
+        }
+      ]
+    };
+
+    await assert.rejects(async () => {
+      await applyChangeset(vaultRoot, sidecarChangeset, { strategy: "sidecar" });
+    });
+
+    // Sidecar must not remain on disk after rollback
+    assert.strictEqual(fs.existsSync(sidecarPath), false);
+  });
 });

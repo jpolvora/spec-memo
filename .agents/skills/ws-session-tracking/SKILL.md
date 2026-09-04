@@ -38,7 +38,7 @@ invocation_names:
 |---|---|---|
 | **Domain Focus** | **Execution Continuity** (What the agent did) | **Knowledge Continuity** (What the codebase learned) |
 | **Primary Records** | `prompt`, `session`, `log` | `trap`, `decision`, `spec`, `plan`, `review`, `scratch` |
-| **Tool Surface** | `prompt` (`record`, `session_start`, `session_end`, `handoff`, `activity_report`) | `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote` |
+| **Tool Surface** | `prompt` (`record`, `session_start`, `session_end`, `activity_report`, `derive_rules`, `export_story`) | `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote` |
 | **Lifecycle Touchpoint** | Ingests prompts, correlates PR/git deliverables, manages task handoffs | Injects traps & architecture decisions into brief, validates git boundaries |
 
 ---

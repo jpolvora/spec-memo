@@ -256,6 +256,10 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       const { cleanConflictSidecars } = await import('./sync.js');
       const cleanRes = cleanConflictSidecars(vaultRoot, { prefer: 'local' });
       fixedCount += cleanRes.cleaned;
+      if (cleanRes.cleaned > 0) {
+        const { rebuildIndex } = await import('./indexer.js');
+        await rebuildIndex(vaultRoot);
+      }
     } catch {
       // Ignore sidecar cleanup errors
     }

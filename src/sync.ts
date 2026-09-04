@@ -547,6 +547,12 @@ export async function applyChangeset(
             conflicts++;
             if (!dryRun) {
               const conflictPath = path.resolve(kindDir, `${slug}.conflict.md`);
+              if (!journal.some((j) => j.filePath === conflictPath)) {
+                journal.push({
+                  filePath: conflictPath,
+                  originalContent: fs.existsSync(conflictPath) ? fs.readFileSync(conflictPath, "utf8") : null
+                });
+              }
               fs.writeFileSync(conflictPath, serializeRecord(item), "utf8");
             }
             conflictDetails.push({
@@ -593,6 +599,12 @@ export async function applyChangeset(
               if (!dryRun) {
                 // AC4: Write single deterministic ${slug}.conflict.md
                 const conflictPath = path.resolve(kindDir, `${slug}.conflict.md`);
+                if (!journal.some((j) => j.filePath === conflictPath)) {
+                  journal.push({
+                    filePath: conflictPath,
+                    originalContent: fs.existsSync(conflictPath) ? fs.readFileSync(conflictPath, "utf8") : null
+                  });
+                }
                 fs.writeFileSync(conflictPath, serializeRecord(item), "utf8");
               }
               conflictDetails.push({
@@ -659,7 +671,7 @@ export async function applyChangeset(
         sidecarsCleaned = cleanRes.cleaned;
       }
 
-      if (!dryRun && applied > 0) {
+      if (!dryRun && (applied > 0 || autoMerged > 0 || sidecarsCleaned > 0)) {
         for (const projId of touchedProjects) {
           rebuildCompiledViews(projId, vaultRoot);
         }

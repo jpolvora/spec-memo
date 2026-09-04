@@ -1209,7 +1209,10 @@ async function runCliInner(
             `  Pushed:   applied=${report.pushed.applied}, skipped=${report.pushed.skipped}, conflicts=${report.pushed.conflicts}${report.pushed.autoMerged ? `, auto-merged=${report.pushed.autoMerged}` : ''}`
           );
         }
-        return report.pulled.conflicts > 0 || report.pushed.conflicts > 0 ? 1 : 0;
+        const { readHybridState } = await import('./hybrid-state.js');
+        const state = readHybridState(getVaultRoot(vaultRoot));
+        const hasConflicts = report.pulled.conflicts > 0 || report.pushed.conflicts > 0;
+        return hasConflicts || state.dirty ? 1 : 0;
       }
 
       if (gitEnabled) {
@@ -1250,7 +1253,7 @@ async function runCliInner(
         parsed.options.dryRun === true;
       const cwd = (parsed.options.cwd as string) || process.cwd();
       const identity = resolveProjectIdentity(cwd, { vaultRoot: root });
-      const prefer = (parsed.options.prefer as 'local' | 'remote') || 'local';
+      const prefer = (parsed.options.prefer as 'local' | 'remote') || undefined;
       const strategy = (parsed.options.strategy as import('./types.js').ConflictStrategy) || 'smart-merge';
       const cleanSidecars = parsed.options['clean-sidecars'] !== false && parsed.options['clean-sidecars'] !== 'false';
 
@@ -1261,6 +1264,10 @@ async function runCliInner(
         dryRun,
         projectId: all ? undefined : identity.projectId
       });
+      if (!dryRun && cleanResult.cleaned > 0) {
+        const { rebuildIndex } = await import('./indexer.js');
+        await rebuildIndex(root);
+      }
 
       // 2. Perform synchronization if in hybrid mode
       let syncResult: any = null;
@@ -1280,7 +1287,7 @@ async function runCliInner(
 
       const report = {
         command: 'reconcile',
-        prefer,
+        prefer: prefer || 'none',
         strategy,
         dryRun,
         sidecarsCleaned: cleanResult.cleaned,
@@ -1293,7 +1300,7 @@ async function runCliInner(
         printJson(report);
       } else {
         console.log(`spec-memo — Vault Conflict Reconciliation Complete\n`);
-        console.log(`  Source of Truth:  Prefer ${prefer.toUpperCase()}`);
+        console.log(`  Source of Truth:  ${prefer ? `Prefer ${prefer.toUpperCase()}` : 'None (Smart-Merge)'}`);
         console.log(`  Strategy:         ${strategy}`);
         console.log(`  Sidecars Cleaned: ${cleanResult.cleaned} (retained: ${cleanResult.retained})`);
         if (cleanResult.filesCleaned.length > 0 && cleanResult.filesCleaned.length <= 10) {
@@ -1317,8 +1324,9 @@ async function runCliInner(
           }
         }
       }
-
-      return syncResult && !syncResult.ok ? 1 : 0;
+      const syncFailed = Boolean(syncResult && !syncResult.ok);
+      const hasRetainedSidecars = cleanResult.retained > 0;
+      return syncFailed || hasRetainedSidecars ? 1 : 0;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (parsed.isJson) {

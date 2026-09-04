@@ -206,7 +206,9 @@ export interface PortsConfig {
 export type ConflictStrategy = 'smart-merge' | 'local-wins' | 'remote-wins' | 'sidecar';
 
 export interface SyncConfig {
+  /** Primary conflict resolution strategy (spec AC5). */
   conflictStrategy?: ConflictStrategy;
+  /** @deprecated Use conflictStrategy */
   defaultStrategy?: ConflictStrategy;
   cleanSidecars?: boolean;
   autoSyncIntervalMinutes?: number;
