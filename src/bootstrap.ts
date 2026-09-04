@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { BootstrapBrief, BootstrapOptions, MemoRecord, BootstrapBudgetReport, BudgetCandidateReport } from './types.js';
-import { getProjectMetadata, getVaultRoot, ensureVaultStructure, ensureProjectVault } from './vault.js';
+import { getProjectMetadata, getVaultRoot, ensureVaultStructure, ensureProjectVault, withVaultLockSync } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { scanProjectRecords } from './compiler.js';
 import { getRecord } from './store.js';
@@ -418,22 +418,28 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       sessionObjective: brief.sessionObjective ?? sessionObjective
     };
     if (calculatePayloadSize(deliverable) > budgetBytes) {
+      delete brief.handoff;
+      delete brief.handoffMarkdown;
       brief.byteLength = calculatePayloadSize(brief);
       return brief;
     }
     try {
-      deliverable.handoff = claimHandoff({
-        projectDir,
-        record: handoffCandidate,
-        claimedBySession: options.sessionId,
-        vaultRoot,
-        projectId
-      });
+      deliverable.handoff = withVaultLockSync(vaultRoot, () =>
+        claimHandoff({
+          projectDir,
+          record: handoffCandidate!,
+          claimedBySession: options.sessionId,
+          vaultRoot,
+          projectId
+        })
+      );
       deliverable.byteLength = calculatePayloadSize(deliverable);
       return deliverable;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       notices.push(`Handoff claim warning: ${msg}`);
+      delete brief.handoff;
+      delete brief.handoffMarkdown;
       brief.byteLength = calculatePayloadSize(brief);
       return brief;
     }
