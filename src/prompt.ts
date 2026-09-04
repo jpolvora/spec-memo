@@ -58,7 +58,9 @@ export async function recordPromptTurn(options: PromptOptions): Promise<PromptRe
   if (!rawBody || typeof rawBody !== 'string' || !rawBody.trim()) {
     throw new Error("Parameter 'body' must be a non-empty string for prompt record.");
   }
-  const body = (redactSecretsInPayload(rawBody) as string).trim();
+  const { redactIgnoredPathsInText } = await import('./capture-ignore.js');
+  const redactedBody = redactIgnoredPathsInText(rawBody, cwd, { projectId, vaultRoot });
+  const body = (redactSecretsInPayload(redactedBody) as string).trim();
   const sessionId = options.sessionId;
 
   // Allocate turn + write under one vault lock so concurrent session turns cannot collide

@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.21.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.22.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -450,6 +450,7 @@ memo doctor              # vault + FTS + in-repo pollution scan
 memo doctor --json
 memo doctor --rebuild    # rebuild SQLite FTS5 from markdown
 memo doctor --fix       # delete leftover in-tree workflow residue
+memo doctor --check-capture <path>  # verify CAPTURED vs IGNORED exclusion boundary
 ```
 
 Also useful: `memo rank` (trap recurrence), `memo wiki --regenerate` (vault project page), `memo gc --dry-run`, and the status page live log while the SSE daemon is up.
