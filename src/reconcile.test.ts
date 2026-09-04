@@ -507,6 +507,29 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     assert.ok(logs.includes("sync-reconcile"));
   });
 
+  await t.test("memo reconcile emits sync_reconcile telemetry (AC21)", async () => {
+    const { spawnSync } = await import("node:child_process");
+    const cliPath = path.resolve("dist/cli.js");
+    // Exit code may be 1 when divergent sidecars are retained; telemetry still emits.
+    spawnSync(
+      process.execPath,
+      [cliPath, "reconcile", "--vaultRoot", vaultRoot, "--all", "--json"],
+      { encoding: "utf8" }
+    );
+    const telemetryDir = path.join(vaultRoot, "telemetry");
+    const files = fs.existsSync(telemetryDir) ? fs.readdirSync(telemetryDir) : [];
+    let found = false;
+    for (const f of files) {
+      if (!f.endsWith(".jsonl")) continue;
+      const content = fs.readFileSync(path.join(telemetryDir, f), "utf8");
+      if (content.includes("sync_reconcile")) {
+        found = true;
+        break;
+      }
+    }
+    assert.strictEqual(found, true);
+  });
+
   await t.test("dual-sync report.ok is false when hybrid channel fails even if vault-git succeeds", async () => {
     const dualVault = path.join(tempDir, "dual-vault");
     initVault({ vaultRoot: dualVault, projectId: "proj-dual" });

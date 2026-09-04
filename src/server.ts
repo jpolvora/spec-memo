@@ -664,15 +664,47 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
           autoSyncInFlight = (async () => {
             try {
               const { syncDual } = await import("./dual-sync.js");
-              await syncDual({
-                vaultRoot,
-                trigger: "sync",
-                strategy:
-                  config.sync?.conflictStrategy ??
-                  config.sync?.defaultStrategy ??
-                  "smart-merge",
-                cleanSidecars: config.sync?.cleanSidecars ?? false
-              });
+              const strategy =
+                config.sync?.conflictStrategy ??
+                config.sync?.defaultStrategy ??
+                "smart-merge";
+              const cleanSidecars = config.sync?.cleanSidecars ?? false;
+              // Iterate projects so per-project hybrid cursors apply incrementally.
+              // A single unscoped syncDual would full-pull + full-push every tick.
+              let projectIds: string[] = [];
+              try {
+                const { getVaultProjects } = await import("./vault.js");
+                projectIds = getVaultProjects(vaultRoot).map((p) => p.id);
+              } catch {
+                projectIds = [];
+              }
+              if (projectIds.length > 0) {
+                for (const id of projectIds) {
+                  try {
+                    await syncDual({
+                      vaultRoot,
+                      projectId: id,
+                      trigger: "sync",
+                      strategy,
+                      cleanSidecars
+                    });
+                  } catch (err: unknown) {
+                    logErrorReport({
+                      subsystem: "sync-reconcile",
+                      error: err,
+                      level: "WARN",
+                      context: { phase: "background_autosync", projectId: id }
+                    }, { vaultRoot, logPath: errorLogPath });
+                  }
+                }
+              } else {
+                await syncDual({
+                  vaultRoot,
+                  trigger: "sync",
+                  strategy,
+                  cleanSidecars
+                });
+              }
             } catch (err: unknown) {
               logErrorReport({
                 subsystem: "sync-reconcile",

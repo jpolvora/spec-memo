@@ -1256,6 +1256,7 @@ async function runCliInner(
       const prefer = (parsed.options.prefer as 'local' | 'remote') || undefined;
       const strategy = (parsed.options.strategy as import('./types.js').ConflictStrategy) || 'smart-merge';
       const cleanSidecars = parsed.options['clean-sidecars'] !== false && parsed.options['clean-sidecars'] !== 'false';
+      const reconcileStarted = performance.now();
 
       // 1. Clean conflict sidecars (serialized under vault lock vs daemon auto-sync)
       const { withVaultLock } = await import('./vault.js');
@@ -1335,6 +1336,27 @@ async function runCliInner(
       }
       const syncFailed = Boolean(syncResult && !syncResult.ok);
       const hasRetainedSidecars = cleanResult.retained > 0;
+      // AC21: dedicated reconcile telemetry (conflicts, auto-merged, strategy).
+      recordTelemetry({
+        category: 'sync_operation',
+        operation: 'sync_reconcile',
+        durationMs: Math.max(0, Math.round((performance.now() - reconcileStarted) * 10) / 10),
+        success: !(syncFailed || hasRetainedSidecars),
+        errorCode: syncFailed ? 'RECONCILE_SYNC_FAILED' : hasRetainedSidecars ? 'SIDECARS_RETAINED' : undefined,
+        projectId: all ? undefined : identity.projectId,
+        vaultRoot: root,
+        metadata: {
+          prefer: prefer || 'none',
+          strategy,
+          dryRun,
+          sidecarsCleaned: cleanResult.cleaned,
+          sidecarsRetained: cleanResult.retained,
+          pulledConflicts: syncResult?.hybrid?.report?.pulled?.conflicts ?? 0,
+          pushedConflicts: syncResult?.hybrid?.report?.pushed?.conflicts ?? 0,
+          pulledAutoMerged: syncResult?.hybrid?.report?.pulled?.autoMerged ?? 0,
+          pushedAutoMerged: syncResult?.hybrid?.report?.pushed?.autoMerged ?? 0
+        }
+      });
       return syncFailed || hasRetainedSidecars ? 1 : 0;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
