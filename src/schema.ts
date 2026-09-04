@@ -66,6 +66,17 @@ export const RecordFrontmatterSchema = z.object({
   lastSeen: DateOrStringSchema.optional(),
   hits: z.coerce.number().int().min(0).optional(),
   lastHit: DateOrStringSchema.optional(),
+  helpfulCount: z.coerce.number().int().min(0).optional(),
+  staleCount: z.coerce.number().int().min(0).optional(),
+  lastFeedback: DateOrStringSchema.optional(),
+  links: z
+    .array(
+      z.object({
+        target: z.string().min(1),
+        type: z.enum(['fixes', 'contradicts', 'causes'])
+      })
+    )
+    .optional(),
   // Prompt & Session extended fields
   ide: z.string().optional(),
   model: z.string().optional(),

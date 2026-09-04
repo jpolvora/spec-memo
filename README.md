@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.22.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.23.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -778,11 +778,12 @@ memo reconcile --clean-sidecars
 | `check_version` / `check-version` | Compare running version to npm latest | `--json` |
 | `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into a consumer repo or global skills roots | `--product-root`, `--global`, `--skill`, `--force`, `--json` |
 | `install_hooks` / `install-hooks` | Optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Claude (CLI-only) | `--host`, `--global`, `--apply`, `--dry-run`, `--force`, `--remove`, `--json` |
-| `prompt` / `prompts` | Ingest & query prompt history; derive rules; export stories | `record`/`list`/`search`/`show`/`session`/`export`/`derive-rules` |
+| `prompt` / `prompts` | Ingest & query prompt history; derive rules; export stories; record memory feedback | `record`/`list`/`search`/`show`/`session`/`export`/`derive-rules`/`feedback` |
 | `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`show`/`export`, `--summary`, `--pr` |
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
+| `feedback` | Submit helpful/stale/wrong feedback on a memory record (CLI extra) | `<id>`, `--helpful`/`--stale`/`--wrong`, `--comment` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
-| `doctor` | Diagnose health, mode, conflict sidecars, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
+| `doctor` | Diagnose health, mode, conflict sidecars, semantic contradictions, stale traps, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
 | `sync` | Synchronize vault records (hybrid HTTP, vault-git, or both in parallel) | `--all`, `--dry-run`, `--prefer` (`local`\|`remote`), `--strategy`, `--clean-sidecars`, `--force`, `--json` |
 | `reconcile` | Reconcile sync conflicts, apply smart semantic auto-merge, and clean conflict sidecars | `--prefer` (`local`\|`remote`), `--strategy` (`smart-merge`\|`local-wins`\|`remote-wins`\|`sidecar`), `--clean-sidecars`, `--dry-run`, `--all`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |

@@ -38,6 +38,7 @@ Package version: **0.14.3** (`develop`). Status marks: `[ ]` planned · `[~]` in
 
 - [x] **SQLite FTS5.** Query by text, kind, status, slug, pathPatterns, severity, tags, project. `search.sort` can order by `relevance`, `occurrences`, `updated`, or `hits`.
 - [x] **Retrieval hit count.** Orthogonal `hits` / `lastHit` frontmatter (not `occurrences`). Auto-increment on bootstrap brief inclusion and successful `get` of trap/decision/spec/plan; bare `search` does not count — pass `hitIds` (+ optional `sessionId` de-dupe). Status Memory tab list + details drawer show Hits; canvas detail meta + `/api/records` expose counts. No 12th MCP tool.
+- [x] **Memory feedback & salience.** `helpfulCount` / `staleCount` / typed `links` frontmatter; `prompt action:feedback` and `memo feedback`; search salience dampening + `flaggedStale`; bootstrap `⚠️ [POSSIBLY STALE]` badge; doctor semantic contradiction + obsolete scans; status Memory drawer Mark Helpful / Flag Stale buttons and link graph; zero new MCP tools.
 - [x] **Disposable DB.** Delete `memo.sqlite` and rebuild from the vault. The DB is never the source of truth.
 - [x] **Default search filter.** Exclude `scratch`, `state`, `log`, `review` unless the caller sets `kinds`.
 

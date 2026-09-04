@@ -9,6 +9,7 @@ import { getRecord } from './store.js';
 import { matchesAnyPattern } from './indexer.js';
 import { isPathIgnored, resolveCaptureProductRoot } from './capture-ignore.js';
 import { pullHybridProject } from './hybrid-sync.js';
+import { cloneRecordWithStaleBadge } from './salience.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -201,9 +202,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     if (spec || plan || state) {
       activeSlice = {
         slug: options.slug,
-        spec: spec || undefined,
-        plan: plan || undefined,
-        state: state || undefined
+        spec: spec ? cloneRecordWithStaleBadge(spec) : undefined,
+        plan: plan ? cloneRecordWithStaleBadge(plan) : undefined,
+        state: state ? cloneRecordWithStaleBadge(state) : undefined
       };
     }
   }
@@ -227,8 +228,8 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       : configuredBudget && configuredBudget > 0
         ? configuredBudget
         : 8192;
-  const currentTraps = [...activeTraps];
-  const currentDecisions = [...activeDecisions];
+  const currentTraps = activeTraps.map(cloneRecordWithStaleBadge);
+  const currentDecisions = activeDecisions.map(cloneRecordWithStaleBadge);
 
   if (driftList.length > 0) {
     for (const d of driftList) {

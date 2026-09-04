@@ -19,6 +19,7 @@ import { resolveProjectIdentity } from './identity.js';
 import { openIndex, indexRecord } from './indexer.js';
 import { logErrorReport } from './error-logger.js';
 import { occurrenceOf, lastSeenOf, hitCountOf, lastHitOf } from './recurrence.js';
+import { helpfulCountOf, staleCountOf, parseRecordLinks, isFlaggedStale } from './salience.js';
 import { rebuildCompiledViews } from './compiler.js';
 
 /** Overridable for fail-open tests. */
@@ -498,7 +499,11 @@ export function listMemoryRecords(options: ListMemoryRecordsOptions = {}): Memor
             lastHit: lastHitOf(record.frontmatter) || null,
             lastSeen: lastSeenOf(record.frontmatter) || null,
             updated: String(record.frontmatter.updated || ''),
-            snippet: snippet || undefined
+            snippet: snippet || undefined,
+            helpfulCount: helpfulCountOf(record.frontmatter),
+            staleCount: staleCountOf(record.frontmatter),
+            links: parseRecordLinks(record.frontmatter),
+            flaggedStale: isFlaggedStale(record.frontmatter)
           });
         } catch {
           // skip malformed

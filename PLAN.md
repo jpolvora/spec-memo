@@ -233,6 +233,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-09-04 | vault-merge-alias | Vault alias map, canonical project resolution, status Vaults tab, memo vault CLI; npm test 514 pass |
 | 2026-09-04 | agent-hooks-install | memo install-hooks CLI for Antigravity/OpenCode/Cursor/Claude; doctor hook diagnostics; npm test 533 pass |
 | 2026-09-04 | capture-ignore-marker | .spec-memo-ignore exclusions, doctor --check-capture, safety boundary in upsert/prompt/bootstrap/search; v0.22.0; npm test 550 pass |
+| 2026-09-04 | memory-feedback-salience | Memory feedback + salience, typed links, doctor contradictions, status Memory actions; v0.23.0; npm test 561 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

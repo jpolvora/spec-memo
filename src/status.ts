@@ -23,6 +23,8 @@ import { sanitizeToolOutput, isPathInside } from "./safety.js";
 import { scheduleHybridPush } from "./hybrid-sync.js";
 import { TopologyInfo, TopologyRole, BackupFileInfo, BackupListFilters } from "./types.js";
 import { listMemoryRecords } from "./hits.js";
+import { submitMemoryFeedback } from "./feedback.js";
+import { getRecordLinkGraph } from "./indexer.js";
 import {
   readWikiFile,
   readWikiSection,
@@ -1603,6 +1605,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     </div>
     <div class="drawer-body">
       <div class="metadata-card" id="memory-drawer-metadata"></div>
+      <div class="drawer-actions" id="memory-drawer-actions" style="margin: 12px 0; display:flex; gap:8px;">
+        <button type="button" id="btn-memory-helpful" class="btn-primary" style="width:auto;">Mark Helpful</button>
+        <button type="button" id="btn-memory-stale" class="btn-secondary" style="width:auto;">Flag Stale</button>
+      </div>
+      <div id="memory-drawer-links" style="margin-bottom:12px;"></div>
       <div>
         <h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Record Body</h4>
         <div class="markdown-body" id="memory-drawer-body"></div>
@@ -2165,6 +2172,26 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     // --- MEMORY TAB LOGIC ---
     let memoryRecordsCache = [];
+    let memoryDrawerRecord = null;
+
+    async function submitMemoryFeedbackAction(feedback) {
+      if (!memoryDrawerRecord) return;
+      try {
+        const res = await fetch("/api/records/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: memoryDrawerRecord.id, feedback, projectId: memoryDrawerRecord.projectId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Feedback failed");
+        memoryDrawerRecord.helpfulCount = data.helpfulCount;
+        memoryDrawerRecord.staleCount = data.staleCount;
+        openMemoryDrawer(memoryDrawerRecord);
+        await loadMemoryRecords();
+      } catch (err) {
+        alert(err.message || "Failed to submit feedback");
+      }
+    }
 
     function formatIsoShort(iso) {
       if (!iso) return "-";
@@ -2216,7 +2243,18 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     }
 
-    function openMemoryDrawer(record) {
+    async function openMemoryDrawer(record) {
+      memoryDrawerRecord = record;
+      try {
+        const linkRes = await fetch("/api/records/links?id=" + encodeURIComponent(record.id) + "&project=" + encodeURIComponent(record.projectId || ""));
+        if (linkRes.ok) {
+          const linkData = await linkRes.json();
+          record.links = linkData.outgoing || record.links || [];
+          record.incomingLinks = linkData.incoming || [];
+        }
+      } catch {
+        // fail-open
+      }
       document.getElementById("memory-drawer-title").textContent = record.title || record.id || "Memory";
       const meta = document.getElementById("memory-drawer-metadata");
       meta.innerHTML =
@@ -2224,10 +2262,28 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         '<div class="meta-item"><span class="meta-label">Kind</span><span class="meta-val">' + escapeHtml(record.kind) + "</span></div>" +
         '<div class="meta-item"><span class="meta-label">Status</span><span class="meta-val">' + escapeHtml(record.status || "-") + "</span></div>" +
         '<div class="meta-item"><span class="meta-label">Hits</span><span class="meta-val">' + escapeHtml(String(record.hits != null ? record.hits : 0)) + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Helpful</span><span class="meta-val">' + escapeHtml(String(record.helpfulCount != null ? record.helpfulCount : 0)) + "</span></div>" +
+        '<div class="meta-item"><span class="meta-label">Stale flags</span><span class="meta-val">' + escapeHtml(String(record.staleCount != null ? record.staleCount : 0)) + "</span></div>" +
+        (record.flaggedStale ? '<div class="meta-item"><span class="meta-label">Salience</span><span class="meta-val" style="color:var(--warn);">Possibly stale</span></div>' : "") +
         '<div class="meta-item"><span class="meta-label">Occurrences</span><span class="meta-val">' + escapeHtml(String(record.occurrences != null ? record.occurrences : 0)) + "</span></div>" +
         '<div class="meta-item"><span class="meta-label">Last hit</span><span class="meta-val">' + escapeHtml(record.lastHit || "-") + "</span></div>" +
         '<div class="meta-item"><span class="meta-label">Updated</span><span class="meta-val">' + escapeHtml(record.updated || "-") + "</span></div>" +
         '<div class="meta-item"><span class="meta-label">Project</span><span class="meta-val">' + escapeHtml(displayNameForProject(record.projectId)) + "</span></div>";
+      const linksEl = document.getElementById("memory-drawer-links");
+      const outgoing = Array.isArray(record.links) ? record.links : [];
+      const incoming = Array.isArray(record.incomingLinks) ? record.incomingLinks : [];
+      let linksHtml = "";
+      if (outgoing.length > 0 || incoming.length > 0) {
+        linksHtml += '<h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Typed Links</h4><ul style="margin:0; padding-left:18px;">';
+        for (const l of outgoing) {
+          linksHtml += "<li><code>" + escapeHtml(l.type) + "</code> → " + escapeHtml(l.target) + " (outgoing)</li>";
+        }
+        for (const l of incoming) {
+          linksHtml += "<li>" + escapeHtml(l.sourceId) + " → <code>" + escapeHtml(l.type) + "</code> (incoming)</li>";
+        }
+        linksHtml += "</ul>";
+      }
+      linksEl.innerHTML = linksHtml;
       const bodyEl = document.getElementById("memory-drawer-body");
       bodyEl.textContent = record.snippet || "(no body snippet)";
       document.getElementById("memory-drawer-overlay").classList.add("open");
@@ -2241,6 +2297,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     document.getElementById("memory-drawer-close-btn").addEventListener("click", closeMemoryDrawer);
     document.getElementById("memory-drawer-overlay").addEventListener("click", closeMemoryDrawer);
+    document.getElementById("btn-memory-helpful").addEventListener("click", () => submitMemoryFeedbackAction("helpful"));
+    document.getElementById("btn-memory-stale").addEventListener("click", () => submitMemoryFeedbackAction("stale"));
     document.getElementById("btn-memory-refresh").addEventListener("click", () => loadMemoryRecords());
     document.getElementById("memory-kind-select").addEventListener("change", () => loadMemoryRecords());
     document.getElementById("memory-sort-select").addEventListener("change", () => loadMemoryRecords());
@@ -3908,6 +3966,52 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           limit: Number.isFinite(limit) && limit > 0 ? limit : 200
         });
         writeJson(res, 200, sanitizeToolOutput({ records }));
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/records/links") {
+        const recordId = url.searchParams.get("id");
+        if (!recordId) {
+          writeJson(res, 400, sanitizeToolOutput({ error: "Query parameter 'id' is required" }));
+          return;
+        }
+        const graph = getRecordLinkGraph(recordId, vaultRoot, url.searchParams.get("project") || undefined);
+        writeJson(res, 200, sanitizeToolOutput({ id: recordId, ...graph }));
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/records/feedback") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: { id?: string; feedback?: string; projectId?: string } = {};
+          if (rawBody.length > 0) {
+            parsed = JSON.parse(rawBody.toString("utf8"));
+          }
+          if (!parsed.id || !parsed.feedback) {
+            writeJson(res, 400, sanitizeToolOutput({ error: "Body requires id and feedback" }));
+            return;
+          }
+          const result = await submitMemoryFeedback({
+            id: parsed.id,
+            feedback: parsed.feedback as import("./types.js").FeedbackType,
+            projectId: parsed.projectId,
+            vaultRoot
+          });
+          recordTelemetry({
+            category: "http_endpoint",
+            operation: "memory_feedback",
+            durationMs: Date.now() - startTime,
+            success: true,
+            vaultRoot,
+            metadata: { recordId: parsed.id, feedback: parsed.feedback }
+          });
+          writeJson(res, 200, sanitizeToolOutput(result));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const status = msg.includes("Record not found") ? 404 : 400;
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
         return;
       }
 

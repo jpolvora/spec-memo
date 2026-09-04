@@ -16,6 +16,13 @@ import {
   compareHitsSearch,
   applyTrapClassification
 } from './recurrence.js';
+import {
+  helpfulCountOf,
+  staleCountOf,
+  salienceMultiplier,
+  isFlaggedStale,
+  parseRecordLinks
+} from './salience.js';
 
 const dbPool = new Map<string, Database.Database>();
 
@@ -52,6 +59,16 @@ export function openIndex(vaultRoot: string = getVaultRoot()): Database.Database
       filepath UNINDEXED,
       updated UNINDEXED,
       tokenize = 'porter ascii'
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS record_links (
+      source_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      link_type TEXT NOT NULL,
+      source_project TEXT NOT NULL,
+      PRIMARY KEY (source_id, target_id, link_type)
     );
   `);
 
@@ -107,6 +124,108 @@ export function indexRecord(
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   ins.run(id, projectId, kind, status, title, tags, pathPatterns, body, filepath, updated);
+  syncRecordLinks(db, fm);
+}
+
+function syncRecordLinks(db: Database.Database, fm: RecordFrontmatter): void {
+  const sourceId = String(fm.id);
+  const sourceProject = String(fm.project);
+  const del = db.prepare('DELETE FROM record_links WHERE source_id = ? AND source_project = ?');
+  del.run(sourceId, sourceProject);
+
+  const links = parseRecordLinks(fm);
+  if (links.length === 0) return;
+
+  const ins = db.prepare(`
+    INSERT OR REPLACE INTO record_links (source_id, target_id, link_type, source_project)
+    VALUES (?, ?, ?, ?)
+  `);
+  for (const link of links) {
+    ins.run(sourceId, link.target, link.type, sourceProject);
+  }
+}
+
+export function findActiveSemanticContradictions(
+  vaultRoot: string = getVaultRoot()
+): Array<{ sourceId: string; targetId: string; sourceTitle?: string; targetTitle?: string }> {
+  const db = openIndex(vaultRoot);
+  const rows = db
+    .prepare(
+      `
+      SELECT rl.source_id AS sourceId, rl.target_id AS targetId
+      FROM record_links rl
+      INNER JOIN records_fts src ON src.id = rl.source_id AND src.projectId = rl.source_project
+      INNER JOIN records_fts tgt ON tgt.id = rl.target_id AND tgt.projectId = rl.source_project
+      WHERE rl.link_type = 'contradicts'
+        AND src.status = 'active'
+        AND tgt.status = 'active'
+    `
+    )
+    .all() as Array<{ sourceId: string; targetId: string }>;
+
+  const titleFor = (id: string): string | undefined => {
+    const row = db
+      .prepare('SELECT title FROM records_fts WHERE id = ? LIMIT 1')
+      .get(id) as { title?: string } | undefined;
+    return row?.title || undefined;
+  };
+
+  return rows.map((row) => ({
+    sourceId: row.sourceId,
+    targetId: row.targetId,
+    sourceTitle: titleFor(row.sourceId),
+    targetTitle: titleFor(row.targetId)
+  }));
+}
+
+export function getRecordLinkGraph(
+  recordId: string,
+  vaultRoot: string = getVaultRoot(),
+  projectId?: string
+): {
+  outgoing: ReturnType<typeof parseRecordLinks>;
+  incoming: Array<{ sourceId: string; type: string; sourceTitle?: string }>;
+} {
+  const db = openIndex(vaultRoot);
+  const incomingRows = db
+    .prepare(
+      `
+      SELECT rl.source_id AS sourceId, rl.link_type AS type, src.title AS sourceTitle
+      FROM record_links rl
+      LEFT JOIN records_fts src ON src.id = rl.source_id AND src.projectId = rl.source_project
+      WHERE rl.target_id = ?${projectId ? ' AND rl.source_project = ?' : ''}
+    `
+    )
+    .all(...(projectId ? [recordId, projectId] : [recordId])) as Array<{
+      sourceId: string;
+      type: string;
+      sourceTitle?: string;
+    }>;
+
+  let outgoing: ReturnType<typeof parseRecordLinks> = [];
+  for (const project of getVaultProjects(vaultRoot)) {
+    if (projectId && project.id !== projectId) continue;
+    for (const record of listProjectMarkdownRecords(vaultRoot, project.id)) {
+      if (String(record.frontmatter.id) === recordId) {
+        outgoing = parseRecordLinks(record.frontmatter);
+        break;
+      }
+    }
+  }
+
+  return { outgoing, incoming: incomingRows };
+}
+
+function enrichHitSalience(hit: SearchHit, fm: RecordFrontmatter): void {
+  hit.helpfulCount = helpfulCountOf(fm);
+  hit.staleCount = staleCountOf(fm);
+  if (isFlaggedStale(fm)) {
+    hit.flaggedStale = true;
+  }
+  const mult = salienceMultiplier(fm);
+  if (mult < 1 && hit.rank !== undefined) {
+    hit.rank = hit.rank * mult;
+  }
 }
 
 /**
@@ -300,7 +419,7 @@ function searchIndexByFullScanRank(
       }
 
       const classified = applyTrapClassification(fm, record.body);
-      hits.push({
+      const hit: SearchHit = {
         id: String(fm.id),
         projectId: String(fm.project || projectId),
         kind: fm.kind,
@@ -316,7 +435,9 @@ function searchIndexByFullScanRank(
         lastHit: lastHitOf(fm) || null,
         layer: (fm.layer || classified.layer) as SearchHit['layer'],
         severity: fm.severity
-      });
+      };
+      enrichHitSalience(hit, fm);
+      hits.push(hit);
     }
   }
 
@@ -571,6 +692,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         hit.lastHit = lastHitOf(record.frontmatter) || null;
         hit.occurrences = occurrenceOf(record.frontmatter);
         hit.lastSeen = lastSeenOf(record.frontmatter) || undefined;
+        enrichHitSalience(hit, record.frontmatter);
       } else {
         hit.hits = 0;
         hit.lastHit = null;
@@ -583,6 +705,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
 
   if (sort === 'updated') {
     results.sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
+  } else if (hasFtsQuery && ftsQuery) {
+    results.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
   }
 
   return results;
@@ -646,6 +770,7 @@ export async function rebuildIndex(vaultRoot: string = getVaultRoot()): Promise<
 
   const rebuildTx = db.transaction(() => {
     db.prepare('DELETE FROM records_fts').run();
+    db.prepare('DELETE FROM record_links').run();
     const ins = db.prepare(`
       INSERT INTO records_fts (id, projectId, kind, status, title, tags, pathPatterns, body, filepath, updated)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -667,6 +792,7 @@ export async function rebuildIndex(vaultRoot: string = getVaultRoot()): Promise<
         item.filepath,
         fm.updated || new Date().toISOString()
       );
+      syncRecordLinks(db, fm);
     }
   });
 

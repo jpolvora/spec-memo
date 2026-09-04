@@ -72,7 +72,18 @@ async function allocateLoopbackPort(): Promise<number> {
   return port;
 }
 
-describe('CLI Integration', () => {
+async function assertPortBindable(port: number): Promise<void> {
+  const probeServer = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    probeServer.once('error', reject);
+    probeServer.listen(port, '127.0.0.1', () => resolve());
+  });
+  await new Promise<void>((resolve, reject) => {
+    probeServer.close((err) => (err ? reject(err) : resolve()));
+  });
+}
+
+describe('CLI Integration', { concurrency: false }, () => {
   it('stdio memo serve does not bind status port unless --status', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-stdio-status-bind-'));
     const vaultRoot = path.join(tempDir, 'vault');
@@ -104,14 +115,17 @@ describe('CLI Integration', () => {
     let on: ReturnType<typeof spawn> | undefined;
     try {
       off = spawnServe([]);
-      await new Promise((r) => setTimeout(r, 600));
-      const idle = await probeHttpService(`http://127.0.0.1:${statusPort}/api/status`, 400);
-      assert.equal(idle.running, false, `stdio serve without --status must not bind :${statusPort}`);
+      await new Promise((r) => setTimeout(r, 1000));
+      await assertPortBindable(statusPort);
       await stop(off);
 
       on = spawnServe(['--status', '--status-port', String(statusPort)]);
-      await new Promise((r) => setTimeout(r, 800));
-      const live = await probeHttpService(`http://127.0.0.1:${statusPort}/api/status`, 800);
+      let live: Awaited<ReturnType<typeof probeHttpService>> = { running: false };
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await new Promise((r) => setTimeout(r, 400));
+        live = await probeHttpService(`http://127.0.0.1:${statusPort}/api/status`, 800);
+        if (live.running) break;
+      }
       assert.equal(live.running, true);
       assert.ok(live.statusCode === 200 || live.statusCode === 401);
     } finally {

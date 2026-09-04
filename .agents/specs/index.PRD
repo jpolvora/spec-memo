@@ -119,7 +119,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [ ] [`session-handoff-baton`](0036-session-handoff-baton.spec.md): Cross-Agent Session Handoff Baton via Prompt and Bootstrap
 - [ ] [`record-ttl-expiration`](0037-record-ttl-expiration.spec.md): Universal Record Time-To-Live and Expiration Engine
 - [ ] [`search-ranking-explain`](0038-search-ranking-explain.spec.md): Retrieval Ranking and Bootstrap Brief Explainability
-- [ ] [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md): Memory Retrieval Feedback, Stale Flagging, and Salience Tuning
+- [x] [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md): Memory Retrieval Feedback, Stale Flagging, and Salience Tuning
 - [x] [`capture-ignore-marker`](0040-capture-ignore-marker.spec.md): Project-Local Capture Exclusions Marker and Safety Boundary
 - [x] [`agent-hooks-install`](0041-agent-hooks-install.spec.md): Automatic Agent Lifecycle Hooks Installer (memo install-hooks)
 - [x] Vault manager: alias redirect, merge, and project CRUD (`spec: 0047-vault-merge-alias.spec.md`)
@@ -174,7 +174,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 39 | [`session-handoff-baton`](0036-session-handoff-baton.spec.md) | `[ ] todo` | Phase 8 | Cross-Agent Session Handoff Baton via Prompt and Bootstrap |
 | 40 | [`record-ttl-expiration`](0037-record-ttl-expiration.spec.md) | `[ ] todo` | Phase 8 | Universal Record Time-To-Live and Expiration Engine |
 | 41 | [`search-ranking-explain`](0038-search-ranking-explain.spec.md) | `[ ] todo` | Phase 8 | Retrieval Ranking and Bootstrap Brief Explainability |
-| 42 | [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md) | `[ ] todo` | Phase 8 | Memory Retrieval Feedback, Stale Flagging, and Salience Tuning |
+| 42 | [`memory-feedback-salience`](0039-memory-feedback-salience.spec.md) | `[x] done` | Phase 8 | Memory Retrieval Feedback, Stale Flagging, and Salience Tuning |
 | 43 | [`capture-ignore-marker`](0040-capture-ignore-marker.spec.md) | `[x] done` | Phase 8 | Project-Local Capture Exclusions Marker and Safety Boundary |
 | 44 | [`agent-hooks-install`](0041-agent-hooks-install.spec.md) | `[x] done` | Phase 8 | Automatic Agent Lifecycle Hooks Installer (memo install-hooks) |
 | 45 | [`project-wiki`](0046-project-wiki.spec.md) | `[x] done` | Phase 7 | Per-project vault wiki, status Wiki tab, CLI memo wiki |
@@ -245,6 +245,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-04 | vault-merge-alias | Vault alias redirect + merge, status Vaults tab, memo vault CLI | npm test 514 pass |
 | 2026-09-04 | agent-hooks-install | memo install-hooks CLI, host hook adapters, doctor hook status | npm test 533 pass |
 | 2026-09-04 | capture-ignore-marker | .spec-memo-ignore capture exclusions, doctor --check-capture, safety boundary enforcement | v0.22.0; npm test 550 pass |
+| 2026-09-04 | memory-feedback-salience | Memory feedback, typed links, salience dampening, doctor contradictions, status Memory actions | v0.23.0; npm test 561 pass |
 
 ## Archive
 
