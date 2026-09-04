@@ -20,6 +20,39 @@ export type RecordStatus =
 
 export type RecordSource = 'agent' | 'human' | 'imported';
 
+export interface HandoffPayload {
+  nextSteps: string[];
+  failedApproaches?: string[];
+  openQuestions?: string[];
+  branch?: string;
+  owner?: string;
+  shared?: boolean;
+}
+
+export interface HandoffRecord {
+  id: string;
+  owner: string;
+  branch: string;
+  shared: boolean;
+  nextSteps: string[];
+  failedApproaches?: string[];
+  openQuestions?: string[];
+  harness?: string;
+  createdAt: string;
+  sessionId?: string;
+  claimed?: boolean;
+  claimedAt?: string;
+  claimedBySession?: string;
+}
+
+export interface SessionObjective {
+  owner: string;
+  branch: string;
+  objective: string;
+  sessionId?: string;
+  updatedAt: string;
+}
+
 export interface SessionDeliverable {
   type: 'pr' | 'commit' | 'spec';
   url?: string;
@@ -190,7 +223,8 @@ export type TelemetryCategory =
   | 'cli_command'
   | 'sync_operation'
   | 'curator_gc'
-  | 'importer';
+  | 'importer'
+  | 'handoff';
 
 export interface TelemetryEvent {
   timestamp: string;
@@ -471,6 +505,9 @@ export interface BootstrapBrief {
   projectId: string;
   gitRemote?: string | null;
   lastSeenRoot?: string;
+  handoff?: HandoffRecord;
+  handoffMarkdown?: string;
+  sessionObjective?: SessionObjective;
   activeSlice?: {
     slug: string;
     spec?: MemoRecord;
@@ -1035,6 +1072,7 @@ export type PromptAction =
   | 'session'
   | 'session_start'
   | 'session_end'
+  | 'cancel_handoff'
   | 'activity_report'
   | 'derive_rules'
   | 'export_story'
@@ -1080,6 +1118,9 @@ export interface PromptOptions {
   format?: string;
   feedback?: FeedbackType;
   comment?: string;
+  handoff?: HandoffPayload;
+  objective?: string;
+  shared?: boolean;
 }
 
 export interface PromptRecordResult {
@@ -1106,6 +1147,8 @@ export interface SessionResult {
   summary?: string;
   path: string;
   sync?: unknown;
+  handoff?: HandoffRecord;
+  objective?: SessionObjective;
 }
 
 export interface ActivityReportResult {

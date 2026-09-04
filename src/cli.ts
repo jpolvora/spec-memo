@@ -468,7 +468,7 @@ Options:
     console.log(`Usage:
   memo prompt <action> [options]
   memo prompts <action> [options]     (alias)
-  memo session start|end|show|export [sessionId] [options]
+  memo session start|end|handoff|show|export [sessionId] [options]
   memo activity [options]
 
 Actions (prompt):
@@ -492,6 +492,12 @@ Key options:
   --output|-o         Export story path (refused inside product tree)
   --summary           Session-end summary body
   --pr <url>          Append a PR deliverable on session-end
+  --handoff-steps     Comma-separated next steps for session handoff baton
+  --handoff-failed    Comma-separated failed approaches for handoff
+  --handoff-questions Comma-separated open questions for handoff
+  --objective         Session in-flight focus (session start)
+  --shared            Project-wide shared handoff (session end)
+  --cancel            Cancel pending handoff (with session handoff)
   --promote <path>    Allowlisted IDE rule dest (.cursor/rules/*, CLAUDE.md, GEMINI.md, .github/copilot-instructions.md)
   --save-traps        Persist high-confidence derived rules as vault traps
   --format            cursor|copilot|claude|gemini|markdown
@@ -2324,6 +2330,15 @@ async function runCliInner(
         } else if (pos0 === 'end') {
           payload.action = 'session_end';
           if (parsed.positionals[1]) payload.sessionId = parsed.positionals[1];
+        } else if (pos0 === 'handoff') {
+          if (parsed.options.cancel === true || parsed.options.cancel === 'true') {
+            payload.action = 'cancel_handoff';
+          } else if (parsed.options.all === true || parsed.options.all === 'true') {
+            payload.action = 'handoff_list';
+            payload.crossProject = false;
+          } else {
+            payload.action = 'handoff_show';
+          }
         } else if (pos0 === 'export') {
           payload.action = 'export_story';
           if (parsed.positionals[1]) payload.sessionId = parsed.positionals[1];
@@ -2451,6 +2466,66 @@ async function runCliInner(
       if (payload.deliverables != null && !Array.isArray(payload.deliverables)) {
         throw new Error('--deliverables must be a JSON array.');
       }
+      const handoffSteps =
+        payload['handoff-steps'] ||
+        payload.handoffSteps;
+      if (handoffSteps) {
+        const nextSteps = String(handoffSteps)
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+        const failedRaw = payload['handoff-failed'] || payload.handoffFailed;
+        const questionsRaw = payload['handoff-questions'] || payload.handoffQuestions;
+        payload.handoff = {
+          nextSteps,
+          failedApproaches: failedRaw
+            ? String(failedRaw).split(',').map((s: string) => s.trim()).filter(Boolean)
+            : undefined,
+          openQuestions: questionsRaw
+            ? String(questionsRaw).split(',').map((s: string) => s.trim()).filter(Boolean)
+            : undefined,
+          shared: payload.shared === true || payload.shared === 'true'
+        };
+        delete payload['handoff-steps'];
+        delete payload.handoffSteps;
+        delete payload['handoff-failed'];
+        delete payload.handoffFailed;
+        delete payload['handoff-questions'];
+        delete payload.handoffQuestions;
+      }
+      if (payload.objective && payload.action === 'session_start') {
+        payload.objective = String(payload.objective);
+      }
+    }
+
+    // Session handoff display (not routed through generic prompt tool enum)
+    if (parsed.command === 'prompt' && (payload.action === 'handoff_show' || payload.action === 'handoff_list')) {
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const { showHandoffRecord } = await import('./prompt.js');
+      const result = showHandoffRecord({
+        cwd,
+        vaultRoot,
+        crossProject: payload.action === 'handoff_list'
+      });
+      if (parsed.isJson) {
+        printJson(result);
+      } else if (payload.action === 'handoff_list') {
+        const items = result.handoffs || [];
+        if (items.length === 0) {
+          console.log('No pending handoffs.');
+        } else {
+          for (const h of items) {
+            console.log(`${h.id}\t${h.owner}\t${h.branch}${h.shared ? ' (shared)' : ''}\t${h.nextSteps.join('; ')}`);
+          }
+        }
+      } else if (result.handoff) {
+        const { renderHandoffMarkdown } = await import('./handoff.js');
+        console.log(renderHandoffMarkdown(result.handoff));
+      } else {
+        console.log('No pending handoff for current repository, user, and branch.');
+      }
+      return 0;
     }
 
     const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
@@ -2475,6 +2550,12 @@ async function runCliInner(
         }
         console.log(`spec-memo — Bootstrap Context Brief (${b.byteLength} / ${b.budgetBytes} bytes)\n`);
         console.log(`Project: ${b.projectId} (remote: ${b.gitRemote || 'local-only'})`);
+        if (b.handoffMarkdown) {
+          console.log(`\n${b.handoffMarkdown}`);
+        }
+        if (b.sessionObjective?.objective) {
+          console.log(`\nSession objective: ${b.sessionObjective.objective}`);
+        }
         if (b.activeSlice) {
           console.log(`\nActive Feature Slice: ${b.activeSlice.slug}`);
           if (b.activeSlice.spec)

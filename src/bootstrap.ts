@@ -12,6 +12,11 @@ import { pullHybridProject } from './hybrid-sync.js';
 import { cloneRecordWithStaleBadge } from './salience.js';
 import { roundExplain } from './ranking-explain.js';
 import { isRecordExpiredAt, defaultTtlDaysForKind } from './expiration.js';
+import {
+  deliverAndClaimHandoff,
+  getSessionObjective,
+  renderHandoffMarkdown
+} from './handoff.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -256,6 +261,31 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
   const metadata = getProjectMetadata(projectId, vaultRoot);
   const allRecords = scanProjectRecords(projectDir);
+  const cwd = options.cwd || process.cwd();
+
+  // Handoff delivery (AC7-AC11): claim eligible baton before budget trimming
+  let handoffClaimed;
+  let handoffMarkdown: string | undefined;
+  let sessionObjective;
+  try {
+    sessionObjective =
+      getSessionObjective({ projectDir, cwd }) || undefined;
+    const claimed = deliverAndClaimHandoff({
+      projectDir,
+      cwd,
+      vaultRoot,
+      sessionId: options.sessionId,
+      projectId
+    });
+    if (claimed) {
+      handoffClaimed = claimed;
+      handoffMarkdown = renderHandoffMarkdown(claimed);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    notices.push(`Handoff delivery warning: ${msg}`);
+  }
+
   const captureRoot = resolveCaptureProductRoot({ cwd: options.cwd, projectId, vaultRoot });
   const pathFilter =
     options.path && !isPathIgnored(options.path, captureRoot, { projectId, vaultRoot })
@@ -367,6 +397,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     projectId,
     gitRemote: metadata?.gitRemote || identity.normalizedRemote,
     lastSeenRoot: identity.rootPath,
+    handoff: handoffClaimed,
+    handoffMarkdown,
+    sessionObjective,
     activeSlice,
     traps: currentTraps,
     decisions: currentDecisions,
@@ -381,6 +414,10 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
   initialBrief.byteLength = calculatePayloadSize(initialBrief);
 
+  // Reserve handoff section bytes before trap/decision trimming (AC10)
+  const handoffReserve = handoffMarkdown ? Buffer.byteLength(handoffMarkdown, 'utf8') + 64 : 0;
+  const effectiveBudget = Math.max(512, budgetBytes - handoffReserve);
+
   if (initialBrief.byteLength > budgetBytes) {
     initialBrief.truncated = true;
 
@@ -388,17 +425,17 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     notices.push(`Context brief truncated to fit ${budgetBytes} byte budget.`);
 
     // Drop lower-ranked traps first
-    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentTraps.pop();
     }
 
     // If still over budget, drop older decisions
-    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentDecisions.pop();
     }
 
     // Then trim activeSlice (state → plan → spec) so the byte cap is fail-closed
-    while (calculatePayloadSize(initialBrief) > budgetBytes && initialBrief.activeSlice) {
+    while (calculatePayloadSize(initialBrief) > effectiveBudget && initialBrief.activeSlice) {
       const slice = initialBrief.activeSlice;
       if (slice.state) {
         delete slice.state;
@@ -416,7 +453,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     }
 
     if (initialBrief.drift) {
-      while (initialBrief.drift.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+      while (initialBrief.drift.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
         initialBrief.drift.pop();
       }
       if (initialBrief.drift.length === 0) {
@@ -430,10 +467,10 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       `Context brief truncated to fit ${budgetBytes} byte budget (dropped ${droppedTraps} trap(s), ${droppedDecisions} decision(s)).`;
 
     // If updating the notice message slightly increased payload size, trim one more item if needed
-    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentTraps.pop();
     }
-    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > budgetBytes) {
+    while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentDecisions.pop();
     }
 

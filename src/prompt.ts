@@ -15,12 +15,21 @@ import {
   SessionResult
 } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
-import { getVaultProjects, getVaultRoot, withVaultLock, withVaultLockSync, ensureVaultStructure } from './vault.js';
+import { getVaultProjects, getVaultRoot, withVaultLock, withVaultLockSync, ensureVaultStructure, ensureProjectVault } from './vault.js';
 import { getRecord, listProjectRecords, upsertRecord } from './store.js';
 import { extractRulesFromPrompts, formatDerivedRulesForExport } from './rules-engine.js';
 import { assertAllowedIdeRulePromote, assertNotInProductRoot, isPathInside, redactSecretsInPayload } from './safety.js';
 import { searchIndex } from './indexer.js';
 import { parseRecord } from './schema.js';
+import {
+  clearSessionObjective,
+  deliverAndClaimHandoff,
+  setSessionObjective,
+  writeHandoffOnSessionEnd,
+  cancelHandoffForContext,
+  getActiveHandoffForContext,
+  listPendingHandoffs
+} from './handoff.js';
 
 export function generatePromptId(sessionId?: string, turn?: number): string {
   if (sessionId && turn != null) {
@@ -179,6 +188,30 @@ export async function startSessionRecord(options: PromptOptions): Promise<Sessio
       projectId
     });
 
+    const projectDir = path.join(vaultRoot, 'projects', projectId!);
+    let handoffClaimed;
+    let objectiveRecord;
+
+    if (options.objective?.trim()) {
+      objectiveRecord = setSessionObjective({
+        projectDir,
+        cwd,
+        objective: options.objective,
+        sessionId
+      });
+    }
+
+    const claimed = deliverAndClaimHandoff({
+      projectDir,
+      cwd,
+      vaultRoot,
+      sessionId,
+      projectId
+    });
+    if (claimed) {
+      handoffClaimed = claimed;
+    }
+
     return {
       id: res.id,
       sessionId,
@@ -189,7 +222,9 @@ export async function startSessionRecord(options: PromptOptions): Promise<Sessio
       client: options.client,
       billable: fm.billable ?? true,
       summary: fm.summary,
-      path: res.path
+      path: res.path,
+      handoff: handoffClaimed,
+      objective: objectiveRecord
     };
   });
 }
@@ -255,6 +290,21 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
 
     const summary = options.body || (existing.frontmatter.summary as string) || `Completed session ${sessionId}`;
 
+    const projectDir = path.join(vaultRoot, 'projects', projectId!);
+    let handoffWritten;
+    if (options.handoff?.nextSteps?.length) {
+      handoffWritten = writeHandoffOnSessionEnd({
+        projectDir,
+        cwd,
+        vaultRoot,
+        payload: options.handoff,
+        sessionId,
+        harness: options.ide,
+        projectId
+      });
+    }
+    clearSessionObjective({ projectDir, cwd });
+
     const fm: Partial<RecordFrontmatter> = {
       ...(existing.frontmatter || {}),
       id,
@@ -270,7 +320,16 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
       client: options.client || (existing.frontmatter.client as string),
       billable: options.billable !== undefined ? Boolean(options.billable) : (existing.frontmatter.billable as boolean ?? true),
       deliverables: mergedDeliverables,
-      summary
+      summary,
+      handoffArchive: handoffWritten
+        ? {
+            id: handoffWritten.id,
+            branch: handoffWritten.branch,
+            owner: handoffWritten.owner,
+            shared: handoffWritten.shared,
+            nextSteps: handoffWritten.nextSteps
+          }
+        : (existing.frontmatter.handoffArchive as Record<string, unknown> | undefined)
     };
 
     const body = `# Session ${sessionId} — Completed
@@ -309,7 +368,8 @@ ${summary}
       billable: fm.billable ?? true,
       deliverables: mergedDeliverables,
       summary,
-      path: res.path
+      path: res.path,
+      handoff: handoffWritten
     };
   }).then(async (session): Promise<SessionResult> => {
     try {
@@ -838,4 +898,34 @@ export function generateActivityReport(options: {
     byClient,
     byProject
   };
+}
+
+export function cancelHandoffRecord(options: PromptOptions): { cancelled: boolean } {
+  const vaultRoot = getVaultRoot(options.vaultRoot);
+  const cwd = options.cwd || process.cwd();
+  const identity = resolveProjectIdentity(cwd, { vaultRoot });
+  const projectId = options.projectId || identity.projectId;
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+  ensureProjectVault(identity, vaultRoot);
+  const cancelled = cancelHandoffForContext({ projectDir, cwd });
+  return { cancelled };
+}
+
+export function showHandoffRecord(options: PromptOptions): {
+  handoff: import('./types.js').HandoffRecord | null;
+  handoffs?: import('./types.js').HandoffRecord[];
+} {
+  const vaultRoot = getVaultRoot(options.vaultRoot);
+  const cwd = options.cwd || process.cwd();
+  const identity = resolveProjectIdentity(cwd, { vaultRoot });
+  const projectId = options.projectId || identity.projectId;
+  const projectDir = path.join(vaultRoot, 'projects', projectId);
+  ensureProjectVault(identity, vaultRoot);
+
+  if (options.crossProject || options.shared) {
+    return { handoff: null, handoffs: listPendingHandoffs(projectDir) };
+  }
+
+  const handoff = getActiveHandoffForContext({ projectDir, cwd });
+  return { handoff };
 }
