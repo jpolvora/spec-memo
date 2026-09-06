@@ -29,7 +29,19 @@ import { assertSupportedNodeRuntime } from './sqlite.js';
 import { submitMemoryFeedback } from './feedback.js';
 import type { FeedbackType } from './types.js';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import * as readline from 'node:readline';
+import {
+  getInstallPreflight,
+  normalizeInstallHosts,
+  normalizeConflictPolicy,
+  runInstallWizard,
+  InstallHost,
+  InstallScope,
+  ConflictPolicy
+} from './install-wizard.js';
+import { resolveHostHookPaths } from './hooks-install.js';
+import { installSkills, resolveSkillInstallTargets } from './skills-install.js';
 
 async function confirmPrompt(message: string): Promise<boolean> {
   const rl = readline.createInterface({
@@ -101,6 +113,18 @@ interface ParsedCliArgs {
   positionals: string[];
 }
 
+function setParsedOption(
+  options: Record<string, string | boolean>,
+  key: string,
+  value: string | boolean
+): void {
+  if (key === 'host' && options[key] !== undefined) {
+    options[key] = `${String(options[key])},${String(value)}`;
+    return;
+  }
+  options[key] = value;
+}
+
 function parseCliArgs(args: string[]): ParsedCliArgs {
   const result: ParsedCliArgs = {
     subcommandHelp: false,
@@ -133,14 +157,14 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       const key = arg.slice(2);
       if (key.includes('=')) {
         const [k, v] = key.split('=', 2);
-        result.options[k] = v;
+        setParsedOption(result.options, k, v);
       } else {
         const next = args[i + 1];
         if (next && !next.startsWith('-')) {
-          result.options[key] = next;
+          setParsedOption(result.options, key, next);
           i++;
         } else {
-          result.options[key] = true;
+          setParsedOption(result.options, key, true);
         }
       }
     } else if (!result.command) {
@@ -197,7 +221,7 @@ Core Memory Commands:
   promote         Copy one record into the product repository
   check_version   Compare running version to npm latest (alias: check-version)
   install_skills  Install ws-memo / ws-session-tracking into a consumer repo or --global (alias: install-skills)
-  install_hooks   Install optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Claude (alias: install-hooks)
+  install_hooks   Install optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Codex, Claude (alias: install-hooks)
   prompt          Ingest, query, export prompt turns, stories, and derive rules
   session         Start, complete, export, or inspect session lifecycles
   activity        Generate timesheet activity and invoicing report
@@ -414,15 +438,40 @@ Options:
     return;
   }
 
+  if (cmd === 'install-skills' || cmd === 'install_skills') {
+    console.log(`Usage: memo install-skills [productRoot] [options]
+
+Install packaged ws-memo and ws-session-tracking skills into a local or global host root.
+Interactive TTY sessions use a shared scope, host, policy, and confirmation wizard.
+
+Options:
+  --scope         Install scope: local or global (required for non-TTY writes)
+  --host          Target host(s), repeatable or CSV: cursor, antigravity, codex, opencode, claude, or all
+  --global        Legacy alias for --scope global
+  --skills        Comma-separated skill ids
+  --skills-root   Relative local destination (default: .agents/skills)
+  --conflictPolicy Existing-file policy: skip, update, or force
+  --yes, --confirm Explicit permission for non-TTY writes
+  --dry-run       Preview without writing files
+  --force         Alias for --conflictPolicy force
+  --json          Output machine-readable JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
   if (cmd === 'install-hooks' || cmd === 'install_hooks') {
     console.log(`Usage: memo install-hooks [options]
 
-Install optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, and Claude Code.
-Default is dry-run preview; pass --apply to write files.
+Install optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Codex, and Claude Code.
+Interactive TTY sessions use a shared scope, host, policy, and confirmation wizard.
+Default is dry-run preview; pass --apply with --yes to write files.
 
 Options:
-  --host          Target host: antigravity, opencode, cursor, claude, or all (default: all)
-  --global        Install to global host paths instead of workspace-local
+  --scope         Install scope: local or global (required for non-TTY writes)
+  --host          Target host(s), repeatable or CSV: antigravity, opencode, cursor, codex, claude, or all
+  --global        Legacy alias for --scope global
+  --conflictPolicy Existing-file policy: skip, update, or force
+  --yes, --confirm Explicit permission for non-TTY writes
   --apply         Write hook files (default: preview only)
   --dry-run       Force preview mode (default when --apply omitted)
   --force         Overwrite differing targets (creates timestamped .bak backups)
@@ -549,6 +598,350 @@ function isReadOnlyWikiGet(parsed: ParsedCliArgs): boolean {
     parsed.options.regenerate !== true &&
     parsed.options.regenerate !== 'true'
   );
+}
+
+function optionIsTrue(options: Record<string, string | boolean>, ...keys: string[]): boolean {
+  return keys.some((key) => options[key] === true || options[key] === 'true');
+}
+
+function parseInstallScope(options: Record<string, string | boolean>): InstallScope | undefined {
+  const raw = options.scope;
+  if (typeof raw !== 'string') {
+    return optionIsTrue(options, 'global') ? 'global' : undefined;
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (normalized !== 'local' && normalized !== 'global') {
+    throw new Error(`Unknown install scope '${raw}'. Supported scopes: local, global.`);
+  }
+  if (optionIsTrue(options, 'global') && normalized !== 'global') {
+    throw new Error('Do not combine --global with --scope local.');
+  }
+  return normalized;
+}
+
+function installProductRoot(
+  scope: InstallScope,
+  options: Record<string, string | boolean>,
+  cwd: string
+): string {
+  if (scope === 'global') return path.resolve(os.homedir());
+  const explicit = (options['product-root'] as string) || (options.productRoot as string);
+  return explicit ? path.resolve(explicit) : resolveProjectIdentity(cwd).rootPath;
+}
+
+function parseInstallSkills(options: Record<string, string | boolean>): string[] | undefined {
+  if (typeof options.skill === 'string') return [options.skill];
+  if (typeof options.skills === 'string') {
+    return options.skills.split(',').map((skill) => skill.trim()).filter(Boolean);
+  }
+  return undefined;
+}
+
+function previewHookPaths(
+  scope: InstallScope,
+  hosts: InstallHost[],
+  productRoot: string,
+  homeDir: string
+): string[] {
+  return hosts.flatMap((host) =>
+    resolveHostHookPaths(host as Exclude<import('./hooks-install.js').HookHostName, 'all'>, {
+      global: scope === 'global',
+      productRoot,
+      homeDir
+    }).map((target) => target.path.replace(/\\/g, '/'))
+  );
+}
+
+function previewSkillPaths(
+  scope: InstallScope,
+  hosts: InstallHost[],
+  productRoot: string,
+  homeDir: string,
+  skillsRoot: string | undefined,
+  skills: string[] | undefined
+): string[] {
+  const targets = resolveSkillInstallTargets({
+    scope,
+    productRoot,
+    homeDir,
+    skillsRoot,
+    hosts
+  });
+  const ids = skills?.length ? skills : ['ws-memo', 'ws-session-tracking'];
+  return targets.flatMap((target) =>
+    ids.map((skill) => path.join(target.root, skill).replace(/\\/g, '/'))
+  );
+}
+
+function installSelectionMissing(
+  scope: InstallScope | undefined,
+  hosts: InstallHost[] | undefined,
+  conflictPolicy: ConflictPolicy | undefined
+): string[] {
+  const missing: string[] = [];
+  if (!scope) missing.push('--scope local|global');
+  if (!hosts || hosts.length === 0) missing.push('--host <host>');
+  if (!conflictPolicy) missing.push('--conflictPolicy skip|update|force');
+  return missing;
+}
+
+async function runInstallHooksCommand(parsed: ParsedCliArgs): Promise<number> {
+  const options = parsed.options;
+  const json = parsed.isJson;
+  const cwd = (options.cwd as string) || process.cwd();
+  const homeDir = path.resolve(os.homedir());
+  const applyFlag = optionIsTrue(options, 'apply');
+  const dryRunFlag = optionIsTrue(options, 'dry-run', 'dryRun');
+  const remove = optionIsTrue(options, 'remove', 'uninstall');
+  const confirmed = optionIsTrue(options, 'yes', 'confirm');
+  const preflight = getInstallPreflight();
+  let scope = parseInstallScope(options);
+  let hosts = typeof options.host === 'string'
+    ? normalizeInstallHosts(options.host, { allowAll: true })
+    : undefined;
+  let conflictPolicy = normalizeConflictPolicy(
+    typeof options.conflictPolicy === 'string'
+      ? options.conflictPolicy
+      : typeof options['conflict-policy'] === 'string'
+        ? options['conflict-policy']
+        : undefined,
+    {
+      force: optionIsTrue(options, 'force'),
+      skipExisting: optionIsTrue(options, 'skip-existing', 'skipExisting'),
+      update: optionIsTrue(options, 'update')
+    }
+  );
+  let yes = confirmed;
+  let apply = applyFlag && confirmed;
+
+  const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !json;
+  const needsWizard = interactive && (!scope || !hosts?.length || !conflictPolicy || !confirmed);
+  if (needsWizard) {
+    const productRoot = scope ? installProductRoot(scope, options, cwd) : resolveProjectIdentity(cwd).rootPath;
+    const selection = await runInstallWizard({
+      productRoot,
+      homeDir,
+      commandName: 'install-hooks',
+      defaultScope: scope,
+      defaultPolicy: conflictPolicy,
+      preflight,
+      previewPaths: ({ scope: selectedScope, hosts: selectedHosts }) =>
+        previewHookPaths(selectedScope, selectedHosts, installProductRoot(selectedScope, options, cwd), homeDir)
+    });
+    if (!selection) {
+      console.log('Install hooks cancelled. No files were changed.');
+      return 0;
+    }
+    scope = selection.scope;
+    hosts = selection.hosts;
+    conflictPolicy = selection.conflictPolicy;
+    yes = true;
+    apply = !dryRunFlag;
+  }
+
+  const missing = installSelectionMissing(scope, hosts, conflictPolicy);
+  if (missing.length > 0) {
+    const message = `Install hooks requires ${missing.join(', ')}.`;
+    if (json) printJson({ isError: true, error: message, code: 'INSTALL_HOOKS_FLAGS_REQUIRED' });
+    else console.error(message);
+    return 1;
+  }
+  if (!scope || !hosts) return 1;
+  if (hosts?.length && typeof options.host === 'string' && options.host.toLowerCase().includes('all') && !yes) {
+    const message = "Host 'all' requires explicit confirmation (--yes/--confirm).";
+    if (json) printJson({ isError: true, error: message, code: 'INSTALL_HOOKS_CONFIRM_REQUIRED' });
+    else console.error(message);
+    return 1;
+  }
+  if (!interactive && !json && (applyFlag || remove) && !yes) {
+    const message = 'Non-interactive hook writes require --yes (or --confirm).';
+    console.error(message);
+    return 1;
+  }
+  if (json && !yes) {
+    apply = false;
+  }
+  if (!yes && !dryRunFlag && !json && (applyFlag || remove)) {
+    console.error('Hook installation requires explicit confirmation (--yes or --confirm).');
+    return 1;
+  }
+
+  try {
+    const result = await installHooks({
+      scope,
+      global: scope === 'global',
+      host: hosts.join(','),
+      apply,
+      dryRun: dryRunFlag || !apply,
+      force: conflictPolicy === 'force',
+      conflictPolicy,
+      remove,
+      cwd,
+      productRoot: scope === 'local'
+        ? ((options['product-root'] as string) || (options.productRoot as string) || undefined)
+        : undefined,
+      homeDir,
+      preflight
+    });
+    if (json) {
+      printJson(result);
+    } else {
+      console.log(`spec-memo — Install Hooks (${result.mode})\n`);
+      console.log(`Product root: ${result.productRoot}`);
+      console.log(`Scope: ${result.scope}; hosts: ${result.hosts?.join(', ')}; policy: ${result.conflictPolicy}`);
+      console.log(`Preflight: platform=${result.preflight.platform}, memo=${result.preflight.memoCommand || 'unresolved'}, shell=${result.preflight.shellHookPrefix || 'native'}, chmod=${result.preflight.chmodAttempted ? 'attempted' : 'not required'}`);
+      for (const row of result.results) {
+        console.log(`  [${row.status}] ${row.host}: ${row.path}`);
+        if (row.diff) {
+          console.log(row.diff.split('\n').map((line) => `    ${line}`).join('\n'));
+        }
+      }
+      if (result.status === 'preview') {
+        console.log('\nPreview only. Re-run with explicit confirmation and --apply to write files.');
+      }
+    }
+    return 0;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (json) printJson({ isError: true, error: msg, code: 'INSTALL_HOOKS_FAILED' });
+    else console.error(`Install hooks failed: ${msg}`);
+    return 1;
+  }
+}
+
+async function runInstallSkillsCommand(parsed: ParsedCliArgs): Promise<number> {
+  const options = parsed.options;
+  const json = parsed.isJson;
+  const cwd = (options.cwd as string) || process.cwd();
+  const positionalProductRoot = parsed.positionals[0];
+  const productRootOption =
+    (options['product-root'] as string) ||
+    (options.productRoot as string) ||
+    positionalProductRoot;
+  const homeDir = path.resolve(os.homedir());
+  const confirmed = optionIsTrue(options, 'yes', 'confirm');
+  const dryRunFlag = optionIsTrue(options, 'dry-run', 'dryRun');
+  let scope = parseInstallScope(options);
+  let hosts = typeof options.host === 'string'
+    ? normalizeInstallHosts(options.host, { allowAll: true })
+    : undefined;
+  let conflictPolicy = normalizeConflictPolicy(
+    typeof options.conflictPolicy === 'string'
+      ? options.conflictPolicy
+      : typeof options['conflict-policy'] === 'string'
+        ? options['conflict-policy']
+        : undefined,
+    {
+      force: optionIsTrue(options, 'force'),
+      skipExisting: optionIsTrue(options, 'skip-existing', 'skipExisting'),
+      update: optionIsTrue(options, 'update')
+    }
+  );
+  let yes = confirmed;
+  let dryRun = dryRunFlag || (json && !confirmed);
+  const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !json;
+  const needsWizard = interactive && (!scope || !hosts?.length || !conflictPolicy || !confirmed);
+  const skills = parseInstallSkills(options);
+  const skillsRoot = typeof options['skills-root'] === 'string'
+    ? options['skills-root']
+    : typeof options.skillsRoot === 'string'
+      ? options.skillsRoot
+      : undefined;
+
+  if (needsWizard) {
+    const productRoot = scope
+      ? (scope === 'local' && productRootOption ? path.resolve(productRootOption) : installProductRoot(scope, options, cwd))
+      : resolveProjectIdentity(cwd).rootPath;
+    const selection = await runInstallWizard({
+      productRoot,
+      homeDir,
+      commandName: 'install-skills',
+      defaultScope: scope,
+      defaultPolicy: conflictPolicy,
+      preflight: getInstallPreflight(),
+      previewPaths: ({ scope: selectedScope, hosts: selectedHosts }) =>
+        previewSkillPaths(
+          selectedScope,
+          selectedHosts,
+          selectedScope === 'local' && productRootOption
+            ? path.resolve(productRootOption)
+            : installProductRoot(selectedScope, options, cwd),
+          homeDir,
+          skillsRoot,
+          skills
+        )
+    });
+    if (!selection) {
+      console.log('Install skills cancelled. No files were changed.');
+      return 0;
+    }
+    scope = selection.scope;
+    hosts = selection.hosts;
+    conflictPolicy = selection.conflictPolicy;
+    yes = true;
+    dryRun = dryRunFlag;
+  }
+
+  const missing = installSelectionMissing(scope, hosts, conflictPolicy);
+  if (missing.length > 0) {
+    const message = `Install skills requires ${missing.join(', ')}.`;
+    if (json) printJson({ isError: true, error: message, code: 'INSTALL_SKILLS_FLAGS_REQUIRED' });
+    else console.error(message);
+    return 1;
+  }
+  if (!scope || !hosts) return 1;
+  if (typeof options.host === 'string' && options.host.toLowerCase().includes('all') && !yes) {
+    const message = "Host 'all' requires explicit confirmation (--yes/--confirm).";
+    if (json) printJson({ isError: true, error: message, code: 'INSTALL_SKILLS_CONFIRM_REQUIRED' });
+    else console.error(message);
+    return 1;
+  }
+  if (!interactive && !json && !yes && !dryRun) {
+    console.error('Non-interactive skill writes require --yes (or --confirm).');
+    return 1;
+  }
+  if (json && !yes) dryRun = true;
+
+  try {
+    const result = await installSkills({
+      productRoot: scope === 'local'
+        ? (productRootOption || undefined)
+        : undefined,
+      cwd,
+      skills,
+      skillsRoot,
+      scope,
+      global: scope === 'global',
+      hosts,
+      conflictPolicy,
+      force: conflictPolicy === 'force',
+      confirm: yes,
+      dryRun,
+      homeDir,
+      vaultRoot: options.vaultRoot as string | undefined
+    });
+    if (json) printJson(result);
+    else {
+      console.log(`spec-memo — Install Skills (${result.mode})\n`);
+      console.log(`Scope: ${result.scope}; hosts: ${result.hosts?.join(', ')}; policy: ${result.conflictPolicy}`);
+      console.log(`Preflight: platform=${result.preflight?.platform}, memo=${result.preflight?.memoCommand || 'unresolved'}`);
+      for (const row of result.installed) {
+        console.log(`  [${row.status || (row.identical ? 'unchanged' : 'installed')}] ${row.skill} → ${row.destination}${row.target ? ` [${row.target}]` : ''}`);
+      }
+      if (result.skippedTargets?.length) {
+        for (const skipped of result.skippedTargets) {
+          console.log(`  (skipped ${skipped.kind}: ${skipped.reason})`);
+        }
+      }
+      if (result.status === 'preview') console.log('\nPreview only. Re-run with explicit confirmation to write files.');
+    }
+    return 0;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (json) printJson({ isError: true, error: msg, code: 'INSTALL_SKILLS_FAILED' });
+    else console.error(`Install skills failed: ${msg}`);
+    return 1;
+  }
 }
 
 function isReadOnlyStatusCommand(parsed: ParsedCliArgs): boolean {
@@ -969,65 +1362,7 @@ async function runCliInner(
   }
 
   if (parsed.command === 'install-hooks' || parsed.command === 'install_hooks') {
-    try {
-      const host = (parsed.options.host as string) || undefined;
-      const global = parsed.options.global === true || parsed.options.global === 'true';
-      const apply = parsed.options.apply === true || parsed.options.apply === 'true';
-      const dryRun =
-        parsed.options['dry-run'] === true ||
-        parsed.options['dry-run'] === 'true' ||
-        parsed.options.dryRun === true;
-      const force = parsed.options.force === true || parsed.options.force === 'true';
-      const remove =
-        parsed.options.remove === true ||
-        parsed.options.remove === 'true' ||
-        parsed.options.uninstall === true ||
-        parsed.options.uninstall === 'true';
-      const productRoot =
-        (parsed.options['product-root'] as string) ||
-        (parsed.options.productRoot as string) ||
-        undefined;
-      const cwd = (parsed.options.cwd as string) || process.cwd();
-
-      const result = await installHooks({
-        host,
-        global,
-        apply: apply && !dryRun,
-        dryRun: dryRun || !apply,
-        force,
-        remove,
-        productRoot,
-        cwd
-      });
-
-      if (parsed.isJson) {
-        printJson(result);
-      } else {
-        console.log(`spec-memo — Install Hooks (${result.mode})\n`);
-        console.log(`Product root: ${result.productRoot}\n`);
-        for (const row of result.results) {
-          console.log(`  [${row.status}] ${row.host}: ${row.path}`);
-          if (row.diff) {
-            console.log(row.diff
-              .split('\n')
-              .map((l) => `    ${l}`)
-              .join('\n'));
-          }
-        }
-        if (!apply && !remove) {
-          console.log('\nDry-run preview only. Re-run with --apply to write files.');
-        }
-      }
-      return 0;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (parsed.isJson) {
-        printJson({ isError: true, error: msg, code: 'INSTALL_HOOKS_FAILED' });
-      } else {
-        console.error(`Install hooks failed: ${msg}`);
-      }
-      return 1;
-    }
+    return runInstallHooksCommand(parsed);
   }
 
   if (parsed.command === 'serve') {
@@ -2066,6 +2401,10 @@ async function runCliInner(
       }
       return 1;
     }
+  }
+
+  if (parsed.command === 'install_skills') {
+    return runInstallSkillsCommand(parsed);
   }
 
   if (TOOL_NAMES.includes(parsed.command as ToolName)) {

@@ -608,6 +608,25 @@ export interface InstallSkillsOptions {
    * `$HOME/.agents/skills` always; `$HOME/.gemini/config/skills` when Antigravity/Gemini config exists.
    */
   global?: boolean;
+  /** Explicit install scope for permission-gated callers. */
+  scope?: 'local' | 'global';
+  /** Explicit host selection for permission-gated callers. */
+  hosts?: string[];
+  /** Existing destination conflict behavior. */
+  conflictPolicy?: 'skip' | 'update' | 'force';
+  /** Explicit permission bit for MCP/CLI adapters. */
+  confirm?: boolean;
+  /** Preview without writing destination files. */
+  dryRun?: boolean;
+  /** Testable platform and executable preflight result. */
+  preflight?: {
+    ok: boolean;
+    platform: 'win32' | 'linux' | 'darwin';
+    memoCommand: string | null;
+    shellHookPrefix: 'bash' | '';
+    chmodAttempted: boolean;
+    warning?: string;
+  };
   /** Test hook: override packaged skill source root. */
   packageRoot?: string;
   /** Test hook: override `$HOME` for `--global` installs. */
@@ -619,8 +638,9 @@ export interface InstallSkillsInstalledRow {
   destination: string;
   identical: boolean;
   bytesWritten: number;
+  status?: 'installed' | 'unchanged' | 'skipped' | 'refused' | 'preview';
   /** Destination kind: local product, Cursor/agents global, or Antigravity. */
-  target?: 'local' | 'agents' | 'antigravity';
+  target?: 'local' | 'agents' | 'antigravity' | 'codex' | 'opencode' | 'claude';
 }
 
 export interface InstallSkillsResult {
@@ -630,6 +650,11 @@ export interface InstallSkillsResult {
   /** Local: relative skillsRoot. Global: `"global"`. */
   skillsRoot: string;
   installed: InstallSkillsInstalledRow[];
+  status?: 'applied' | 'preview';
+  scope?: 'local' | 'global';
+  hosts?: string[];
+  conflictPolicy?: 'skip' | 'update' | 'force';
+  preflight?: InstallSkillsOptions['preflight'];
   /** Global-only: Antigravity (or other) roots that were skipped because missing. */
   skippedTargets?: Array<{ kind: string; path: string; reason: string }>;
 }

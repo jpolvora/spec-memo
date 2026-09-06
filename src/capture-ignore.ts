@@ -71,18 +71,20 @@ export const DEFAULT_IGNORE_PATTERNS: string[] = [
 
 interface IgnoreCacheEntry {
   markerMtime: number;
-  cfgMtime: number;
+  cfgMtime: string;
   rules: IgnoreRule[];
   invalidLines: Array<{ line: number; text: string; reason: string }>;
 }
 
 const ignoreCache = new Map<string, IgnoreCacheEntry>();
 
-function configMtime(vaultRoot: string): number {
+function configMtime(vaultRoot: string): string {
   try {
-    return fs.statSync(path.join(vaultRoot, 'config.json')).mtimeMs;
+    const configPath = path.join(vaultRoot, 'config.json');
+    const stat = fs.statSync(configPath);
+    return `${stat.mtimeMs}:${stat.size}:${fs.readFileSync(configPath, 'utf8')}`;
   } catch {
-    return 0;
+    return '0';
   }
 }
 

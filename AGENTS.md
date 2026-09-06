@@ -317,9 +317,9 @@ When the user asks to install a boot service for the SSE daemon:
 - **CLI Example**: `memo check-version --json`
 
 ### 10. `install_skills`
-- **Purpose**: Install packaged runtime skill(s) (default `ws-memo`) into a consumer product `{skillsRoot}`.
-- **Parameters**: `productRoot` (string), `cwd` (string), `skills` (string[]), `skillsRoot` (string), `force` (boolean).
-- **CLI Example**: `memo install-skills --product-root /path/to/consumer --force`
+- **Purpose**: Install packaged runtime skill(s) into explicitly selected local or global host roots.
+- **Parameters**: `productRoot` (string), `cwd` (string), `skills` (string[]), `skillsRoot` (string), `scope` (`local|global`), `hosts` (string[]), `conflictPolicy` (`skip|update|force`), `confirm` (boolean).
+- **CLI Example**: `memo install-skills --product-root /path/to/consumer --scope local --host cursor --conflictPolicy update --yes`
 
 ### 11. `prompt`
 - **Purpose**: Ingest prompt turns, manage session lifecycles, FTS/list query, activity reports, rule derivation, and session story export. Successful `session_end` also triggers dual sync flush (hybrid + batched vault-git when enabled; fail-open).

@@ -237,6 +237,7 @@ Slice 1 only (skeleton + failing-or-stub tests for the eight tools). Do not bund
 | 2026-09-04 | search-ranking-explain | Search/bootstrap `--explain` scoring breakdown, budgetReport, status Memory explain toggle; v0.24.0; npm test 571 pass |
 | 2026-09-04 | record-ttl-expiration | Universal `expires_at`/`ttl`, search `--include-expired`/`--as-of`, bootstrap/GC expiration sweeps, status Memory filters; v0.25.0; npm test 583 pass |
 | 2026-09-04 | session-handoff-baton | Cross-agent session handoff batons with owner/branch isolation, bootstrap delivery, CLI + status monitor; v0.26.0; npm test 591 pass |
+| 2026-09-06 | install-hooks-skills-interactive | Shared TTY installer wizard, explicit scope/host/policy/confirmation gates, Codex hooks, scoped global paths, conflict policies, MCP skill-install validation | npm test 609 pass |
 
 When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.PRD` / `FEATURES.md`.
 

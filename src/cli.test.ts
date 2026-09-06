@@ -767,7 +767,12 @@ describe('CLI Integration', { concurrency: false }, () => {
       const code = await runCli([
         'install-skills',
         tempConsumer,
+        '--scope',
+        'local',
+        '--host',
+        'cursor',
         '--force',
+        '--yes',
         '--json'
       ]);
       assert.equal(code, 0);
@@ -780,6 +785,65 @@ describe('CLI Integration', { concurrency: false }, () => {
       } catch {
         // Ignore
       }
+    }
+  });
+
+  it('fails closed for non-TTY hook writes without explicit scope, host, and confirmation', async () => {
+    let capturedErr = '';
+    const origErr = console.error;
+    console.error = (...args) => {
+      capturedErr += args.join(' ') + '\n';
+    };
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-hook-gate-'));
+    const productRoot = path.join(tempDir, 'consumer');
+    fs.mkdirSync(productRoot, { recursive: true });
+    try {
+      const code = await runCli([
+        'install-hooks',
+        '--apply',
+        '--host',
+        'cursor',
+        '--product-root',
+        productRoot
+      ]);
+      assert.equal(code, 1);
+      assert.match(capturedErr, /scope/i);
+      assert.equal(fs.existsSync(path.join(productRoot, '.cursor')), false);
+    } finally {
+      console.error = origErr;
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('JSON installer preview requires explicit target but never writes without confirmation', async () => {
+    let captured = '';
+    const origLog = console.log;
+    console.log = (...args) => {
+      captured += args.join(' ') + '\n';
+    };
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-json-preview-'));
+    const productRoot = path.join(tempDir, 'consumer');
+    fs.mkdirSync(productRoot, { recursive: true });
+    try {
+      const code = await runCli([
+        'install-hooks',
+        '--scope',
+        'local',
+        '--host',
+        'cursor',
+        '--conflictPolicy',
+        'update',
+        '--json',
+        '--product-root',
+        productRoot
+      ]);
+      assert.equal(code, 0);
+      const parsed = JSON.parse(captured.trim());
+      assert.equal(parsed.status, 'preview');
+      assert.equal(fs.existsSync(path.join(productRoot, '.cursor')), false);
+    } finally {
+      console.log = origLog;
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 

@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.26.2
+version: 0.27.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -470,7 +470,7 @@ memo check-version --json
 
 ### 10. `install_skills`
 
-**Job:** Install or update packaged runtime skill(s) (`ws-memo`, `ws-session-tracking`) into a consumer product repository (default), or into global skills roots with `global: true`.
+**Job:** Install or update packaged runtime skill(s) (`ws-memo`, `ws-session-tracking`) into explicitly selected local or global host roots.
 
 #### Parameter Specification
 - `productRoot` (string, optional): Consumer product repository root directory (local mode).
@@ -478,7 +478,11 @@ memo check-version --json
 - `skills` (string[], optional): Skill IDs to install. Defaults to `["ws-memo", "ws-session-tracking"]`.
 - `skillsRoot` (string, optional): Relative destination under product root (default: `".agents/skills"`). Ignored when `global` is true.
 - `force` (boolean, optional): Overwrite destination when it differs from the packaged skill (default: `false`).
-- `global` (boolean, optional): Install into `$HOME/.agents/skills` (always created) and `$HOME/.gemini/config/skills` when Antigravity/Gemini `~/.gemini/config` exists (skipped otherwise). Default: `false` (local product install).
+- `scope` (`local|global`, required for permission-gated calls): Installation scope.
+- `hosts` (string[], required for permission-gated calls): Explicit host ids or aliases (`cursor`, `antigravity`/`gemini`, `codex`, `opencode`, `claude`); `all` requires confirmation.
+- `conflictPolicy` (`skip|update|force`, required for permission-gated calls): Existing-destination policy.
+- `confirm` (boolean, required for writes): Explicit permission bit, must be `true`.
+- `global` (boolean, optional): Legacy alias for `scope: "global"`.
 
 #### Pre-Flight Checklist
 - [ ] Only packaged runtime skills (`"ws-memo"`, `"ws-session-tracking"`) are accepted. Unknown skill IDs fail closed.
@@ -489,22 +493,19 @@ memo check-version --json
 ```json
 {
   "productRoot": "/path/to/consumer-app",
-  "skills": ["ws-memo", "ws-session-tracking"],
-  "force": true
-}
-```
-
-```json
-{
-  "global": true,
-  "force": true
+  "scope": "local",
+  "hosts": ["cursor"],
+  "conflictPolicy": "update",
+  "confirm": true
 }
 ```
 
 #### CLI Equivalent
 ```bash
-memo install-skills --product-root /path/to/consumer-app --force
-memo install-skills --global --force
+memo install-skills --product-root /path/to/consumer-app \
+  --scope local --host cursor --conflictPolicy update --yes
+memo install-skills --scope global --host cursor,antigravity \
+  --conflictPolicy force --yes
 ```
 
 ---

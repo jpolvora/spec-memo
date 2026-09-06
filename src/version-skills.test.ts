@@ -7,9 +7,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createMcpServer } from './mcp.js';
 import { TOOL_NAMES } from './types.js';
-import { executeTool } from './tools.js';
+import { executeTool, TOOL_DEFINITIONS } from './tools.js';
 import { checkVersion, getPackageVersion, isSemverNewer } from './version.js';
-import { installSkills, listRelativeFiles } from './skills-install.js';
+import { installSkills, listRelativeFiles, resolveSkillInstallTargets } from './skills-install.js';
 import { getPackageRoot } from './version.js';
 import { runCli } from './cli.js';
 
@@ -35,6 +35,15 @@ describe('check_version and install_skills', () => {
 
     await client.close();
     await server.close();
+  });
+
+  it('publishes permission fields as required install_skills MCP inputs', () => {
+    assert.deepEqual(TOOL_DEFINITIONS.install_skills.inputSchema.required, [
+      'scope',
+      'hosts',
+      'conflictPolicy',
+      'confirm'
+    ]);
   });
 
   it('check_version returns payload and soft-fails when latest lookup is offline', async () => {
@@ -329,6 +338,70 @@ describe('check_version and install_skills', () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  });
+
+  it('explicit global host selection does not infer Antigravity skills per AC15', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-global-host-'));
+    const home = path.join(tmp, 'home');
+    fs.mkdirSync(path.join(home, '.gemini', 'config'), { recursive: true });
+    try {
+      const result = await installSkills({
+        scope: 'global',
+        hosts: ['cursor'],
+        conflictPolicy: 'force',
+        confirm: true,
+        homeDir: home,
+        packageRoot: getPackageRoot(),
+        vaultRoot: path.join(tmp, 'vault')
+      });
+      assert.equal(result.installed.length, 2);
+      assert.ok(result.installed.every((row) => row.target === 'agents'));
+      assert.equal(fs.existsSync(path.join(home, '.gemini', 'config', 'skills', 'ws-memo')), false);
+      assert.equal(fs.existsSync(path.join(home, '.agents', 'skills', 'ws-memo', 'SKILL.md')), true);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('local host selection includes only selected host-specific skill roots', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-local-host-'));
+    const productRoot = path.join(tmp, 'consumer');
+    fs.mkdirSync(productRoot, { recursive: true });
+    try {
+      const result = await installSkills({
+        scope: 'local',
+        hosts: ['codex'],
+        conflictPolicy: 'force',
+        confirm: true,
+        productRoot,
+        packageRoot: getPackageRoot(),
+        vaultRoot: path.join(tmp, 'vault')
+      });
+      assert.equal(result.installed.length, 4);
+      assert.equal(fs.existsSync(path.join(productRoot, '.agents', 'skills', 'ws-memo', 'SKILL.md')), true);
+      assert.equal(fs.existsSync(path.join(productRoot, '.codex', 'skills', 'ws-memo', 'SKILL.md')), true);
+      assert.equal(fs.existsSync(path.join(productRoot, '.claude', 'skills', 'ws-memo')), false);
+      const targets = resolveSkillInstallTargets({
+        scope: 'local',
+        productRoot,
+        hosts: ['codex']
+      });
+      assert.ok(targets.some((target) => target.root.endsWith(path.join('.codex', 'skills'))));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('MCP install_skills requires confirm, scope, hosts, and conflict policy per AC20/AC21', async () => {
+    const response = await executeTool('install_skills', {
+      productRoot: path.join(os.tmpdir(), 'spec-memo-no-write'),
+      confirm: false,
+      scope: 'local',
+      hosts: ['cursor'],
+      conflictPolicy: 'skip'
+    });
+    assert.equal(response.isError, true);
+    assert.match(response.error, /confirm/i);
   });
 
   it('packaged skill versions match package.json version', () => {

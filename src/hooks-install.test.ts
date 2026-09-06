@@ -12,6 +12,8 @@ import {
   generateFailOpenShellBody,
   generateOpenCodePlugin,
   generateCursorRule,
+  generateCursorHooksJson,
+  generateCodexAgents,
   stripSpecMemoFromHookConfig,
   HOOK_TIMEOUT_MS
 } from './hooks-install.js';
@@ -38,7 +40,7 @@ describe('hooks-install', () => {
   });
 
   it('defines SUPPORTED_HOOK_HOSTS per AC1', () => {
-    assert.deepEqual(SUPPORTED_HOOK_HOSTS, ['antigravity', 'opencode', 'cursor', 'claude', 'all']);
+    assert.deepEqual(SUPPORTED_HOOK_HOSTS, ['antigravity', 'opencode', 'cursor', 'claude', 'codex', 'all']);
   });
 
   it('resolveHostHookPaths returns canonical destinations per AC2', () => {
@@ -411,5 +413,125 @@ describe('hooks-install', () => {
     };
     assert.equal(parsed.hooks.sessionStart.length, 1);
     assert.equal(parsed.hooks.sessionStart[0].command, 'echo keep');
+  });
+
+  it('global cursor resolves user hooks and uses ./hooks scope prefix per AC26/AC29', async () => {
+    await installHooks({
+      host: 'cursor',
+      scope: 'global',
+      productRoot,
+      homeDir,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'force',
+      packageVersion: '4.0.0'
+    });
+    const hooksPath = path.join(homeDir, '.cursor', 'hooks.json');
+    const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8')) as {
+      hooks: Record<string, Array<{ command: string }>>;
+    };
+    for (const entries of Object.values(hooks.hooks)) {
+      for (const entry of entries) {
+        if (entry.command.includes('spec-memo')) {
+          assert.match(entry.command, /(?:^| )\.\/hooks\/spec-memo-/);
+          assert.doesNotMatch(entry.command, /\.cursor\/hooks\//);
+        }
+      }
+    }
+    assert.equal(fs.existsSync(path.join(homeDir, '.cursor', 'hooks', 'spec-memo-bootstrap.sh')), true);
+  });
+
+  it('update rewrites stamped global cursor commands and preserves custom hooks per AC28', async () => {
+    const hooksPath = path.join(homeDir, '.cursor', 'hooks.json');
+    fs.mkdirSync(path.dirname(hooksPath), { recursive: true });
+    fs.writeFileSync(
+      hooksPath,
+      JSON.stringify({
+        hooks: {
+          sessionStart: [
+            { command: 'echo keep' },
+            { command: 'bash .cursor/hooks/spec-memo-bootstrap.sh', timeout: 1 }
+          ]
+        },
+        'spec-memo': { version: '1.0.0', generatedBy: 'spec-memo@1.0.0' }
+      }),
+      'utf8'
+    );
+    await installHooks({
+      host: 'cursor',
+      scope: 'global',
+      productRoot,
+      homeDir,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'update',
+      packageVersion: '2.0.0'
+    });
+    const parsed = JSON.parse(fs.readFileSync(hooksPath, 'utf8')) as {
+      hooks: { sessionStart: Array<{ command: string }> };
+    };
+    assert.ok(parsed.hooks.sessionStart.some((entry) => entry.command === 'echo keep'));
+    assert.ok(parsed.hooks.sessionStart.some((entry) => entry.command.includes('bash ./hooks/spec-memo-bootstrap.sh')));
+    assert.equal(parsed.hooks.sessionStart.some((entry) => entry.command.includes('.cursor/hooks/')), false);
+  });
+
+  it('codex writes stamped workspace and global AGENTS.md paths per AC12/AC24', async () => {
+    await installHooks({
+      host: 'codex',
+      scope: 'local',
+      productRoot,
+      homeDir,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'force',
+      packageVersion: '3.1.0'
+    });
+    assert.match(
+      fs.readFileSync(path.join(productRoot, '.codex', 'AGENTS.md'), 'utf8'),
+      /generated-by: spec-memo@3\.1\.0/
+    );
+    assert.match(generateCodexAgents('3.1.0'), /timeout 1\.5/);
+    await installHooks({
+      host: 'codex',
+      scope: 'global',
+      productRoot,
+      homeDir,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'force',
+      packageVersion: '3.1.0'
+    });
+    assert.equal(fs.existsSync(path.join(homeDir, '.codex', 'AGENTS.md')), true);
+  });
+
+  it('skip leaves foreign hook files unchanged and update refuses them per AC8/AC9', async () => {
+    const rulePath = path.join(productRoot, '.cursor', 'rules', 'spec-memo.mdc');
+    const emptyHooksPath = path.join(productRoot, '.cursor', 'hooks.json');
+    fs.mkdirSync(path.dirname(rulePath), { recursive: true });
+    fs.writeFileSync(rulePath, '# consumer-owned rule\n', 'utf8');
+    fs.writeFileSync(emptyHooksPath, '', 'utf8');
+    const skipped = await installHooks({
+      host: 'cursor',
+      productRoot,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'skip',
+      packageVersion: '1.0.0'
+    });
+    assert.ok(skipped.results.some((row) => row.path.endsWith('/spec-memo.mdc') && row.status === 'skipped'));
+    assert.ok(skipped.results.some((row) => row.path.endsWith('/hooks.json') && row.status === 'skipped'));
+    assert.equal(fs.readFileSync(rulePath, 'utf8'), '# consumer-owned rule\n');
+    assert.equal(fs.readFileSync(emptyHooksPath, 'utf8'), '');
+
+    const refused = await installHooks({
+      host: 'cursor',
+      productRoot,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'update',
+      packageVersion: '1.0.0'
+    });
+    assert.ok(refused.results.some((row) => row.path.endsWith('/spec-memo.mdc') && row.status === 'refused'));
+    assert.equal(fs.readFileSync(rulePath, 'utf8'), '# consumer-owned rule\n');
   });
 });

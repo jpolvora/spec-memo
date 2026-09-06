@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-09-06 11:20] Agent: Cursor
+- **Prompt**: Implement spec 0048 interactive install-hooks and install-skills safety gates
+- **Done**: Added shared TTY wizard, explicit local/global host and conflict-policy gates, Codex hook support, scoped global hook paths, conflict-aware installers, MCP confirmation validation, tests, documentation, and tracking updates.
+- **Result**: `npm test` 609 pass / 0 fail; `npm run build` passes.
+
 ### [2026-09-06 08:46] Agent: Cursor Grok 4.6
 - **Prompt**: Align root AGENTS.md with local ws-shared/autoload.md
 - **Done**: Always-applied table matches autoload (megabrain, memo, session-tracking, spec-memo; dropped patterns + always-on task-lifecycle); spec router uses ws-spec-write / ws-spec-provider-local / ws-spec-update / ws-spec-multi / organizer / from-provider; kept product ws-ship-pr row
