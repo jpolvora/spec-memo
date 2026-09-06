@@ -112,6 +112,7 @@ describe('install wizard', () => {
       assert.equal(preflight.ok, true);
       assert.equal(preflight.memoExecutable, process.execPath);
       assert.deepEqual(preflight.memoArgs, [cliPath]);
+      assert.equal(preflight.memoShell, false);
       assert.match(preflight.memoCommand || '', /cli\.js/);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });

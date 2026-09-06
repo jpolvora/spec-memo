@@ -413,7 +413,8 @@ ${CODEX_BLOCK_END}
 export function generateOpenCodePlugin(
   version: string,
   memoExecutable = 'memo',
-  memoArgs: string[] = []
+  memoArgs: string[] = [],
+  memoShell = process.platform === 'win32'
 ): string {
   return `${GENERATED_BY_PREFIX}${version}
 import * as fs from 'node:fs';
@@ -441,7 +442,7 @@ async function runMemo(args) {
     const child = spawn(
       ${JSON.stringify(memoExecutable)},
       [...${JSON.stringify(memoArgs)}, ...args],
-      { stdio: 'ignore', shell: false }
+      { stdio: 'ignore', shell: ${memoShell} }
     );
     const timer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch {}
@@ -622,6 +623,7 @@ function buildHostArtifacts(
     memoCommand?: string;
     memoExecutable?: string;
     memoArgs?: string[];
+    memoShell?: boolean;
   } = {}
 ): Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> {
   const scripts = uniqueScripts(host, version, options.memoCommand);
@@ -644,7 +646,8 @@ function buildHostArtifacts(
         content: generateOpenCodePlugin(
           version,
           options.memoExecutable || options.memoCommand || 'memo',
-          options.memoArgs
+          options.memoArgs,
+          options.memoShell ?? process.platform === 'win32'
         ),
         kind: 'js'
       });
@@ -752,7 +755,8 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
       shellHookPrefix: preflight.shellHookPrefix,
       memoCommand: preflight.memoCommand || 'memo',
       memoExecutable: preflight.memoExecutable,
-      memoArgs: preflight.memoArgs
+      memoArgs: preflight.memoArgs,
+      memoShell: preflight.memoShell
     });
     const jsonTarget = targets.find((t) => t.kind === 'json');
 

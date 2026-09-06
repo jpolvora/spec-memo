@@ -28,6 +28,7 @@ export interface InstallPreflight {
   memoCommand: string | null;
   memoExecutable?: string;
   memoArgs?: string[];
+  memoShell?: boolean;
   shellHookPrefix: 'bash' | '';
   chmodAttempted: boolean;
   warning?: string;
@@ -116,6 +117,7 @@ interface MemoInvocation {
   shellCommand: string;
   executable: string;
   args: string[];
+  shell: boolean;
 }
 
 function resolveMemoInvocation(options: {
@@ -125,7 +127,12 @@ function resolveMemoInvocation(options: {
 } = {}): MemoInvocation | null {
   const platform = options.platform || process.platform;
   if (commandOnPath('memo', platform, options.pathEnv)) {
-    return { shellCommand: 'memo', executable: 'memo', args: [] };
+    return {
+      shellCommand: 'memo',
+      executable: 'memo',
+      args: [],
+      shell: platform === 'win32'
+    };
   }
   const cliPath = options.cliPath ||
     path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'cli.js');
@@ -133,7 +140,8 @@ function resolveMemoInvocation(options: {
   return {
     shellCommand: `${shellQuote(process.execPath)} ${shellQuote(cliPath)}`,
     executable: process.execPath,
-    args: [cliPath]
+    args: [cliPath],
+    shell: false
   };
 }
 
@@ -165,7 +173,11 @@ export function getInstallPreflight(options: {
     platform,
     memoCommand: memoInvocation?.shellCommand || null,
     ...(memoInvocation
-      ? { memoExecutable: memoInvocation.executable, memoArgs: memoInvocation.args }
+      ? {
+          memoExecutable: memoInvocation.executable,
+          memoArgs: memoInvocation.args,
+          memoShell: memoInvocation.shell
+        }
       : {}),
     shellHookPrefix: platform === 'win32' ? 'bash' : '',
     chmodAttempted: platform !== 'win32',

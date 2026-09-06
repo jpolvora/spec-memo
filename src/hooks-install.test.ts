@@ -137,6 +137,11 @@ describe('hooks-install', () => {
     assert.match(plugin, /bootstrap/);
     assert.match(plugin, /sync/);
     assert.ok(plugin.includes(String(HOOK_TIMEOUT_MS)));
+    assert.match(generateOpenCodePlugin('2.0.0', 'memo', [], true), /shell: true/);
+    assert.match(
+      generateOpenCodePlugin('2.0.0', process.execPath, ['dist/cli.js'], false),
+      /shell: false/
+    );
   });
 
   it('shell hooks use timeout and fail-open per AC11/AC12', () => {
