@@ -123,6 +123,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`capture-ignore-marker`](0040-capture-ignore-marker.spec.md): Project-Local Capture Exclusions Marker and Safety Boundary
 - [x] [`agent-hooks-install`](0041-agent-hooks-install.spec.md): Automatic Agent Lifecycle Hooks Installer (memo install-hooks)
 - [x] Vault manager: alias redirect, merge, and project CRUD (`spec: 0047-vault-merge-alias.spec.md`)
+- [ ] Interactive install-hooks and install-skills with explicit host permission (`spec: 0048-install-hooks-skills-interactive.spec.md`)
+
 
 
 
@@ -180,6 +182,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 45 | [`project-wiki`](0046-project-wiki.spec.md) | `[x] done` | Phase 7 | Per-project vault wiki, status Wiki tab, CLI memo wiki |
 
 | 46 | `vault-merge-alias` | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Vault manager: alias redirect, merge, and project CRUD |
+
+| 47 | `install-hooks-skills-interactive` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Interactive install-hooks and install-skills with explicit host permission |
 
 ## 9. Inbox (unscheduled ideas)
 

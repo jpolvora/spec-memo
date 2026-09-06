@@ -21,45 +21,51 @@ This document is the operating contract for coding agents working in and with **
 
 ## Autoload (Always-applied skills)
 
-Load **every** skill listed in [`.agents/skills/ws-shared/autoload.md`](.agents/skills/ws-shared/autoload.md) § Always-applied skills on every prompt:
+Load **every** skill listed in [`.agents/skills/ws-shared/autoload.md`](.agents/skills/ws-shared/autoload.md) § Always-applied skills on every prompt. Membership SoT is that file (hybrid installs may resolve the same id under `{globalSkillsRoot}` when missing locally). `ws-karpathy-guidelines` stays shared-hub mandatory, not this table.
 
 | Skill | Path | Trigger | Role |
 |---|---|---|---|
-| `ws-senior-developer` | `{globalSkillsRoot}/ws-senior-developer/SKILL.md` | Every prompt | Delivery gate, scope control, ambiguity stops, pre-ship proof |
-| `ws-self-learning` | `{globalSkillsRoot}/ws-self-learning/SKILL.md` | Every mutating task | Consult MEMORY + anti-regression trap writes |
-| `ws-patterns-backend` | `{skillsRoot}/ws-patterns-backend/SKILL.md` | Every prompt | Backend patterns & Node/SQLite best practices |
-| `ws-patterns-frontend` | `{skillsRoot}/ws-patterns-frontend/SKILL.md` | Every prompt | Frontend patterns & viewer best practices |
-| `ws-changelog` | `{globalSkillsRoot}/ws-changelog/SKILL.md` | Task completion | Append-only history writer |
-| `ws-fable-method` | `{globalSkillsRoot}/ws-fable-method/SKILL.md` | Every prompt | 7-step structured investigation & verification loop |
-| `ws-tdah` | `{globalSkillsRoot}/ws-tdah/SKILL.md` | Every prompt | Action-first reply shape & operational judgment |
-| `ws-task-lifecycle` | `{globalSkillsRoot}/ws-task-lifecycle/SKILL.md` | Every prompt | Task lifecycle management |
-| `ws-memo` | [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md) | Every prompt | Vault runtime (11 MCP tools + CLI); bootstrap, search, upsert, prompt, serve/status |
-| `ws-session-tracking` | [`.agents/skills/ws-session-tracking/SKILL.md`](.agents/skills/ws-session-tracking/SKILL.md) | Every prompt | Prompt/session ingestion, deliverables, activity reports, derive-rules |
+| `ws-senior-developer` | `{skillsRoot}/ws-senior-developer/SKILL.md` | Every prompt | Delivery gate, Code review proof |
+| `ws-self-learning` | `{skillsRoot}/ws-self-learning/SKILL.md` | Every mutating task | MEMORY consult + trap write (including after `ws-goal-fix-pr` / `ws-fix-pr`) |
+| `ws-changelog` | `{skillsRoot}/ws-changelog/SKILL.md` | Every task completion | Append-only history |
+| `ws-fable-method` | `{skillsRoot}/ws-fable-method/SKILL.md` | Every prompt | Investigate/act/verify when non-trivial; defer when orch owns the session |
+| `ws-tdah` | `{skillsRoot}/ws-tdah/SKILL.md` | Every prompt | Action-first shape + judgment |
+| `ws-megabrain` | `{skillsRoot}/ws-megabrain/SKILL.md` | Every prompt | Vibe-coding implementer (no spec); defer when orch owns the session |
+| `ws-memo` | `{skillsRoot}/ws-memo/SKILL.md` | Session start / working memory | Vault runtime (11 MCP tools + CLI) |
+| `ws-session-tracking` | `{skillsRoot}/ws-session-tracking/SKILL.md` | Every session | Prompt turns, task boundaries, deliverables |
+| `ws-spec-memo` | `{skillsRoot}/ws-spec-memo/SKILL.md` | Config preflight | Wire `config.json` memory backends and hybrid fallback |
+
+`ws-patterns-backend` / `ws-patterns-frontend` and `ws-task-lifecycle` are **not** Always-applied here. Consult pattern files only on matching backend/frontend work; load `ws-task-lifecycle` only for prompt-driven product work that is not Spec-to-PR (see autoload router).
 
 ---
 
 ## Specs Progressive Disclosure & Router
 
-When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a skill, load **only** the matching skill:
+When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a skill, load **only** the matching skill (full table: [`autoload.md`](.agents/skills/ws-shared/autoload.md) § Specs skill router):
 
 | When the task means… | Load | Does not do |
 |---|---|---|
-| Draft a new local spec | `ws-write-spec` | Does not create `{plansDir}`; does not run orch |
+| Unified spec front door | `ws-spec-manager` | Delegates; does not implement product code |
+| Draft a new local spec | `ws-spec-write` | Does not create `{plansDir}`; does not run orch |
 | Validate / reshape `*.spec.md` format & ACs | `ws-spec-format` | Does not invent product requirements |
-| Register spec of record & workflow copy | `ws-local-spec-provider` | Not for free-text draft |
-| Init / sync / promote `index.PRD` feature map | `ws-spec-index` | Does not rewrite AC bodies for code drift |
-| Spec text drifted from implemented code | `ws-sync-spec` | Does not update `index.PRD` checkboxes |
+| Register spec of record & workflow copy | `ws-spec-provider-local` | Not for free-text draft |
+| Init / sync / promote / track `index.PRD` | `ws-spec-index` | Does not rewrite AC bodies for code drift |
+| Spec-of-record path / chronological prefix | `ws-spec-organizer` | Does not reformulate requirements |
+| Spec text drifted from implemented code | `ws-spec-update` | Does not update `index.PRD` checkboxes |
+| Prompt-driven product work (not Spec-to-PR) | `ws-task-lifecycle` | Does not mkdir `{plansDir}` or run orch |
+| Vibe-coding / what-next without a spec | `ws-megabrain` | Does not replace spec-to-pr |
 | Deliver feature Spec→PR (standard FSM) | `ws-spec-to-pr` | Not for batch; not for format-only edits |
 | Deliver feature Spec→PR (fast lite) | `ws-spec-to-pr-lite` | Not for complex multi-phase work |
+| Sequential multi-spec delivery | `ws-spec-multi` | Master orch only; does not edit product code |
+| Bulk-import GH issues / ADO US → specs | `ws-spec-from-provider` | Not single-id fetch; not orch delivery |
 | Ship / PR (`ws-ship-pr`, including “ship next version”) | § Ship via `ws-ship-pr` below + load `ws-ship-pr` | Not a feature-slice orch; does not invent scope; **always bump version before create-pr** |
 
 ### Vault / spec-memo runtime
 
-[`ws-memo`](.agents/skills/ws-memo/SKILL.md) and [`ws-session-tracking`](.agents/skills/ws-session-tracking/SKILL.md) are **Always-applied** in this repo with **separated, complementary roles**:
+[`ws-memo`](.agents/skills/ws-memo/SKILL.md), [`ws-session-tracking`](.agents/skills/ws-session-tracking/SKILL.md), and [`ws-spec-memo`](.agents/skills/ws-spec-memo/SKILL.md) are **Always-applied** with **separated roles**:
 - **`ws-memo` (Knowledge Continuity):** Vault operations (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills). Injects anti-regression traps, architectural decisions, and active specs.
 - **`ws-session-tracking` (Execution Continuity):** Session lifecycle boundaries (`session_start`, `session_end`), prompt turn ingestion, deliverable correlation (PRs, commits), and cross-agent handoff batons via MCP `prompt`.
-
-Consumer **setup** (`specMemo.enabled`, import, hybrid MEMORY) stays in workflow-skills `ws-spec-memo` — do not duplicate it here.
+- **`ws-spec-memo` (Consumer setup):** `specMemo.*` / harness flags, import MEMORY, write-block hook, disable. Do not write `specMemo.*` from `ws-memo`.
 
 ---
 

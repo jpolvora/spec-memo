@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-09-06 08:46] Agent: Cursor Grok 4.6
+- **Prompt**: Align root AGENTS.md with local ws-shared/autoload.md
+- **Done**: Always-applied table matches autoload (megabrain, memo, session-tracking, spec-memo; dropped patterns + always-on task-lifecycle); spec router uses ws-spec-write / ws-spec-provider-local / ws-spec-update / ws-spec-multi / organizer / from-provider; kept product ws-ship-pr row
+- **Result**: AGENTS.md membership SoT points at autoload.md; not committed
+
 ### [2026-09-04 14:55] Agent: Cursor Grok 4.6
 - **Prompt**: bump, commit, push; ws-ship-pr (PR #39 review threads)
 - **Done**: Sanitize `memo wiki` stdout; GET `/api/wiki` `renderedHtml` via `renderPromptMarkdownHtml` + `wrapWikiH2Html`; CRLF heading parse
