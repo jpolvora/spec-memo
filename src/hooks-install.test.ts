@@ -297,4 +297,109 @@ describe('hooks-install', () => {
     const rule = generateCursorRule('1.0.0');
     assert.match(rule, /globs:\s*\n\s+-\s+"\*\*\/\*"/);
   });
+
+  it('cursor hooks use bash prefix so Windows executes via Git Bash per #47', async () => {
+    await installHooks({
+      host: 'cursor',
+      productRoot,
+      cwd: productRoot,
+      apply: true,
+      force: true,
+      packageVersion: '1.0.0'
+    });
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(productRoot, '.cursor', 'hooks.json'), 'utf8')
+    ) as {
+      hooks: {
+        sessionStart: Array<{ command: string }>;
+        beforeSubmitPrompt: Array<{ command: string }>;
+        sessionEnd: Array<{ command: string }>;
+      };
+    };
+    for (const key of ['sessionStart', 'beforeSubmitPrompt', 'sessionEnd'] as const) {
+      assert.ok(parsed.hooks[key].length >= 1);
+      for (const entry of parsed.hooks[key]) {
+        assert.match(entry.command, /^bash \.cursor\/hooks\/spec-memo-.*\.sh$/);
+      }
+    }
+  });
+
+  it('antigravity and claude hooks use bash prefix per #47 audit', async () => {
+    await installHooks({
+      host: 'antigravity',
+      productRoot,
+      cwd: productRoot,
+      apply: true,
+      force: true,
+      packageVersion: '1.0.0'
+    });
+    const ag = JSON.parse(
+      fs.readFileSync(path.join(productRoot, '.agents', 'hooks.json'), 'utf8')
+    ) as {
+      hooks: {
+        PreInvocation: Array<{ command: string }>;
+        PostInvocation: Array<{ command: string }>;
+      };
+    };
+    assert.match(ag.hooks.PreInvocation[0].command, /^bash \.agents\/hooks\/spec-memo-.*\.sh$/);
+    assert.match(ag.hooks.PostInvocation[0].command, /^bash \.agents\/hooks\/spec-memo-.*\.sh$/);
+
+    await installHooks({
+      host: 'claude',
+      productRoot,
+      cwd: productRoot,
+      apply: true,
+      force: true,
+      packageVersion: '1.0.0'
+    });
+    const claude = JSON.parse(
+      fs.readFileSync(path.join(productRoot, '.claude', 'config.json'), 'utf8')
+    ) as {
+      hooks: Record<string, Array<{ command: string }>>;
+    };
+    for (const entries of Object.values(claude.hooks)) {
+      for (const entry of entries) {
+        if (entry.command.includes('spec-memo')) {
+          assert.match(entry.command, /^bash \.claude\/hooks\/spec-memo-.*\.sh$/);
+        }
+      }
+    }
+  });
+
+  it('--remove strips bash-prefixed spec-memo entries per #47', async () => {
+    const hooksPath = path.join(productRoot, '.cursor', 'hooks.json');
+    fs.mkdirSync(path.dirname(hooksPath), { recursive: true });
+    fs.writeFileSync(
+      hooksPath,
+      JSON.stringify(
+        {
+          version: 1,
+          hooks: {
+            sessionStart: [
+              { command: 'echo keep' },
+              { command: 'bash .cursor/hooks/spec-memo-bootstrap.sh' }
+            ]
+          }
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    await installHooks({
+      host: 'cursor',
+      productRoot,
+      cwd: productRoot,
+      apply: true,
+      remove: true,
+      packageVersion: '1.0.0'
+    });
+
+    const parsed = JSON.parse(fs.readFileSync(hooksPath, 'utf8')) as {
+      hooks: { sessionStart: Array<{ command: string }> };
+    };
+    assert.equal(parsed.hooks.sessionStart.length, 1);
+    assert.equal(parsed.hooks.sessionStart[0].command, 'echo keep');
+  });
 });
