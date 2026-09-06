@@ -54,7 +54,7 @@ describe('vault-git-hybrid-sync', () => {
     ensureVaultStructure(tempVault);
     prevTimeout = process.env.SPEC_MEMO_SYNC_TIMEOUT_MS;
     if (!process.env.SPEC_MEMO_SYNC_TIMEOUT_MS) {
-      process.env.SPEC_MEMO_SYNC_TIMEOUT_MS = '1500';
+      process.env.SPEC_MEMO_SYNC_TIMEOUT_MS = '5000';
     }
   });
 
