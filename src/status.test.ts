@@ -475,6 +475,26 @@ test("MCP status monitor", async (t) => {
       assert.ok(!JSON.stringify(okBody).includes(vaultRoot));
       const events = bus.list();
       assert.ok(events.some((e) => e.path === "/api/vaults/sync" && e.kind === "write"));
+
+      // Failure propagation: when hybrid mode is enabled with an unreachable remote, syncDual fails and returns HTTP 502 with ok: false
+      parsed.mode = "hybrid";
+      parsed.remote = { url: "http://127.0.0.1:1" };
+      parsed.vaultGit = { enabled: false };
+      fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2));
+
+      const failSync = await fetch(`${baseUrl}/api/vaults/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: projectId, direction: "both", dryRun: true, prefer: "local" })
+      });
+      assert.strictEqual(failSync.status, 502);
+      const failBody = await failSync.json() as { ok: boolean; id: string; direction: string; error?: string };
+      assert.strictEqual(failBody.ok, false);
+      assert.strictEqual(failBody.id, projectId);
+      assert.strictEqual(failBody.direction, "both");
+      assert.ok(failBody.error);
+      const failEvents = bus.list();
+      assert.ok(failEvents.some((e) => e.path === "/api/vaults/sync" && e.statusCode === 502 && e.ok === false));
     } finally {
       fs.writeFileSync(configPath, prev);
     }

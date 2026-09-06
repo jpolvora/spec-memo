@@ -3739,7 +3739,10 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           const direction = dirEl ? dirEl.value : "both";
           const dryRun = document.getElementById("vault-sync-dryrun").checked === true;
           const prefer = document.getElementById("vault-sync-prefer").value === "remote" ? "remote" : "local";
-          await vaultManagerApi("/api/vaults/sync", { id, direction, dryRun, prefer });
+          const resData = await vaultManagerApi("/api/vaults/sync", { id, direction, dryRun, prefer });
+          if (resData && resData.ok === false) {
+            throw new Error(resData.error || "Sync failed");
+          }
           showBanner("Sync finished for " + id, "success");
         }
         closeVaultModal();
@@ -4396,6 +4399,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             return;
           }
           let payload: Record<string, unknown> = { ok: true, id, direction };
+          let syncOk = true;
           if (direction === "both") {
             const report = await syncDual({
               trigger: "sync",
@@ -4404,7 +4408,23 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
               prefer,
               vaultRoot
             });
-            payload = { ok: true, id, direction, hybrid: report.hybrid, vaultGit: report.vaultGit };
+            syncOk = report.ok;
+            const errs: string[] = [];
+            if (report.hybrid && !report.hybrid.ok && report.hybrid.error) {
+              errs.push(`Hybrid: ${report.hybrid.error}`);
+            }
+            if (report.vaultGit && !report.vaultGit.ok && report.vaultGit.error) {
+              errs.push(`Vault-git: ${report.vaultGit.error}`);
+            }
+            const syncError = errs.length > 0 ? errs.join("; ") : (!syncOk ? "Dual sync failed" : undefined);
+            payload = {
+              ok: syncOk,
+              id,
+              direction,
+              hybrid: report.hybrid,
+              vaultGit: report.vaultGit,
+              ...(syncError ? { error: syncError } : {})
+            };
           } else if (direction === "pull") {
             if (!hybridEnabled) {
               writeJson(
@@ -4414,37 +4434,58 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
               );
               return;
             }
-            const pulled = await pullHybridProject(vaultRoot, id, undefined, undefined, dryRun, prefer);
-            payload = { ok: true, id, direction, hybrid: { ok: true, pulled } };
+            try {
+              const pulled = await pullHybridProject(vaultRoot, id, undefined, undefined, dryRun, prefer);
+              payload = { ok: true, id, direction, hybrid: { ok: true, pulled } };
+            } catch (err) {
+              syncOk = false;
+              const msg = err instanceof Error ? err.message : String(err);
+              payload = { ok: false, id, direction, hybrid: { ok: false, error: msg }, error: msg };
+            }
           } else {
             if (hybridEnabled) {
-              const pushed = await pushHybridProject(
-                vaultRoot,
-                id,
-                undefined,
-                undefined,
-                dryRun,
-                undefined,
-                undefined,
-                prefer
-              );
-              payload.hybrid = { ok: true, pushed };
+              try {
+                const pushed = await pushHybridProject(
+                  vaultRoot,
+                  id,
+                  undefined,
+                  undefined,
+                  dryRun,
+                  undefined,
+                  undefined,
+                  prefer
+                );
+                payload.hybrid = { ok: true, pushed };
+              } catch (err) {
+                syncOk = false;
+                const msg = err instanceof Error ? err.message : String(err);
+                payload.hybrid = { ok: false, error: msg };
+                payload.error = msg;
+              }
             }
             if (gitEnabled) {
-              payload.vaultGit = await flushVaultGit(vaultRoot, { dryRun, trigger: "sync" });
+              const vg = await flushVaultGit(vaultRoot, { dryRun, trigger: "sync" });
+              payload.vaultGit = vg;
+              if (!vg.ok) {
+                syncOk = false;
+                const vgErr = vg.error || vg.message || "vault-git sync failed";
+                payload.error = payload.error ? `${String(payload.error)}; Vault-git: ${vgErr}` : vgErr;
+              }
             }
+            payload.ok = syncOk;
           }
+          const statusCode = syncOk ? 200 : 502;
           bus.capture({
             type: "system",
             kind: "write",
-            ok: true,
+            ok: syncOk,
             durationMs: Date.now() - startTime,
             summary: `vault sync ${direction} ${id}`,
             method: "POST",
             path: "/api/vaults/sync",
-            statusCode: 200
+            statusCode
           });
-          writeJson(res, 200, sanitizeToolOutput(payload));
+          writeJson(res, statusCode, sanitizeToolOutput(payload));
         } catch (err: unknown) {
           const status = err instanceof VaultManagerError ? err.httpStatus : 500;
           const msg = err instanceof Error ? err.message : String(err);
