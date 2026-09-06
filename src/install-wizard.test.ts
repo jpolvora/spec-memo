@@ -97,4 +97,24 @@ describe('install wizard', () => {
     assert.equal(preflight.shellHookPrefix, '');
     assert.match(preflight.warning || '', /resolve memo/i);
   });
+
+  it('exposes executable and args separately for a cross-platform node fallback', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-wizard-fallback-'));
+    const cliPath = path.join(tmp, 'dist', 'cli.js');
+    fs.mkdirSync(path.dirname(cliPath), { recursive: true });
+    fs.writeFileSync(cliPath, '#!/usr/bin/env node\n', 'utf8');
+    try {
+      const preflight = getInstallPreflight({
+        platform: 'win32',
+        pathEnv: '',
+        cliPath
+      });
+      assert.equal(preflight.ok, true);
+      assert.equal(preflight.memoExecutable, process.execPath);
+      assert.deepEqual(preflight.memoArgs, [cliPath]);
+      assert.match(preflight.memoCommand || '', /cli\.js/);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });

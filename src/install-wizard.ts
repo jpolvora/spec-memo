@@ -26,6 +26,8 @@ export interface InstallPreflight {
   ok: boolean;
   platform: 'win32' | 'linux' | 'darwin';
   memoCommand: string | null;
+  memoExecutable?: string;
+  memoArgs?: string[];
   shellHookPrefix: 'bash' | '';
   chmodAttempted: boolean;
   warning?: string;
@@ -106,20 +108,41 @@ function commandOnPath(name: string, platform: string, pathEnv?: string): string
   return undefined;
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+interface MemoInvocation {
+  shellCommand: string;
+  executable: string;
+  args: string[];
+}
+
+function resolveMemoInvocation(options: {
+  platform?: NodeJS.Platform;
+  pathEnv?: string;
+  cliPath?: string;
+} = {}): MemoInvocation | null {
+  const platform = options.platform || process.platform;
+  if (commandOnPath('memo', platform, options.pathEnv)) {
+    return { shellCommand: 'memo', executable: 'memo', args: [] };
+  }
+  const cliPath = options.cliPath ||
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'cli.js');
+  if (!fs.existsSync(cliPath)) return null;
+  return {
+    shellCommand: `${shellQuote(process.execPath)} ${shellQuote(cliPath)}`,
+    executable: process.execPath,
+    args: [cliPath]
+  };
+}
+
 export function resolveMemoCommand(options: {
   platform?: NodeJS.Platform;
   pathEnv?: string;
   cliPath?: string;
 } = {}): string | null {
-  const platform = options.platform || process.platform;
-  if (commandOnPath('memo', platform, options.pathEnv)) return 'memo';
-  const cliPath = options.cliPath ||
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'cli.js');
-  if (fs.existsSync(cliPath)) {
-    const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-    return `${quote(process.execPath)} ${quote(cliPath)}`;
-  }
-  return null;
+  return resolveMemoInvocation(options)?.shellCommand || null;
 }
 
 export function getInstallPreflight(options: {
@@ -132,18 +155,21 @@ export function getInstallPreflight(options: {
     rawPlatform === 'win32' || rawPlatform === 'darwin' || rawPlatform === 'linux'
       ? rawPlatform
       : 'linux';
-  const memoCommand = resolveMemoCommand({
+  const memoInvocation = resolveMemoInvocation({
     platform: rawPlatform,
     pathEnv: options.pathEnv,
     cliPath: options.cliPath
   });
   return {
-    ok: Boolean(memoCommand),
+    ok: Boolean(memoInvocation),
     platform,
-    memoCommand,
+    memoCommand: memoInvocation?.shellCommand || null,
+    ...(memoInvocation
+      ? { memoExecutable: memoInvocation.executable, memoArgs: memoInvocation.args }
+      : {}),
     shellHookPrefix: platform === 'win32' ? 'bash' : '',
     chmodAttempted: platform !== 'win32',
-    ...(memoCommand ? {} : { warning: 'Unable to resolve memo on PATH or node dist/cli.js.' })
+    ...(memoInvocation ? {} : { warning: 'Unable to resolve memo on PATH or node dist/cli.js.' })
   };
 }
 

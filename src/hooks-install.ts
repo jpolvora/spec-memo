@@ -410,7 +410,11 @@ ${CODEX_BLOCK_END}
 `;
 }
 
-export function generateOpenCodePlugin(version: string, memoCommand = 'memo'): string {
+export function generateOpenCodePlugin(
+  version: string,
+  memoExecutable = 'memo',
+  memoArgs: string[] = []
+): string {
   return `${GENERATED_BY_PREFIX}${version}
 import * as fs from 'node:fs';
 
@@ -434,7 +438,11 @@ function writeSessionId(id) {
 async function runMemo(args) {
   const { spawn } = await import('node:child_process');
   return new Promise((resolve) => {
-    const child = spawn(${JSON.stringify(memoCommand)}, args, { stdio: 'ignore', shell: true });
+    const child = spawn(
+      ${JSON.stringify(memoExecutable)},
+      [...${JSON.stringify(memoArgs)}, ...args],
+      { stdio: 'ignore', shell: false }
+    );
     const timer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch {}
       resolve(0);
@@ -608,7 +616,13 @@ function removeSpecMemoBlock(filePath: string): 'removed' | 'unchanged' {
 function buildHostArtifacts(
   host: Exclude<HookHostName, 'all'>,
   version: string,
-  options: { global?: boolean; shellHookPrefix?: 'bash' | ''; memoCommand?: string } = {}
+  options: {
+    global?: boolean;
+    shellHookPrefix?: 'bash' | '';
+    memoCommand?: string;
+    memoExecutable?: string;
+    memoArgs?: string[];
+  } = {}
 ): Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> {
   const scripts = uniqueScripts(host, version, options.memoCommand);
   const artifacts: Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> = [];
@@ -627,7 +641,11 @@ function buildHostArtifacts(
     case 'opencode':
       artifacts.push({
         path: 'spec-memo.js',
-        content: generateOpenCodePlugin(version, options.memoCommand),
+        content: generateOpenCodePlugin(
+          version,
+          options.memoExecutable || options.memoCommand || 'memo',
+          options.memoArgs
+        ),
         kind: 'js'
       });
       break;
@@ -732,7 +750,9 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
     const artifacts = buildHostArtifacts(host, version, {
       global,
       shellHookPrefix: preflight.shellHookPrefix,
-      memoCommand: preflight.memoCommand || 'memo'
+      memoCommand: preflight.memoCommand || 'memo',
+      memoExecutable: preflight.memoExecutable,
+      memoArgs: preflight.memoArgs
     });
     const jsonTarget = targets.find((t) => t.kind === 'json');
 
