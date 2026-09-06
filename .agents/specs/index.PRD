@@ -124,6 +124,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`agent-hooks-install`](0041-agent-hooks-install.spec.md): Automatic Agent Lifecycle Hooks Installer (memo install-hooks)
 - [x] Vault manager: alias redirect, merge, and project CRUD (`spec: 0047-vault-merge-alias.spec.md`)
 - [ ] Interactive install-hooks and install-skills with explicit host permission (`spec: 0048-install-hooks-skills-interactive.spec.md`)
+- [ ] Status Vaults tab: modal forms and per-project sync (`spec: 0049-status-vaults-tab-ui.spec.md`)
+
 
 
 
@@ -184,6 +186,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 46 | `vault-merge-alias` | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Vault manager: alias redirect, merge, and project CRUD |
 
 | 47 | `install-hooks-skills-interactive` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Interactive install-hooks and install-skills with explicit host permission |
+
+| 48 | `status-vaults-tab-ui` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Vaults tab: modal forms and per-project sync |
 
 ## 9. Inbox (unscheduled ideas)
 
