@@ -501,7 +501,11 @@ describe('hooks-install', () => {
       hooks: { sessionStart: Array<{ command: string }> };
     };
     assert.ok(parsed.hooks.sessionStart.some((entry) => entry.command === 'echo keep'));
-    assert.ok(parsed.hooks.sessionStart.some((entry) => entry.command.includes('bash ./hooks/spec-memo-bootstrap.sh')));
+    assert.ok(
+      parsed.hooks.sessionStart.some((entry) =>
+        entry.command.includes(`${shellHookPrefix}./hooks/spec-memo-bootstrap.sh`)
+      )
+    );
     assert.equal(parsed.hooks.sessionStart.some((entry) => entry.command.includes('.cursor/hooks/')), false);
   });
 
