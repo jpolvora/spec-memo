@@ -264,7 +264,16 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('id="tab-vaults"'));
     assert.ok(html.includes('activateTab("tab-vaults")'));
     assert.ok(html.includes('tabParam === "vaults"'));
-    assert.ok(html.includes('data-vault-action="unalias"'));
+    assert.ok(html.includes('vaultActionButton("unalias"'));
+    assert.ok(html.includes('id="modal-vault-action"'));
+    assert.ok(html.includes('data-vault-action="sync"'));
+    const handlerStart = html.indexOf("const vaultsTbody");
+    const handlerEnd = html.indexOf("const btnVaultsRefresh");
+    assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
+    const handler = html.slice(handlerStart, handlerEnd);
+    assert.ok(!handler.includes("window.prompt"));
+    assert.ok(!handler.includes("window.confirm"));
+    assert.ok(html.includes("display: flex; flex-wrap: wrap; gap:"));
   });
 
   await t.test("generateStatusHtml loadVaults accepts GET /api/vaults array payload", () => {
@@ -419,6 +428,56 @@ test("MCP status monitor", async (t) => {
       body: JSON.stringify({ sources: [], target: 'alias-tgt-test' })
     });
     assert.strictEqual(mergeBad.status, 400);
+  });
+
+  await t.test("POST /api/vaults/sync happy path, 400 invalid direction, missing channel", async () => {
+    const missing = await fetch(`${baseUrl}/api/vaults/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: projectId, direction: "both", dryRun: true, prefer: "local" })
+    });
+    assert.strictEqual(missing.status, 400);
+    const missingBody = await missing.json() as { error?: string };
+    assert.match(String(missingBody.error || ""), /hybrid remote or vaultGit\.enabled/i);
+    assert.ok(!JSON.stringify(missingBody).includes(vaultRoot));
+
+    const badDir = await fetch(`${baseUrl}/api/vaults/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: projectId, direction: "sideways" })
+    });
+    assert.strictEqual(badDir.status, 400);
+
+    const noId = await fetch(`${baseUrl}/api/vaults/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ direction: "both" })
+    });
+    assert.strictEqual(noId.status, 400);
+
+    const configPath = path.join(vaultRoot, "config.json");
+    const prev = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : "{}";
+    const parsed = JSON.parse(prev || "{}") as Record<string, unknown>;
+    parsed.vaultGit = { ...(typeof parsed.vaultGit === "object" && parsed.vaultGit ? parsed.vaultGit as object : {}), enabled: true };
+    fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2));
+    try {
+      const okSync = await fetch(`${baseUrl}/api/vaults/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: projectId, direction: "both", dryRun: true, prefer: "local" })
+      });
+      assert.strictEqual(okSync.status, 200);
+      const okBody = await okSync.json() as { ok: boolean; id: string; direction: string; vaultGit?: unknown };
+      assert.strictEqual(okBody.ok, true);
+      assert.strictEqual(okBody.id, projectId);
+      assert.strictEqual(okBody.direction, "both");
+      assert.ok(okBody.vaultGit);
+      assert.ok(!JSON.stringify(okBody).includes(vaultRoot));
+      const events = bus.list();
+      assert.ok(events.some((e) => e.path === "/api/vaults/sync" && e.kind === "write"));
+    } finally {
+      fs.writeFileSync(configPath, prev);
+    }
   });
 
   await t.test("GET /api/vaults on pristine vaultRoot does not scaffold config (AC24)", async () => {
@@ -1137,6 +1196,15 @@ test("MCP status monitor", async (t) => {
 
       const resDownloadUnauth = await fetch(`${authServer.url}/api/vaults/backups/${encodeURIComponent("missing.zip")}`);
       assert.strictEqual(resDownloadUnauth.status, 401);
+
+      const resSyncUnauth = await fetch(`${authServer.url}/api/vaults/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: projectId, direction: "both", dryRun: true })
+      });
+      assert.strictEqual(resSyncUnauth.status, 401);
+      const syncUnauthBody = await resSyncUnauth.json() as { error?: string };
+      assert.ok(syncUnauthBody.error);
     } finally {
       authBus.close();
       await authServer.close();

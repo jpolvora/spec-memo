@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.27.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.27.1**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -451,7 +451,7 @@ HTTP routes:
 
 ### Status monitor Wiki tab
 
-The **Vaults** tab (`?tab=vaults`) lists vault projects from `GET /api/vaults` (JSON array with `id`, `displayName`, `aliasOf`, `recordCount`). Operators can create projects, set aliases, merge sources into a canonical id (optional `copyRecords`), edit display names, and delete with confirmation. Mutating routes use the same auth and path sanitization as backup/reset.
+The **Vaults** tab (`?tab=vaults`) lists vault projects from `GET /api/vaults` (JSON array with `id`, `displayName`, `aliasOf`, `recordCount`). Create, Edit, Alias, Merge, Remove alias, Sync, and Delete use in-page modal forms (no `window.prompt` / `confirm`). Actions stay in a wrapping button row. **Sync** calls `POST /api/vaults/sync` with `{ id, direction: pull|push|both, dryRun, prefer }` and reuses `syncDual` / hybrid pull-push / vault-git flush. Mutating routes use the same auth and path sanitization as backup/reset.
 
 CLI extra (not an MCP tool): `memo vault list|alias|merge|create|update|delete` (see Command Reference).
 
