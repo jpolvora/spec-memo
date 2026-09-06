@@ -253,17 +253,20 @@ exit 0
 }
 
 function generateAntigravityHooksJson(version: string): Record<string, unknown> {
+  // Prefix shell hooks with `bash` so Windows hosts (Cursor/Antigravity/Claude)
+  // execute via Git Bash instead of opening `.sh` as a document. Works on
+  // macOS/Linux when `bash` is on PATH (see CROSS-PLATFORM managed-script rule).
   return {
     hooks: {
       PreInvocation: [
         {
           matcher: { invocationNum: 0 },
-          command: '.agents/hooks/spec-memo-session-start.sh'
+          command: 'bash .agents/hooks/spec-memo-session-start.sh'
         }
       ],
       PostInvocation: [
         {
-          command: '.agents/hooks/spec-memo-session-end.sh'
+          command: 'bash .agents/hooks/spec-memo-session-end.sh'
         }
       ]
     },
@@ -275,12 +278,14 @@ function generateAntigravityHooksJson(version: string): Record<string, unknown> 
 }
 
 function generateCursorHooksJson(version: string): Record<string, unknown> {
+  // Same `bash` prefix rationale as Antigravity: Windows Cursor spawns `command`
+  // without a POSIX shebang interpreter, so bare `.sh` paths open in an editor.
   return {
     version: 1,
     hooks: {
-      sessionStart: [{ command: '.cursor/hooks/spec-memo-bootstrap.sh', timeout: 1 }],
-      beforeSubmitPrompt: [{ command: '.cursor/hooks/spec-memo-record.sh', timeout: 1 }],
-      sessionEnd: [{ command: '.cursor/hooks/spec-memo-session-end.sh', timeout: 1 }]
+      sessionStart: [{ command: 'bash .cursor/hooks/spec-memo-bootstrap.sh', timeout: 1 }],
+      beforeSubmitPrompt: [{ command: 'bash .cursor/hooks/spec-memo-record.sh', timeout: 1 }],
+      sessionEnd: [{ command: 'bash .cursor/hooks/spec-memo-session-end.sh', timeout: 1 }]
     },
     'spec-memo': {
       version,
@@ -290,12 +295,14 @@ function generateCursorHooksJson(version: string): Record<string, unknown> {
 }
 
 function generateClaudeHooksConfig(version: string): Record<string, unknown> {
+  // Same `bash` prefix rationale: Claude hook runners on Windows hit the same
+  // `.sh` file-association limitation as Cursor.
   return {
     hooks: {
-      SessionStart: [{ type: 'command', command: '.claude/hooks/spec-memo-bootstrap.sh' }],
-      UserPromptSubmit: [{ type: 'command', command: '.claude/hooks/spec-memo-record.sh' }],
-      PreCompact: [{ type: 'command', command: '.claude/hooks/spec-memo-checkpoint.sh' }],
-      SessionEnd: [{ type: 'command', command: '.claude/hooks/spec-memo-session-end.sh' }]
+      SessionStart: [{ type: 'command', command: 'bash .claude/hooks/spec-memo-bootstrap.sh' }],
+      UserPromptSubmit: [{ type: 'command', command: 'bash .claude/hooks/spec-memo-record.sh' }],
+      PreCompact: [{ type: 'command', command: 'bash .claude/hooks/spec-memo-checkpoint.sh' }],
+      SessionEnd: [{ type: 'command', command: 'bash .claude/hooks/spec-memo-session-end.sh' }]
     },
     'spec-memo': {
       version,
