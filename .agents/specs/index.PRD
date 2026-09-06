@@ -124,7 +124,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`agent-hooks-install`](0041-agent-hooks-install.spec.md): Automatic Agent Lifecycle Hooks Installer (memo install-hooks)
 - [x] Vault manager: alias redirect, merge, and project CRUD (`spec: 0047-vault-merge-alias.spec.md`)
 - [x] Interactive install-hooks and install-skills with explicit host permission (`spec: 0048-install-hooks-skills-interactive.context.md`)
-- [ ] Status Vaults tab: modal forms and per-project sync (`spec: 0049-status-vaults-tab-ui.spec.md`)
+- [x] Status Vaults tab: modal forms and per-project sync (`spec: 0049-status-vaults-tab-ui.spec.md`)
 
 
 
@@ -187,7 +187,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 47 | `install-hooks-skills-interactive` | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Interactive install-hooks and install-skills with explicit host permission |
 
-| 48 | `status-vaults-tab-ui` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Vaults tab: modal forms and per-project sync |
+| 48 | `status-vaults-tab-ui` | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Vaults tab: modal forms and per-project sync |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -258,6 +258,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-04 | record-ttl-expiration | Universal record TTL/expiration, `--include-expired`/`--as-of` search, bootstrap/GC sweeps, status Memory filters | v0.25.0; npm test 583 pass |
 | 2026-09-04 | session-handoff-baton | Owner/branch-isolated session handoff batons via prompt/bootstrap, memo session handoff CLI, status Active Handoffs panel | v0.26.0; npm test 591 pass |
 | 2026-09-06 | install-hooks-skills-interactive | Shared installer wizard, explicit permission gates, Codex hooks, scoped global paths, conflict policies, and MCP skill-install validation | npm test 609 pass |
+| 2026-09-06 | status-vaults-tab-ui | Status Vaults tab modal forms + POST /api/vaults/sync | v0.27.1 |
 
 ## Archive
 

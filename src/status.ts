@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { getVaultRoot, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts } from "./vault.js";
+import { getVaultRoot, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts, flushVaultGit, readVaultConfig } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
 import { getPackageVersion } from "./version.js";
@@ -20,7 +20,8 @@ import { logErrorReport } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
-import { scheduleHybridPush } from "./hybrid-sync.js";
+import { scheduleHybridPush, pullHybridProject, pushHybridProject } from "./hybrid-sync.js";
+import { syncDual } from "./dual-sync.js";
 import { TopologyInfo, TopologyRole, BackupFileInfo, BackupListFilters } from "./types.js";
 import { listMemoryRecords } from "./hits.js";
 import { submitMemoryFeedback } from "./feedback.js";
@@ -1126,6 +1127,10 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     .modal-card label { display: block; font-size: 0.78rem; color: var(--muted); margin-top: 10px; }
     .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
     .modal-actions button { width: auto; margin-top: 0; padding: 8px 14px; }
+    .modal-card.modal-card-wide { max-width: 560px; }
+    .vault-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+    #vaults-manager-table th.vault-actions-col,
+    #vaults-manager-table td.vault-actions-col { min-width: 22rem; width: auto; }
   </style>
 </head>
 <body>
@@ -1512,7 +1517,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div class="filter-bar">
         <div class="filter-row">
           <button type="button" id="btn-vaults-refresh" class="btn-secondary" style="width:auto; margin-top:0; padding:6px 14px;">Refresh</button>
-          <button type="button" id="btn-vault-create" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px;">Create project</button>
+          <button type="button" id="btn-vault-create" class="btn-primary" data-vault-action="create" style="width:auto; margin-top:0; padding:6px 14px;">Create project</button>
         </div>
       </div>
       <div class="data-table-container">
@@ -1523,7 +1528,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
               <th>Display name</th>
               <th>Alias target</th>
               <th style="width:90px;">Records</th>
-              <th style="width:280px;">Actions</th>
+              <th class="vault-actions-col">Actions</th>
             </tr>
           </thead>
           <tbody id="vaults-manager-tbody">
@@ -1534,6 +1539,63 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div class="helper-text" style="margin-top:12px;">Merge redirects source ids to a canonical project. Optional record copy imports history once; new writes always use the canonical folder.</div>
     </div>
   </section>
+
+  <div id="modal-vault-action" class="modal-overlay">
+    <div id="modal-vault-card" class="modal-card modal-card-wide">
+      <h3 id="modal-vault-title">Vault action</h3>
+      <p id="modal-vault-help"></p>
+      <p id="modal-vault-error" style="display:none; color:var(--err); font-size:0.82rem;"></p>
+      <div id="vault-fields-create" class="vault-modal-fields" style="display:none;">
+        <label for="vault-create-id">Project id (filesystem-safe)</label>
+        <input type="text" id="vault-create-id" autocomplete="off">
+        <label for="vault-create-name">Display name</label>
+        <input type="text" id="vault-create-name" autocomplete="off">
+      </div>
+      <div id="vault-fields-edit" class="vault-modal-fields" style="display:none;">
+        <label for="vault-edit-name">Display name</label>
+        <input type="text" id="vault-edit-name" autocomplete="off">
+      </div>
+      <div id="vault-fields-alias" class="vault-modal-fields" style="display:none;">
+        <label for="vault-alias-from">Source id</label>
+        <input type="text" id="vault-alias-from" readonly>
+        <label for="vault-alias-to">Canonical target</label>
+        <select id="vault-alias-to"></select>
+        <label for="vault-alias-typed">Or type a target id</label>
+        <input type="text" id="vault-alias-typed" autocomplete="off" placeholder="Optional">
+      </div>
+      <div id="vault-fields-unalias" class="vault-modal-fields" style="display:none;">
+        <p id="vault-unalias-from" style="font-family:monospace;"></p>
+      </div>
+      <div id="vault-fields-merge" class="vault-modal-fields" style="display:none;">
+        <label>Source vaults</label>
+        <div id="vault-merge-sources" style="max-height:180px; overflow:auto; border:1px solid var(--border); border-radius:6px; padding:8px;"></div>
+        <label><input type="checkbox" id="vault-merge-copy"> Copy records from sources</label>
+      </div>
+      <div id="vault-fields-delete" class="vault-modal-fields" style="display:none;">
+        <p>Type the exact project id to confirm deletion.</p>
+        <p id="vault-delete-id" style="font-family:monospace; color:var(--bright);"></p>
+        <label for="vault-delete-confirm">Project id</label>
+        <input type="text" id="vault-delete-confirm" autocomplete="off">
+      </div>
+      <div id="vault-fields-sync" class="vault-modal-fields" style="display:none;">
+        <p>Project: <code id="vault-sync-id"></code></p>
+        <label>Direction</label>
+        <label><input type="radio" name="vault-sync-direction" value="pull"> Pull (down)</label>
+        <label><input type="radio" name="vault-sync-direction" value="push"> Push (up)</label>
+        <label><input type="radio" name="vault-sync-direction" value="both" checked> Both</label>
+        <label><input type="checkbox" id="vault-sync-dryrun"> dryRun</label>
+        <label for="vault-sync-prefer">prefer</label>
+        <select id="vault-sync-prefer">
+          <option value="local" selected>local</option>
+          <option value="remote">remote</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="btn-vault-modal-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-vault-modal-submit" class="btn-primary">Submit</button>
+      </div>
+    </div>
+  </div>
 
   <!-- TAB 5: Backups -->
   <section id="tab-backups" class="tab-content">
@@ -3440,12 +3502,16 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
 
     let vaultsManagerBusy = false;
+    let vaultModalAction = "";
+    let vaultModalId = "";
 
     function setVaultsManagerBusy(busy) {
       vaultsManagerBusy = busy;
       document.querySelectorAll("#tab-vaults button[data-vault-action]").forEach((btn) => {
         btn.disabled = busy;
       });
+      const submit = document.getElementById("btn-vault-modal-submit");
+      if (submit && busy) submit.disabled = true;
     }
 
     async function vaultManagerApi(path, body, method) {
@@ -3462,6 +3528,34 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       return data;
     }
 
+    function hideVaultModalFields() {
+      document.querySelectorAll(".vault-modal-fields").forEach((el) => { el.style.display = "none"; });
+    }
+
+    function setVaultModalError(msg) {
+      const errEl = document.getElementById("modal-vault-error");
+      if (!errEl) return;
+      if (msg) {
+        errEl.style.display = "block";
+        errEl.textContent = msg;
+      } else {
+        errEl.style.display = "none";
+        errEl.textContent = "";
+      }
+    }
+
+    function closeVaultModal() {
+      const overlay = document.getElementById("modal-vault-action");
+      if (overlay) overlay.classList.remove("open");
+      vaultModalAction = "";
+      vaultModalId = "";
+      setVaultModalError("");
+    }
+
+    function vaultActionButton(action, id, label) {
+      return '<button type="button" class="btn-secondary" data-vault-action="' + action + '" data-id="' + id + '" style="padding:4px 8px;">' + label + '</button>';
+    }
+
     function renderVaultsManagerTable() {
       const tbody = document.getElementById("vaults-manager-tbody");
       if (!tbody) return;
@@ -3473,20 +3567,196 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         const alias = v.aliasOf ? String(v.aliasOf) : "-";
         const count = v.recordCount != null ? String(v.recordCount) : "0";
         const safeId = String(v.id).replace(/"/g, "");
+        const unalias = v.aliasOf ? vaultActionButton("unalias", safeId, "Remove alias") : "";
         return '<tr>' +
           '<td><code>' + safeId + '</code></td>' +
           '<td>' + (v.displayName || v.id) + '</td>' +
           '<td>' + alias + '</td>' +
           '<td>' + count + '</td>' +
-          '<td>' +
-            '<button type="button" class="btn-secondary" data-vault-action="edit" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Edit</button>' +
-            '<button type="button" class="btn-secondary" data-vault-action="alias" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Alias</button>' +
-            '<button type="button" class="btn-secondary" data-vault-action="merge" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Merge</button>' +
-            (v.aliasOf ? '<button type="button" class="btn-secondary" data-vault-action="unalias" data-id="' + safeId + '" style="padding:4px 8px; margin-right:4px;">Remove alias</button>' : '') +
-            '<button type="button" class="btn-secondary" data-vault-action="delete" data-id="' + safeId + '" style="padding:4px 8px;">Delete</button>' +
-          '</td>' +
+          '<td class="vault-actions-col"><div class="vault-actions">' +
+            vaultActionButton("edit", safeId, "Edit") +
+            vaultActionButton("alias", safeId, "Alias") +
+            vaultActionButton("merge", safeId, "Merge") +
+            unalias +
+            '<button type="button" class="btn-secondary" data-vault-action="sync" data-id="' + safeId + '" style="padding:4px 8px;">Sync</button>' +
+            vaultActionButton("delete", safeId, "Delete") +
+          '</div></td>' +
         '</tr>';
       }).join("");
+    }
+
+    function updateVaultModalSubmitEnabled() {
+      const submit = document.getElementById("btn-vault-modal-submit");
+      if (!submit || vaultsManagerBusy) return;
+      if (vaultModalAction === "alias") {
+        const typed = (document.getElementById("vault-alias-typed").value || "").trim();
+        const sel = (document.getElementById("vault-alias-to").value || "").trim();
+        submit.disabled = !(typed || sel);
+      } else if (vaultModalAction === "merge") {
+        submit.disabled = document.querySelectorAll("#vault-merge-sources input:checked").length < 1;
+      } else if (vaultModalAction === "delete") {
+        submit.disabled = document.getElementById("vault-delete-confirm").value !== vaultModalId;
+      } else {
+        submit.disabled = false;
+      }
+    }
+
+    function openVaultModal(action, id) {
+      vaultModalAction = action;
+      vaultModalId = id || "";
+      hideVaultModalFields();
+      setVaultModalError("");
+      const overlay = document.getElementById("modal-vault-action");
+      const card = document.getElementById("modal-vault-card");
+      const title = document.getElementById("modal-vault-title");
+      const help = document.getElementById("modal-vault-help");
+      const submit = document.getElementById("btn-vault-modal-submit");
+      submit.textContent = "Submit";
+      submit.disabled = false;
+      card.style.borderColor = "";
+      let focusEl = null;
+      if (action === "create") {
+        title.textContent = "Create project";
+        help.textContent = "Choose a filesystem-safe id and display name.";
+        document.getElementById("vault-fields-create").style.display = "block";
+        document.getElementById("vault-create-id").value = "";
+        document.getElementById("vault-create-name").value = "";
+        focusEl = document.getElementById("vault-create-id");
+      } else if (action === "edit") {
+        title.textContent = "Edit display name";
+        help.textContent = "Update the display name for this project.";
+        document.getElementById("vault-fields-edit").style.display = "block";
+        const row = vaults.find((v) => v.id === id);
+        document.getElementById("vault-edit-name").value = (row && row.displayName) || id;
+        focusEl = document.getElementById("vault-edit-name");
+      } else if (action === "alias") {
+        title.textContent = "Set alias";
+        help.textContent = "Point this source id at a canonical vault.";
+        document.getElementById("vault-fields-alias").style.display = "block";
+        document.getElementById("vault-alias-from").value = id;
+        document.getElementById("vault-alias-typed").value = "";
+        const sel = document.getElementById("vault-alias-to");
+        sel.innerHTML = '<option value="">Select target…</option>' + vaults.filter((v) => v.id !== id).map((v) =>
+          '<option value="' + String(v.id).replace(/"/g, "") + '">' + String(v.id).replace(/"/g, "") + '</option>'
+        ).join("");
+        focusEl = sel;
+        submit.disabled = true;
+      } else if (action === "unalias") {
+        title.textContent = "Remove alias";
+        help.textContent = "Confirm removing the alias for this source id.";
+        document.getElementById("vault-fields-unalias").style.display = "block";
+        document.getElementById("vault-unalias-from").textContent = id;
+        submit.textContent = "Confirm";
+        focusEl = submit;
+      } else if (action === "merge") {
+        title.textContent = "Merge vaults";
+        help.textContent = "Select one or more source vaults to merge into this target.";
+        document.getElementById("vault-fields-merge").style.display = "block";
+        document.getElementById("vault-merge-copy").checked = false;
+        document.getElementById("vault-merge-sources").innerHTML = vaults.filter((v) => v.id !== id).map((v) => {
+          const sid = String(v.id).replace(/"/g, "");
+          return '<label><input type="checkbox" value="' + sid + '"> ' + sid + '</label>';
+        }).join("") || '<span class="helper-text">No other vaults</span>';
+        submit.disabled = true;
+        focusEl = document.querySelector("#vault-merge-sources input");
+      } else if (action === "delete") {
+        title.textContent = "Delete project";
+        help.textContent = "This removes the project vault. Type the id to confirm.";
+        card.style.borderColor = "var(--err)";
+        document.getElementById("vault-fields-delete").style.display = "block";
+        document.getElementById("vault-delete-id").textContent = id;
+        document.getElementById("vault-delete-confirm").value = "";
+        submit.textContent = "Delete";
+        submit.disabled = true;
+        submit.style.background = "#da3633";
+        submit.style.borderColor = "#f85149";
+        focusEl = document.getElementById("vault-delete-confirm");
+      } else if (action === "sync") {
+        title.textContent = "Sync project";
+        help.textContent = "Pull (down) fetches remote records. Push (up) sends this vault. Both is pull then push.";
+        document.getElementById("vault-fields-sync").style.display = "block";
+        document.getElementById("vault-sync-id").textContent = id;
+        document.getElementById("vault-sync-dryrun").checked = false;
+        document.getElementById("vault-sync-prefer").value = "local";
+        document.querySelectorAll('input[name="vault-sync-direction"]').forEach((r) => {
+          r.checked = r.value === "both";
+        });
+        submit.textContent = "Run sync";
+        focusEl = document.querySelector('input[name="vault-sync-direction"]:checked');
+      }
+      if (action !== "delete") {
+        submit.style.background = "";
+        submit.style.borderColor = "";
+      }
+      overlay.classList.add("open");
+      if (focusEl && focusEl.focus) focusEl.focus();
+    }
+
+    async function submitVaultModal() {
+      if (vaultsManagerBusy) return;
+      const submit = document.getElementById("btn-vault-modal-submit");
+      const orig = submit.textContent;
+      try {
+        setVaultsManagerBusy(true);
+        submit.disabled = true;
+        submit.textContent = "Working…";
+        const id = vaultModalId;
+        if (vaultModalAction === "create") {
+          const newId = document.getElementById("vault-create-id").value.trim();
+          const displayName = document.getElementById("vault-create-name").value.trim() || newId;
+          await vaultManagerApi("/api/vaults/create", { id: newId, displayName });
+          showBanner("Created project " + newId, "success");
+        } else if (vaultModalAction === "edit") {
+          const displayName = document.getElementById("vault-edit-name").value;
+          await vaultManagerApi("/api/vaults/update", { id, displayName });
+          showBanner("Updated display name for " + id, "success");
+        } else if (vaultModalAction === "alias") {
+          const to = document.getElementById("vault-alias-typed").value.trim() || document.getElementById("vault-alias-to").value.trim();
+          if (!to) {
+            setVaultModalError("Select or type a target id");
+            return;
+          }
+          await vaultManagerApi("/api/vaults/alias", { from: id, to });
+          showBanner("Alias set: " + id + " -> " + to, "success");
+        } else if (vaultModalAction === "unalias") {
+          await vaultManagerApi("/api/vaults/alias", { from: id }, "DELETE");
+          showBanner("Alias removed for " + id, "success");
+        } else if (vaultModalAction === "merge") {
+          const sources = Array.from(document.querySelectorAll("#vault-merge-sources input:checked")).map((el) => el.value);
+          const copyRecords = document.getElementById("vault-merge-copy").checked === true;
+          await vaultManagerApi("/api/vaults/merge", { sources, target: id, copyRecords });
+          showBanner("Merged " + sources.length + " source(s) into " + id, "success");
+        } else if (vaultModalAction === "delete") {
+          const typed = document.getElementById("vault-delete-confirm").value;
+          if (typed !== id) {
+            setVaultModalError("Id did not match");
+            return;
+          }
+          await vaultManagerApi("/api/vaults/delete", { id, confirm: true });
+          showBanner("Deleted project " + id, "success");
+        } else if (vaultModalAction === "sync") {
+          const dirEl = document.querySelector('input[name="vault-sync-direction"]:checked');
+          const direction = dirEl ? dirEl.value : "both";
+          const dryRun = document.getElementById("vault-sync-dryrun").checked === true;
+          const prefer = document.getElementById("vault-sync-prefer").value === "remote" ? "remote" : "local";
+          const resData = await vaultManagerApi("/api/vaults/sync", { id, direction, dryRun, prefer });
+          if (resData && resData.ok === false) {
+            throw new Error(resData.error || "Sync failed");
+          }
+          showBanner("Sync finished for " + id, "success");
+        }
+        closeVaultModal();
+        await loadVaultsManager();
+      } catch (err) {
+        const msg = String(err.message || err);
+        setVaultModalError(msg);
+        showBanner(msg, "error");
+      } finally {
+        setVaultsManagerBusy(false);
+        submit.disabled = false;
+        submit.textContent = orig;
+        updateVaultModalSubmitEnabled();
+      }
     }
 
     async function loadVaultsManager() {
@@ -3496,49 +3766,13 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
     const vaultsTbody = document.getElementById("vaults-manager-tbody");
     if (vaultsTbody) {
-      vaultsTbody.addEventListener("click", async (ev) => {
+      vaultsTbody.addEventListener("click", (ev) => {
         const btn = ev.target.closest("button[data-vault-action]");
         if (!btn || vaultsManagerBusy) return;
         const action = btn.getAttribute("data-vault-action");
         const id = btn.getAttribute("data-id");
         if (!action || !id) return;
-        try {
-          setVaultsManagerBusy(true);
-          if (action === "edit") {
-            const name = window.prompt("Display name for " + id + ":", vaults.find((v) => v.id === id)?.displayName || id);
-            if (name == null) return;
-            await vaultManagerApi("/api/vaults/update", { id, displayName: name });
-            showBanner("Updated display name for " + id, "success");
-          } else if (action === "alias") {
-            const to = window.prompt("Canonical target id for alias from " + id + ":");
-            if (!to) return;
-            await vaultManagerApi("/api/vaults/alias", { from: id, to });
-            showBanner("Alias set: " + id + " → " + to, "success");
-          } else if (action === "unalias") {
-            await vaultManagerApi("/api/vaults/alias", { from: id }, "DELETE");
-            showBanner("Alias removed for " + id, "success");
-          } else if (action === "merge") {
-            const sourcesRaw = window.prompt("Source ids to merge into " + id + " (comma-separated):");
-            if (!sourcesRaw) return;
-            const sources = sourcesRaw.split(",").map((s) => s.trim()).filter(Boolean);
-            const copyRecords = window.confirm("Copy records from sources into " + id + "? Cancel = alias only.");
-            await vaultManagerApi("/api/vaults/merge", { sources, target: id, copyRecords });
-            showBanner("Merged " + sources.length + " source(s) into " + id, "success");
-          } else if (action === "delete") {
-            const typed = window.prompt('Type project id "' + id + '" to confirm delete:');
-            if (typed !== id) {
-              showBanner("Delete cancelled — id did not match", "error");
-              return;
-            }
-            await vaultManagerApi("/api/vaults/delete", { id, confirm: true });
-            showBanner("Deleted project " + id, "success");
-          }
-          await loadVaultsManager();
-        } catch (err) {
-          showBanner(String(err.message || err), "error");
-        } finally {
-          setVaultsManagerBusy(false);
-        }
+        openVaultModal(action, id);
       });
     }
 
@@ -3548,23 +3782,38 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
     const btnVaultCreate = document.getElementById("btn-vault-create");
     if (btnVaultCreate) {
-      btnVaultCreate.addEventListener("click", async () => {
+      btnVaultCreate.addEventListener("click", () => {
         if (vaultsManagerBusy) return;
-        const newId = window.prompt("New project id (filesystem-safe):");
-        if (!newId) return;
-        const displayName = window.prompt("Display name:", newId) || newId;
-        try {
-          setVaultsManagerBusy(true);
-          await vaultManagerApi("/api/vaults/create", { id: newId, displayName });
-          showBanner("Created project " + newId, "success");
-          await loadVaultsManager();
-        } catch (err) {
-          showBanner(String(err.message || err), "error");
-        } finally {
-          setVaultsManagerBusy(false);
-        }
+        openVaultModal("create", "");
       });
     }
+    const vaultModalOverlay = document.getElementById("modal-vault-action");
+    if (vaultModalOverlay) {
+      vaultModalOverlay.addEventListener("click", (ev) => {
+        if (ev.target === vaultModalOverlay) closeVaultModal();
+      });
+    }
+    const btnVaultModalCancel = document.getElementById("btn-vault-modal-cancel");
+    if (btnVaultModalCancel) {
+      btnVaultModalCancel.addEventListener("click", () => closeVaultModal());
+    }
+    const btnVaultModalSubmit = document.getElementById("btn-vault-modal-submit");
+    if (btnVaultModalSubmit) {
+      btnVaultModalSubmit.addEventListener("click", () => submitVaultModal());
+    }
+    const vaultAliasTyped = document.getElementById("vault-alias-typed");
+    const vaultAliasTo = document.getElementById("vault-alias-to");
+    if (vaultAliasTyped) vaultAliasTyped.addEventListener("input", () => updateVaultModalSubmitEnabled());
+    if (vaultAliasTo) vaultAliasTo.addEventListener("change", () => updateVaultModalSubmitEnabled());
+    const vaultMergeSources = document.getElementById("vault-merge-sources");
+    if (vaultMergeSources) vaultMergeSources.addEventListener("change", () => updateVaultModalSubmitEnabled());
+    const vaultDeleteConfirm = document.getElementById("vault-delete-confirm");
+    if (vaultDeleteConfirm) vaultDeleteConfirm.addEventListener("input", () => updateVaultModalSubmitEnabled());
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && document.getElementById("modal-vault-action").classList.contains("open")) {
+        closeVaultModal();
+      }
+    });
 
     loadVaults().then(() => {
       const tabParam = urlParams.get("tab");
@@ -4093,6 +4342,150 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             statusCode: 200
           });
           writeJson(res, 200, sanitizeToolOutput(result));
+        } catch (err: unknown) {
+          const status = err instanceof VaultManagerError ? err.httpStatus : 500;
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/sync") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: {
+            id?: string;
+            direction?: string;
+            dryRun?: boolean;
+            prefer?: string;
+          } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          const id = String(parsed.id || "").trim();
+          const direction = String(parsed.direction || "").trim();
+          const dryRun = parsed.dryRun === true;
+          const prefer = parsed.prefer === "remote" ? "remote" as const : "local" as const;
+          if (!id || id.toLowerCase() === "all") {
+            writeJson(res, 400, sanitizeToolOutput({ error: "id is required and must not be all" }));
+            return;
+          }
+          if (direction !== "pull" && direction !== "push" && direction !== "both") {
+            writeJson(res, 400, sanitizeToolOutput({ error: "Invalid direction; expected pull, push, or both" }));
+            return;
+          }
+          const known = getVaultProjectList(vaultRoot).some((p) => p.id === id);
+          if (!known) {
+            writeJson(res, 400, sanitizeToolOutput({ error: "Unknown project id" }));
+            return;
+          }
+          const { config } = readVaultConfig(vaultRoot);
+          const hybridEnabled = config.mode === "hybrid" && Boolean(config.remote?.url);
+          const gitEnabled = Boolean(config.vaultGit?.enabled) && config.mode !== "remote";
+          if (!hybridEnabled && !gitEnabled) {
+            writeJson(
+              res,
+              400,
+              sanitizeToolOutput({
+                error: "Sync requires a hybrid remote or vaultGit.enabled"
+              })
+            );
+            return;
+          }
+          let payload: Record<string, unknown> = { ok: true, id, direction };
+          let syncOk = true;
+          if (direction === "both") {
+            const report = await syncDual({
+              trigger: "sync",
+              projectId: id,
+              dryRun,
+              prefer,
+              vaultRoot
+            });
+            syncOk = report.ok;
+            const errs: string[] = [];
+            if (report.hybrid && !report.hybrid.ok && report.hybrid.error) {
+              errs.push(`Hybrid: ${report.hybrid.error}`);
+            }
+            if (report.vaultGit && !report.vaultGit.ok && report.vaultGit.error) {
+              errs.push(`Vault-git: ${report.vaultGit.error}`);
+            }
+            const syncError = errs.length > 0 ? errs.join("; ") : (!syncOk ? "Dual sync failed" : undefined);
+            payload = {
+              ok: syncOk,
+              id,
+              direction,
+              hybrid: report.hybrid,
+              vaultGit: report.vaultGit,
+              ...(syncError ? { error: syncError } : {})
+            };
+          } else if (direction === "pull") {
+            if (!hybridEnabled) {
+              writeJson(
+                res,
+                400,
+                sanitizeToolOutput({ error: "Pull requires hybrid mode with a remote URL" })
+              );
+              return;
+            }
+            try {
+              const pulled = await pullHybridProject(vaultRoot, id, undefined, undefined, dryRun, prefer);
+              payload = { ok: true, id, direction, hybrid: { ok: true, pulled } };
+            } catch (err) {
+              syncOk = false;
+              const msg = err instanceof Error ? err.message : String(err);
+              payload = { ok: false, id, direction, hybrid: { ok: false, error: msg }, error: msg };
+            }
+          } else {
+            if (hybridEnabled) {
+              try {
+                const pushed = await pushHybridProject(
+                  vaultRoot,
+                  id,
+                  undefined,
+                  undefined,
+                  dryRun,
+                  undefined,
+                  undefined,
+                  prefer
+                );
+                payload.hybrid = { ok: true, pushed };
+              } catch (err) {
+                syncOk = false;
+                const msg = err instanceof Error ? err.message : String(err);
+                payload.hybrid = { ok: false, error: msg };
+                payload.error = msg;
+              }
+            }
+            if (gitEnabled) {
+              const vg = await flushVaultGit(vaultRoot, { dryRun, trigger: "sync" });
+              payload.vaultGit = vg;
+              if (!vg.ok) {
+                syncOk = false;
+                const vgErr = vg.error || vg.message || "vault-git sync failed";
+                payload.error = payload.error ? `${String(payload.error)}; Vault-git: ${vgErr}` : vgErr;
+              }
+            }
+            payload.ok = syncOk;
+          }
+          const statusCode = syncOk ? 200 : 502;
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: syncOk,
+            durationMs: Date.now() - startTime,
+            summary: `vault sync ${direction} ${id}`,
+            method: "POST",
+            path: "/api/vaults/sync",
+            statusCode
+          });
+          writeJson(res, statusCode, sanitizeToolOutput(payload));
         } catch (err: unknown) {
           const status = err instanceof VaultManagerError ? err.httpStatus : 500;
           const msg = err instanceof Error ? err.message : String(err);

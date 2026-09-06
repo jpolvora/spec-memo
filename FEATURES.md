@@ -135,7 +135,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 ## 10. Recurrence learning & ops visibility (Phase 6)
 
 - [x] **Trap recurrence ranking.** `memo rank` lists active traps by `occurrences`; optional `--layer`, `--backfill`; `memo promote --format skill` exports owner skill from ranked traps.
-- [x] **MCP status monitor.** Companion HTTP page (default `:3124`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream).
+- [x] **MCP status monitor.** Companion HTTP page (default `:3124`) co-hosted with `memo serve --sse`: vault list, server health, vault-filtered live activity log (capture → ring buffer → SSE stream). Vaults tab uses modal forms plus per-project `POST /api/vaults/sync` (pull/push/both).
 - [x] **Status monitor vault backup UI.** Zero-friction export (.zip with `vault-backup.json`, optional AES-256-GCM) and restore (multipart .zip upload with confirmation and overwrite) from the `:3124` status page.
 - [x] **Dedicated Backups tab.** Status monitor **Backups** page with full-vault confirm, complete kind archives (including prompts/sessions), inventory filters, details drawer, and row restore/delete/download.
 - [x] **Per-project vault wiki.** On-demand `WIKI.md` at `projects/{projectId}/WIKI.md` (never product README), status **Wiki** tab with collapsed sections and Regenerate, CLI `memo wiki` / `memo wiki --regenerate`. Optional AI polish is fail-open. Not an MCP tool.

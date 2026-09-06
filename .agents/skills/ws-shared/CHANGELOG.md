@@ -1,5 +1,11 @@
 # Changelog
 
+### [2026-09-06 15:50] Agent: Cursor Grok 4.6
+- **Prompt**: Implement spec 0049 status Vaults tab modal forms and per-project sync; bump, commit, PR
+- **Done**: Replaced Vaults tab prompt/confirm with modal forms; added POST /api/vaults/sync (pull/push/both via syncDual/hybrid/vault-git); preserved /api/ paths on activity events; tests and tracking
+- **Result**: Version 0.27.1; npm test 615 pass / 0 fail
+
+
 ### [2026-09-06 11:20] Agent: Cursor
 - **Prompt**: Implement spec 0048 interactive install-hooks and install-skills safety gates
 - **Done**: Added shared TTY wizard, explicit local/global host and conflict-policy gates, Codex hook support, scoped global hook paths, conflict-aware installers, MCP confirmation validation, tests, documentation, and tracking updates.

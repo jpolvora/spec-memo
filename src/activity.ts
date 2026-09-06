@@ -65,12 +65,15 @@ function sanitizeString(value: string): string {
 }
 
 function sanitizeEvent(input: ActivityCaptureInput): ActivityCaptureInput {
+  const pathValue = input.path
+    ? (input.path.startsWith("/api/") ? input.path.slice(0, 500) : sanitizeString(input.path))
+    : undefined;
   return {
     ...input,
     summary: sanitizeString(input.summary),
     tool: input.tool ? sanitizeString(input.tool) : undefined,
     method: input.method ? sanitizeString(input.method) : undefined,
-    path: input.path ? sanitizeString(input.path) : undefined,
+    path: pathValue,
     projectId: input.projectId ? sanitizeString(input.projectId) : undefined,
     clientIp: input.clientIp ? sanitizeString(input.clientIp) : undefined,
     clientName: input.clientName ? sanitizeString(input.clientName) : undefined,
