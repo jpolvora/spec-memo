@@ -816,6 +816,43 @@ export function initVaultGit(vaultRoot: string = getVaultRoot()): boolean {
   }
 }
 
+async function initVaultGitAsync(vaultRoot: string): Promise<boolean> {
+  const config = readVaultConfigLoose(vaultRoot);
+  if (!config) return false;
+
+  try {
+    if (!config.vaultGit?.enabled) return false;
+    if (config.mode === 'remote') return false;
+
+    const gitDir = path.join(vaultRoot, '.git');
+    if (!fs.existsSync(gitDir)) {
+      const init = await gitExecAsync(vaultRoot, ['init'], 'init');
+      if (!init.ok) return false;
+    }
+
+    ensureVaultGitignore(vaultRoot);
+
+    if (config.vaultGit.remoteUrl) {
+      const add = await gitExecAsync(vaultRoot, ['remote', 'add', 'origin', config.vaultGit.remoteUrl], 'init');
+      if (!add.ok) {
+        await gitExecAsync(vaultRoot, ['remote', 'set-url', 'origin', config.vaultGit.remoteUrl], 'init');
+      }
+    }
+    return true;
+  } catch (err: unknown) {
+    logErrorReport(
+      {
+        subsystem: 'vault-git',
+        mode: config.mode,
+        error: err,
+        context: { phase: 'init' }
+      },
+      { vaultRoot }
+    );
+    return false;
+  }
+}
+
 /**
  * Paths to `git add` for a vault auto-commit. Never `.` — that sweeps unrelated dirty files.
  */
@@ -939,6 +976,20 @@ function vaultGitPorcelain(
   return { ok: true, porcelain: (res.stdout || '').trim() };
 }
 
+async function vaultGitPorcelainAsync(
+  vaultRoot: string
+): Promise<{ ok: true; porcelain: string } | { ok: false; error: string }> {
+  const res = await gitExecAsync(
+    vaultRoot,
+    ['status', '--porcelain', '--untracked-files=normal', '--', 'projects', 'config.json', '.gitignore'],
+    'flush'
+  );
+  if (!res.ok) {
+    return { ok: false, error: res.error || 'git status failed' };
+  }
+  return { ok: true, porcelain: (res.stdout || '').trim() };
+}
+
 async function syncVaultRemote(vaultRoot: string): Promise<void> {
   await flushVaultGit(vaultRoot, { dryRun: false, trigger: 'remote-follow' });
 }
@@ -1002,8 +1053,8 @@ export async function flushVaultGit(
   }
 
   try {
-    initVaultGit(vaultRoot);
-    const statusRes = vaultGitPorcelain(vaultRoot);
+    await initVaultGitAsync(vaultRoot);
+    const statusRes = await vaultGitPorcelainAsync(vaultRoot);
     if (!statusRes.ok) {
       const err = safeVaultGitError(statusRes.error)!;
       writeVaultGitState(vaultRoot, { dirty: true, lastError: statusRes.error });

@@ -165,7 +165,12 @@ describe('hooks-install', () => {
   });
 
   it('doctor inspect reports skill-only when hooks absent per AC18', () => {
-    const inspection = inspectAgentHooks({ productRoot, cwd: productRoot, runningVersion: '1.0.0' });
+    const inspection = inspectAgentHooks({
+      productRoot,
+      cwd: productRoot,
+      homeDir,
+      runningVersion: '1.0.0'
+    });
     assert.equal(inspection.installed, false);
     assert.match(inspection.summary, /Not installed/);
     assert.match(inspection.summary, /ws-memo/);
@@ -180,7 +185,12 @@ describe('hooks-install', () => {
       force: true,
       packageVersion: '1.0.0'
     });
-    const inspection = inspectAgentHooks({ productRoot, cwd: productRoot, runningVersion: '1.0.0' });
+    const inspection = inspectAgentHooks({
+      productRoot,
+      cwd: productRoot,
+      homeDir,
+      runningVersion: '1.0.0'
+    });
     assert.equal(inspection.installed, true);
     assert.ok(inspection.hosts.some((h) => h.host === 'Cursor' && h.active));
     assert.match(inspection.summary, /Cursor \(Active\)/);
