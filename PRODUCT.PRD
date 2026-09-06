@@ -320,6 +320,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-09-04 | session-handoff-baton | Cross-agent session handoff batons with owner/branch isolation, bootstrap claim, memo session handoff CLI, status Active Handoffs panel; package 0.26.0 | npm test 591 pass |
 | 2026-09-06 | install-hooks-skills-interactive | Shared installer wizard, explicit permission gates, Codex hooks, scoped global paths, conflict policies, and MCP skill-install validation | npm test 609 pass |
 | 2026-09-06 | status-vaults-tab-ui | Status Vaults tab modal forms and per-project sync; package 0.27.1 | npm test 615 pass |
+| 2026-09-06 | status-vaults-tab-ui-polish | Status Vaults tab Actions column visual polish, side-by-side button grid, semantic accents, responsive layout; package 0.27.2 | npm test 615 pass |
 
 
 ## 12. Related docs
