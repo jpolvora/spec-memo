@@ -404,6 +404,26 @@ describe('check_version and install_skills', () => {
     assert.match(response.error, /confirm/i);
   });
 
+  it('MCP install_skills rejects whitespace-only hosts without falling back to defaults', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-empty-host-'));
+    const productRoot = path.join(tmp, 'consumer');
+    fs.mkdirSync(productRoot, { recursive: true });
+    try {
+      const response = await executeTool('install_skills', {
+        productRoot,
+        confirm: true,
+        scope: 'local',
+        hosts: [' '],
+        conflictPolicy: 'skip'
+      });
+      assert.equal(response.isError, true);
+      assert.match(response.error, /at least one non-empty host/i);
+      assert.equal(fs.existsSync(path.join(productRoot, '.agents')), false);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it('packaged skill versions match package.json version', () => {
     const version = getPackageVersion();
     const root = getPackageRoot();

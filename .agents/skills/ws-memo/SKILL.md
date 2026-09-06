@@ -12,6 +12,7 @@ description: >-
 invocation_names:
   - ws-memo
   - memo
+managedBy: spec-memo
 ---
 
 # ws-memo

@@ -18,6 +18,8 @@ import {
   HOOK_TIMEOUT_MS
 } from './hooks-install.js';
 
+const shellHookPrefix = process.platform === 'win32' ? 'bash ' : '';
+
 describe('hooks-install', () => {
   let tempDir: string;
   let productRoot: string;
@@ -142,6 +144,20 @@ describe('hooks-install', () => {
     assert.match(script, /timeout 1\.5/);
     assert.match(script, /exit 0/);
     assert.match(script, /\|\| true/);
+  });
+
+  it('preserves foreign commands containing spec-memo in their name', () => {
+    const cleaned = stripSpecMemoFromHookConfig({
+      hooks: {
+        sessionStart: [
+          { command: 'custom-spec-memo-wrapper.js' },
+          { command: 'bash .cursor/hooks/spec-memo-bootstrap.sh' }
+        ]
+      }
+    });
+    assert.deepEqual(cleaned.hooks, {
+      sessionStart: [{ command: 'custom-spec-memo-wrapper.js' }]
+    });
   });
 
   it('unsupported host errors cleanly', async () => {
@@ -310,7 +326,7 @@ describe('hooks-install', () => {
     assert.match(rule, /globs:\s*\n\s+-\s+"\*\*\/\*"/);
   });
 
-  it('cursor hooks use bash prefix so Windows executes via Git Bash per #47', async () => {
+  it('cursor hooks use the platform shell prefix per #47', async () => {
     await installHooks({
       host: 'cursor',
       productRoot,
@@ -331,12 +347,12 @@ describe('hooks-install', () => {
     for (const key of ['sessionStart', 'beforeSubmitPrompt', 'sessionEnd'] as const) {
       assert.ok(parsed.hooks[key].length >= 1);
       for (const entry of parsed.hooks[key]) {
-        assert.match(entry.command, /^bash \.cursor\/hooks\/spec-memo-.*\.sh$/);
+        assert.match(entry.command, new RegExp(`^${shellHookPrefix}\\.cursor/hooks/spec-memo-.*\\.sh$`));
       }
     }
   });
 
-  it('antigravity and claude hooks use bash prefix per #47 audit', async () => {
+  it('antigravity and claude hooks use the platform shell prefix per #47 audit', async () => {
     await installHooks({
       host: 'antigravity',
       productRoot,
@@ -353,8 +369,14 @@ describe('hooks-install', () => {
         PostInvocation: Array<{ command: string }>;
       };
     };
-    assert.match(ag.hooks.PreInvocation[0].command, /^bash \.agents\/hooks\/spec-memo-.*\.sh$/);
-    assert.match(ag.hooks.PostInvocation[0].command, /^bash \.agents\/hooks\/spec-memo-.*\.sh$/);
+    assert.match(
+      ag.hooks.PreInvocation[0].command,
+      new RegExp(`^${shellHookPrefix}\\.agents/hooks/spec-memo-.*\\.sh$`)
+    );
+    assert.match(
+      ag.hooks.PostInvocation[0].command,
+      new RegExp(`^${shellHookPrefix}\\.agents/hooks/spec-memo-.*\\.sh$`)
+    );
 
     await installHooks({
       host: 'claude',
@@ -372,7 +394,10 @@ describe('hooks-install', () => {
     for (const entries of Object.values(claude.hooks)) {
       for (const entry of entries) {
         if (entry.command.includes('spec-memo')) {
-          assert.match(entry.command, /^bash \.claude\/hooks\/spec-memo-.*\.sh$/);
+          assert.match(
+            entry.command,
+            new RegExp(`^${shellHookPrefix}\\.claude/hooks/spec-memo-.*\\.sh$`)
+          );
         }
       }
     }

@@ -219,7 +219,7 @@ export function deepMergeJson(
 function isSpecMemoHookEntry(entry: unknown): boolean {
   if (!entry || typeof entry !== 'object') return false;
   const cmd = String((entry as Record<string, unknown>).command || '');
-  return cmd.includes('spec-memo') || cmd.includes('.spec-memo');
+  return /(?:^|\s|[/\\])spec-memo-(?:bootstrap|record|checkpoint|session-start|session-end)\.sh(?:\s|$)/.test(cmd);
 }
 
 export function stripSpecMemoFromHookConfig(parsed: Record<string, unknown>): Record<string, unknown> {
@@ -275,47 +275,43 @@ SESSION_FILE="${ACTIVE_SESSION_FILE}"
 `;
 }
 
-function generateSessionStartScript(version: string): string {
+function generateSessionStartScript(version: string, memoCommand = 'memo'): string {
   return `${shellHeader(version)}SID="hook-$(date +%s)-$$"
 mkdir -p .spec-memo 2>/dev/null || true
 echo "$SID" > "$SESSION_FILE" 2>/dev/null || true
-if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo bootstrap >/dev/null 2>&1 || true
-  timeout 1.5 memo prompt session_start --session-id "$SID" >/dev/null 2>&1 || true
-fi
+timeout 1.5 ${memoCommand} bootstrap >/dev/null 2>&1 || true
+timeout 1.5 ${memoCommand} prompt session_start --session-id "$SID" >/dev/null 2>&1 || true
 exit 0
 `;
 }
 
-function generateRecordScript(version: string, body: string): string {
+function generateRecordScript(version: string, body: string, memoCommand = 'memo'): string {
   const escaped = body.replace(/'/g, `'\\''`);
   return `${shellHeader(version)}SID=""
 if [ -f "$SESSION_FILE" ]; then SID="$(cat "$SESSION_FILE" 2>/dev/null)"; fi
 if [ -z "$SID" ]; then SID="hook-orphan-$$"; fi
-if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo prompt record --session-id "$SID" --body '${escaped}' >/dev/null 2>&1 || true
-fi
+timeout 1.5 ${memoCommand} prompt record --session-id "$SID" --body '${escaped}' >/dev/null 2>&1 || true
 exit 0
 `;
 }
 
-function generateSessionEndScript(version: string): string {
+function generateSessionEndScript(version: string, memoCommand = 'memo'): string {
   return `${shellHeader(version)}SID=""
 if [ -f "$SESSION_FILE" ]; then SID="$(cat "$SESSION_FILE" 2>/dev/null)"; fi
 if [ -z "$SID" ]; then exit 0; fi
-if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo prompt session_end --session-id "$SID" >/dev/null 2>&1 || true
-fi
+timeout 1.5 ${memoCommand} prompt session_end --session-id "$SID" >/dev/null 2>&1 || true
 rm -f "$SESSION_FILE" 2>/dev/null || true
 exit 0
 `;
 }
 
-export function generateFailOpenShellBody(memoArgs: string[], version = getPackageVersion()): string {
+export function generateFailOpenShellBody(
+  memoArgs: string[],
+  version = getPackageVersion(),
+  memoCommand = 'memo'
+): string {
   const quoted = memoArgs.map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ');
-  return `${shellHeader(version)}if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo ${quoted} >/dev/null 2>&1 || true
-fi
+  return `${shellHeader(version)}timeout 1.5 ${memoCommand} ${quoted} >/dev/null 2>&1 || true
 exit 0
 `;
 }
@@ -398,7 +394,7 @@ export function generateClaudeHooksConfig(
   };
 }
 
-export function generateCodexAgents(version: string): string {
+export function generateCodexAgents(version: string, memoCommand = 'memo'): string {
   return `# spec-memo Codex agent instructions
 
 ${CODEX_BLOCK_START}
@@ -407,14 +403,14 @@ ${GENERATED_BY_PREFIX}${version}
 Use the external spec-memo memory during each session. These commands are fail-open
 and bounded to ${HOOK_TIMEOUT_MS}ms:
 
-\`timeout 1.5 memo bootstrap >/dev/null 2>&1 || true\`
-\`timeout 1.5 memo prompt record --body '[hook-automated turn]' >/dev/null 2>&1 || true\`
-\`timeout 1.5 memo prompt session_end >/dev/null 2>&1 || true\`
+\`timeout 1.5 ${memoCommand} bootstrap >/dev/null 2>&1 || true\`
+\`timeout 1.5 ${memoCommand} prompt record --body '[hook-automated turn]' >/dev/null 2>&1 || true\`
+\`timeout 1.5 ${memoCommand} prompt session_end >/dev/null 2>&1 || true\`
 ${CODEX_BLOCK_END}
 `;
 }
 
-export function generateOpenCodePlugin(version: string): string {
+export function generateOpenCodePlugin(version: string, memoCommand = 'memo'): string {
   return `${GENERATED_BY_PREFIX}${version}
 import * as fs from 'node:fs';
 
@@ -438,7 +434,7 @@ function writeSessionId(id) {
 async function runMemo(args) {
   const { spawn } = await import('node:child_process');
   return new Promise((resolve) => {
-    const child = spawn('memo', args, { stdio: 'ignore', shell: true });
+    const child = spawn(${JSON.stringify(memoCommand)}, args, { stdio: 'ignore', shell: true });
     const timer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch {}
       resolve(0);
@@ -490,29 +486,30 @@ Hooks are optional; skill-only mode via ws-memo autoload is fully supported.
 
 function uniqueScripts(
   host: Exclude<HookHostName, 'all'>,
-  version: string
+  version: string,
+  memoCommand = 'memo'
 ): Array<{ rel: string; content: string }> {
   switch (host) {
     case 'antigravity':
       return [
-        { rel: 'spec-memo-session-start.sh', content: generateSessionStartScript(version) },
-        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
+        { rel: 'spec-memo-session-start.sh', content: generateSessionStartScript(version, memoCommand) },
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version, memoCommand) }
       ];
     case 'cursor':
       return [
-        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version) },
-        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]') },
-        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
+        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version, memoCommand) },
+        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]', memoCommand) },
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version, memoCommand) }
       ];
     case 'claude':
       return [
-        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version) },
-        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]') },
+        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version, memoCommand) },
+        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]', memoCommand) },
         {
           rel: 'spec-memo-checkpoint.sh',
-          content: generateRecordScript(version, '[pre-compact checkpoint]')
+          content: generateRecordScript(version, '[pre-compact checkpoint]', memoCommand)
         },
-        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version, memoCommand) }
       ];
     default:
       return [];
@@ -611,9 +608,9 @@ function removeSpecMemoBlock(filePath: string): 'removed' | 'unchanged' {
 function buildHostArtifacts(
   host: Exclude<HookHostName, 'all'>,
   version: string,
-  options: { global?: boolean; shellHookPrefix?: 'bash' | '' } = {}
+  options: { global?: boolean; shellHookPrefix?: 'bash' | ''; memoCommand?: string } = {}
 ): Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> {
-    const scripts = uniqueScripts(host, version);
+  const scripts = uniqueScripts(host, version, options.memoCommand);
   const artifacts: Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> = [];
 
   switch (host) {
@@ -630,7 +627,7 @@ function buildHostArtifacts(
     case 'opencode':
       artifacts.push({
         path: 'spec-memo.js',
-        content: generateOpenCodePlugin(version),
+        content: generateOpenCodePlugin(version, options.memoCommand),
         kind: 'js'
       });
       break;
@@ -664,7 +661,7 @@ function buildHostArtifacts(
     case 'codex':
       artifacts.push({
         path: 'AGENTS.md',
-        content: generateCodexAgents(version),
+        content: generateCodexAgents(version, options.memoCommand),
         kind: 'md'
       });
       break;
@@ -734,7 +731,8 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
     const targets = resolveHostHookPaths(host, { global, productRoot, homeDir: options.homeDir });
     const artifacts = buildHostArtifacts(host, version, {
       global,
-      shellHookPrefix: preflight.shellHookPrefix
+      shellHookPrefix: preflight.shellHookPrefix,
+      memoCommand: preflight.memoCommand || 'memo'
     });
     const jsonTarget = targets.find((t) => t.kind === 'json');
 

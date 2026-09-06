@@ -815,6 +815,31 @@ describe('CLI Integration', { concurrency: false }, () => {
     }
   });
 
+  it('applies confirmed non-TTY hook writes when --yes and --apply are provided', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-cli-hook-apply-'));
+    const productRoot = path.join(tempDir, 'consumer');
+    fs.mkdirSync(productRoot, { recursive: true });
+    try {
+      const code = await runCli([
+        'install-hooks',
+        '--scope',
+        'local',
+        '--host',
+        'cursor',
+        '--conflictPolicy',
+        'update',
+        '--yes',
+        '--apply',
+        '--product-root',
+        productRoot
+      ]);
+      assert.equal(code, 0);
+      assert.equal(fs.existsSync(path.join(productRoot, '.cursor', 'hooks.json')), true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('JSON installer preview requires explicit target but never writes without confirmation', async () => {
     let captured = '';
     const origLog = console.log;

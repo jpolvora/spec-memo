@@ -8,6 +8,7 @@ invocation_names:
   - ws-session-tracking
   - session-tracking
   - prompt-tracking
+managedBy: spec-memo
 ---
 
 # ws-session-tracking

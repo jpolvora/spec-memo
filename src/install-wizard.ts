@@ -116,7 +116,8 @@ export function resolveMemoCommand(options: {
   const cliPath = options.cliPath ||
     path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'cli.js');
   if (fs.existsSync(cliPath)) {
-    return `${process.execPath} ${cliPath}`;
+    const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+    return `${quote(process.execPath)} ${quote(cliPath)}`;
   }
   return null;
 }

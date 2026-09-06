@@ -103,7 +103,11 @@ function isPackagedSkillTree(skillId: AllowedSkill, dir: string): boolean {
   if (!fs.existsSync(skillFile)) return false;
   try {
     const body = fs.readFileSync(skillFile, 'utf8');
-    return body.includes(`name: ${skillId}`) && /^version:\s*\S+/m.test(body);
+    return (
+      body.includes(`name: ${skillId}`) &&
+      /^version:\s*\S+/m.test(body) &&
+      /^managedBy:\s*spec-memo\s*$/m.test(body)
+    );
   } catch {
     return false;
   }
@@ -335,9 +339,12 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
   const packageRoot = options.packageRoot || getPackageRoot();
   const global = options.scope ? options.scope === 'global' : options.global === true;
   const scope = global ? 'global' : 'local';
-  const hosts = options.hosts?.length
-    ? normalizeInstallHosts(options.hosts, { allowAll: true })
-    : undefined;
+  const hosts = options.hosts === undefined
+    ? undefined
+    : normalizeInstallHosts(options.hosts, { allowAll: true });
+  if (hosts !== undefined && hosts.length === 0) {
+    throw new Error('Skill installation requires at least one non-empty host.');
+  }
   const conflictPolicy =
     options.conflictPolicy ||
     (force ? 'force' : undefined);

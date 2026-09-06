@@ -776,6 +776,7 @@ async function runInstallHooksCommand(parsed: ParsedCliArgs): Promise<number> {
       force: conflictPolicy === 'force',
       conflictPolicy,
       remove,
+      confirm: yes,
       cwd,
       productRoot: scope === 'local'
         ? ((options['product-root'] as string) || (options.productRoot as string) || undefined)

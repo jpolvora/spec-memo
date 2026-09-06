@@ -928,6 +928,12 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         );
       }
       const hosts = normalizeInstallHosts(installOpts.hosts, { allowAll: true });
+      if (hosts.length === 0) {
+        return fail(
+          'INSTALL_SKILLS_PERMISSION_REQUIRED',
+          'install_skills writes require at least one non-empty host. No files were written.'
+        );
+      }
       const result = await installSkills({
         ...installOpts,
         hosts,
