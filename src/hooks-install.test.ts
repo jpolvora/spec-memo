@@ -12,9 +12,13 @@ import {
   generateFailOpenShellBody,
   generateOpenCodePlugin,
   generateCursorRule,
+  generateCursorHooksJson,
+  generateCodexAgents,
   stripSpecMemoFromHookConfig,
   HOOK_TIMEOUT_MS
 } from './hooks-install.js';
+
+const shellHookPrefix = process.platform === 'win32' ? 'bash ' : '';
 
 describe('hooks-install', () => {
   let tempDir: string;
@@ -38,7 +42,7 @@ describe('hooks-install', () => {
   });
 
   it('defines SUPPORTED_HOOK_HOSTS per AC1', () => {
-    assert.deepEqual(SUPPORTED_HOOK_HOSTS, ['antigravity', 'opencode', 'cursor', 'claude', 'all']);
+    assert.deepEqual(SUPPORTED_HOOK_HOSTS, ['antigravity', 'opencode', 'cursor', 'claude', 'codex', 'all']);
   });
 
   it('resolveHostHookPaths returns canonical destinations per AC2', () => {
@@ -133,6 +137,11 @@ describe('hooks-install', () => {
     assert.match(plugin, /bootstrap/);
     assert.match(plugin, /sync/);
     assert.ok(plugin.includes(String(HOOK_TIMEOUT_MS)));
+    assert.match(generateOpenCodePlugin('2.0.0', 'memo', [], true), /shell: true/);
+    assert.match(
+      generateOpenCodePlugin('2.0.0', process.execPath, ['dist/cli.js'], false),
+      /shell: false/
+    );
   });
 
   it('shell hooks use timeout and fail-open per AC11/AC12', () => {
@@ -140,6 +149,20 @@ describe('hooks-install', () => {
     assert.match(script, /timeout 1\.5/);
     assert.match(script, /exit 0/);
     assert.match(script, /\|\| true/);
+  });
+
+  it('preserves foreign commands containing spec-memo in their name', () => {
+    const cleaned = stripSpecMemoFromHookConfig({
+      hooks: {
+        sessionStart: [
+          { command: 'custom-spec-memo-wrapper.js' },
+          { command: 'bash .cursor/hooks/spec-memo-bootstrap.sh' }
+        ]
+      }
+    });
+    assert.deepEqual(cleaned.hooks, {
+      sessionStart: [{ command: 'custom-spec-memo-wrapper.js' }]
+    });
   });
 
   it('unsupported host errors cleanly', async () => {
@@ -165,7 +188,12 @@ describe('hooks-install', () => {
   });
 
   it('doctor inspect reports skill-only when hooks absent per AC18', () => {
-    const inspection = inspectAgentHooks({ productRoot, cwd: productRoot, runningVersion: '1.0.0' });
+    const inspection = inspectAgentHooks({
+      productRoot,
+      cwd: productRoot,
+      homeDir,
+      runningVersion: '1.0.0'
+    });
     assert.equal(inspection.installed, false);
     assert.match(inspection.summary, /Not installed/);
     assert.match(inspection.summary, /ws-memo/);
@@ -180,7 +208,12 @@ describe('hooks-install', () => {
       force: true,
       packageVersion: '1.0.0'
     });
-    const inspection = inspectAgentHooks({ productRoot, cwd: productRoot, runningVersion: '1.0.0' });
+    const inspection = inspectAgentHooks({
+      productRoot,
+      cwd: productRoot,
+      homeDir,
+      runningVersion: '1.0.0'
+    });
     assert.equal(inspection.installed, true);
     assert.ok(inspection.hosts.some((h) => h.host === 'Cursor' && h.active));
     assert.match(inspection.summary, /Cursor \(Active\)/);
@@ -298,7 +331,7 @@ describe('hooks-install', () => {
     assert.match(rule, /globs:\s*\n\s+-\s+"\*\*\/\*"/);
   });
 
-  it('cursor hooks use bash prefix so Windows executes via Git Bash per #47', async () => {
+  it('cursor hooks use the platform shell prefix per #47', async () => {
     await installHooks({
       host: 'cursor',
       productRoot,
@@ -319,12 +352,12 @@ describe('hooks-install', () => {
     for (const key of ['sessionStart', 'beforeSubmitPrompt', 'sessionEnd'] as const) {
       assert.ok(parsed.hooks[key].length >= 1);
       for (const entry of parsed.hooks[key]) {
-        assert.match(entry.command, /^bash \.cursor\/hooks\/spec-memo-.*\.sh$/);
+        assert.match(entry.command, new RegExp(`^${shellHookPrefix}\\.cursor/hooks/spec-memo-.*\\.sh$`));
       }
     }
   });
 
-  it('antigravity and claude hooks use bash prefix per #47 audit', async () => {
+  it('antigravity and claude hooks use the platform shell prefix per #47 audit', async () => {
     await installHooks({
       host: 'antigravity',
       productRoot,
@@ -341,8 +374,14 @@ describe('hooks-install', () => {
         PostInvocation: Array<{ command: string }>;
       };
     };
-    assert.match(ag.hooks.PreInvocation[0].command, /^bash \.agents\/hooks\/spec-memo-.*\.sh$/);
-    assert.match(ag.hooks.PostInvocation[0].command, /^bash \.agents\/hooks\/spec-memo-.*\.sh$/);
+    assert.match(
+      ag.hooks.PreInvocation[0].command,
+      new RegExp(`^${shellHookPrefix}\\.agents/hooks/spec-memo-.*\\.sh$`)
+    );
+    assert.match(
+      ag.hooks.PostInvocation[0].command,
+      new RegExp(`^${shellHookPrefix}\\.agents/hooks/spec-memo-.*\\.sh$`)
+    );
 
     await installHooks({
       host: 'claude',
@@ -360,7 +399,10 @@ describe('hooks-install', () => {
     for (const entries of Object.values(claude.hooks)) {
       for (const entry of entries) {
         if (entry.command.includes('spec-memo')) {
-          assert.match(entry.command, /^bash \.claude\/hooks\/spec-memo-.*\.sh$/);
+          assert.match(
+            entry.command,
+            new RegExp(`^${shellHookPrefix}\\.claude/hooks/spec-memo-.*\\.sh$`)
+          );
         }
       }
     }
@@ -401,5 +443,129 @@ describe('hooks-install', () => {
     };
     assert.equal(parsed.hooks.sessionStart.length, 1);
     assert.equal(parsed.hooks.sessionStart[0].command, 'echo keep');
+  });
+
+  it('global cursor resolves user hooks and uses ./hooks scope prefix per AC26/AC29', async () => {
+    await installHooks({
+      host: 'cursor',
+      scope: 'global',
+      productRoot,
+      homeDir,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'force',
+      packageVersion: '4.0.0'
+    });
+    const hooksPath = path.join(homeDir, '.cursor', 'hooks.json');
+    const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8')) as {
+      hooks: Record<string, Array<{ command: string }>>;
+    };
+    for (const entries of Object.values(hooks.hooks)) {
+      for (const entry of entries) {
+        if (entry.command.includes('spec-memo')) {
+          assert.match(entry.command, /(?:^| )\.\/hooks\/spec-memo-/);
+          assert.doesNotMatch(entry.command, /\.cursor\/hooks\//);
+        }
+      }
+    }
+    assert.equal(fs.existsSync(path.join(homeDir, '.cursor', 'hooks', 'spec-memo-bootstrap.sh')), true);
+  });
+
+  it('update rewrites stamped global cursor commands and preserves custom hooks per AC28', async () => {
+    const hooksPath = path.join(homeDir, '.cursor', 'hooks.json');
+    fs.mkdirSync(path.dirname(hooksPath), { recursive: true });
+    fs.writeFileSync(
+      hooksPath,
+      JSON.stringify({
+        hooks: {
+          sessionStart: [
+            { command: 'echo keep' },
+            { command: 'bash .cursor/hooks/spec-memo-bootstrap.sh', timeout: 1 }
+          ]
+        },
+        'spec-memo': { version: '1.0.0', generatedBy: 'spec-memo@1.0.0' }
+      }),
+      'utf8'
+    );
+    await installHooks({
+      host: 'cursor',
+      scope: 'global',
+      productRoot,
+      homeDir,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'update',
+      packageVersion: '2.0.0'
+    });
+    const parsed = JSON.parse(fs.readFileSync(hooksPath, 'utf8')) as {
+      hooks: { sessionStart: Array<{ command: string }> };
+    };
+    assert.ok(parsed.hooks.sessionStart.some((entry) => entry.command === 'echo keep'));
+    assert.ok(
+      parsed.hooks.sessionStart.some((entry) =>
+        entry.command.includes(`${shellHookPrefix}./hooks/spec-memo-bootstrap.sh`)
+      )
+    );
+    assert.equal(parsed.hooks.sessionStart.some((entry) => entry.command.includes('.cursor/hooks/')), false);
+  });
+
+  it('codex writes stamped workspace and global AGENTS.md paths per AC12/AC24', async () => {
+    await installHooks({
+      host: 'codex',
+      scope: 'local',
+      productRoot,
+      homeDir,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'force',
+      packageVersion: '3.1.0'
+    });
+    assert.match(
+      fs.readFileSync(path.join(productRoot, '.codex', 'AGENTS.md'), 'utf8'),
+      /generated-by: spec-memo@3\.1\.0/
+    );
+    assert.match(generateCodexAgents('3.1.0'), /timeout 1\.5/);
+    await installHooks({
+      host: 'codex',
+      scope: 'global',
+      productRoot,
+      homeDir,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'force',
+      packageVersion: '3.1.0'
+    });
+    assert.equal(fs.existsSync(path.join(homeDir, '.codex', 'AGENTS.md')), true);
+  });
+
+  it('skip leaves foreign hook files unchanged and update refuses them per AC8/AC9', async () => {
+    const rulePath = path.join(productRoot, '.cursor', 'rules', 'spec-memo.mdc');
+    const emptyHooksPath = path.join(productRoot, '.cursor', 'hooks.json');
+    fs.mkdirSync(path.dirname(rulePath), { recursive: true });
+    fs.writeFileSync(rulePath, '# consumer-owned rule\n', 'utf8');
+    fs.writeFileSync(emptyHooksPath, '', 'utf8');
+    const skipped = await installHooks({
+      host: 'cursor',
+      productRoot,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'skip',
+      packageVersion: '1.0.0'
+    });
+    assert.ok(skipped.results.some((row) => row.path.endsWith('/spec-memo.mdc') && row.status === 'skipped'));
+    assert.ok(skipped.results.some((row) => row.path.endsWith('/hooks.json') && row.status === 'skipped'));
+    assert.equal(fs.readFileSync(rulePath, 'utf8'), '# consumer-owned rule\n');
+    assert.equal(fs.readFileSync(emptyHooksPath, 'utf8'), '');
+
+    const refused = await installHooks({
+      host: 'cursor',
+      productRoot,
+      apply: true,
+      confirm: true,
+      conflictPolicy: 'update',
+      packageVersion: '1.0.0'
+    });
+    assert.ok(refused.results.some((row) => row.path.endsWith('/spec-memo.mdc') && row.status === 'refused'));
+    assert.equal(fs.readFileSync(rulePath, 'utf8'), '# consumer-owned rule\n');
   });
 });

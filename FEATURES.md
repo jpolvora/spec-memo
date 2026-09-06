@@ -77,6 +77,7 @@ Do not add an eleventh tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 ## 5. CLI
 
 - [x] **Same module as MCP.** `memo <command>` maps 1:1 to tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`, `check_version` (`check-version`), `install_skills` (`install-skills`).
+- [x] **Permission-gated installers.** `install-hooks` and `install-skills` share a TTY wizard for local/global scope, explicit hosts, conflict policy, plan preview, and confirmation; non-TTY writes require explicit flags.
 - [x] **`memo doctor`.** Vault exists, FTS rebuilds, project binds, reports in-repo pollution under a given product root (does not delete).
 - [x] **`memo rank`.** CLI-only list of active traps by `occurrences` (optional `--layer`, `--backfill`). Not an MCP tool.
 - [x] **`memo import <productRoot>`.** See § Import.
@@ -153,7 +154,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] **Configurable Daemon Ports via `config.json`.** Global configurable port assignments (`ports.sse`, `ports.status`, `ports.canvas`, with `mcp`/`ui` aliases) in `config.json` defaulting to `:3123` (SSE), `:3124` (Status monitor), and `:3125` (Canvas viewer), cleanly overridden by CLI arguments.
 - [x] **Operational Status & Configuration Inspector (`memo status`).** Dedicated read-only CLI command (`memo status`, aliases: `memo info`, `memo state`, `memo setup --check`) performing live HTTP reachability probes (SSE `:3123`, Status companion `:3124`, Canvas visualizer `:3125`, remote `/health`), active project record breakdown, global vault SQLite FTS5 footprint, and backup snapshot inventory.
 - [x] **Setup & Host Wiring Helper (`memo setup`).** Configures mode, remote URL, checks environment bearer tokens without persisting them to disk, and prints/writes editor MCP configs (`--host`, `--print-mcp`, `--write-mcp`).
-- [x] **Agent lifecycle hooks installer (`memo install-hooks`).** Optional CLI to generate and install fail-open hooks for Antigravity, OpenCode, Cursor, and Claude Code; dry-run preview, `--apply`/`--remove`, deep JSON merge, `.bak` backups, and `memo doctor` hook status (Skill-only mode remains fully supported without hooks).
+- [x] **Agent lifecycle hooks installer (`memo install-hooks`).** Optional CLI to generate and install fail-open hooks for Antigravity, OpenCode, Cursor, Codex, and Claude Code; shared scope/host/policy wizard, dry-run preview, explicit confirmation, scoped command paths, deep JSON merge, `.bak` backups, and `memo doctor` hook status (Skill-only mode remains fully supported without hooks).
 - [x] **Daemon HTTP Sync Routes.** `/api/sync/pull`, `/api/sync/push`, and `/api/sync` on the SSE daemon origin with bearer token authentication.
 - [x] **Hybrid Bidirectional Sync & Debounced Push.** Low-latency local cache with automatic remote delta pulls on `bootstrap` (fail open) and debounced push scheduling after mutating operations (`upsert`, `append`, `forget`, `gc`).
 - [x] **Batched vault-git + dual-mode hybrid dispatch.** `vaultGit.atomic` (default `false`) defers git commit/push to `memo sync`, `session_end`, and graceful serve shutdown; `atomic: true` restores per-mutation commit+push. Hybrid HTTP and vault-git run in parallel when both are enabled, fail-open, with `error.logs` (`subsystem: vault-git`).

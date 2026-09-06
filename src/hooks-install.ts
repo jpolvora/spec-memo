@@ -3,20 +3,37 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { resolveProjectIdentity } from './identity.js';
 import { getPackageVersion } from './version.js';
+import {
+  canonicalInstallHost,
+  normalizeInstallHosts,
+  getInstallPreflight,
+  InstallPreflight,
+  ConflictPolicy,
+  InstallHost
+} from './install-wizard.js';
 
-export const SUPPORTED_HOOK_HOSTS = ['antigravity', 'opencode', 'cursor', 'claude', 'all'] as const;
+export const SUPPORTED_HOOK_HOSTS = ['antigravity', 'opencode', 'cursor', 'claude', 'codex', 'all'] as const;
 export type HookHostName = (typeof SUPPORTED_HOOK_HOSTS)[number];
 
 export const HOOK_TIMEOUT_MS = 1500;
 export const GENERATED_BY_PREFIX = '// generated-by: spec-memo@';
 export const ACTIVE_SESSION_FILE = '.spec-memo/.active-session-id';
+const CODEX_BLOCK_START = '<!-- spec-memo:start -->';
+const CODEX_BLOCK_END = '<!-- spec-memo:end -->';
 
 export interface InstallHooksOptions {
   host?: HookHostName | string;
+  hosts?: string[];
   global?: boolean;
+  scope?: 'local' | 'global';
   apply?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  skipExisting?: boolean;
+  update?: boolean;
+  conflictPolicy?: ConflictPolicy;
+  confirm?: boolean;
+  preflight?: InstallPreflight;
   remove?: boolean;
   cwd?: string;
   productRoot?: string;
@@ -28,20 +45,25 @@ export interface InstallHooksOptions {
 export interface InstallHooksRow {
   host: string;
   path: string;
-  status: 'installed' | 'removed' | 'unchanged' | 'preview';
+  status: 'installed' | 'removed' | 'unchanged' | 'preview' | 'skipped' | 'refused';
   diff?: string;
 }
 
 export interface InstallHooksResult {
   mode: 'local' | 'global';
   productRoot: string;
+  scope?: 'local' | 'global';
+  hosts?: string[];
+  conflictPolicy?: ConflictPolicy;
+  status?: 'applied' | 'preview';
+  preflight: InstallPreflight;
   results: InstallHooksRow[];
 }
 
 export interface HookPathTarget {
   host: Exclude<HookHostName, 'all'>;
   path: string;
-  kind: 'json' | 'js' | 'mdc' | 'shell' | 'dir';
+  kind: 'json' | 'js' | 'mdc' | 'md' | 'shell' | 'dir';
 }
 
 export interface AgentHookHostStatus {
@@ -61,18 +83,22 @@ export interface AgentHooksInspection {
 function assertHookHost(host: string): asserts host is Exclude<HookHostName, 'all'> {
   if (!(SUPPORTED_HOOK_HOSTS as readonly string[]).includes(host) || host === 'all') {
     throw new Error(
-      `Unsupported hook host '${host}'. Supported hosts: ${SUPPORTED_HOOK_HOSTS.filter((h) => h !== 'all').join(', ')}, all`
+      `Unsupported hook host '${host}'. Supported hosts: ${SUPPORTED_HOOK_HOSTS.filter((h) => h !== 'all').join(', ')}, aliases: gemini, google, gpt, openai, claude-code, all`
     );
   }
 }
 
-function resolveHosts(hostArg?: string): Array<Exclude<HookHostName, 'all'>> {
-  const normalized = (hostArg || 'all').toLowerCase();
-  if (normalized === 'all') {
-    return ['antigravity', 'opencode', 'cursor', 'claude'];
+function resolveHosts(
+  hostArg?: string,
+  hostList?: string[]
+): Array<Exclude<HookHostName, 'all'>> {
+  const requested = hostList?.length ? hostList : hostArg;
+  if (!requested) {
+    throw new Error('Hook host selection is required. Pass --host <host> or use the interactive wizard.');
   }
-  assertHookHost(normalized);
-  return [normalized];
+  const normalized = normalizeInstallHosts(requested, { allowAll: true });
+  for (const host of normalized) assertHookHost(host);
+  return normalized;
 }
 
 /**
@@ -96,15 +122,13 @@ export function resolveHostHookPaths(
             : path.join(root, '.agents', 'hooks.json'),
           kind: 'json'
         },
-        ...(global
-          ? []
-          : [
-              {
-                host,
-                path: path.join(root, '.agents', 'hooks'),
-                kind: 'dir' as const
-              }
-            ])
+        {
+          host,
+          path: global
+            ? path.join(home, '.gemini', 'config', 'hooks')
+            : path.join(root, '.agents', 'hooks'),
+          kind: 'dir'
+        }
       ];
     case 'opencode':
       return [
@@ -117,22 +141,34 @@ export function resolveHostHookPaths(
         }
       ];
     case 'cursor':
-      if (global) {
-        return [];
-      }
-      return [
-        { host, path: path.join(root, '.cursor', 'rules', 'spec-memo.mdc'), kind: 'mdc' },
-        { host, path: path.join(root, '.cursor', 'hooks.json'), kind: 'json' },
-        { host, path: path.join(root, '.cursor', 'hooks'), kind: 'dir' }
-      ];
+      return global
+        ? [
+            { host, path: path.join(home, '.cursor', 'hooks.json'), kind: 'json' },
+            { host, path: path.join(home, '.cursor', 'hooks'), kind: 'dir' }
+          ]
+        : [
+            { host, path: path.join(root, '.cursor', 'rules', 'spec-memo.mdc'), kind: 'mdc' },
+            { host, path: path.join(root, '.cursor', 'hooks.json'), kind: 'json' },
+            { host, path: path.join(root, '.cursor', 'hooks'), kind: 'dir' }
+          ];
     case 'claude':
-      if (global) {
-        return [{ host, path: path.join(home, '.claude', 'config.json'), kind: 'json' }];
-      }
-      return [
-        { host, path: path.join(root, '.claude', 'hooks'), kind: 'dir' },
-        { host, path: path.join(root, '.claude', 'config.json'), kind: 'json' }
-      ];
+      return global
+        ? [
+            { host, path: path.join(home, '.claude', 'hooks'), kind: 'dir' },
+            { host, path: path.join(home, '.claude', 'config.json'), kind: 'json' }
+          ]
+        : [
+            { host, path: path.join(root, '.claude', 'hooks'), kind: 'dir' },
+            { host, path: path.join(root, '.claude', 'config.json'), kind: 'json' }
+          ];
+    case 'codex':
+      return [{
+        host,
+        path: global
+          ? path.join(home, '.codex', 'AGENTS.md')
+          : path.join(root, '.codex', 'AGENTS.md'),
+        kind: 'md'
+      }];
     default:
       return [];
   }
@@ -183,7 +219,7 @@ export function deepMergeJson(
 function isSpecMemoHookEntry(entry: unknown): boolean {
   if (!entry || typeof entry !== 'object') return false;
   const cmd = String((entry as Record<string, unknown>).command || '');
-  return cmd.includes('spec-memo') || cmd.includes('.spec-memo');
+  return /(?:^|\s|[/\\])spec-memo-(?:bootstrap|record|checkpoint|session-start|session-end)\.sh(?:\s|$)/.test(cmd);
 }
 
 export function stripSpecMemoFromHookConfig(parsed: Record<string, unknown>): Record<string, unknown> {
@@ -199,6 +235,38 @@ export function stripSpecMemoFromHookConfig(parsed: Record<string, unknown>): Re
   return parsed;
 }
 
+function isSpecMemoStamped(content: string): boolean {
+  if (content.includes(GENERATED_BY_PREFIX)) return true;
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    const marker = parsed['spec-memo'];
+    return Boolean(
+      marker &&
+      typeof marker === 'object' &&
+      String((marker as Record<string, unknown>).generatedBy || '').startsWith('spec-memo@')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function mergeManagedJson(
+  existing: Record<string, unknown>,
+  patch: Record<string, unknown>
+): Record<string, unknown> {
+  return deepMergeJson(stripSpecMemoFromHookConfig(existing), patch);
+}
+
+function mergeCodexAgents(existing: string, generated: string): string {
+  const start = existing.indexOf(CODEX_BLOCK_START);
+  const end = existing.indexOf(CODEX_BLOCK_END);
+  if (start >= 0 && end >= start) {
+    return `${existing.slice(0, start)}${generated.trimEnd()}${existing.slice(end + CODEX_BLOCK_END.length)}`;
+  }
+  if (!existing) return generated;
+  return `${existing.trimEnd()}\n\n${generated}`;
+}
+
 function shellHeader(version: string): string {
   return `#!/bin/sh
 # ${GENERATED_BY_PREFIX}${version}
@@ -207,66 +275,71 @@ SESSION_FILE="${ACTIVE_SESSION_FILE}"
 `;
 }
 
-function generateSessionStartScript(version: string): string {
+function generateSessionStartScript(version: string, memoCommand = 'memo'): string {
   return `${shellHeader(version)}SID="hook-$(date +%s)-$$"
 mkdir -p .spec-memo 2>/dev/null || true
 echo "$SID" > "$SESSION_FILE" 2>/dev/null || true
-if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo bootstrap >/dev/null 2>&1 || true
-  timeout 1.5 memo prompt session_start --session-id "$SID" >/dev/null 2>&1 || true
-fi
+timeout 1.5 ${memoCommand} bootstrap >/dev/null 2>&1 || true
+timeout 1.5 ${memoCommand} prompt session_start --session-id "$SID" >/dev/null 2>&1 || true
 exit 0
 `;
 }
 
-function generateRecordScript(version: string, body: string): string {
+function generateRecordScript(version: string, body: string, memoCommand = 'memo'): string {
   const escaped = body.replace(/'/g, `'\\''`);
   return `${shellHeader(version)}SID=""
 if [ -f "$SESSION_FILE" ]; then SID="$(cat "$SESSION_FILE" 2>/dev/null)"; fi
 if [ -z "$SID" ]; then SID="hook-orphan-$$"; fi
-if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo prompt record --session-id "$SID" --body '${escaped}' >/dev/null 2>&1 || true
-fi
+timeout 1.5 ${memoCommand} prompt record --session-id "$SID" --body '${escaped}' >/dev/null 2>&1 || true
 exit 0
 `;
 }
 
-function generateSessionEndScript(version: string): string {
+function generateSessionEndScript(version: string, memoCommand = 'memo'): string {
   return `${shellHeader(version)}SID=""
 if [ -f "$SESSION_FILE" ]; then SID="$(cat "$SESSION_FILE" 2>/dev/null)"; fi
 if [ -z "$SID" ]; then exit 0; fi
-if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo prompt session_end --session-id "$SID" >/dev/null 2>&1 || true
-fi
+timeout 1.5 ${memoCommand} prompt session_end --session-id "$SID" >/dev/null 2>&1 || true
 rm -f "$SESSION_FILE" 2>/dev/null || true
 exit 0
 `;
 }
 
-export function generateFailOpenShellBody(memoArgs: string[], version = getPackageVersion()): string {
+export function generateFailOpenShellBody(
+  memoArgs: string[],
+  version = getPackageVersion(),
+  memoCommand = 'memo'
+): string {
   const quoted = memoArgs.map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ');
-  return `${shellHeader(version)}if command -v memo >/dev/null 2>&1; then
-  timeout 1.5 memo ${quoted} >/dev/null 2>&1 || true
-fi
+  return `${shellHeader(version)}timeout 1.5 ${memoCommand} ${quoted} >/dev/null 2>&1 || true
 exit 0
 `;
 }
 
-function generateAntigravityHooksJson(version: string): Record<string, unknown> {
+function managedHookCommand(prefix: 'bash' | '', relativePath: string): string {
+  return prefix ? `${prefix} ${relativePath}` : relativePath;
+}
+
+export function generateAntigravityHooksJson(
+  version: string,
+  options: { global?: boolean; shellHookPrefix?: 'bash' | '' } = {}
+): Record<string, unknown> {
   // Prefix shell hooks with `bash` so Windows hosts (Cursor/Antigravity/Claude)
   // execute via Git Bash instead of opening `.sh` as a document. Works on
   // macOS/Linux when `bash` is on PATH (see CROSS-PLATFORM managed-script rule).
+  const prefix = options.shellHookPrefix ?? 'bash';
+  const hookRoot = options.global ? './hooks' : '.agents/hooks';
   return {
     hooks: {
       PreInvocation: [
         {
           matcher: { invocationNum: 0 },
-          command: 'bash .agents/hooks/spec-memo-session-start.sh'
+          command: managedHookCommand(prefix, `${hookRoot}/spec-memo-session-start.sh`)
         }
       ],
       PostInvocation: [
         {
-          command: 'bash .agents/hooks/spec-memo-session-end.sh'
+          command: managedHookCommand(prefix, `${hookRoot}/spec-memo-session-end.sh`)
         }
       ]
     },
@@ -277,15 +350,20 @@ function generateAntigravityHooksJson(version: string): Record<string, unknown> 
   };
 }
 
-function generateCursorHooksJson(version: string): Record<string, unknown> {
+export function generateCursorHooksJson(
+  version: string,
+  options: { global?: boolean; shellHookPrefix?: 'bash' | '' } = {}
+): Record<string, unknown> {
   // Same `bash` prefix rationale as Antigravity: Windows Cursor spawns `command`
   // without a POSIX shebang interpreter, so bare `.sh` paths open in an editor.
+  const prefix = options.shellHookPrefix ?? 'bash';
+  const hookRoot = options.global ? './hooks' : '.cursor/hooks';
   return {
     version: 1,
     hooks: {
-      sessionStart: [{ command: 'bash .cursor/hooks/spec-memo-bootstrap.sh', timeout: 1 }],
-      beforeSubmitPrompt: [{ command: 'bash .cursor/hooks/spec-memo-record.sh', timeout: 1 }],
-      sessionEnd: [{ command: 'bash .cursor/hooks/spec-memo-session-end.sh', timeout: 1 }]
+      sessionStart: [{ command: managedHookCommand(prefix, `${hookRoot}/spec-memo-bootstrap.sh`), timeout: 1 }],
+      beforeSubmitPrompt: [{ command: managedHookCommand(prefix, `${hookRoot}/spec-memo-record.sh`), timeout: 1 }],
+      sessionEnd: [{ command: managedHookCommand(prefix, `${hookRoot}/spec-memo-session-end.sh`), timeout: 1 }]
     },
     'spec-memo': {
       version,
@@ -294,15 +372,20 @@ function generateCursorHooksJson(version: string): Record<string, unknown> {
   };
 }
 
-function generateClaudeHooksConfig(version: string): Record<string, unknown> {
+export function generateClaudeHooksConfig(
+  version: string,
+  options: { global?: boolean; shellHookPrefix?: 'bash' | '' } = {}
+): Record<string, unknown> {
   // Same `bash` prefix rationale: Claude hook runners on Windows hit the same
   // `.sh` file-association limitation as Cursor.
+  const prefix = options.shellHookPrefix ?? 'bash';
+  const hookRoot = options.global ? './hooks' : '.claude/hooks';
   return {
     hooks: {
-      SessionStart: [{ type: 'command', command: 'bash .claude/hooks/spec-memo-bootstrap.sh' }],
-      UserPromptSubmit: [{ type: 'command', command: 'bash .claude/hooks/spec-memo-record.sh' }],
-      PreCompact: [{ type: 'command', command: 'bash .claude/hooks/spec-memo-checkpoint.sh' }],
-      SessionEnd: [{ type: 'command', command: 'bash .claude/hooks/spec-memo-session-end.sh' }]
+      SessionStart: [{ type: 'command', command: managedHookCommand(prefix, `${hookRoot}/spec-memo-bootstrap.sh`) }],
+      UserPromptSubmit: [{ type: 'command', command: managedHookCommand(prefix, `${hookRoot}/spec-memo-record.sh`) }],
+      PreCompact: [{ type: 'command', command: managedHookCommand(prefix, `${hookRoot}/spec-memo-checkpoint.sh`) }],
+      SessionEnd: [{ type: 'command', command: managedHookCommand(prefix, `${hookRoot}/spec-memo-session-end.sh`) }]
     },
     'spec-memo': {
       version,
@@ -311,7 +394,28 @@ function generateClaudeHooksConfig(version: string): Record<string, unknown> {
   };
 }
 
-export function generateOpenCodePlugin(version: string): string {
+export function generateCodexAgents(version: string, memoCommand = 'memo'): string {
+  return `# spec-memo Codex agent instructions
+
+${CODEX_BLOCK_START}
+${GENERATED_BY_PREFIX}${version}
+
+Use the external spec-memo memory during each session. These commands are fail-open
+and bounded to ${HOOK_TIMEOUT_MS}ms:
+
+\`timeout 1.5 ${memoCommand} bootstrap >/dev/null 2>&1 || true\`
+\`timeout 1.5 ${memoCommand} prompt record --body '[hook-automated turn]' >/dev/null 2>&1 || true\`
+\`timeout 1.5 ${memoCommand} prompt session_end >/dev/null 2>&1 || true\`
+${CODEX_BLOCK_END}
+`;
+}
+
+export function generateOpenCodePlugin(
+  version: string,
+  memoExecutable = 'memo',
+  memoArgs: string[] = [],
+  memoShell = process.platform === 'win32'
+): string {
   return `${GENERATED_BY_PREFIX}${version}
 import * as fs from 'node:fs';
 
@@ -335,7 +439,11 @@ function writeSessionId(id) {
 async function runMemo(args) {
   const { spawn } = await import('node:child_process');
   return new Promise((resolve) => {
-    const child = spawn('memo', args, { stdio: 'ignore', shell: true });
+    const child = spawn(
+      ${JSON.stringify(memoExecutable)},
+      [...${JSON.stringify(memoArgs)}, ...args],
+      { stdio: 'ignore', shell: ${memoShell} }
+    );
     const timer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch {}
       resolve(0);
@@ -387,29 +495,30 @@ Hooks are optional; skill-only mode via ws-memo autoload is fully supported.
 
 function uniqueScripts(
   host: Exclude<HookHostName, 'all'>,
-  version: string
+  version: string,
+  memoCommand = 'memo'
 ): Array<{ rel: string; content: string }> {
   switch (host) {
     case 'antigravity':
       return [
-        { rel: 'spec-memo-session-start.sh', content: generateSessionStartScript(version) },
-        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
+        { rel: 'spec-memo-session-start.sh', content: generateSessionStartScript(version, memoCommand) },
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version, memoCommand) }
       ];
     case 'cursor':
       return [
-        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version) },
-        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]') },
-        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
+        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version, memoCommand) },
+        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]', memoCommand) },
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version, memoCommand) }
       ];
     case 'claude':
       return [
-        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version) },
-        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]') },
+        { rel: 'spec-memo-bootstrap.sh', content: generateSessionStartScript(version, memoCommand) },
+        { rel: 'spec-memo-record.sh', content: generateRecordScript(version, '[hook-automated turn]', memoCommand) },
         {
           rel: 'spec-memo-checkpoint.sh',
-          content: generateRecordScript(version, '[pre-compact checkpoint]')
+          content: generateRecordScript(version, '[pre-compact checkpoint]', memoCommand)
         },
-        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version) }
+        { rel: 'spec-memo-session-end.sh', content: generateSessionEndScript(version, memoCommand) }
       ];
     default:
       return [];
@@ -477,7 +586,10 @@ function removeSpecMemoBlock(filePath: string): 'removed' | 'unchanged' {
     return 'removed';
   }
   if (filePath.endsWith('.json')) {
-    const parsed = stripSpecMemoFromHookConfig(readJsonFile(filePath));
+    const parsed = readJsonFile(filePath);
+    const before = JSON.stringify(parsed);
+    stripSpecMemoFromHookConfig(parsed);
+    if (before === JSON.stringify(parsed)) return 'unchanged';
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), 'utf8');
     return 'removed';
   }
@@ -488,21 +600,40 @@ function removeSpecMemoBlock(filePath: string): 'removed' | 'unchanged' {
       return 'removed';
     }
   }
+  if (filePath.endsWith('.md')) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const start = text.indexOf(CODEX_BLOCK_START);
+    const end = text.indexOf(CODEX_BLOCK_END);
+    if (start >= 0 && end >= start) {
+      const cleaned = `${text.slice(0, start)}${text.slice(end + CODEX_BLOCK_END.length)}`.replace(/\n{3,}/g, '\n\n').trimEnd();
+      if (cleaned) fs.writeFileSync(filePath, `${cleaned}\n`, 'utf8');
+      else fs.unlinkSync(filePath);
+      return 'removed';
+    }
+  }
   return 'unchanged';
 }
 
 function buildHostArtifacts(
   host: Exclude<HookHostName, 'all'>,
-  version: string
+  version: string,
+  options: {
+    global?: boolean;
+    shellHookPrefix?: 'bash' | '';
+    memoCommand?: string;
+    memoExecutable?: string;
+    memoArgs?: string[];
+    memoShell?: boolean;
+  } = {}
 ): Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> {
-    const scripts = uniqueScripts(host, version);
+  const scripts = uniqueScripts(host, version, options.memoCommand);
   const artifacts: Array<{ path: string; content: string; kind: HookPathTarget['kind'] }> = [];
 
   switch (host) {
     case 'antigravity':
       artifacts.push({
         path: 'hooks.json',
-        content: JSON.stringify(generateAntigravityHooksJson(version), null, 2) + '\n',
+        content: JSON.stringify(generateAntigravityHooksJson(version, options), null, 2) + '\n',
         kind: 'json'
       });
       for (const s of scripts) {
@@ -512,19 +643,26 @@ function buildHostArtifacts(
     case 'opencode':
       artifacts.push({
         path: 'spec-memo.js',
-        content: generateOpenCodePlugin(version),
+        content: generateOpenCodePlugin(
+          version,
+          options.memoExecutable || options.memoCommand || 'memo',
+          options.memoArgs,
+          options.memoShell ?? process.platform === 'win32'
+        ),
         kind: 'js'
       });
       break;
     case 'cursor':
-      artifacts.push({
-        path: 'spec-memo.mdc',
-        content: generateCursorRule(version),
-        kind: 'mdc'
-      });
+      if (!options.global) {
+        artifacts.push({
+          path: 'spec-memo.mdc',
+          content: generateCursorRule(version),
+          kind: 'mdc'
+        });
+      }
       artifacts.push({
         path: 'hooks.json',
-        content: JSON.stringify(generateCursorHooksJson(version), null, 2) + '\n',
+        content: JSON.stringify(generateCursorHooksJson(version, options), null, 2) + '\n',
         kind: 'json'
       });
       for (const s of scripts) {
@@ -537,8 +675,15 @@ function buildHostArtifacts(
       }
       artifacts.push({
         path: 'config.json',
-        content: JSON.stringify(generateClaudeHooksConfig(version), null, 2) + '\n',
+        content: JSON.stringify(generateClaudeHooksConfig(version, options), null, 2) + '\n',
         kind: 'json'
+      });
+      break;
+    case 'codex':
+      artifacts.push({
+        path: 'AGENTS.md',
+        content: generateCodexAgents(version, options.memoCommand),
+        kind: 'md'
       });
       break;
   }
@@ -554,7 +699,7 @@ function mapArtifactToAbsolute(
   if (target.kind === 'dir') {
     return path.join(target.path, artifactName);
   }
-  if (artifactName === 'hooks.json' || artifactName === 'config.json') {
+  if (artifactName === 'hooks.json' || artifactName === 'config.json' || artifactName === 'AGENTS.md') {
     return target.path;
   }
   if (artifactName === 'spec-memo.mdc') {
@@ -563,22 +708,26 @@ function mapArtifactToAbsolute(
   if (artifactName === 'spec-memo.js') {
     return target.path;
   }
-  const hookDir =
-    host === 'antigravity'
-      ? path.join(productRoot, '.agents', 'hooks')
-      : host === 'cursor'
-        ? path.join(productRoot, '.cursor', 'hooks')
-        : path.join(productRoot, '.claude', 'hooks');
-  return path.join(hookDir, artifactName);
+  return path.join(target.path, artifactName);
 }
 
 export async function installHooks(options: InstallHooksOptions = {}): Promise<InstallHooksResult> {
-  const global = options.global === true;
+  const global = options.scope ? options.scope === 'global' : options.global === true;
   const apply = options.apply === true;
   const dryRun = options.dryRun === true || !apply;
-  const force = options.force === true;
+  const force = options.force === true || options.conflictPolicy === 'force';
   const remove = options.remove === true;
   const version = options.packageVersion || getPackageVersion();
+  const preflight = options.preflight || getInstallPreflight();
+  const permissionGated = options.scope !== undefined ||
+    options.hosts !== undefined ||
+    options.conflictPolicy !== undefined;
+  const conflictPolicy =
+    options.conflictPolicy ||
+    (options.force ? 'force' : undefined) ||
+    (options.skipExisting ? 'skip' : undefined) ||
+    (options.update ? 'update' : undefined) ||
+    'update';
 
   const explicitRoot = options.productRoot?.trim();
   const cwdFallback = options.cwd?.trim() || process.cwd();
@@ -588,21 +737,27 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
       ? path.resolve(options.homeDir || os.homedir())
       : resolveProjectIdentity(cwdFallback).rootPath;
 
-  const hosts = resolveHosts(options.host);
+  if (permissionGated && apply && !dryRun && options.confirm !== true) {
+    throw new Error('Hook installation requires explicit confirmation (confirm: true or --yes).');
+  }
+  const hosts = resolveHosts(options.host, options.hosts);
+  if (apply && !dryRun && !preflight.ok && !force) {
+    throw new Error(
+      `${preflight.warning || 'Unable to resolve an invocable memo command.'} Pass --force only after explicit confirmation to install fail-open hooks anyway.`
+    );
+  }
   const results: InstallHooksRow[] = [];
 
   for (const host of hosts) {
     const targets = resolveHostHookPaths(host, { global, productRoot, homeDir: options.homeDir });
-    if (targets.length === 0) {
-      results.push({
-        host,
-        path: '(skipped — workspace-only host)',
-        status: 'unchanged'
-      });
-      continue;
-    }
-
-    const artifacts = buildHostArtifacts(host, version);
+    const artifacts = buildHostArtifacts(host, version, {
+      global,
+      shellHookPrefix: preflight.shellHookPrefix,
+      memoCommand: preflight.memoCommand || 'memo',
+      memoExecutable: preflight.memoExecutable,
+      memoArgs: preflight.memoArgs,
+      memoShell: preflight.memoShell
+    });
     const jsonTarget = targets.find((t) => t.kind === 'json');
 
     for (const artifact of artifacts) {
@@ -613,8 +768,13 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
         absPath = targets.find((t) => t.kind === 'mdc')?.path || '';
       } else if (artifact.kind === 'js') {
         absPath = targets.find((t) => t.kind === 'js')?.path || '';
+      } else if (artifact.kind === 'md') {
+        absPath = targets.find((t) => t.kind === 'md')?.path || '';
       } else if (artifact.kind === 'shell') {
-        absPath = mapArtifactToAbsolute(host, targets.find((t) => t.kind === 'dir') || targets[0], artifact.path, productRoot);
+        const dirTarget = targets.find((t) => t.kind === 'dir');
+        if (dirTarget) {
+          absPath = mapArtifactToAbsolute(host, dirTarget, artifact.path, productRoot);
+        }
       }
       if (!absPath) continue;
 
@@ -625,8 +785,14 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
           results.push({ host, path: relDisplay, status: 'preview', diff: 'would remove spec-memo hooks' });
           continue;
         }
-        const status = artifact.kind === 'shell' && fs.existsSync(absPath)
-          ? (fs.unlinkSync(absPath), 'removed' as const)
+        const status = artifact.kind === 'shell'
+          ? (() => {
+              if (!fs.existsSync(absPath)) return 'unchanged' as const;
+              const existing = fs.readFileSync(absPath, 'utf8');
+              if (!isSpecMemoStamped(existing)) return 'unchanged' as const;
+              fs.unlinkSync(absPath);
+              return 'removed' as const;
+            })()
           : removeSpecMemoBlock(absPath);
         results.push({ host, path: relDisplay, status });
         continue;
@@ -636,7 +802,9 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
       if (artifact.kind === 'json' && fs.existsSync(absPath)) {
         const existing = readJsonFile(absPath);
         const patch = JSON.parse(artifact.content) as Record<string, unknown>;
-        nextContent = JSON.stringify(deepMergeJson(existing, patch), null, 2) + '\n';
+        nextContent = JSON.stringify(mergeManagedJson(existing, patch), null, 2) + '\n';
+      } else if (artifact.kind === 'md' && fs.existsSync(absPath)) {
+        nextContent = mergeCodexAgents(fs.readFileSync(absPath, 'utf8'), artifact.content);
       }
 
       const before = fs.existsSync(absPath) ? fs.readFileSync(absPath, 'utf8') : '';
@@ -652,8 +820,48 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
         continue;
       }
 
+      const existing = fs.existsSync(absPath);
+      const identical = before === nextContent;
+      if (identical) {
+        results.push({ host, path: relDisplay, status: 'unchanged' });
+        continue;
+      }
+      if (existing && conflictPolicy === 'skip') {
+        results.push({ host, path: relDisplay, status: 'skipped', diff });
+        continue;
+      }
+      if (
+        existing &&
+        conflictPolicy === 'update' &&
+        !isSpecMemoStamped(before) &&
+        artifact.kind !== 'json'
+      ) {
+        results.push({
+          host,
+          path: relDisplay,
+          status: 'refused',
+          diff: 'existing destination is not a spec-memo-generated file'
+        });
+        continue;
+      }
+      if (
+        existing &&
+        conflictPolicy === 'update' &&
+        artifact.kind === 'json' &&
+        !isSpecMemoStamped(before)
+      ) {
+        results.push({
+          host,
+          path: relDisplay,
+          status: 'refused',
+          diff: 'existing destination is not a spec-memo-generated configuration'
+        });
+        continue;
+      }
+
+      const allowOverwrite = !existing || conflictPolicy === 'force' || conflictPolicy === 'update';
       if (artifact.kind === 'shell') {
-        const st = writeFileAtomic(absPath, nextContent, force);
+        const st = writeFileAtomic(absPath, nextContent, allowOverwrite);
         try {
           fs.chmodSync(absPath, 0o755);
         } catch {
@@ -663,7 +871,7 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
         continue;
       }
 
-      const st = writeFileAtomic(absPath, nextContent, force);
+      const st = writeFileAtomic(absPath, nextContent, allowOverwrite);
       results.push({ host, path: relDisplay, status: st, diff: diff || undefined });
     }
   }
@@ -671,6 +879,11 @@ export async function installHooks(options: InstallHooksOptions = {}): Promise<I
   return {
     mode: global ? 'global' : 'local',
     productRoot,
+    scope: global ? 'global' : 'local',
+    hosts,
+    conflictPolicy,
+    status: dryRun ? 'preview' : 'applied',
+    preflight,
     results
   };
 }
@@ -716,7 +929,9 @@ export function inspectAgentHooks(options: {
       host: 'cursor',
       paths: [
         path.join(productRoot, '.cursor', 'rules', 'spec-memo.mdc'),
-        path.join(productRoot, '.cursor', 'hooks.json')
+        path.join(productRoot, '.cursor', 'hooks.json'),
+        path.join(home, '.cursor', 'hooks.json'),
+        path.join(home, '.cursor', 'hooks')
       ]
     },
     {
@@ -724,7 +939,15 @@ export function inspectAgentHooks(options: {
       paths: [
         path.join(productRoot, '.claude', 'config.json'),
         path.join(home, '.claude', 'config.json'),
-        path.join(productRoot, '.claude', 'hooks')
+        path.join(productRoot, '.claude', 'hooks'),
+        path.join(home, '.claude', 'hooks')
+      ]
+    },
+    {
+      host: 'codex',
+      paths: [
+        path.join(productRoot, '.codex', 'AGENTS.md'),
+        path.join(home, '.codex', 'AGENTS.md')
       ]
     }
   ];

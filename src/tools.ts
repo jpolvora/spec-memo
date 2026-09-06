@@ -29,6 +29,7 @@ import { runGc } from './curator.js';
 import { promoteRecord } from './promote.js';
 import { checkVersion } from './version.js';
 import { installSkills } from './skills-install.js';
+import { normalizeInstallHosts } from './install-wizard.js';
 import {
   recordPromptTurn,
   startSessionRecord,
@@ -379,7 +380,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   install_skills: {
     name: 'install_skills',
     description:
-      'Install packaged spec-memo runtime skill(s) (default ws-memo + ws-session-tracking) into a consumer product {skillsRoot}, or with global=true into $HOME/.agents/skills (+ Antigravity if present).',
+      'Install packaged spec-memo runtime skill(s) into explicitly selected local or global host roots. Writes require scope, hosts, conflictPolicy, and confirm: true.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -401,9 +402,33 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         global: {
           type: 'boolean',
           description:
-            'Install into $HOME/.agents/skills (always) and $HOME/.gemini/config/skills when Antigravity/Gemini config exists'
+            'Legacy alias for scope=global; host targets are never inferred'
+        },
+        scope: {
+          type: 'string',
+          enum: ['local', 'global'],
+          description: 'Required install scope'
+        },
+        hosts: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Required explicit host ids or aliases; all requires confirm: true'
+        },
+        conflictPolicy: {
+          type: 'string',
+          enum: ['skip', 'update', 'force'],
+          description: 'Required existing-destination policy'
+        },
+        confirm: {
+          type: 'boolean',
+          description: 'Required explicit permission to write files'
+        },
+        dryRun: {
+          type: 'boolean',
+          description: 'Preview without writing files'
         }
-      }
+      },
+      required: ['scope', 'hosts', 'conflictPolicy', 'confirm']
     },
     zodSchema: z.object({
       productRoot: z.string().optional(),
@@ -412,6 +437,11 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       skillsRoot: z.string().optional(),
       force: z.boolean().optional(),
       global: z.boolean().optional(),
+      scope: z.enum(['local', 'global']).optional(),
+      hosts: z.array(z.string()).optional(),
+      conflictPolicy: z.enum(['skip', 'update', 'force']).optional(),
+      confirm: z.boolean().optional(),
+      dryRun: z.boolean().optional(),
       vaultRoot: z.string().optional(),
       packageRoot: z.string().optional(),
       homeDir: z.string().optional()
@@ -886,7 +916,29 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
   if (name === 'install_skills') {
     try {
       const installOpts = parseResult.data as InstallSkillsOptions;
-      const result = await installSkills(installOpts);
+      const missing: string[] = [];
+      if (installOpts.confirm !== true) missing.push('confirm: true');
+      if (!installOpts.scope) missing.push('scope');
+      if (!installOpts.hosts || installOpts.hosts.length === 0) missing.push('hosts');
+      if (!installOpts.conflictPolicy) missing.push('conflictPolicy');
+      if (missing.length > 0) {
+        return fail(
+          'INSTALL_SKILLS_PERMISSION_REQUIRED',
+          `install_skills writes require explicit ${missing.join(', ')}. No files were written.`
+        );
+      }
+      const hosts = normalizeInstallHosts(installOpts.hosts, { allowAll: true });
+      if (hosts.length === 0) {
+        return fail(
+          'INSTALL_SKILLS_PERMISSION_REQUIRED',
+          'install_skills writes require at least one non-empty host. No files were written.'
+        );
+      }
+      const result = await installSkills({
+        ...installOpts,
+        hosts,
+        global: installOpts.scope === 'global'
+      });
       return ok(result);
     } catch (err: unknown) {
       return fail('INSTALL_SKILLS_FAILED', err);

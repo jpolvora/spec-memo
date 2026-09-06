@@ -6,18 +6,31 @@ import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot } from './vault.js';
 import { isPathInside } from './safety.js';
 import { getPackageRoot } from './version.js';
+import {
+  getInstallPreflight,
+  normalizeInstallHosts,
+  InstallHost,
+  InstallPreflight,
+  ConflictPolicy
+} from './install-wizard.js';
 
 export const ALLOWED_SKILLS = ['ws-memo', 'ws-session-tracking'] as const;
 export type AllowedSkill = (typeof ALLOWED_SKILLS)[number];
 
 const DEFAULT_SKILLS_ROOT = '.agents/skills';
 
-export type GlobalSkillTargetKind = 'agents' | 'antigravity';
+export type GlobalSkillTargetKind = 'agents' | 'antigravity' | 'codex' | 'opencode' | 'claude';
 
 export interface GlobalSkillTarget {
   kind: GlobalSkillTargetKind;
   /** Absolute skills directory (…/skills). */
   root: string;
+}
+
+export interface SkillInstallTarget {
+  kind: GlobalSkillTargetKind | 'local';
+  root: string;
+  labelRoot: string;
 }
 
 function assertAllowedSkill(id: string): asserts id is AllowedSkill {
@@ -85,6 +98,21 @@ function removeTree(dir: string): void {
   }
 }
 
+function isPackagedSkillTree(skillId: AllowedSkill, dir: string): boolean {
+  const skillFile = path.join(dir, 'SKILL.md');
+  if (!fs.existsSync(skillFile)) return false;
+  try {
+    const body = fs.readFileSync(skillFile, 'utf8');
+    return (
+      body.includes(`name: ${skillId}`) &&
+      /^version:\s*\S+/m.test(body) &&
+      /^managedBy:\s*spec-memo\s*$/m.test(body)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** destDir must not be the vault, inside the vault, or a parent of the vault (force wipe). */
 function assertDestDoesNotOverlapVault(destDir: string, vaultRoot: string): void {
   if (
@@ -103,29 +131,108 @@ function assertDestDoesNotOverlapVault(destDir: string, vaultRoot: string): void
  * - Always include `$HOME/.agents/skills` (created on write).
  * - Include `$HOME/.gemini/config/skills` only when Antigravity/Gemini config tree exists.
  */
-export function resolveGlobalSkillTargets(homeDir = os.homedir()): {
+export function resolveGlobalSkillTargets(
+  homeDir = os.homedir(),
+  hosts?: InstallHost[]
+): {
   targets: GlobalSkillTarget[];
   skipped: Array<{ kind: GlobalSkillTargetKind; path: string; reason: string }>;
 } {
   const home = path.resolve(homeDir);
   const agentsRoot = path.join(home, '.agents', 'skills');
-  const geminiConfig = path.join(home, '.gemini', 'config');
-  const antigravityRoot = path.join(geminiConfig, 'skills');
-
-  const targets: GlobalSkillTarget[] = [{ kind: 'agents', root: agentsRoot }];
+  const targets: GlobalSkillTarget[] = hosts === undefined
+    ? [{ kind: 'agents', root: agentsRoot }]
+    : [];
   const skipped: Array<{ kind: GlobalSkillTargetKind; path: string; reason: string }> = [];
 
-  if (fs.existsSync(antigravityRoot) || fs.existsSync(geminiConfig)) {
-    targets.push({ kind: 'antigravity', root: antigravityRoot });
-  } else {
-    skipped.push({
-      kind: 'antigravity',
-      path: antigravityRoot,
-      reason: 'Antigravity/Gemini config root not found; skipped'
-    });
+  if (hosts === undefined) {
+    const geminiConfig = path.join(home, '.gemini', 'config');
+    const antigravityRoot = path.join(geminiConfig, 'skills');
+    if (fs.existsSync(antigravityRoot) || fs.existsSync(geminiConfig)) {
+      targets.push({ kind: 'antigravity', root: antigravityRoot });
+    } else {
+      skipped.push({
+        kind: 'antigravity',
+        path: antigravityRoot,
+        reason: 'Antigravity/Gemini config root not found; skipped'
+      });
+    }
+    return { targets, skipped };
   }
 
+  const roots: Record<InstallHost, GlobalSkillTarget> = {
+    cursor: { kind: 'agents', root: path.join(home, '.agents', 'skills') },
+    antigravity: { kind: 'antigravity', root: path.join(home, '.gemini', 'config', 'skills') },
+    codex: { kind: 'codex', root: path.join(home, '.codex', 'skills') },
+    opencode: { kind: 'opencode', root: path.join(home, '.config', 'opencode', 'skills') },
+    claude: { kind: 'claude', root: path.join(home, '.claude', 'skills') }
+  };
+  const seen = new Set<string>();
+  for (const host of hosts) {
+    const target = roots[host];
+    if (!target || seen.has(target.root)) continue;
+    seen.add(target.root);
+    targets.push(target);
+  }
   return { targets, skipped };
+}
+
+export function resolveSkillInstallTargets(options: {
+  scope: 'local' | 'global';
+  productRoot?: string;
+  cwd?: string;
+  homeDir?: string;
+  skillsRoot?: string;
+  hosts?: string[];
+}): SkillInstallTarget[] {
+  const hosts = options.hosts
+    ? normalizeInstallHosts(options.hosts, { allowAll: true })
+    : undefined;
+  if (options.scope === 'global') {
+    const resolved = resolveGlobalSkillTargets(
+      options.homeDir?.trim() || os.homedir(),
+      hosts
+    );
+    return resolved.targets.map((target) => ({
+      kind: target.kind,
+      root: target.root,
+      labelRoot: target.root
+    }));
+  }
+
+  const explicitRoot = options.productRoot?.trim();
+  const productRoot = explicitRoot
+    ? path.resolve(explicitRoot)
+    : resolveProjectIdentity(options.cwd?.trim() || process.cwd()).rootPath;
+  const skillsRoot = (options.skillsRoot || DEFAULT_SKILLS_ROOT)
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  const targets: SkillInstallTarget[] = [{
+    kind: 'local',
+    root: path.resolve(productRoot, skillsRoot),
+    labelRoot: skillsRoot
+  }];
+  if (!hosts) return targets;
+
+  const hostRoots: Record<InstallHost, string> = {
+    cursor: path.join(productRoot, '.cursor', 'skills'),
+    antigravity: path.join(productRoot, '.gemini', 'config', 'skills'),
+    codex: path.join(productRoot, '.codex', 'skills'),
+    opencode: path.join(productRoot, '.opencode', 'skills'),
+    claude: path.join(productRoot, '.claude', 'skills')
+  };
+  const seen = new Set(targets.map((target) => path.resolve(target.root)));
+  for (const host of hosts) {
+    const root = path.resolve(hostRoots[host]);
+    if (seen.has(root)) continue;
+    seen.add(root);
+    targets.push({
+      kind: 'local',
+      root,
+      labelRoot: path.relative(productRoot, root).replace(/\\/g, '/')
+    });
+  }
+  return targets;
 }
 
 function installOneSkill(options: {
@@ -133,10 +240,32 @@ function installOneSkill(options: {
   srcDir: string;
   destDir: string;
   force: boolean;
+  conflictPolicy?: ConflictPolicy;
+  dryRun?: boolean;
   destinationLabel: string;
   target?: GlobalSkillTargetKind | 'local';
 }): InstallSkillsInstalledRow {
-  const { skillId, srcDir, destDir, force, destinationLabel, target } = options;
+  const {
+    skillId,
+    srcDir,
+    destDir,
+    force,
+    conflictPolicy,
+    dryRun,
+    destinationLabel,
+    target
+  } = options;
+
+  if (!fs.existsSync(destDir) && dryRun) {
+    return {
+      skill: skillId,
+      destination: destinationLabel,
+      identical: false,
+      bytesWritten: 0,
+      status: 'preview',
+      ...(target ? { target } : {})
+    };
+  }
 
   if (fs.existsSync(destDir)) {
     if (treesIdentical(srcDir, destDir)) {
@@ -145,10 +274,41 @@ function installOneSkill(options: {
         destination: destinationLabel,
         identical: true,
         bytesWritten: 0,
+        status: 'unchanged',
         ...(target ? { target } : {})
       };
     }
-    if (!force) {
+    if (dryRun) {
+      return {
+        skill: skillId,
+        destination: destinationLabel,
+        identical: false,
+        bytesWritten: 0,
+        status: 'preview',
+        ...(target ? { target } : {})
+      };
+    }
+    if (conflictPolicy === 'skip') {
+      return {
+        skill: skillId,
+        destination: destinationLabel,
+        identical: false,
+        bytesWritten: 0,
+        status: 'skipped',
+        ...(target ? { target } : {})
+      };
+    }
+    if (conflictPolicy === 'update' && !isPackagedSkillTree(skillId, destDir)) {
+      return {
+        skill: skillId,
+        destination: destinationLabel,
+        identical: false,
+        bytesWritten: 0,
+        status: 'refused',
+        ...(target ? { target } : {})
+      };
+    }
+    if (!force && conflictPolicy !== 'force' && conflictPolicy !== 'update') {
       throw new Error(
         `Destination skill already exists and differs: ${destinationLabel}. Pass force: true to overwrite.`
       );
@@ -163,6 +323,7 @@ function installOneSkill(options: {
     destination: destinationLabel,
     identical: false,
     bytesWritten,
+    status: 'installed',
     ...(target ? { target } : {})
   };
 }
@@ -176,10 +337,36 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
   const skills = options.skills?.length ? options.skills : ['ws-memo', 'ws-session-tracking'];
   const force = options.force === true;
   const packageRoot = options.packageRoot || getPackageRoot();
-  const global = options.global === true;
+  const global = options.scope ? options.scope === 'global' : options.global === true;
+  const scope = global ? 'global' : 'local';
+  const hosts = options.hosts === undefined
+    ? undefined
+    : normalizeInstallHosts(options.hosts, { allowAll: true });
+  if (hosts !== undefined && hosts.length === 0) {
+    throw new Error('Skill installation requires at least one non-empty host.');
+  }
+  const conflictPolicy =
+    options.conflictPolicy ||
+    (force ? 'force' : undefined);
+  const dryRun = options.dryRun === true;
+  const preflight = options.preflight || getInstallPreflight();
+  const permissionGated = options.scope !== undefined ||
+    options.hosts !== undefined ||
+    options.conflictPolicy !== undefined;
 
+  if (permissionGated && options.confirm !== true && !dryRun) {
+    throw new Error('Skill installation requires explicit confirmation (confirm: true or --yes).');
+  }
+  if (!dryRun && !preflight.ok && !force) {
+    throw new Error(
+      `${preflight.warning || 'Unable to resolve an invocable memo command.'} Pass --force only after explicit confirmation to install anyway.`
+    );
+  }
+
+  const skillIds: AllowedSkill[] = [];
   for (const skillId of skills) {
     assertAllowedSkill(skillId);
+    skillIds.push(skillId);
     const srcDir = packagedSkillDir(skillId, packageRoot);
     if (!fs.existsSync(srcDir) || !fs.existsSync(path.join(srcDir, 'SKILL.md'))) {
       throw new Error(
@@ -190,18 +377,12 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
 
   if (global) {
     const homeDir = options.homeDir?.trim() || os.homedir();
-    const { targets, skipped } = resolveGlobalSkillTargets(homeDir);
+    const resolved = resolveGlobalSkillTargets(homeDir, hosts);
+    const { targets, skipped } = resolved;
     const installed: InstallSkillsInstalledRow[] = [];
 
     for (const target of targets) {
-      if (target.root === vaultRoot || isPathInside(target.root, vaultRoot)) {
-        throw new Error(
-          `Safety violation (Default Deny): global skills root must not be the vault root or inside the vault (${vaultRoot}).`
-        );
-      }
-
-      for (const skillId of skills) {
-        assertAllowedSkill(skillId);
+      for (const skillId of skillIds) {
         const srcDir = packagedSkillDir(skillId, packageRoot);
         const destDir = path.join(target.root, skillId);
         assertDestDoesNotOverlapVault(destDir, vaultRoot);
@@ -211,6 +392,8 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
             srcDir,
             destDir,
             force,
+            conflictPolicy,
+            dryRun,
             destinationLabel: destDir.replace(/\\/g, '/'),
             target: target.kind
           })
@@ -223,6 +406,11 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
       productRoot: path.resolve(homeDir),
       skillsRoot: 'global',
       installed,
+      status: dryRun ? 'preview' : 'applied',
+      scope,
+      hosts,
+      conflictPolicy,
+      preflight,
       skippedTargets: skipped.length ? skipped : undefined
     };
   }
@@ -250,12 +438,18 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
     throw new Error('skillsRoot must be a relative path without ".." segments.');
   }
 
+  const targetRoots = resolveSkillInstallTargets({
+    scope: 'local',
+    productRoot,
+    skillsRoot: skillsRootSeg,
+    hosts
+  });
   const installed: InstallSkillsInstalledRow[] = [];
 
-  for (const skillId of skills) {
-    assertAllowedSkill(skillId);
+  for (const target of targetRoots) {
+    for (const skillId of skillIds) {
     const srcDir = packagedSkillDir(skillId, packageRoot);
-    const destDir = path.resolve(productRoot, skillsRootSeg, skillId);
+    const destDir = path.resolve(target.root, skillId);
     if (!isPathInside(destDir, productRoot)) {
       throw new Error(
         `Safety violation (Default Deny): skill destination must be inside product repository (${productRoot}). Target: ${destDir}`
@@ -276,16 +470,24 @@ export async function installSkills(options: InstallSkillsOptions): Promise<Inst
         srcDir,
         destDir,
         force,
+        conflictPolicy,
+        dryRun,
         destinationLabel,
         target: 'local'
       })
     );
+    }
   }
 
   return {
     mode: 'local',
     productRoot,
     skillsRoot: skillsRootSeg,
-    installed
+    installed,
+    status: dryRun ? 'preview' : 'applied',
+    scope,
+    hosts,
+    conflictPolicy,
+    preflight
   };
 }

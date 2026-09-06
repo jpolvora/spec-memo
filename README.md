@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.26.1**.
+**Local working memory for coding agents outside the product repository.** Version **0.27.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -207,20 +207,46 @@ Add to `~/.config/opencode/config.json` (`type` is `local`, `command` is an arra
 
 ### Agent skill (`ws-memo`)
 
-Day-to-day vault ops (all **10** MCP tools + CLI extras) are documented as a project skill:
+Day-to-day vault ops (all **11** MCP tools + CLI extras) are documented as a project skill:
 
 - [`.agents/skills/ws-memo/SKILL.md`](.agents/skills/ws-memo/SKILL.md)
 
 **Preferred install into a consumer repo:**
 
 ```bash
-memo install-skills --product-root /path/to/consumer
-memo install-skills --global --force
-# or MCP tool: install_skills { "productRoot": "/path/to/consumer" }
-#            install_skills { "global": true, "force": true }
+# TTY: choose local/global scope, hosts, conflict policy, and confirmation in the wizard.
+# Non-TTY/CI: provide every write permission explicitly.
+memo install-skills --product-root /path/to/consumer \
+  --scope local --host cursor --conflictPolicy update --yes
+memo install-skills --scope global --host cursor,antigravity \
+  --conflictPolicy force --yes
+# or MCP tool:
+# install_skills {
+#   "productRoot": "/path/to/consumer",
+#   "scope": "local",
+#   "hosts": ["cursor"],
+#   "conflictPolicy": "update",
+#   "confirm": true
+# }
 ```
 
-Manual copy/symlink of `.agents/skills/ws-memo/` remains a fallback. **Setup** of `specMemo.enabled` in workflow-skills consumers remains [`ws-spec-memo`](https://github.com/jpolvora/workflow-skills) — do not duplicate that bridge here.
+`--host` is repeatable or CSV and supports Cursor, Antigravity/Gemini, Codex, OpenCode, and Claude Code. `--dry-run` or JSON without confirmation previews paths without writing. `skip`, `update`, and `force` control differing destinations; `update` refuses consumer-owned files. Manual copy/symlink of `.agents/skills/ws-memo/` remains a fallback. **Setup** of `specMemo.enabled` in workflow-skills consumers remains [`ws-spec-memo`](https://github.com/jpolvora/workflow-skills) — do not duplicate that bridge here.
+
+#### Optional agent lifecycle hooks
+
+Hooks are opt-in and independent from skill-only operation. The same wizard is shared with `install-skills`; Codex writes a managed block to `.codex/AGENTS.md` locally or `$HOME/.codex/AGENTS.md` globally.
+
+```bash
+# Preview without writing
+memo install-hooks --scope local --host cursor,codex \
+  --conflictPolicy update --json
+
+# Apply a confirmed plan in CI
+memo install-hooks --scope global --host cursor,claude,codex \
+  --conflictPolicy force --yes --apply
+```
+
+Global Cursor and Claude hooks use `bash ./hooks/spec-memo-*.sh` from their user-level host directory; local hooks retain `.cursor/hooks/` or `.claude/hooks/` paths. Generated shell bridges are fail-open and bounded to 1500ms.
 
 ---
 
@@ -776,8 +802,8 @@ memo reconcile --clean-sidecars
 | `gc` | Apply TTL retention and compact plans | `--dry-run`, `--project`, `--purge` |
 | `promote` | Safe export of record to product repo | `--id`, `--to`, `--format` (`raw`/`adr`/`madr`/`skill`), `--force`, `--limit` |
 | `check_version` / `check-version` | Compare running version to npm latest | `--json` |
-| `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into a consumer repo or global skills roots | `--product-root`, `--global`, `--skill`, `--force`, `--json` |
-| `install_hooks` / `install-hooks` | Optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Claude (CLI-only) | `--host`, `--global`, `--apply`, `--dry-run`, `--force`, `--remove`, `--json` |
+| `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into selected local or global host roots | `--scope`, `--host`, `--conflictPolicy`, `--yes`, `--dry-run`, `--json` |
+| `install_hooks` / `install-hooks` | Optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Codex, Claude (CLI-only) | `--scope`, `--host`, `--conflictPolicy`, `--yes`, `--apply`, `--dry-run`, `--remove`, `--json` |
 | `prompt` / `prompts` | Ingest & query prompt history; derive rules; export stories; record memory feedback | `record`/`list`/`search`/`show`/`session`/`export`/`derive-rules`/`feedback` |
 | `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`handoff`/`show`/`export`, `--summary`, `--pr`, `--handoff-steps`, `--shared`, `--objective` |
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
@@ -809,12 +835,14 @@ Compare `current` to `latest`. When the registry is unreachable, `updateAvailabl
 **How do I install the `ws-memo` skill into a consumer project?**
 
 ```bash
-memo install-skills --product-root /path/to/consumer
-# Global (Cursor/agents + Antigravity if ~/.gemini/config exists):
-memo install-skills --global --force
+memo install-skills --product-root /path/to/consumer \
+  --scope local --host cursor --conflictPolicy update --yes
+# Global, explicit hosts and policy:
+memo install-skills --scope global --host cursor,antigravity \
+  --conflictPolicy force --yes
 ```
 
-Use `--force` only when overwriting a diverged destination. MCP hosts can call `install_skills` with the same arguments (`global: true` for global roots).
+Use `force` only when intentionally overwriting a diverged destination. MCP hosts must pass `scope`, explicit `hosts`, `conflictPolicy`, and `confirm: true`; `install-hooks` remains CLI-only.
 
 **How do I make the `memo` command available on my PATH (Windows / Linux / macOS)?**
 
