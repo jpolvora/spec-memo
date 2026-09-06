@@ -1128,7 +1128,51 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
     .modal-actions button { width: auto; margin-top: 0; padding: 8px 14px; }
     .modal-card.modal-card-wide { max-width: 560px; }
-    .vault-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+    .vault-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .vault-actions button {
+      width: auto;
+      margin: 0;
+      padding: 3px 8px;
+      font-size: 0.72rem;
+      line-height: 1.25;
+      font-weight: 500;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+    .vault-actions button:hover { filter: brightness(1.15); }
+    .vault-actions button[data-vault-action="sync"] {
+      background: rgba(88, 166, 255, 0.08);
+      border-color: rgba(56, 139, 253, 0.35);
+      color: var(--accent);
+    }
+    .vault-actions button[data-vault-action="sync"]:hover {
+      background: rgba(88, 166, 255, 0.18);
+      border-color: var(--accent);
+    }
+    .vault-actions button[data-vault-action="delete"] {
+      border-color: rgba(248, 81, 73, 0.3);
+      color: #ff7b72;
+    }
+    .vault-actions button[data-vault-action="delete"]:hover {
+      background: rgba(248, 81, 73, 0.15);
+      border-color: var(--err);
+    }
+    .vault-actions button[data-vault-action="unalias"] {
+      border-color: rgba(210, 153, 34, 0.35);
+      color: #e3b341;
+    }
+    .vault-actions button[data-vault-action="unalias"]:hover {
+      background: rgba(210, 153, 34, 0.15);
+      border-color: #f2cc60;
+    }
+    #vaults-manager-table th,
+    #vaults-manager-table td {
+      vertical-align: middle;
+    }
     #vaults-manager-table th.vault-actions-col,
     #vaults-manager-table td.vault-actions-col { min-width: 22rem; width: auto; }
   </style>
@@ -1524,10 +1568,10 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         <table class="data-table" id="vaults-manager-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Display name</th>
-              <th>Alias target</th>
-              <th style="width:90px;">Records</th>
+              <th style="width:25%;">ID</th>
+              <th style="width:18%;">Display name</th>
+              <th style="width:18%;">Alias target</th>
+              <th style="width:75px; text-align:right;">Records</th>
               <th class="vault-actions-col">Actions</th>
             </tr>
           </thead>
@@ -3553,7 +3597,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
 
     function vaultActionButton(action, id, label) {
-      return '<button type="button" class="btn-secondary" data-vault-action="' + action + '" data-id="' + id + '" style="padding:4px 8px;">' + label + '</button>';
+      return '<button type="button" class="btn-secondary" data-vault-action="' + action + '" data-id="' + id + '">' + label + '</button>';
     }
 
     function renderVaultsManagerTable() {
@@ -3572,13 +3616,13 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           '<td><code>' + safeId + '</code></td>' +
           '<td>' + (v.displayName || v.id) + '</td>' +
           '<td>' + alias + '</td>' +
-          '<td>' + count + '</td>' +
+          '<td style="text-align:right;">' + count + '</td>' +
           '<td class="vault-actions-col"><div class="vault-actions">' +
             vaultActionButton("edit", safeId, "Edit") +
             vaultActionButton("alias", safeId, "Alias") +
             vaultActionButton("merge", safeId, "Merge") +
             unalias +
-            '<button type="button" class="btn-secondary" data-vault-action="sync" data-id="' + safeId + '" style="padding:4px 8px;">Sync</button>' +
+            '<button type="button" class="btn-secondary" data-vault-action="sync" data-id="' + safeId + '">Sync</button>' +
             vaultActionButton("delete", safeId, "Delete") +
           '</div></td>' +
         '</tr>';

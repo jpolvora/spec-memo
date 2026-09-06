@@ -274,6 +274,11 @@ test("MCP status monitor", async (t) => {
     assert.ok(!handler.includes("window.prompt"));
     assert.ok(!handler.includes("window.confirm"));
     assert.ok(html.includes("display: flex; flex-wrap: wrap; gap:"));
+    assert.ok(html.includes(".vault-actions button {"));
+    assert.ok(html.includes("width: auto;"));
+    assert.ok(html.includes('.vault-actions button[data-vault-action="sync"]'));
+    assert.ok(html.includes('.vault-actions button[data-vault-action="delete"]'));
+    assert.ok(html.includes('.vault-actions button[data-vault-action="unalias"]'));
   });
 
   await t.test("generateStatusHtml loadVaults accepts GET /api/vaults array payload", () => {
