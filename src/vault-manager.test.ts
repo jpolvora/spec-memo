@@ -387,4 +387,11 @@ describe('vault-manager', () => {
     assert.equal(result.deduplicated, 0);
     assert.equal(result.copied, 1);
   });
+
+  it('merge deleteSources without copyRecords fails closed (review thread)', async () => {
+    scaffoldProject('guard-src');
+    scaffoldProject('guard-tgt');
+    await assert.rejects(() => mergeVaultProjects({ sources: ['guard-src'], target: 'guard-tgt', deleteSources: true, vaultRoot: tempVault }), /deleteSources.*copyRecords/);
+    assert.ok(fs.existsSync(path.join(tempVault, 'projects', 'guard-src')));
+  });
 });

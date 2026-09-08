@@ -682,6 +682,9 @@ export async function mergeVaultProjects(options: {
   if (sources.includes(target)) {
     throw new VaultManagerError('Target cannot appear in sources');
   }
+  if (deleteSources && !copyRecords) {
+    throw new VaultManagerError('"deleteSources" requires "copyRecords" to preserve records');
+  }
   for (const src of sources) {
     if (!isFilesystemSafeProjectId(src)) {
       throw new VaultManagerError(`Invalid source project id "${src}"`);
