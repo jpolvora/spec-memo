@@ -245,3 +245,4 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 
 
 
+| 2026-09-08 | vault-dedup-merge-and-local-config | Consumer .spec-memo.json binding, memo init/status source, vault rename + smart dedup merge, REST/CLI/UI; v0.28.0; npm test 652 pass; PR #52 merged |
