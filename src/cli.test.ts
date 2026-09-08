@@ -1438,6 +1438,165 @@ describe('CLI wiki extra', () => {
   });
 });
 
+describe('CLI init and vault rename/merge (AC6-AC10, AC20, AC28, NS1)', () => {
+  it('AC6-AC7: init writes .spec-memo.json with inferred id from basename', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-init-'));
+    const proj = path.join(tmp, 'MyProj');
+    fs.mkdirSync(proj, { recursive: true });
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    let out = '';
+    const orig = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['init', '--cwd', proj, '--vaultRoot', vault]);
+      assert.equal(code, 0);
+      const cfgPath = path.join(proj, '.spec-memo.json');
+      assert.ok(fs.existsSync(cfgPath));
+      const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      assert.ok(parsed.projectId);
+      assert.equal(parsed.projectId, 'myproj');
+      assert.ok(out.includes('Created'));
+    } finally {
+      console.log = orig;
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC8: init --project-id validates filesystem safety', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-init-id-'));
+    const proj = path.join(tmp, 'proj');
+    fs.mkdirSync(proj, { recursive: true });
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    let err = '';
+    const origErr = console.error;
+    console.error = (...a) => { err += a.join(' ') + '\n'; };
+    try {
+      const bad = await runCli(['init', '--cwd', proj, '--vaultRoot', vault, '--project-id', 'BAD ID!']);
+      assert.notEqual(bad, 0);
+      assert.match(err, /Invalid project id/i);
+      const ok = await runCli(['init', '--cwd', proj, '--vaultRoot', vault, '--project-id', 'custom-id']);
+      assert.equal(ok, 0);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(proj, '.spec-memo.json'), 'utf8')).projectId, 'custom-id');
+    } finally {
+      console.error = origErr;
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('NS1: init refuses overwrite without --force', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-init-ns1-'));
+    const proj = path.join(tmp, 'proj');
+    fs.mkdirSync(proj, { recursive: true });
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    fs.writeFileSync(path.join(proj, '.spec-memo.json'), JSON.stringify({ projectId: 'orig' }), 'utf8');
+    let err = '';
+    const origErr = console.error;
+    console.error = (...a) => { err += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['init', '--cwd', proj, '--vaultRoot', vault]);
+      assert.notEqual(code, 0);
+      assert.match(err, /already exists/i);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(proj, '.spec-memo.json'), 'utf8')).projectId, 'orig');
+      const forced = await runCli(['init', '--cwd', proj, '--vaultRoot', vault, '--force', '--project-id', 'next']);
+      assert.equal(forced, 0);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(proj, '.spec-memo.json'), 'utf8')).projectId, 'next');
+    } finally {
+      console.error = origErr;
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC10: init --json returns ok/path/projectId', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-init-json-'));
+    const proj = path.join(tmp, 'proj');
+    fs.mkdirSync(proj, { recursive: true });
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    let out = '';
+    const orig = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['init', '--cwd', proj, '--vaultRoot', vault, '--json']);
+      assert.equal(code, 0);
+      const parsed = JSON.parse(out.trim());
+      assert.equal(parsed.ok, true);
+      assert.ok(parsed.path);
+      assert.ok(parsed.projectId);
+    } finally {
+      console.log = orig;
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('init refuses inside vault directory', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-init-vault-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(path.join(vault, 'projects'), { recursive: true });
+    fs.writeFileSync(path.join(vault, 'config.json'), JSON.stringify({ version: '1.0' }), 'utf8');
+    let err = '';
+    const origErr = console.error;
+    console.error = (...a) => { err += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['init', '--cwd', vault, '--vaultRoot', vault]);
+      assert.notEqual(code, 0);
+      assert.match(err, /inside the vault/i);
+    } finally {
+      console.error = origErr;
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC20: vault rename executes and exits 0', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-rename-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(path.join(vault, 'projects', 'old-proj'), { recursive: true });
+    fs.writeFileSync(path.join(vault, 'projects', 'old-proj', 'project.json'), JSON.stringify({ projectId: 'old-proj' }), 'utf8');
+    let out = '';
+    const orig = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['vault', 'rename', '--from', 'old-proj', '--to', 'new-proj', '--vaultRoot', vault]);
+      assert.equal(code, 0);
+      assert.ok(out.includes('Renamed'));
+      assert.ok(fs.existsSync(path.join(vault, 'projects', 'new-proj')));
+    } finally {
+      console.log = orig;
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC28: vault merge supports --no-dedup and --delete-sources flags', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-merge-flags-'));
+    const vault = path.join(tmp, 'vault');
+    const { ensureVaultStructure } = await import('./vault.js');
+    ensureVaultStructure(vault);
+    const { upsertRecord } = await import('./store.js');
+    await upsertRecord({ vaultRoot: vault, projectId: 'm-src', kind: 'trap', slug: 't1', frontmatter: { title: 'T1', severity: 'low' }, body: 'merge flags body unique qzxw' });
+    let out = '';
+    const orig = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['vault', 'merge', '--source', 'm-src', '--target', 'm-tgt', '--copy-records', '--no-dedup', '--delete-sources', '--vaultRoot', vault]);
+      assert.equal(code, 0);
+      assert.ok(out.includes('deduplicated='));
+      assert.ok(!fs.existsSync(path.join(vault, 'projects', 'm-src')));
+    } finally {
+      console.log = orig;
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
 
 
 

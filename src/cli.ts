@@ -233,6 +233,7 @@ Utility Commands:
   sync          Synchronize vault records (hybrid mode or vault-git)
   rank          List traps by recurrence (occurrences)
   feedback      Submit helpful/stale/wrong feedback on a memory record
+  init          Create .spec-memo.json in the project root with an auto-detected project id
   import        Import legacy .agents tree into external vault
   export-vault  Export vault records into portable archive (optional AES-256-GCM)
   import-vault  Import vault archive into local vault
@@ -241,7 +242,7 @@ Utility Commands:
   reset         Reset vault database and clear records with mandatory pre-wipe backup
   canvas        Start interactive Canvas visualizer and graph UI server
   wiki          Print or regenerate the vault project wiki (WIKI.md)
-  vault         Manage vault projects (list, alias, merge, create, update, delete)
+  vault         Manage vault projects (list, alias, merge, create, update, delete, rename)
   sync-vault    Synchronize delta changesets directly between vault instances
   serve         Run the stdio or SSE MCP server for agent integration
 
@@ -252,6 +253,43 @@ Global Options:
 }
 
 function printCommandHelp(cmd: string): void {
+  if (cmd === 'init') {
+    console.log(`Usage: memo init [options]
+
+Create a .spec-memo.json file in the project root with an auto-detected project id.
+
+Options:
+  --project-id    Explicit project id (filesystem-safe, lowercase)
+  --force         Overwrite an existing .spec-memo.json
+  --cwd           Target working directory (default: current directory)
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'vault') {
+    console.log(`Usage: memo vault <subcommand> [options]
+
+Manage vault projects.
+
+Subcommands:
+  list                        List vault projects
+  alias --from <id> --to <id> Set a project alias
+  unalias --from <id>         Remove a project alias
+  merge --source <id> --target <id> [--copy-records] [--no-dedup] [--delete-sources]
+                              Merge vaults with smart deduplication
+  rename --from <id> --to <id> Rename a vault project and migrate aliases
+  create --id <id>            Create a vault project
+  update --id <id>            Update a vault project display name
+  delete --id <id> --confirm  Delete a vault project
+
+Options:
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
   if (cmd === 'status' || cmd === 'info' || cmd === 'state') {
     console.log(`Usage: memo status [options]
 
@@ -1067,6 +1105,35 @@ async function runCliInner(
     }
   }
 
+  if (parsed.command === 'init') {
+    try {
+      const { runInitCommand } = await import('./init-cmd.js');
+      const cwd = (parsed.options.cwd as string) || process.cwd();
+      const projectId =
+        (parsed.options['project-id'] as string) ||
+        (parsed.options.projectId as string) ||
+        (parsed.options.project as string) ||
+        undefined;
+      const force = parsed.options.force === true || parsed.options.force === 'true';
+      const vaultRoot = (parsed.options.vaultRoot as string) || undefined;
+      const result = await runInitCommand({ cwd, projectId, force, vaultRoot });
+      if (parsed.isJson) {
+        printJson(result);
+      } else {
+        console.log(`Created ${result.path} with projectId ${result.projectId}`);
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'INIT_ERROR' });
+      } else {
+        console.error(msg);
+      }
+      return 1;
+    }
+  }
+
   if (isReadOnlyWikiGet(parsed)) {
     try {
       const vaultRoot = getVaultRoot(vaultRootArg);
@@ -1182,7 +1249,8 @@ async function runCliInner(
       mergeVaultProjects,
       createVaultProject,
       updateVaultProject,
-      deleteVaultProject
+      deleteVaultProject,
+      renameVaultProject
     } = await import('./vault-manager.js');
     const vaultRoot = getVaultRoot(vaultRootArg);
     const sub = parsed.positionals[0] || 'list';
@@ -1236,13 +1304,31 @@ async function runCliInner(
           parsed.options['copy-records'] === true ||
           parsed.options['copy-records'] === 'true' ||
           parsed.options.copyRecords === true;
-        const result = await mergeVaultProjects({ sources, target, copyRecords, vaultRoot });
+        const dedup = !(
+          parsed.options['no-dedup'] === true ||
+          parsed.options['no-dedup'] === 'true' ||
+          parsed.options.noDedup === true
+        );
+        const deleteSources =
+          parsed.options['delete-sources'] === true ||
+          parsed.options['delete-sources'] === 'true' ||
+          parsed.options.deleteSources === true;
+        const result = await mergeVaultProjects({ sources, target, copyRecords, dedup, deleteSources, vaultRoot });
         if (parsed.isJson) printJson(result);
         else {
           console.log(
-            `Merged ${result.sources.join(', ')} -> ${result.target} (copied=${result.copied}, skipped=${result.skipped})`
+            `Merged ${result.sources.join(', ')} -> ${result.target} (copied=${result.copied}, deduplicated=${result.deduplicated}, skipped=${result.skipped})`
           );
         }
+        return 0;
+      }
+
+      if (sub === 'rename') {
+        const from = String(parsed.options.from || '');
+        const to = String(parsed.options.to || '');
+        const result = await renameVaultProject(from, to, vaultRoot);
+        if (parsed.isJson) printJson(result);
+        else console.log(`Renamed ${result.from} -> ${result.to}`);
         return 0;
       }
 

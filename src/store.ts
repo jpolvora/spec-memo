@@ -125,7 +125,28 @@ export function getSubdirForKind(kind: RecordKind): string {
   }
 }
 
-function findMatchingTrap(
+/**
+ * Normalize a record title for deterministic merge comparison.
+ * Trims, lowercases, and collapses inner whitespace.
+ */
+export function normalizeTitleForMerge(title: string): string {
+  return String(title || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Derive the match key (slug) for a record frontmatter.
+ */
+export function slugKeyForRecord(frontmatter: { id?: unknown; slug?: unknown }): string {
+  const slug = typeof frontmatter.slug === 'string' && frontmatter.slug.trim()
+    ? frontmatter.slug.trim()
+    : String(frontmatter.id || '').trim();
+  return slug;
+}
+
+export function findMatchingTrap(
   projectDir: string,
   recordId: string,
   slug: string,
@@ -154,6 +175,47 @@ function findMatchingTrap(
         newPatterns.every((p, idx) => p === existingPatterns[idx]);
       if (samePatterns && calculateTextOverlap(body, existing.body) >= 0.7) {
         return existing;
+      }
+    } catch {
+      // Ignore unparseable
+    }
+  }
+  return null;
+}
+
+/**
+ * Find a matching non-trap record (decision/spec/plan) by slug or normalized title.
+ * Scans the kind subdirectory under projectDir. Returns null when no match.
+ */
+export function findMatchingNonTrapRecord(
+  projectDir: string,
+  kind: string,
+  slug: string,
+  title?: string
+): MemoRecord | null {
+  const subdir = getSubdirForKind(kind as RecordKind);
+  const dir = path.join(projectDir, subdir);
+  if (!fs.existsSync(dir)) return null;
+  const normalizedTitle = title ? normalizeTitleForMerge(title) : '';
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  for (const file of files) {
+    if (!file.endsWith('.md') || file.includes('.conflict.')) continue;
+    const filePath = path.join(dir, file);
+    try {
+      const existing = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
+      if (existing.frontmatter.status === 'archived') continue;
+      const existingSlug = slugKeyForRecord(existing.frontmatter);
+      if (slug && existingSlug === slug) return existing;
+      if (existing.frontmatter.id === slug) return existing;
+      if (normalizedTitle && typeof existing.frontmatter.title === 'string') {
+        if (normalizeTitleForMerge(existing.frontmatter.title) === normalizedTitle) {
+          return existing;
+        }
       }
     } catch {
       // Ignore unparseable

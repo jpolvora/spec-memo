@@ -179,6 +179,8 @@ export interface ProjectIdentity {
   isGit: boolean;
   isFallback: boolean;
   vaultProjectPath: string;
+  identitySource?: 'file' | 'git' | 'path';
+  configFilePath?: string | null;
 }
 
 export interface ProjectMetadata {
@@ -924,6 +926,9 @@ export interface ProjectStorageStatus {
   path: string;
   remoteOrigin: string | null;
   isFallback: boolean;
+  identitySource?: 'file' | 'git' | 'path';
+  configFilePath?: string | null;
+  configOverrides?: string[];
   counts: {
     traps: number;
     decisions: number;
@@ -1226,6 +1231,23 @@ export interface ExportStoryResult {
   turnsCount: number;
   markdown: string;
   outputPath?: string;
+}
+
+export interface LocalSpecMemoConfig {
+  projectId?: string;
+  bootstrap?: VaultConfig['bootstrap'];
+  ports?: PortsConfig;
+  vaultGit?: VaultConfig['vaultGit'];
+  telemetry?: VaultConfig['telemetry'];
+  ttl?: VaultConfig['ttl'];
+  sync?: SyncConfig;
+  [key: string]: unknown;
+}
+
+export interface MergeMetrics {
+  copied: number;
+  deduplicated: number;
+  skipped: number;
 }
 
 

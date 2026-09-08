@@ -124,6 +124,14 @@ const VAULT_PATH_KEYS = new Set([
 ]);
 
 /**
+ * Keys whose string values are consumer-repo or product-relative paths, not
+ * vault absolute paths. They must survive sanitizeToolOutput (AC13 vs AC31):
+ * `configFilePath` points at the consumer `<projectRoot>/.spec-memo.json`,
+ * `destination` is already documented as product-relative in stripVaultPaths.
+ */
+export const SANITIZE_PATH_ALLOWLIST = new Set(['configFilePath', 'destination']);
+
+/**
  * Redact credential-like strings in a JSON-serializable payload (read-path fail-closed).
  */
 export function redactSecretsInPayload(payload: unknown): unknown {
@@ -159,6 +167,16 @@ export function stripVaultPaths(payload: unknown): unknown {
   if (payload !== null && typeof payload === 'object') {
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+      if (SANITIZE_PATH_ALLOWLIST.has(key)) {
+        out[key] = value;
+        continue;
+      }
+      // Consumer local config path (memo init --json `path`) is not a vault
+      // record path and must survive for AC10. Vault record paths end with .md.
+      if (key === 'path' && typeof value === 'string' && value.endsWith('.spec-memo.json')) {
+        out[key] = value;
+        continue;
+      }
       if (VAULT_PATH_KEYS.has(key)) {
         continue;
       }
@@ -182,8 +200,16 @@ export function sanitizeToolOutput(payload: unknown): unknown {
   return stripVaultPaths(redactSecretsInPayload(redactPathsDeep(payload)));
 }
 
-function redactPathsDeep(payload: unknown): unknown {
+function redactPathsDeep(payload: unknown, parentKey?: string): unknown {
   if (typeof payload === 'string') {
+    // Consumer-repo config path (e.g. L:\proj\.spec-memo.json) is not a vault
+    // path and must survive sanitization for AC13 status reporting and AC10 init.
+    if (parentKey && SANITIZE_PATH_ALLOWLIST.has(parentKey)) {
+      return payload;
+    }
+    if (parentKey === 'path' && payload.endsWith('.spec-memo.json')) {
+      return payload;
+    }
     return redactAbsolutePathsInText(payload);
   }
   if (Array.isArray(payload)) {
@@ -192,7 +218,7 @@ function redactPathsDeep(payload: unknown): unknown {
   if (payload !== null && typeof payload === 'object') {
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
-      out[key] = redactPathsDeep(value);
+      out[key] = redactPathsDeep(value, key);
     }
     return out;
   }

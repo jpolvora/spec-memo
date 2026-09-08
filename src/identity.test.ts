@@ -9,7 +9,12 @@ import {
   generateProjectIdFromPath,
   findGitRoot,
   resolveProjectIdentity,
-  getGitRemoteUrl
+  getGitRemoteUrl,
+  findLocalSpecMemoConfig,
+  loadLocalSpecMemoConfig,
+  getLocalConfigOverrides,
+  getEffectiveVaultConfig,
+  resolveVaultId
 } from './identity.js';
 
 describe('Git Remote and Project Identity', () => {
@@ -278,6 +283,143 @@ describe('Git Remote and Project Identity', () => {
       assert.equal(parentIdentity.normalizedRemote, cloneIdentity.normalizedRemote);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Local .spec-memo.json config (AC1-AC5)', () => {
+  it('AC1: discovers .spec-memo.json in cwd and ancestors up to git root', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ac1-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    const proj = path.join(tmp, 'proj');
+    const nested = path.join(proj, 'a', 'b');
+    fs.mkdirSync(nested, { recursive: true });
+    fs.writeFileSync(path.join(proj, '.spec-memo.json'), JSON.stringify({ projectId: 'file-proj' }), 'utf8');
+    try {
+      const found = findLocalSpecMemoConfig(nested, { vaultRoot: vault });
+      assert.ok(found);
+      assert.equal(found.configFilePath, path.join(proj, '.spec-memo.json'));
+      assert.equal(found.projectId, 'file-proj');
+      const identity = resolveProjectIdentity(nested, { vaultRoot: vault });
+      assert.equal(identity.projectId, 'file-proj');
+      assert.equal(identity.identitySource, 'file');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC2/AC3: valid projectId uses file source with configFilePath', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ac23-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    const proj = path.join(tmp, 'proj2');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, '.spec-memo.json'), JSON.stringify({ projectId: 'My-Proj' }), 'utf8');
+    try {
+      const identity = resolveProjectIdentity(proj, { vaultRoot: vault });
+      assert.equal(identity.projectId, 'my-proj');
+      assert.equal(identity.identitySource, 'file');
+      assert.equal(identity.configFilePath, path.join(proj, '.spec-memo.json'));
+      assert.equal(resolveVaultId(proj, { vaultRoot: vault }), 'my-proj');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC1 negative: malformed JSON is ignored and falls through', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ac1neg-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    const proj = path.join(tmp, 'proj3');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, '.spec-memo.json'), '{ invalid', 'utf8');
+    try {
+      const identity = resolveProjectIdentity(proj, { vaultRoot: vault });
+      assert.notEqual(identity.identitySource, 'file');
+      assert.ok(identity.projectId.startsWith('local-'));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC1: invalid file projectId falls through but surfaces configFilePath', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ac1inv-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    const proj = path.join(tmp, 'proj4');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, '.spec-memo.json'), JSON.stringify({ projectId: 'BAD ID!' }), 'utf8');
+    try {
+      const identity = resolveProjectIdentity(proj, { vaultRoot: vault });
+      assert.notEqual(identity.identitySource, 'file');
+      assert.equal(identity.configFilePath, path.join(proj, '.spec-memo.json'));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC4: file ID follows projectAliases to canonical', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ac4-'));
+    const vault = path.join(tmp, 'vault');
+    const { ensureVaultStructure } = await import('./vault.js');
+    const { setProjectAlias } = await import('./vault-manager.js');
+    const { closeIndex } = await import('./indexer.js');
+    ensureVaultStructure(vault);
+    const proj = path.join(tmp, 'proj5');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.mkdirSync(path.join(vault, 'projects', 'canonical'), { recursive: true });
+    fs.mkdirSync(path.join(vault, 'projects', 'old-id'), { recursive: true });
+    fs.writeFileSync(path.join(proj, '.spec-memo.json'), JSON.stringify({ projectId: 'old-id' }), 'utf8');
+    try {
+      await setProjectAlias('old-id', 'canonical', vault);
+      const identity = resolveProjectIdentity(proj, { vaultRoot: vault });
+      assert.equal(identity.projectId, 'canonical');
+      assert.equal(identity.identitySource, 'file');
+    } finally {
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('AC5: local override keys merge and secrets are stripped', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ac5-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    const proj = path.join(tmp, 'proj6');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(
+      path.join(proj, '.spec-memo.json'),
+      JSON.stringify({ projectId: 'p6', bootstrap: { maxBytes: 4000 }, authToken: 'secret-abc', unknownKey: 1 }),
+      'utf8'
+    );
+    try {
+      const loaded = loadLocalSpecMemoConfig(proj, { vaultRoot: vault });
+      assert.ok(loaded);
+      assert.ok(loaded.overrides.bootstrap);
+      assert.equal((loaded.overrides.bootstrap as { maxBytes: number }).maxBytes, 4000);
+      assert.equal((loaded.overrides as Record<string, unknown>).authToken, undefined);
+      assert.equal((loaded.overrides as Record<string, unknown>).unknownKey, undefined);
+      const overrides = getLocalConfigOverrides(proj, { vaultRoot: vault });
+      assert.ok('bootstrap' in overrides);
+      const effective = getEffectiveVaultConfig(proj, vault);
+      assert.equal(effective.bootstrap?.maxBytes, 4000);
+      assert.ok(effective.bootstrap?.maxTraps);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('vault-internal cwd skips file discovery', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ac1vault-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(path.join(vault, 'projects', 'p1'), { recursive: true });
+    fs.writeFileSync(path.join(vault, '.spec-memo.json'), JSON.stringify({ projectId: 'evil' }), 'utf8');
+    try {
+      const found = findLocalSpecMemoConfig(path.join(vault, 'projects', 'p1'), { vaultRoot: vault });
+      assert.equal(found, null);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 });

@@ -454,4 +454,80 @@ describe('status-cmd & CLI memo status', () => {
     assert.strictEqual(formatted.includes('Sync Conflicts:'), true);
     assert.strictEqual(formatted.includes('sidecars=1'), true);
   });
+
+  it('AC11-AC13: status reports file source, overrides, and JSON fields', async () => {
+    ensureVaultStructure(vaultRoot);
+    fs.writeFileSync(
+      path.join(repoDir, '.spec-memo.json'),
+      JSON.stringify({ projectId: 'file-bound-proj', bootstrap: { maxBytes: 4000 } }),
+      'utf8'
+    );
+    try {
+      const status = await runStatusCheck({ vaultRoot, cwd: repoDir });
+      assert.strictEqual(status.project?.projectId, 'file-bound-proj');
+      assert.strictEqual(status.project?.identitySource, 'file');
+      assert.strictEqual(status.project?.configFilePath, path.join(repoDir, '.spec-memo.json'));
+      assert.ok(Array.isArray(status.project?.configOverrides));
+      assert.ok(status.project?.configOverrides?.includes('bootstrap'));
+      const formatted = formatStatusDashboard(status);
+      assert.ok(formatted.includes('Source:'));
+      assert.ok(formatted.includes('.spec-memo.json'));
+      assert.ok(formatted.includes('Local Overrides:'));
+      assert.ok(formatted.includes('bootstrap'));
+    } finally {
+      fs.rmSync(path.join(repoDir, '.spec-memo.json'), { force: true });
+    }
+  });
+
+  it('AC11: status reports git remote source when no local config', async () => {
+    ensureVaultStructure(vaultRoot);
+    const status = await runStatusCheck({ vaultRoot, cwd: repoDir });
+    assert.strictEqual(status.project?.identitySource, 'git');
+    assert.strictEqual(status.project?.configFilePath, null);
+    const formatted = formatStatusDashboard(status);
+    assert.ok(formatted.includes('Source:'));
+    assert.ok(formatted.includes('Git Remote'));
+  });
+
+  it('AC11: status reports path fallback when outside git', async () => {
+    ensureVaultStructure(vaultRoot);
+    const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-status-plain-'));
+    try {
+      const status = await runStatusCheck({ vaultRoot, cwd: plain });
+      assert.strictEqual(status.project?.identitySource, 'path');
+      const formatted = formatStatusDashboard(status);
+      assert.ok(formatted.includes('Local Path Fallback'));
+    } finally {
+      fs.rmSync(plain, { recursive: true, force: true });
+    }
+  });
+
+  it('AC32 NS5: status does not create or modify .spec-memo.json or config.json', async () => {
+    ensureVaultStructure(vaultRoot);
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const localPath = path.join(repoDir, '.spec-memo.json');
+    fs.writeFileSync(localPath, JSON.stringify({ projectId: 'readonly-proj' }), 'utf8');
+    const cfgBefore = fs.readFileSync(cfgPath, 'utf8');
+    const cfgMtime = fs.statSync(cfgPath).mtimeMs;
+    const localBefore = fs.readFileSync(localPath, 'utf8');
+    const localMtime = fs.statSync(localPath).mtimeMs;
+    await new Promise((r) => setTimeout(r, 10));
+    await runStatusCheck({ vaultRoot, cwd: repoDir });
+    await runStatusCheck({ vaultRoot, cwd: repoDir });
+    assert.strictEqual(fs.readFileSync(cfgPath, 'utf8'), cfgBefore);
+    assert.strictEqual(fs.readFileSync(localPath, 'utf8'), localBefore);
+    assert.strictEqual(fs.statSync(cfgPath).mtimeMs, cfgMtime);
+    assert.strictEqual(fs.statSync(localPath).mtimeMs, localMtime);
+    fs.rmSync(localPath, { force: true });
+  });
+
+  it('sanitize preserves configFilePath while stripping vault paths', async () => {
+    const { sanitizeToolOutput } = await import('./safety.js');
+    const out = sanitizeToolOutput({
+      project: { configFilePath: 'L:\\proj\\.spec-memo.json', path: '/home/user/.spec-memo/projects/x' },
+      vaultRoot: '/home/user/.spec-memo'
+    }) as { project: { configFilePath: string } };
+    assert.strictEqual(out.project.configFilePath, 'L:\\proj\\.spec-memo.json');
+    assert.equal((out as Record<string, unknown>).vaultRoot, undefined);
+  });
 });
