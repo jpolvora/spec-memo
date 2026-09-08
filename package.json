@@ -1,6 +1,6 @@
 {
   "name": "spec-memo",
-  "version": "0.28.0",
+  "version": "0.28.1",
   "description": "Local working memory for coding agents outside the product repository",
   "type": "module",
   "main": "dist/index.js",
@@ -61,4 +61,3 @@
     "better-sqlite3@13.0.3": true
   }
 }
-
