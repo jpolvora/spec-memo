@@ -66,6 +66,7 @@ test('vault rename and dedup merge REST + UI (AC18-19, AC21, AC27, AC29-31, NS2,
     assert.ok(html.includes('Rename project'));
     assert.ok(html.includes('id="vault-merge-dedup"'));
     assert.ok(html.includes('id="vault-merge-delete-sources"'));
+    assert.ok(html.includes('id="vault-merge-target-id"'));
     assert.ok(html.includes('copied='));
     assert.ok(html.includes('deduplicated='));
     assert.ok(html.includes('skipped='));

@@ -1612,9 +1612,10 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         <p id="vault-unalias-from" style="font-family:monospace;"></p>
       </div>
       <div id="vault-fields-merge" class="vault-modal-fields" style="display:none;">
+        <p style="margin-bottom:12px; font-size:0.9rem;">Target vault (destination): <code id="vault-merge-target-id" style="color:var(--bright); font-weight:600;"></code></p>
         <label>Source vaults</label>
         <div id="vault-merge-sources" style="max-height:180px; overflow:auto; border:1px solid var(--border); border-radius:6px; padding:8px;"></div>
-        <label><input type="checkbox" id="vault-merge-copy"> Copy records from sources</label>
+        <label><input type="checkbox" id="vault-merge-copy" checked> Copy records from sources</label>
         <label><input type="checkbox" id="vault-merge-dedup" checked> Smart deduplication</label>
         <label><input type="checkbox" id="vault-merge-delete-sources"> Delete sources after merge</label>
       </div>
@@ -3648,7 +3649,12 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         const sel = (document.getElementById("vault-alias-to").value || "").trim();
         submit.disabled = !(typed || sel);
       } else if (vaultModalAction === "merge") {
-        submit.disabled = document.querySelectorAll("#vault-merge-sources input:checked").length < 1;
+        const hasSources = document.querySelectorAll("#vault-merge-sources input:checked").length >= 1;
+        const copyEl = document.getElementById("vault-merge-copy");
+        const delEl = document.getElementById("vault-merge-delete-sources");
+        const copyChecked = copyEl ? copyEl.checked === true : false;
+        const delChecked = delEl ? delEl.checked === true : false;
+        submit.disabled = !hasSources || (delChecked && !copyChecked);
       } else if (vaultModalAction === "rename") {
         const toVal = (document.getElementById("vault-rename-to").value || "").trim();
         submit.disabled = !(toVal && toVal !== vaultModalId);
@@ -3708,11 +3714,16 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         focusEl = submit;
       } else if (action === "merge") {
         title.textContent = "Merge vaults";
-        help.textContent = "Select one or more source vaults to merge into this target.";
+        help.textContent = "Select one or more source vaults to merge into this destination target.";
         document.getElementById("vault-fields-merge").style.display = "block";
-        document.getElementById("vault-merge-copy").checked = false;
-        document.getElementById("vault-merge-dedup").checked = true;
-        document.getElementById("vault-merge-delete-sources").checked = false;
+        const targetEl = document.getElementById("vault-merge-target-id");
+        if (targetEl) targetEl.textContent = id;
+        const copyEl = document.getElementById("vault-merge-copy");
+        if (copyEl) copyEl.checked = true;
+        const dedupEl = document.getElementById("vault-merge-dedup");
+        if (dedupEl) dedupEl.checked = true;
+        const delEl = document.getElementById("vault-merge-delete-sources");
+        if (delEl) delEl.checked = false;
         document.getElementById("vault-merge-sources").innerHTML = vaults.filter((v) => v.id !== id).map((v) => {
           const sid = String(v.id).replace(/"/g, "");
           return '<label><input type="checkbox" value="' + sid + '"> ' + sid + '</label>';
@@ -3891,6 +3902,22 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     if (vaultAliasTo) vaultAliasTo.addEventListener("change", () => updateVaultModalSubmitEnabled());
     const vaultMergeSources = document.getElementById("vault-merge-sources");
     if (vaultMergeSources) vaultMergeSources.addEventListener("change", () => updateVaultModalSubmitEnabled());
+    const vaultMergeCopy = document.getElementById("vault-merge-copy");
+    const vaultMergeDeleteSources = document.getElementById("vault-merge-delete-sources");
+    if (vaultMergeCopy && vaultMergeDeleteSources) {
+      vaultMergeDeleteSources.addEventListener("change", () => {
+        if (vaultMergeDeleteSources.checked) {
+          vaultMergeCopy.checked = true;
+        }
+        updateVaultModalSubmitEnabled();
+      });
+      vaultMergeCopy.addEventListener("change", () => {
+        if (!vaultMergeCopy.checked && vaultMergeDeleteSources.checked) {
+          vaultMergeDeleteSources.checked = false;
+        }
+        updateVaultModalSubmitEnabled();
+      });
+    }
     const vaultDeleteConfirm = document.getElementById("vault-delete-confirm");
     if (vaultDeleteConfirm) vaultDeleteConfirm.addEventListener("input", () => updateVaultModalSubmitEnabled());
     const vaultRenameTo = document.getElementById("vault-rename-to");

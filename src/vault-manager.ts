@@ -700,6 +700,17 @@ export async function mergeVaultProjects(options: {
       ensureProjectVault(targetIdentity(target, vaultRoot), vaultRoot);
     }
 
+    const aliases = { ...readProjectAliases(vaultRoot) };
+    if (aliases[target]) {
+      delete aliases[target];
+    }
+    for (const src of sources) {
+      if (wouldCreateCycle(aliases, src, target)) {
+        throw new VaultManagerError(`Merge would create an alias cycle involving "${src}"`);
+      }
+      aliases[src] = target;
+    }
+
     let copied = 0;
     let deduplicated = 0;
     let skipped = 0;
@@ -710,12 +721,19 @@ export async function mergeVaultProjects(options: {
       skipped = copyResult.skipped;
     }
 
-    const aliases = { ...readProjectAliases(vaultRoot) };
-    for (const src of sources) {
-      if (wouldCreateCycle(aliases, src, target)) {
-        throw new VaultManagerError(`Merge would create an alias cycle involving "${src}"`);
+    const targetProjectJsonPath = path.join(vaultRoot, 'projects', target, 'project.json');
+    if (fs.existsSync(targetProjectJsonPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(targetProjectJsonPath, 'utf8')) as Record<string, unknown>;
+        if (meta.canonicalOf) {
+          delete meta.canonicalOf;
+          fs.writeFileSync(targetProjectJsonPath, JSON.stringify(meta, null, 2), 'utf8');
+        }
+      } catch {
+        // ignore
       }
-      aliases[src] = target;
+    }
+    for (const src of sources) {
       const projectJsonPath = path.join(vaultRoot, 'projects', src, 'project.json');
       if (fs.existsSync(projectJsonPath)) {
         try {
