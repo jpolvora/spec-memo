@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.27.2**.
+**Local working memory for coding agents outside the product repository.** Version **0.28.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -453,7 +453,16 @@ HTTP routes:
 
 The **Vaults** tab (`?tab=vaults`) lists vault projects from `GET /api/vaults` (JSON array with `id`, `displayName`, `aliasOf`, `recordCount`). Create, Edit, Alias, Merge, Remove alias, Sync, and Delete use in-page modal forms (no `window.prompt` / `confirm`). Actions stay in a wrapping button row. **Sync** calls `POST /api/vaults/sync` with `{ id, direction: pull|push|both, dryRun, prefer }` and reuses `syncDual` / hybrid pull-push / vault-git flush. Mutating routes use the same auth and path sanitization as backup/reset.
 
-CLI extra (not an MCP tool): `memo vault list|alias|merge|create|update|delete` (see Command Reference).
+CLI extra (not an MCP tool): `memo vault list|alias|merge|create|update|delete|rename` (see Command Reference).
+
+### Consumer project binding (`.spec-memo.json`) and vault maintenance
+
+Consumers can pin a repository to a vault partition with a project-root `.spec-memo.json` containing `projectId` (plus optional local overrides for `bootstrap`, `ports`, `vaultGit`, `telemetry`). Identity resolution checks `.spec-memo.json` upward from `cwd` before git remote or path fallback, records `identitySource` (`file`/`git`/`path`) and `configFilePath`, and still follows vault `projectAliases`. The file must never contain tokens or secrets.
+
+- `memo init [--project-id <id>] [--force] [--json]` scaffolds `.spec-memo.json` with an auto-detected default (normalized git remote or folder basename).
+- `memo status` reports the active project ID and its source (`.spec-memo.json`, git remote, or local path fallback) plus active override keys; strictly read-only.
+- `memo vault rename --from <id> --to <id>` renames a vault project (dir, `project.json`, aliases, FTS index). REST `POST /api/vaults/rename` returns 200/400/404/409/401. The Vaults tab has a Rename modal.
+- `memo vault merge --source <id> --target <id> [--no-dedup] [--delete-sources]` smart-merges with trap/decision/spec/plan deduplication (`{copied,deduplicated,skipped}`). REST `POST /api/vaults/merge` accepts `dedup`/`deleteSources`. The Vaults tab merge modal has dedup/delete controls and a results banner.
 
 The **Wiki** tab (`?tab=wiki` or `?tab=wiki&project={id}`) shows the vault file `projects/{projectId}/WIKI.md`. It is not the consumer product README.
 
