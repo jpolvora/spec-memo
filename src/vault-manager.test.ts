@@ -394,4 +394,19 @@ describe('vault-manager', () => {
     await assert.rejects(() => mergeVaultProjects({ sources: ['guard-src'], target: 'guard-tgt', deleteSources: true, vaultRoot: tempVault }), /deleteSources.*copyRecords/);
     assert.ok(fs.existsSync(path.join(tempVault, 'projects', 'guard-src')));
   });
+
+  it('merge clears prior alias on target if target was previously aliased to source', async () => {
+    scaffoldProject('prev-src');
+    scaffoldProject('prev-tgt');
+    await setProjectAlias('prev-tgt', 'prev-src', tempVault);
+    const aliasesBefore = readProjectAliases(tempVault);
+    assert.equal(aliasesBefore['prev-tgt'], 'prev-src');
+
+    // Merging prev-src into prev-tgt should succeed and clear the alias on prev-tgt
+    const result = await mergeVaultProjects({ sources: ['prev-src'], target: 'prev-tgt', copyRecords: true, vaultRoot: tempVault });
+    assert.equal(result.ok, true);
+    const aliasesAfter = readProjectAliases(tempVault);
+    assert.equal(aliasesAfter['prev-tgt'], undefined);
+    assert.equal(aliasesAfter['prev-src'], 'prev-tgt');
+  });
 });

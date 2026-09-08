@@ -711,6 +711,19 @@ export async function mergeVaultProjects(options: {
     }
 
     const aliases = { ...readProjectAliases(vaultRoot) };
+    if (aliases[target]) {
+      delete aliases[target];
+      const targetProjectJsonPath = path.join(vaultRoot, 'projects', target, 'project.json');
+      if (fs.existsSync(targetProjectJsonPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(targetProjectJsonPath, 'utf8')) as Record<string, unknown>;
+          delete meta.canonicalOf;
+          fs.writeFileSync(targetProjectJsonPath, JSON.stringify(meta, null, 2), 'utf8');
+        } catch {
+          // ignore
+        }
+      }
+    }
     for (const src of sources) {
       if (wouldCreateCycle(aliases, src, target)) {
         throw new VaultManagerError(`Merge would create an alias cycle involving "${src}"`);
