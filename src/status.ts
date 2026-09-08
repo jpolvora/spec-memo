@@ -39,7 +39,8 @@ import {
   mergeVaultProjects,
   createVaultProject,
   updateVaultProject,
-  deleteVaultProject
+  deleteVaultProject,
+  renameVaultProject
 } from "./vault-manager.js";
 import {
   listPrompts,
@@ -1614,6 +1615,15 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         <label>Source vaults</label>
         <div id="vault-merge-sources" style="max-height:180px; overflow:auto; border:1px solid var(--border); border-radius:6px; padding:8px;"></div>
         <label><input type="checkbox" id="vault-merge-copy"> Copy records from sources</label>
+        <label><input type="checkbox" id="vault-merge-dedup" checked> Smart deduplication</label>
+        <label><input type="checkbox" id="vault-merge-delete-sources"> Delete sources after merge</label>
+      </div>
+      <div id="vault-fields-rename" class="vault-modal-fields" style="display:none;">
+        <label for="vault-rename-from">Source id</label>
+        <input type="text" id="vault-rename-from" readonly>
+        <label for="vault-rename-to">New project id (filesystem-safe)</label>
+        <input type="text" id="vault-rename-to" autocomplete="off">
+        <div class="helper-text" id="vault-rename-hint">Rename the vault directory and migrate aliases.</div>
       </div>
       <div id="vault-fields-delete" class="vault-modal-fields" style="display:none;">
         <p>Type the exact project id to confirm deletion.</p>
@@ -3621,6 +3631,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
             vaultActionButton("edit", safeId, "Edit") +
             vaultActionButton("alias", safeId, "Alias") +
             vaultActionButton("merge", safeId, "Merge") +
+            vaultActionButton("rename", safeId, "Rename") +
             unalias +
             '<button type="button" class="btn-secondary" data-vault-action="sync" data-id="' + safeId + '">Sync</button>' +
             vaultActionButton("delete", safeId, "Delete") +
@@ -3638,6 +3649,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         submit.disabled = !(typed || sel);
       } else if (vaultModalAction === "merge") {
         submit.disabled = document.querySelectorAll("#vault-merge-sources input:checked").length < 1;
+      } else if (vaultModalAction === "rename") {
+        const toVal = (document.getElementById("vault-rename-to").value || "").trim();
+        submit.disabled = !(toVal && toVal !== vaultModalId);
       } else if (vaultModalAction === "delete") {
         submit.disabled = document.getElementById("vault-delete-confirm").value !== vaultModalId;
       } else {
@@ -3697,12 +3711,22 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         help.textContent = "Select one or more source vaults to merge into this target.";
         document.getElementById("vault-fields-merge").style.display = "block";
         document.getElementById("vault-merge-copy").checked = false;
+        document.getElementById("vault-merge-dedup").checked = true;
+        document.getElementById("vault-merge-delete-sources").checked = false;
         document.getElementById("vault-merge-sources").innerHTML = vaults.filter((v) => v.id !== id).map((v) => {
           const sid = String(v.id).replace(/"/g, "");
           return '<label><input type="checkbox" value="' + sid + '"> ' + sid + '</label>';
         }).join("") || '<span class="helper-text">No other vaults</span>';
         submit.disabled = true;
         focusEl = document.querySelector("#vault-merge-sources input");
+      } else if (action === "rename") {
+        title.textContent = "Rename project";
+        help.textContent = "Rename the vault directory and migrate aliases.";
+        document.getElementById("vault-fields-rename").style.display = "block";
+        document.getElementById("vault-rename-from").value = id;
+        document.getElementById("vault-rename-to").value = "";
+        submit.disabled = true;
+        focusEl = document.getElementById("vault-rename-to");
       } else if (action === "delete") {
         title.textContent = "Delete project";
         help.textContent = "This removes the project vault. Type the id to confirm.";
@@ -3768,8 +3792,24 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         } else if (vaultModalAction === "merge") {
           const sources = Array.from(document.querySelectorAll("#vault-merge-sources input:checked")).map((el) => el.value);
           const copyRecords = document.getElementById("vault-merge-copy").checked === true;
-          await vaultManagerApi("/api/vaults/merge", { sources, target: id, copyRecords });
-          showBanner("Merged " + sources.length + " source(s) into " + id, "success");
+          const dedupEl = document.getElementById("vault-merge-dedup");
+          const delEl = document.getElementById("vault-merge-delete-sources");
+          const dedup = dedupEl ? dedupEl.checked === true : true;
+          const deleteSources = delEl ? delEl.checked === true : false;
+          const mergeResult = await vaultManagerApi("/api/vaults/merge", { sources, target: id, copyRecords, dedup, deleteSources });
+          const copied = mergeResult && mergeResult.copied != null ? mergeResult.copied : 0;
+          const deduplicated = mergeResult && mergeResult.deduplicated != null ? mergeResult.deduplicated : 0;
+          const skipped = mergeResult && mergeResult.skipped != null ? mergeResult.skipped : 0;
+          showBanner("Merged " + sources.join(", ") + " -> " + id + ": copied=" + copied + ", deduplicated=" + deduplicated + ", skipped=" + skipped, "success");
+        } else if (vaultModalAction === "rename") {
+          const from = document.getElementById("vault-rename-from").value.trim() || id;
+          const to = document.getElementById("vault-rename-to").value.trim();
+          if (!to) {
+            setVaultModalError("Enter a new project id");
+            return;
+          }
+          await vaultManagerApi("/api/vaults/rename", { from, to });
+          showBanner("Renamed " + from + " -> " + to, "success");
         } else if (vaultModalAction === "delete") {
           const typed = document.getElementById("vault-delete-confirm").value;
           if (typed !== id) {
@@ -3853,6 +3893,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     if (vaultMergeSources) vaultMergeSources.addEventListener("change", () => updateVaultModalSubmitEnabled());
     const vaultDeleteConfirm = document.getElementById("vault-delete-confirm");
     if (vaultDeleteConfirm) vaultDeleteConfirm.addEventListener("input", () => updateVaultModalSubmitEnabled());
+    const vaultRenameTo = document.getElementById("vault-rename-to");
+    if (vaultRenameTo) vaultRenameTo.addEventListener("input", () => updateVaultModalSubmitEnabled());
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && document.getElementById("modal-vault-action").classList.contains("open")) {
         closeVaultModal();
@@ -4240,7 +4282,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const startTime = Date.now();
         try {
           const rawBody = await readBodyBuffer(req, 256 * 1024);
-          let parsed: { sources?: string[]; target?: string; copyRecords?: boolean } = {};
+          let parsed: { sources?: string[]; target?: string; copyRecords?: boolean; dedup?: boolean; deleteSources?: boolean } = {};
           if (rawBody.length > 0) {
             try {
               parsed = JSON.parse(rawBody.toString("utf8"));
@@ -4249,10 +4291,15 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
               return;
             }
           }
+          const copyRecords = parsed.copyRecords === true;
+          const dedup = parsed.dedup === undefined ? true : parsed.dedup === true;
+          const deleteSources = parsed.deleteSources === true;
           const result = await mergeVaultProjects({
             sources: Array.isArray(parsed.sources) ? parsed.sources : [],
             target: String(parsed.target || ""),
-            copyRecords: parsed.copyRecords === true,
+            copyRecords,
+            dedup,
+            deleteSources,
             vaultRoot
           });
           bus.capture({
@@ -4263,6 +4310,39 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             summary: `vault merge -> ${result.target}`,
             method: "POST",
             path: "/api/vaults/merge",
+            statusCode: 200
+          });
+          writeJson(res, 200, sanitizeToolOutput(result));
+        } catch (err: unknown) {
+          const status = err instanceof VaultManagerError ? err.httpStatus : 500;
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, status, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/vaults/rename") {
+        const startTime = Date.now();
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: { from?: string; to?: string } = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          const result = await renameVaultProject(String(parsed.from || ""), String(parsed.to || ""), vaultRoot);
+          bus.capture({
+            type: "system",
+            kind: "write",
+            ok: true,
+            durationMs: Date.now() - startTime,
+            summary: `vault rename ${result.from} -> ${result.to}`,
+            method: "POST",
+            path: "/api/vaults/rename",
             statusCode: 200
           });
           writeJson(res, 200, sanitizeToolOutput(result));

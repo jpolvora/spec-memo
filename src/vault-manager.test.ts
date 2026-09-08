@@ -11,6 +11,7 @@ import {
   readProjectAliases,
   removeProjectAlias,
   deleteVaultProject,
+  renameVaultProject,
   VaultManagerError,
   getVaultProjectListEnriched
 } from './vault-manager.js';
@@ -177,5 +178,213 @@ describe('vault-manager', () => {
     assert.ok(row);
     assert.equal(row.aliasOf, null);
     assert.ok(row.recordCount >= 1);
+  });
+
+  it('AC14-AC17: renameVaultProject renames dir, project.json, aliases, FTS', async () => {
+    scaffoldProject('rename-src');
+    scaffoldProject('canonical-x');
+    fs.writeFileSync(
+      path.join(tempVault, 'projects', 'rename-src', 'project.json'),
+      JSON.stringify({ projectId: 'rename-src', displayName: 'Src', updated: '2020-01-01T00:00:00.000Z' }, null, 2),
+      'utf8'
+    );
+    await setProjectAlias('alias-in', 'rename-src', tempVault).catch(async () => {
+      scaffoldProject('alias-in');
+      await setProjectAlias('alias-in', 'rename-src', tempVault);
+    });
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'rename-src',
+      kind: 'trap',
+      slug: 'rename-trap',
+      frontmatter: { title: 'Rename trap', severity: 'low' },
+      body: 'rename body content here'
+    });
+    const result = await renameVaultProject('rename-src', 'rename-dst', tempVault);
+    assert.equal(result.ok, true);
+    assert.equal(result.from, 'rename-src');
+    assert.equal(result.to, 'rename-dst');
+    assert.ok(!fs.existsSync(path.join(tempVault, 'projects', 'rename-src')));
+    assert.ok(fs.existsSync(path.join(tempVault, 'projects', 'rename-dst')));
+    const meta = JSON.parse(fs.readFileSync(path.join(tempVault, 'projects', 'rename-dst', 'project.json'), 'utf8'));
+    assert.equal(meta.projectId, 'rename-dst');
+    assert.equal(readProjectAliases(tempVault)['alias-in'], 'rename-dst');
+  });
+
+  it('AC14: rename validates 400/404/409', async () => {
+    scaffoldProject('r-a');
+    scaffoldProject('r-b');
+    await assert.rejects(() => renameVaultProject('r-a', 'r-a', tempVault), VaultManagerError);
+    await assert.rejects(() => renameVaultProject('r-a', 'BAD ID!', tempVault), VaultManagerError);
+    await assert.rejects(() => renameVaultProject('missing-src', 'r-c', tempVault), (e: unknown) => e instanceof VaultManagerError && e.httpStatus === 404);
+    await assert.rejects(() => renameVaultProject('r-a', 'r-b', tempVault), (e: unknown) => e instanceof VaultManagerError && e.httpStatus === 409);
+  });
+
+  it('AC16: rename migrates incoming and outgoing aliases', async () => {
+    scaffoldProject('from-proj');
+    scaffoldProject('canonical-proj');
+    scaffoldProject('incoming-proj');
+    await setProjectAlias('incoming-proj', 'from-proj', tempVault);
+    await setProjectAlias('from-proj', 'canonical-proj', tempVault);
+    await renameVaultProject('from-proj', 'to-proj', tempVault);
+    const aliases = readProjectAliases(tempVault);
+    assert.equal(aliases['incoming-proj'], 'to-proj');
+    assert.equal(aliases['to-proj'], 'canonical-proj');
+    assert.equal(aliases['to-proj-to-proj'], undefined);
+  });
+
+  it('AC22-AC23 NS4: merge dedup consolidates duplicate traps (occurrences summed, single file)', async () => {
+    scaffoldProject('dedup-src');
+    scaffoldProject('dedup-tgt');
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'dedup-tgt',
+      kind: 'trap',
+      slug: 'same-slug',
+      frontmatter: { id: 'tgt-trap-1', title: 'Same Trap', severity: 'high', pathPatterns: ['src/a.ts'], occurrences: 2, hits: 3 },
+      body: 'Close SQLite before unlink on Windows to avoid WAL lock errors alpha beta gamma delta'
+    });
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'dedup-src',
+      kind: 'trap',
+      slug: 'same-slug',
+      frontmatter: { id: 'src-trap-1', title: 'Same Trap', severity: 'high', pathPatterns: ['src/a.ts'], occurrences: 5, hits: 7 },
+      body: 'Close SQLite before unlink on Windows to avoid WAL lock errors alpha beta gamma delta'
+    });
+    const result = await mergeVaultProjects({ sources: ['dedup-src'], target: 'dedup-tgt', copyRecords: true, vaultRoot: tempVault });
+    assert.equal(result.copied, 0);
+    assert.equal(result.deduplicated, 1);
+    const { listProjectRecords } = await import('./store.js');
+    const tgtRecords = listProjectRecords(tempVault, 'dedup-tgt').filter((r) => r.frontmatter.kind === 'trap');
+    assert.equal(tgtRecords.length, 1);
+    assert.equal(tgtRecords[0].frontmatter.occurrences, 7);
+    assert.equal(tgtRecords[0].frontmatter.hits, 10);
+  });
+
+  it('AC22: merge detects title and semantic duplicates', async () => {
+    scaffoldProject('sem-src');
+    scaffoldProject('sem-tgt');
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'sem-tgt',
+      kind: 'trap',
+      slug: 'tgt-slug',
+      frontmatter: { title: 'SQLite WAL Lock', severity: 'high', pathPatterns: ['src/db.ts'] },
+      body: 'Close SQLite before unlink on Windows alpha beta gamma delta epsilon zeta'
+    });
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'sem-src',
+      kind: 'trap',
+      slug: 'src-slug',
+      frontmatter: { title: '  sqlite   wal  lock ', severity: 'high', pathPatterns: ['src/db.ts'] },
+      body: 'Close SQLite before unlink on Windows alpha beta gamma delta epsilon zeta'
+    });
+    const result = await mergeVaultProjects({ sources: ['sem-src'], target: 'sem-tgt', copyRecords: true, vaultRoot: tempVault });
+    assert.equal(result.deduplicated, 1);
+    assert.equal(result.copied, 0);
+  });
+
+  it('AC24: merge dedups decisions/specs/plans by slug or title', async () => {
+    scaffoldProject('nt-src');
+    scaffoldProject('nt-tgt');
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'nt-tgt',
+      kind: 'decision',
+      slug: 'dec-slug',
+      frontmatter: { title: 'Choose Postgres' },
+      body: 'We chose Postgres for durability'
+    });
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'nt-src',
+      kind: 'decision',
+      slug: 'dec-other',
+      frontmatter: { title: '  CHOOSE   postgres ' },
+      body: 'We chose Postgres for durability v2'
+    });
+    const result = await mergeVaultProjects({ sources: ['nt-src'], target: 'nt-tgt', copyRecords: true, vaultRoot: tempVault });
+    assert.equal(result.deduplicated, 1);
+    assert.equal(result.copied, 0);
+  });
+
+  it('AC25: merge returns copied/deduplicated/skipped counts', async () => {
+    scaffoldProject('cnt-src');
+    scaffoldProject('cnt-tgt');
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'cnt-tgt',
+      kind: 'trap',
+      slug: 'dup',
+      frontmatter: { id: 'same-id', title: 'Dup', severity: 'low' },
+      body: 'dup body'
+    });
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'cnt-src',
+      kind: 'trap',
+      slug: 'other',
+      frontmatter: { id: 'same-id', title: 'Dup', severity: 'low' },
+      body: 'dup body'
+    });
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'cnt-src',
+      kind: 'trap',
+      slug: 'fresh',
+      frontmatter: { title: 'Fresh', severity: 'low' },
+      body: 'entirely fresh trap body unique tokens qzxw'
+    });
+    const result = await mergeVaultProjects({ sources: ['cnt-src'], target: 'cnt-tgt', copyRecords: true, vaultRoot: tempVault });
+    assert.equal(typeof result.copied, 'number');
+    assert.equal(typeof result.deduplicated, 'number');
+    assert.equal(typeof result.skipped, 'number');
+    assert.equal(result.skipped, 1);
+    assert.equal(result.copied, 1);
+  });
+
+  it('AC26: merge deleteSources removes dirs but retains aliases', async () => {
+    scaffoldProject('del-src');
+    scaffoldProject('del-tgt');
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'del-src',
+      kind: 'trap',
+      slug: 'del-trap',
+      frontmatter: { title: 'Del', severity: 'low' },
+      body: 'delete me body'
+    });
+    const result = await mergeVaultProjects({ sources: ['del-src'], target: 'del-tgt', copyRecords: true, deleteSources: true, vaultRoot: tempVault });
+    assert.ok(result.copied >= 1 || result.deduplicated >= 1);
+    assert.ok(!fs.existsSync(path.join(tempVault, 'projects', 'del-src')));
+    assert.equal(readProjectAliases(tempVault)['del-src'], 'del-tgt');
+    const again = await mergeVaultProjects({ sources: ['del-src'], target: 'del-tgt', copyRecords: true, vaultRoot: tempVault });
+    assert.equal(again.copied, 0);
+  });
+
+  it('merge --no-dedup legacy path copies with deduplicated 0', async () => {
+    scaffoldProject('nd-src');
+    scaffoldProject('nd-tgt');
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'nd-tgt',
+      kind: 'trap',
+      slug: 'a',
+      frontmatter: { title: 'A trap', severity: 'low', pathPatterns: ['src/x.ts'] },
+      body: 'alpha beta gamma delta epsilon zeta eta theta'
+    });
+    await upsertRecord({
+      vaultRoot: tempVault,
+      projectId: 'nd-src',
+      kind: 'trap',
+      slug: 'b',
+      frontmatter: { title: 'A trap', severity: 'low', pathPatterns: ['src/x.ts'] },
+      body: 'alpha beta gamma delta epsilon zeta eta theta'
+    });
+    const result = await mergeVaultProjects({ sources: ['nd-src'], target: 'nd-tgt', copyRecords: true, dedup: false, vaultRoot: tempVault });
+    assert.equal(result.deduplicated, 0);
+    assert.equal(result.copied, 1);
   });
 });

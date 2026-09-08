@@ -14,7 +14,7 @@ import {
 import { getVaultRoot, readVaultConfig, resolveVaultGitAtomic, redactVaultGitRemoteUrl } from './vault.js';
 import { readVaultGitState } from './vault-git-state.js';
 import { listBackups } from './backup.js';
-import { resolveProjectIdentity } from './identity.js';
+import { getLocalConfigOverrideKeys, resolveProjectIdentity } from './identity.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { openIndex } from './indexer.js';
 
@@ -223,12 +223,21 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
     const identity = resolveProjectIdentity(cwd, { vaultRoot: root });
     const projectDir = path.join(root, 'projects', identity.projectId);
     const counts = countProjectRecords(projectDir);
+    let overrideKeys: string[] = [];
+    try {
+      overrideKeys = getLocalConfigOverrideKeys(cwd, { vaultRoot: root });
+    } catch {
+      overrideKeys = [];
+    }
 
     projectStatus = {
       projectId: identity.projectId,
       path: projectDir,
       remoteOrigin: identity.normalizedRemote,
       isFallback: identity.isFallback,
+      identitySource: identity.identitySource || (identity.isFallback ? 'path' : 'git'),
+      configFilePath: identity.configFilePath ?? null,
+      configOverrides: overrideKeys,
       counts
     };
   } catch {
@@ -387,8 +396,16 @@ export function formatStatusDashboard(result: StatusResult, options: StatusOptio
   if (result.project) {
     lines.push(`\nActive Project Binding:`);
     lines.push(`  Project ID:         ${result.project.projectId}`);
+    const sourceLabel = result.project.identitySource === 'file'
+      ? `.spec-memo.json (${result.project.configFilePath || 'local config'})`
+      : result.project.identitySource === 'git'
+        ? `Git Remote (${result.project.remoteOrigin || 'remote'})`
+        : 'Local Path Fallback';
+    lines.push(`  Source:             ${sourceLabel}`);
     lines.push(`  Git Remote:         ${result.project.remoteOrigin || '(local fallback)'}`);
     lines.push(`  Project Path:       ${result.project.path}`);
+    const overrides = result.project.configOverrides || [];
+    lines.push(`  Local Overrides:    ${overrides.length > 0 ? overrides.join(', ') : 'none'}`);
     const c = result.project.counts;
     lines.push(
       `  Records Breakdown:  ${c.total} total (${c.traps} traps, ${c.decisions} decisions, ${c.specs} specs, ${c.plans} plans, ${c.prompts} prompts, ${c.sessions} sessions, ${c.logs} logs, ${c.reviews} reviews, ${c.scratch} scratch)`

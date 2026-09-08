@@ -2,10 +2,204 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { ProjectIdentity } from './types.js';
-import { getVaultRoot } from './vault.js';
-import { isPathInside } from './safety.js';
-import { resolveCanonicalProjectId } from './vault-manager.js';
+import { LocalSpecMemoConfig, ProjectIdentity, VaultConfig } from './types.js';
+import { getVaultRoot, readVaultConfig } from './vault.js';
+import { isPathInside, scanPayloadForSecrets } from './safety.js';
+import { isFilesystemSafeProjectId, resolveCanonicalProjectId } from './vault-manager.js';
+
+export const LOCAL_SPEC_MEMO_FILENAME = '.spec-memo.json';
+
+const KNOWN_LOCAL_OVERRIDE_KEYS = ['bootstrap', 'ports', 'vaultGit', 'telemetry', 'ttl', 'sync'] as const;
+
+const SECRET_KEY_PATTERN = /token|secret|password|api_?key|auth|private_?key|bearer|credentials/i;
+
+function isSecretKey(key: string): boolean {
+  return SECRET_KEY_PATTERN.test(key);
+}
+
+function stripSecretKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripSecretKeysDeep(item));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (isSecretKey(k)) continue;
+      out[k] = stripSecretKeysDeep(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+function filterLocalOverrides(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of KNOWN_LOCAL_OVERRIDE_KEYS) {
+    if (!(key in raw)) continue;
+    const cleaned = stripSecretKeysDeep(raw[key]);
+    // Fail-open: strip offending key when secret signatures remain in values.
+    try {
+      const scan = scanPayloadForSecrets(cleaned);
+      if (scan.hasSecret) continue;
+    } catch {
+      continue;
+    }
+    out[key] = cleaned;
+  }
+  return out;
+}
+
+export interface LocalSpecMemoDiscovery {
+  configFilePath: string;
+  projectId?: string;
+  overrides: Record<string, unknown>;
+}
+
+/**
+ * Walk usableCwd upward to git root (inclusive) or filesystem root, checking
+ * `.spec-memo.json` at each level. Tolerates missing/malformed files and never throws.
+ * Returns the closest config found, or null when none exists.
+ */
+export function findLocalSpecMemoConfig(
+  startCwd: string = process.cwd(),
+  opts: { vaultRoot?: string } = {}
+): LocalSpecMemoDiscovery | null {
+  let usable: string;
+  try {
+    usable = resolveUsableCwd(startCwd);
+  } catch {
+    return null;
+  }
+  let resolvedVaultRoot: string;
+  try {
+    resolvedVaultRoot = path.resolve(opts.vaultRoot || getVaultRoot());
+  } catch {
+    resolvedVaultRoot = path.resolve(getVaultRoot());
+  }
+  // Never read consumer config from inside the vault itself.
+  try {
+    if (usable === resolvedVaultRoot || isPathInside(usable, resolvedVaultRoot)) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  let gitRoot: string | null = null;
+  try {
+    gitRoot = findGitRoot(usable, resolvedVaultRoot);
+  } catch {
+    gitRoot = null;
+  }
+  let dir = usable;
+  for (;;) {
+    const candidate = path.join(dir, LOCAL_SPEC_MEMO_FILENAME);
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        try {
+          const rawText = fs.readFileSync(candidate, 'utf8');
+          const parsed = JSON.parse(rawText) as Record<string, unknown>;
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const overrides = filterLocalOverrides(parsed);
+            let projectId: string | undefined;
+            const rawId = parsed.projectId;
+            if (typeof rawId === 'string' && rawId.trim().length > 0) {
+              const normalized = rawId.trim().toLowerCase();
+              if (isFilesystemSafeProjectId(normalized)) {
+                projectId = normalized;
+              }
+            }
+            return { configFilePath: candidate, projectId, overrides };
+          }
+        } catch {
+          // Malformed JSON: ignore and fall through to parent.
+        }
+      }
+    } catch {
+      // Ignore fs errors and continue walking.
+    }
+    if (gitRoot && path.resolve(dir) === path.resolve(gitRoot)) break;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/**
+ * Load local `.spec-memo.json` for a cwd (pure fs, no vault writes).
+ */
+export function loadLocalSpecMemoConfig(
+  cwd: string = process.cwd(),
+  opts: { vaultRoot?: string } = {}
+): LocalSpecMemoDiscovery | null {
+  return findLocalSpecMemoConfig(cwd, opts);
+}
+
+/**
+ * List active local override top-level keys for a cwd (sorted).
+ */
+export function getLocalConfigOverrides(
+  cwd: string = process.cwd(),
+  opts: { vaultRoot?: string } = {}
+): Record<string, unknown> {
+  const found = findLocalSpecMemoConfig(cwd, opts);
+  if (!found) return {};
+  return found.overrides || {};
+}
+
+export function getLocalConfigOverrideKeys(
+  cwd: string = process.cwd(),
+  opts: { vaultRoot?: string } = {}
+): string[] {
+  return Object.keys(getLocalConfigOverrides(cwd, opts)).sort();
+}
+
+/**
+ * Effective vault config for a cwd: global config.json with local
+ * `.spec-memo.json` overrides merged one level deep (objects) or replaced (scalars).
+ * Scope for this slice: identity binding + status reporting honor overrides.
+ */
+export function getEffectiveVaultConfig(
+  cwd: string = process.cwd(),
+  vaultRoot?: string
+): VaultConfig {
+  const root = path.resolve(vaultRoot || getVaultRoot());
+  let base: VaultConfig;
+  try {
+    base = readVaultConfig(root).config;
+  } catch {
+    base = readVaultConfig(root).config;
+  }
+  const overrides = getLocalConfigOverrides(cwd, { vaultRoot: root });
+  if (Object.keys(overrides).length === 0) return base;
+  const merged: Record<string, unknown> = { ...(base as unknown as Record<string, unknown>) };
+  for (const [k, v] of Object.entries(overrides)) {
+    const baseVal = (base as unknown as Record<string, unknown>)[k];
+    if (
+      baseVal !== null &&
+      typeof baseVal === 'object' &&
+      !Array.isArray(baseVal) &&
+      v !== null &&
+      typeof v === 'object' &&
+      !Array.isArray(v)
+    ) {
+      merged[k] = { ...(baseVal as Record<string, unknown>), ...(v as Record<string, unknown>) };
+    } else {
+      merged[k] = v;
+    }
+  }
+  return merged as unknown as VaultConfig;
+}
+
+/**
+ * Thin wrapper returning the bound project id for a cwd.
+ */
+export function resolveVaultId(
+  cwd: string = process.cwd(),
+  options: { remoteName?: string; vaultRoot?: string } = {}
+): string {
+  return resolveProjectIdentity(cwd, options).projectId;
+}
 
 /**
  * Normalize any Git remote URL into a canonical hostname/path identifier.
@@ -387,6 +581,9 @@ export function projectIdFromVaultPath(usableCwd: string, vaultRoot: string): st
 
 /**
  * Resolve project identity for a directory.
+ * File-first: `.spec-memo.json` discovery takes precedence over git remote
+ * normalization and path fallback. Discovery is pure fs and never throws.
+ * Alias resolution (resolveCanonicalProjectId) applies after the base id.
  */
 export function resolveProjectIdentity(
   cwd: string = process.cwd(),
@@ -397,11 +594,67 @@ export function resolveProjectIdentity(
   const gitRoot = findGitRoot(usableCwd, resolvedVaultRoot);
   const remoteName = options.remoteName || 'origin';
 
+  // File-first discovery (skipped automatically inside vaultRoot).
+  // Local alias helpers stay in vault-manager; file discovery itself is pure fs
+  // to avoid new circular edges (existing resolveCanonicalProjectId edge reused).
+  let fileDiscovery: LocalSpecMemoDiscovery | null = null;
+  try {
+    fileDiscovery = findLocalSpecMemoConfig(usableCwd, { vaultRoot: resolvedVaultRoot });
+  } catch {
+    fileDiscovery = null;
+  }
+  const fileConfigPath = fileDiscovery?.configFilePath ?? null;
+
+  if (fileDiscovery?.projectId) {
+    const baseId = fileDiscovery.projectId;
+    const canonicalId = resolveCanonicalProjectId(baseId, resolvedVaultRoot);
+    const vaultProjectPath = path.join(resolvedVaultRoot, 'projects', canonicalId);
+    // Root for file-bound identity prefers the git root when present,
+    // otherwise the directory containing the config file.
+    let fileRoot: string;
+    if (gitRoot) {
+      fileRoot = path.resolve(gitRoot);
+    } else {
+      try {
+        fileRoot = path.resolve(path.dirname(fileDiscovery.configFilePath));
+      } catch {
+        fileRoot = usableCwd;
+      }
+    }
+    let fileRemote: string | null = null;
+    if (gitRoot) {
+      try {
+        const remoteUrl = getGitRemoteUrl(path.resolve(gitRoot), remoteName);
+        if (remoteUrl) {
+          const isLocalPath =
+            fs.existsSync(remoteUrl) &&
+            (path.isAbsolute(remoteUrl) || /^[a-zA-Z]:[\\/]/.test(remoteUrl));
+          if (!isLocalPath) {
+            fileRemote = normalizeGitRemote(remoteUrl);
+          }
+        }
+      } catch {
+        fileRemote = null;
+      }
+    }
+    return {
+      projectId: canonicalId,
+      normalizedRemote: fileRemote,
+      rootPath: fileRoot,
+      isGit: Boolean(gitRoot),
+      isFallback: false,
+      vaultProjectPath,
+      identitySource: 'file',
+      configFilePath: fileDiscovery.configFilePath
+    };
+  }
+
   let normalizedRemote: string | null = null;
   let rootPath: string;
   let isGit = false;
   let isFallback = true;
   let projectId: string;
+  let identitySource: 'git' | 'path' = 'path';
 
   if (gitRoot) {
     isGit = true;
@@ -415,22 +668,27 @@ export function resolveProjectIdentity(
         projectId = generateProjectIdFromPath(path.resolve(remoteUrl));
         normalizedRemote = null;
         isFallback = true;
+        identitySource = 'path';
       } else {
         normalizedRemote = normalizeGitRemote(remoteUrl);
         projectId = generateProjectIdFromRemote(normalizedRemote);
         isFallback = false;
+        identitySource = 'git';
       }
     } else {
       projectId = generateProjectIdFromPath(rootPath);
+      identitySource = 'path';
     }
   } else {
     const vaultProjectId = projectIdFromVaultPath(usableCwd, resolvedVaultRoot);
     if (vaultProjectId) {
       projectId = vaultProjectId;
       rootPath = usableCwd;
+      identitySource = 'path';
     } else {
       rootPath = usableCwd;
       projectId = generateProjectIdFromPath(rootPath);
+      identitySource = 'path';
     }
   }
 
@@ -443,6 +701,8 @@ export function resolveProjectIdentity(
     rootPath,
     isGit,
     isFallback,
-    vaultProjectPath
+    vaultProjectPath,
+    identitySource,
+    configFilePath: fileConfigPath
   };
 }
