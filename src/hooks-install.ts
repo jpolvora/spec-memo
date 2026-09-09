@@ -961,7 +961,9 @@ export function inspectAgentHooks(options: {
       if (!fs.existsSync(p)) continue;
       let content = '';
       if (fs.statSync(p).isDirectory()) {
-        const files = fs.readdirSync(p).filter((f) => f.includes('spec-memo'));
+        const files = fs
+          .readdirSync(p)
+          .filter((f) => f.includes('spec-memo') && !f.endsWith('.bak') && !f.includes('.bak.'));
         if (files.length === 0) continue;
         activePaths.push(p);
         for (const f of files) {
