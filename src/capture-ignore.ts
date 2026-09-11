@@ -304,12 +304,27 @@ export function evaluatePathIgnore(
 }
 
 /**
+ * Stable machine-readable code for the AC6 strictness throw, so sync-apply can
+ * distinguish a pathPatterns offender (skip-and-log) from a linkedPaths
+ * offender (strict abort) instead of matching on the message substring.
+ */
+export const CAPTURE_IGNORE_AC6_CODE = 'CAPTURE_IGNORE_AC6';
+
+export interface CaptureIgnoreAc6ErrorDetails {
+  code: typeof CAPTURE_IGNORE_AC6_CODE;
+  field: 'pathPatterns' | 'linkedPaths';
+}
+
+/**
  * Strip pathPatterns that target ignored paths; throw if all patterns removed (AC6).
+ * `field` names which frontmatter field is being sanitized; it is stamped on the
+ * thrown error so callers can tell pathPatterns offenders from linkedPaths ones.
  */
 export function sanitizePathPatterns(
   pathPatterns: string[] | undefined,
   productRoot: string,
-  options: { projectId?: string; vaultRoot?: string } = {}
+  options: { projectId?: string; vaultRoot?: string } = {},
+  field: 'pathPatterns' | 'linkedPaths' = 'pathPatterns'
 ): string[] {
   if (!pathPatterns || pathPatterns.length === 0) {
     return [];
@@ -324,7 +339,10 @@ export function sanitizePathPatterns(
   }
 
   if (pathPatterns.length > 0 && kept.length === 0) {
-    throw new Error('Safety violation: all pathPatterns match ignored paths.');
+    const err = new Error(`Safety violation: all ${field} match ignored paths.`);
+    (err as Error & Partial<CaptureIgnoreAc6ErrorDetails>).code = CAPTURE_IGNORE_AC6_CODE;
+    (err as Error & Partial<CaptureIgnoreAc6ErrorDetails>).field = field;
+    throw err;
   }
 
   return kept;

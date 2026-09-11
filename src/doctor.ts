@@ -215,8 +215,10 @@ export function scanForRepoPollution(
     }
 
     // 3. Check for run state / audit / telemetry residue
+    // run.json matches as a full basename only: my-run.json / my_run.json /
+    // my.run.json are user files and must never be flagged (let alone --fix deleted).
     if (
-      /(^|[/._-])run\.json$/.test(lowerRel) ||
+      /(^|\/)run\.json$/.test(lowerRel) ||
       lowerRel.endsWith('.state.md') ||
       lowerRel.includes('/.state.md')
     ) {

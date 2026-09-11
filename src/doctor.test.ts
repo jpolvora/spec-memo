@@ -233,6 +233,9 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
 
   it('run.json boundary matches on filename boundary, not bare suffix (AC2/NS2)', async () => {
     fs.writeFileSync(path.join(tempProductRepo, 'Default.abprun.json'), '{}\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'my-run.json'), '{}\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'my_run.json'), '{}\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'my.run.json'), '{}\n', 'utf8');
     fs.writeFileSync(path.join(tempProductRepo, 'run.json'), '{"step": 1}\n', 'utf8');
     const nestedDir = path.join(tempProductRepo, 'nested', 'dir');
     fs.mkdirSync(nestedDir, { recursive: true });
@@ -243,6 +246,13 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
       scan.items.some((p) => p.path.includes('abprun.json')),
       false
     );
+    for (const userFile of ['my-run.json', 'my_run.json', 'my.run.json']) {
+      assert.equal(
+        scan.items.some((p) => p.path === userFile),
+        false,
+        `${userFile} is a user file, not state residue`
+      );
+    }
     assert.ok(scan.items.some((p) => p.type === 'state_residue' && p.path === 'run.json'));
     assert.ok(
       scan.items.some((p) => p.type === 'state_residue' && p.path === 'nested/dir/run.json')

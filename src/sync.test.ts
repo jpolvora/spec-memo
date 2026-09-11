@@ -453,4 +453,39 @@ test("US-55 AC3/AC4: applyChangeset skips AC6 offenders and applies the rest", a
       }
     );
   });
+
+  await t.test("linkedPaths-only offender is strict (not skipped as ignored-path)", async () => {
+    const linkedOnly = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          frontmatter: {
+            id: "trap-linked-only",
+            slug: "trap-linked-only",
+            kind: "trap" as const,
+            status: "active" as const,
+            source: "agent" as const,
+            created: now,
+            updated: now,
+            project: projId,
+            severity: "high" as const,
+            pathPatterns: ["src/valid-module.ts"],
+            linkedPaths: offenderPatterns
+          },
+          body: "# Linked-only offender\nValid pathPatterns, ignored linkedPaths.",
+          project: projId
+        }
+      ]
+    };
+    // Must throw (strict) rather than silently skip a record with valid pathPatterns.
+    await assert.rejects(
+      async () => {
+        await applyChangeset(vaultD, linkedOnly);
+      },
+      {
+        message: /all linkedPaths match ignored paths/
+      }
+    );
+  });
 });

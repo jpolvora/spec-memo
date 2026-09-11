@@ -120,12 +120,21 @@ export function mergeRecordMetadata(
 }
 
 /**
- * True when `err` is the capture-ignore AC6 strictness throw
- * (`sanitizePathPatterns`: all pathPatterns match ignored paths).
+ * True when `err` is the capture-ignore AC6 strictness throw for the
+ * **pathPatterns** field (`sanitizePathPatterns`: all pathPatterns match
+ * ignored paths, code `CAPTURE_IGNORE_AC6`).
  * Sync-apply context must skip-and-log these offenders instead of
  * aborting the whole transactional changeset; direct `upsert` stays strict.
+ * A linkedPaths offender is NOT a skip: it propagates (strict abort) so a
+ * record with valid pathPatterns is never silently dropped as "ignored-path".
  */
 export function isCaptureIgnoreSkip(err: unknown): boolean {
+  const code = (err as { code?: unknown })?.code;
+  const field = (err as { field?: unknown })?.field;
+  if (code !== undefined || field !== undefined) {
+    return code === 'CAPTURE_IGNORE_AC6' && field === 'pathPatterns';
+  }
+  // Legacy fallback for unstamped errors carrying the historical message.
   const msg = err instanceof Error ? err.message : String(err);
   return msg.includes('all pathPatterns match ignored paths');
 }

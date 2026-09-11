@@ -249,4 +249,39 @@ Added SQLite persistence adapter for tokens.
     assert.equal(result3.totalImported, 1);
     assert.equal(result3.skippedIdenticalCount, result1.totalImported - 1);
   });
+
+  it('metadata-only source edit is not silently dropped on re-import', async () => {
+    const result1 = await importWorkflowTree({
+      from: fixtureRepo,
+      vaultRoot: tempVaultRoot
+    });
+    assert.ok(result1.totalImported > 0);
+
+    // Touch only frontmatter (severity), leave body/title/status identical.
+    const trapPath = path.join(fixtureRepo, 'memory', 'trap-jwt-secrets.md');
+    const raw = fs.readFileSync(trapPath, 'utf8');
+    fs.writeFileSync(trapPath, raw.replace('severity: high', 'severity: critical'), 'utf8');
+
+    const result2 = await importWorkflowTree({
+      from: fixtureRepo,
+      vaultRoot: tempVaultRoot
+    });
+    assert.equal(result2.totalImported, 1);
+    assert.ok(result2.records.some((r) => r.id === 'trap-jwt-secrets' && r.status === 'imported'));
+
+    const trapRecord = await getRecord({
+      cwd: fixtureRepo,
+      vaultRoot: tempVaultRoot,
+      id: 'trap-jwt-secrets'
+    });
+    assert.ok(trapRecord);
+    assert.equal(trapRecord.frontmatter.severity, 'critical');
+
+    // Unchanged third run is a no-op again.
+    const result3 = await importWorkflowTree({
+      from: fixtureRepo,
+      vaultRoot: tempVaultRoot
+    });
+    assert.equal(result3.totalImported, 0);
+  });
 });

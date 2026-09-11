@@ -402,7 +402,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     rawFrontmatter.linkedPaths = sanitizePathPatterns(rawFrontmatter.linkedPaths, identity.rootPath, {
       projectId,
       vaultRoot
-    });
+    }, 'linkedPaths');
   }
 
   if (options.kind === 'trap') {

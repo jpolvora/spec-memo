@@ -50,20 +50,48 @@ function normalizeRecordStatus(status: unknown): { status: RecordStatus; decisio
 }
 
 /**
+ * Source-carried frontmatter keys that survive the vault round-trip unchanged.
+ * Deliberately excludes vault-managed keys (tags/layer/module via trap
+ * classification, occurrences/lastSeen/hits, id/source/timestamps): hashing
+ * those would break idempotency because the stored record always differs.
+ */
+const IMPORT_HASH_FM_KEYS = [
+  'severity',
+  'decisionStatus',
+  'pathPatterns',
+  'linkedPaths'
+] as const;
+
+function hashFrontmatterSubset(data: Record<string, unknown>): string {
+  const picked: Record<string, unknown> = {};
+  for (const k of IMPORT_HASH_FM_KEYS) {
+    if (data[k] !== undefined) picked[k] = data[k];
+  }
+  return JSON.stringify(picked);
+}
+
+/**
  * Stable content hash for import idempotency: same source content re-imported
  * must resolve to the same hash so the second run is a per-record no-op.
  */
-function hashImportCandidate(body: string, title: string, status: string, extra = ''): string {
+function hashImportCandidate(
+  body: string,
+  title: string,
+  status: string,
+  extra = '',
+  fmSubset = ''
+): string {
   // Body is trimmed to match the vault round-trip (parseRecord trims on read,
   // serializeRecord trims on write), so identical content hashes identically.
   return createHash('sha256')
-    .update(`${title}\n${status}\n${extra}\n${body.trim()}`, 'utf8')
+    .update(`${title}\n${status}\n${extra}\n${fmSubset}\n${body.trim()}`, 'utf8')
     .digest('hex');
 }
 
 /**
  * Return the vault path when a record with the same stable id already holds
- * identical content (body + title + status), else null (new or changed content).
+ * identical content (body + title + status + source-stable frontmatter subset),
+ * else null (new or changed content).
  * Never throws: lookup failures fall through to the regular upsert path.
  */
 async function findIdenticalVaultRecord(args: {
@@ -76,6 +104,7 @@ async function findIdenticalVaultRecord(args: {
   title: string;
   status: string;
   extra?: string;
+  fmData?: Record<string, unknown>;
 }): Promise<string | null> {
   try {
     const existing = await getRecord({
@@ -92,14 +121,21 @@ async function findIdenticalVaultRecord(args: {
       typeof existing.frontmatter.title === 'string' ? existing.frontmatter.title : '';
     const existingStatus =
       typeof existing.frontmatter.status === 'string' ? existing.frontmatter.status : 'active';
-    const candidateHash = hashImportCandidate(args.body, args.title, args.status, args.extra);
+    const candidateHash = hashImportCandidate(
+      args.body,
+      args.title,
+      args.status,
+      args.extra,
+      hashFrontmatterSubset(args.fmData ?? {})
+    );
     const existingHash = hashImportCandidate(
       existing.body,
       existingTitle,
       existingStatus,
       typeof existing.frontmatter.decisionStatus === 'string'
         ? existing.frontmatter.decisionStatus
-        : ''
+        : '',
+      hashFrontmatterSubset(existing.frontmatter as Record<string, unknown>)
     );
     return candidateHash === existingHash ? existing.path || null : null;
   } catch {
@@ -237,7 +273,8 @@ async function importWorkflowTreeDirect(
               slug,
               body: candidateBody,
               title,
-              status
+              status,
+              fmData: parsed.data as Record<string, unknown>
             });
 
             if (identicalPath !== null) {
@@ -340,7 +377,8 @@ async function importWorkflowTreeDirect(
             body: candidateBody,
             title,
             status,
-            extra: decisionStatus || ''
+            extra: decisionStatus || '',
+            fmData: { ...(parsed.data as Record<string, unknown>), ...extraFm }
           });
 
           if (identicalPath !== null) {
@@ -428,7 +466,8 @@ async function importWorkflowTreeDirect(
                   slug,
                   body: candidateBody,
                   title,
-                  status: planStatus
+                  status: planStatus,
+                  fmData: parsed.data as Record<string, unknown>
                 });
                 if (identicalPath !== null) {
                   skippedIdenticalCount++;
