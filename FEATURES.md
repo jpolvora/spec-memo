@@ -78,7 +78,7 @@ Do not add an eleventh tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 
 - [x] **Same module as MCP.** `memo <command>` maps 1:1 to tools: `bootstrap`, `search`, `get`, `upsert`, `append`, `forget`, `gc`, `promote`, `check_version` (`check-version`), `install_skills` (`install-skills`).
 - [x] **Permission-gated installers.** `install-hooks` and `install-skills` share a TTY wizard for local/global scope, explicit hosts, conflict policy, plan preview, and confirmation; non-TTY writes require explicit flags.
-- [x] **`memo doctor`.** Vault exists, FTS rebuilds, project binds, reports in-repo pollution under a given product root (does not delete).
+- [x] **`memo doctor`.** Vault exists, FTS rebuilds, project binds, reports in-repo pollution under a given product root (does not delete). Pollution scan is ignore-aware (`.spec-memo-ignore`), `run.json` matches on filename boundary, `--fix` never deletes tracked files without `--include-tracked`, and legacy import is idempotent per record.
 - [x] **`memo rank`.** CLI-only list of active traps by `occurrences` (optional `--layer`, `--backfill`). Not an MCP tool.
 - [x] **`memo import <productRoot>`.** See § Import.
 - [x] **`memo export-vault` / `memo import-vault`.** Backup and restore vault archives with optional AES-256-GCM encryption.
