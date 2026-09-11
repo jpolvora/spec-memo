@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
 import { ensureVaultStructure, getVaultRoot, resolveVaultGitAtomic, redactVaultGitRemoteUrl } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
@@ -13,6 +14,7 @@ import { isPathInside } from './safety.js';
 import { inspectAgentHooks } from './hooks-install.js';
 import {
   checkCapturePath,
+  evaluatePathIgnore,
   formatCheckCaptureResult,
   loadIgnoreRules
 } from './capture-ignore.js';
@@ -123,20 +125,61 @@ function scanPotentiallyObsoleteRecords(
 /**
  * Scan a product repository for in-tree workflow pollution.
  * If rootPath is within the vault root, returns empty (the vault is where records belong).
+ *
+ * Every residue candidate is filtered through the same ignore boundary that
+ * `memo doctor --check-capture` enforces (project `.spec-memo-ignore` plus vault
+ * `config.json` `projects.{id}.ignorePaths` via `evaluatePathIgnore`). Ignored
+ * candidates never appear in `items`; they are counted in `excludedByIgnoreCount`.
  */
-export function scanForRepoPollution(rootPath: string, vaultRoot?: string): DoctorPollutionItem[] {
+export function scanForRepoPollution(
+  rootPath: string,
+  vaultRoot?: string,
+  opts: { projectId?: string } = {}
+): { items: DoctorPollutionItem[]; excludedByIgnoreCount: number } {
   const pollution: DoctorPollutionItem[] = [];
+  let excludedByIgnoreCount = 0;
+  const empty = (): { items: DoctorPollutionItem[]; excludedByIgnoreCount: number } => ({
+    items: pollution,
+    excludedByIgnoreCount
+  });
   if (!fs.existsSync(rootPath)) {
-    return pollution;
+    return empty();
   }
 
   const resolvedVault = path.resolve(vaultRoot || getVaultRoot());
   const resolvedRoot = path.resolve(rootPath);
   if (resolvedRoot === resolvedVault || isPathInside(resolvedRoot, resolvedVault)) {
-    return pollution;
+    return empty();
   }
 
+  const ignoreCtx = { projectId: opts.projectId, vaultRoot: resolvedVault };
+  // Prime the ignore-rule cache once; per-file evaluation below reuses the loaded rules.
+  loadIgnoreRules(resolvedRoot, ignoreCtx);
+
   const allFiles = findFilesRecursive(rootPath);
+
+  /**
+   * Push a residue item unless the path is excluded by the ignore boundary.
+   * At most one boundary evaluation runs per file (callers `continue` after a push).
+   */
+  const tryPush = (
+    filePath: string,
+    rel: string,
+    type: DoctorPollutionItem['type'],
+    description: string
+  ): boolean => {
+    if (evaluatePathIgnore(filePath, resolvedRoot, ignoreCtx).ignored) {
+      excludedByIgnoreCount++;
+      return false;
+    }
+    pollution.push({
+      path: rel,
+      absolutePath: filePath,
+      type,
+      description
+    });
+    return true;
+  };
 
   for (const filePath of allFiles) {
     const rel = path.relative(rootPath, filePath).replace(/\\/g, '/');
@@ -144,12 +187,12 @@ export function scanForRepoPollution(rootPath: string, vaultRoot?: string): Doct
 
     // 1. Check for .agents/plans residue
     if (lowerRel.startsWith('.agents/plans/') || lowerRel.startsWith('agents/plans/')) {
-      pollution.push({
-        path: rel,
-        absolutePath: filePath,
-        type: 'plan_residue',
-        description: `In-repo agent plan residue detected under .agents/plans/`
-      });
+      tryPush(
+        filePath,
+        rel,
+        'plan_residue',
+        `In-repo agent plan residue detected under .agents/plans/`
+      );
       continue;
     }
 
@@ -162,27 +205,27 @@ export function scanForRepoPollution(rootPath: string, vaultRoot?: string): Doct
       lowerRel.startsWith('ws-shared/memory/') ||
       lowerRel.includes('/ws-shared/memory/')
     ) {
-      pollution.push({
-        path: rel,
-        absolutePath: filePath,
-        type: 'memory_residue',
-        description: `In-repo agent working memory residue detected (${rel})`
-      });
+      tryPush(
+        filePath,
+        rel,
+        'memory_residue',
+        `In-repo agent working memory residue detected (${rel})`
+      );
       continue;
     }
 
     // 3. Check for run state / audit / telemetry residue
     if (
-      lowerRel.endsWith('run.json') ||
+      /(^|[/._-])run\.json$/.test(lowerRel) ||
       lowerRel.endsWith('.state.md') ||
       lowerRel.includes('/.state.md')
     ) {
-      pollution.push({
-        path: rel,
-        absolutePath: filePath,
-        type: 'state_residue',
-        description: `In-repo workflow state residue detected (${rel})`
-      });
+      tryPush(
+        filePath,
+        rel,
+        'state_residue',
+        `In-repo workflow state residue detected (${rel})`
+      );
       continue;
     }
 
@@ -191,12 +234,12 @@ export function scanForRepoPollution(rootPath: string, vaultRoot?: string): Doct
       lowerRel.includes('/telemetry/') ||
       lowerRel.startsWith('telemetry/')
     ) {
-      pollution.push({
-        path: rel,
-        absolutePath: filePath,
-        type: 'telemetry_residue',
-        description: `In-repo telemetry dump residue detected (${rel})`
-      });
+      tryPush(
+        filePath,
+        rel,
+        'telemetry_residue',
+        `In-repo telemetry dump residue detected (${rel})`
+      );
       continue;
     }
 
@@ -204,17 +247,46 @@ export function scanForRepoPollution(rootPath: string, vaultRoot?: string): Doct
       (lowerRel.includes('audit-') && lowerRel.endsWith('.log.md')) ||
       (lowerRel.startsWith('.agents/') && lowerRel.endsWith('.log'))
     ) {
-      pollution.push({
-        path: rel,
-        absolutePath: filePath,
-        type: 'log_residue',
-        description: `In-repo agent audit log residue detected (${rel})`
-      });
+      tryPush(
+        filePath,
+        rel,
+        'log_residue',
+        `In-repo agent audit log residue detected (${rel})`
+      );
       continue;
     }
   }
 
-  return pollution;
+  return { items: pollution, excludedByIgnoreCount };
+}
+
+/**
+ * List git-tracked paths (posix, repo-root-relative) for a product root.
+ * Returns an empty set when the root is not a git repository (nothing is tracked).
+ * Returns `null` when tracked status cannot be determined inside a git repository;
+ * callers must treat every candidate as tracked in that case (never delete on ambiguity).
+ */
+function listTrackedFiles(rootPath: string, isGit: boolean): Set<string> | null {
+  if (!isGit) {
+    return new Set<string>();
+  }
+  try {
+    const out = execFileSync('git', ['-C', rootPath, 'ls-files', '-z'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    });
+    const tracked = new Set<string>();
+    for (const entry of out.split('\0')) {
+      if (entry) {
+        const posix = entry.replace(/\\/g, '/');
+        tracked.add(posix);
+        tracked.add(posix.toLowerCase());
+      }
+    }
+    return tracked;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -313,24 +385,61 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
   }
 
   // Check product tree pollution
-  let pollutionItems = scanForRepoPollution(identity.rootPath, vaultRoot);
+  let scan = scanForRepoPollution(identity.rootPath, vaultRoot, {
+    projectId: identity.projectId
+  });
+  let pollutionItems = scan.items;
+  let excludedByIgnoreCount = scan.excludedByIgnoreCount;
+  let skippedTracked: string[] = [];
   let fixedCount = 0;
 
   // Optional fix execution (AC3)
   if (options.fix) {
     if (pollutionItems.length > 0) {
+      // Tracked files are curated, never residue: skip them unless explicitly opted in.
+      const tracked = listTrackedFiles(identity.rootPath, identity.isGit);
+      if (tracked === null) {
+        warnings.push(
+          `Could not determine git tracked status in ${identity.rootPath}; treating all candidates as tracked (use --include-tracked to override).`
+        );
+      }
+      const deletedTracked: string[] = [];
       for (const item of pollutionItems) {
+        const relPosix = item.path.replace(/\\/g, '/');
+        const isTracked =
+          tracked === null || tracked.has(relPosix) || tracked.has(relPosix.toLowerCase());
+        if (isTracked && options.includeTracked !== true) {
+          skippedTracked.push(item.path);
+          continue;
+        }
         try {
           if (fs.existsSync(item.absolutePath)) {
             fs.unlinkSync(item.absolutePath);
             fixedCount++;
+            if (isTracked) {
+              deletedTracked.push(item.path);
+            }
           }
         } catch {
           // Ignore file delete errors
         }
       }
+      if (skippedTracked.length > 0) {
+        warnings.push(
+          `Skipped ${skippedTracked.length} git-tracked file${skippedTracked.length === 1 ? '' : 's'} (use --include-tracked to delete): ${skippedTracked.join(', ')}`
+        );
+      }
+      if (deletedTracked.length > 0) {
+        warnings.push(
+          `--include-tracked: deleted ${deletedTracked.length} git-tracked file${deletedTracked.length === 1 ? '' : 's'}: ${deletedTracked.join(', ')}`
+        );
+      }
       // Rescan after fix
-      pollutionItems = scanForRepoPollution(identity.rootPath, vaultRoot);
+      scan = scanForRepoPollution(identity.rootPath, vaultRoot, {
+        projectId: identity.projectId
+      });
+      pollutionItems = scan.items;
+      excludedByIgnoreCount = scan.excludedByIgnoreCount;
     }
 
     try {
@@ -508,7 +617,9 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     pollution: {
       detected: pollutionItems.length > 0,
       fixedCount,
-      items: pollutionItems
+      items: pollutionItems,
+      skippedTracked,
+      excludedByIgnoreCount
     },
     agentHooks,
     exclusionBoundary: {

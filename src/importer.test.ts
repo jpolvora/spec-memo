@@ -185,18 +185,47 @@ Added SQLite persistence adapter for tokens.
     assert.ok(hits.some((h) => h.id === 'adr-001-db-choice'));
   });
 
-  it('should be completely idempotent when import is run repeatedly', async () => {
+  it('second import on an unchanged tree is a per-record ok/skipped no-op (AC4/NS4)', async () => {
     const result1 = await importWorkflowTree({
       from: fixtureRepo,
       vaultRoot: tempVaultRoot
     });
+    assert.ok(result1.totalImported > 0);
+    assert.equal(result1.skippedIdenticalCount, 0);
+    assert.ok(result1.records.every((r) => r.status === 'imported'));
+
+    const countVaultFiles = (): number => {
+      let count = 0;
+      const walk = (dir: string): void => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            walk(full);
+          } else if (entry.isFile()) {
+            count++;
+          }
+        }
+      };
+      walk(tempVaultRoot);
+      return count;
+    };
+    const filesAfterFirst = countVaultFiles();
 
     const result2 = await importWorkflowTree({
       from: fixtureRepo,
       vaultRoot: tempVaultRoot
     });
 
-    assert.equal(result1.totalImported, result2.totalImported);
+    // No duplicates written, no throws; nothing newly imported.
+    assert.equal(result2.totalImported, 0);
+    assert.equal(result2.skippedIdenticalCount, result1.totalImported);
+    assert.equal(result2.skippedRecords.length, result1.totalImported);
+    assert.ok(result2.skippedRecords.every((r) => r.status === 'skipped-identical'));
+    assert.deepEqual(
+      result2.skippedRecords.map((r) => r.id).sort(),
+      result1.records.map((r) => r.id).sort()
+    );
+    assert.equal(countVaultFiles(), filesAfterFirst);
 
     // Search for trap: must return exactly 1 hit, not duplicate entries
     const hits = searchIndex({
@@ -206,5 +235,18 @@ Added SQLite persistence adapter for tokens.
     });
     assert.equal(hits.length, 1);
     assert.equal(hits[0].id, 'trap-jwt-secrets');
+
+    // Edited content still re-imports (hash mismatch is not skipped).
+    fs.appendFileSync(
+      path.join(fixtureRepo, 'memory', 'trap-jwt-secrets.md'),
+      '\nExtra line.\n',
+      'utf8'
+    );
+    const result3 = await importWorkflowTree({
+      from: fixtureRepo,
+      vaultRoot: tempVaultRoot
+    });
+    assert.equal(result3.totalImported, 1);
+    assert.equal(result3.skippedIdenticalCount, result1.totalImported - 1);
   });
 });

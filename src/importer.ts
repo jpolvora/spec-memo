@@ -1,10 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import matter from 'gray-matter';
 import { ImportItem, ImportOptions, ImportResult, MemoRecord, RecordFrontmatter, RecordKind, RecordStatus } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 import { ensureProjectVault, getVaultRoot } from './vault.js';
-import { upsertRecord, slugify } from './store.js';
+import { getRecord, upsertRecord, slugify } from './store.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { rebuildIndex } from './indexer.js';
 import { recordTelemetry } from './telemetry.js';
@@ -49,6 +50,64 @@ function normalizeRecordStatus(status: unknown): { status: RecordStatus; decisio
 }
 
 /**
+ * Stable content hash for import idempotency: same source content re-imported
+ * must resolve to the same hash so the second run is a per-record no-op.
+ */
+function hashImportCandidate(body: string, title: string, status: string, extra = ''): string {
+  // Body is trimmed to match the vault round-trip (parseRecord trims on read,
+  // serializeRecord trims on write), so identical content hashes identically.
+  return createHash('sha256')
+    .update(`${title}\n${status}\n${extra}\n${body.trim()}`, 'utf8')
+    .digest('hex');
+}
+
+/**
+ * Return the vault path when a record with the same stable id already holds
+ * identical content (body + title + status), else null (new or changed content).
+ * Never throws: lookup failures fall through to the regular upsert path.
+ */
+async function findIdenticalVaultRecord(args: {
+  cwd: string;
+  projectId: string;
+  vaultRoot: string;
+  kind: RecordKind;
+  slug: string;
+  body: string;
+  title: string;
+  status: string;
+  extra?: string;
+}): Promise<string | null> {
+  try {
+    const existing = await getRecord({
+      cwd: args.cwd,
+      projectId: args.projectId,
+      vaultRoot: args.vaultRoot,
+      kind: args.kind,
+      id: args.slug
+    });
+    if (!existing) {
+      return null;
+    }
+    const existingTitle =
+      typeof existing.frontmatter.title === 'string' ? existing.frontmatter.title : '';
+    const existingStatus =
+      typeof existing.frontmatter.status === 'string' ? existing.frontmatter.status : 'active';
+    const candidateHash = hashImportCandidate(args.body, args.title, args.status, args.extra);
+    const existingHash = hashImportCandidate(
+      existing.body,
+      existingTitle,
+      existingStatus,
+      typeof existing.frontmatter.decisionStatus === 'string'
+        ? existing.frontmatter.decisionStatus
+        : ''
+    );
+    return candidateHash === existingHash ? existing.path || null : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Import a legacy workflow tree (.agents/specs, memory/, plans/, changelog) into the external vault.
  */
 export async function importWorkflowTree(options: ImportOptions = {}): Promise<ImportResult> {
@@ -88,7 +147,8 @@ export async function importWorkflowTree(options: ImportOptions = {}): Promise<I
         metadata: {
           sourceRoot,
           totalImported: result.totalImported,
-          skippedFilesCount: result.skippedFilesCount
+          skippedFilesCount: result.skippedFilesCount,
+          skippedIdenticalCount: result.skippedIdenticalCount
         }
       });
     }
@@ -106,6 +166,7 @@ async function importWorkflowTreeDirect(
 
   const importedRecords: ImportItem[] = [];
   const skippedPaths: string[] = [];
+  const skippedRecords: ImportItem[] = [];
 
   let importedSpecsCount = 0;
   let importedTrapsCount = 0;
@@ -114,6 +175,7 @@ async function importWorkflowTreeDirect(
   let importedLogsCount = 0;
   let importedStateCount = 0;
   let skippedFilesCount = 0;
+  let skippedIdenticalCount = 0;
 
   // Candidate directories for legacy specs
   const specDirCandidates = [
@@ -165,32 +227,57 @@ async function importWorkflowTreeDirect(
               slug;
 
             const { status } = normalizeRecordStatus(parsed.data.status);
+            const candidateBody = parsed.content || rawContent;
 
-            const res = await upsertRecord({
+            const identicalPath = await findIdenticalVaultRecord({
               cwd: sourceRoot,
               projectId,
               vaultRoot,
               kind: 'spec',
               slug,
-              frontmatter: {
-                ...parsed.data,
-                id: slug,
-                title,
-                status,
-                source: 'imported'
-              },
-              body: parsed.content || rawContent,
-              source: 'imported'
+              body: candidateBody,
+              title,
+              status
             });
 
-            importedSpecsCount++;
-            importedRecords.push({
-              id: res.id,
-              kind: 'spec',
-              slug,
-              sourcePath: filePath,
-              vaultPath: res.path
-            });
+            if (identicalPath !== null) {
+              skippedIdenticalCount++;
+              skippedRecords.push({
+                id: slug,
+                kind: 'spec',
+                slug,
+                sourcePath: filePath,
+                vaultPath: identicalPath,
+                status: 'skipped-identical'
+              });
+            } else {
+              const res = await upsertRecord({
+                cwd: sourceRoot,
+                projectId,
+                vaultRoot,
+                kind: 'spec',
+                slug,
+                frontmatter: {
+                  ...parsed.data,
+                  id: slug,
+                  title,
+                  status,
+                  source: 'imported'
+                },
+                body: candidateBody,
+                source: 'imported'
+              });
+
+              importedSpecsCount++;
+              importedRecords.push({
+                id: res.id,
+                kind: 'spec',
+                slug,
+                sourcePath: filePath,
+                vaultPath: res.path,
+                status: 'imported'
+              });
+            }
           } catch {
             skippedFilesCount++;
             skippedPaths.push(filePath);
@@ -242,38 +329,64 @@ async function importWorkflowTreeDirect(
           if (decisionStatus) {
             extraFm.decisionStatus = decisionStatus;
           }
+          const candidateBody = parsed.content || rawContent;
 
-          const res = await upsertRecord({
+          const identicalPath = await findIdenticalVaultRecord({
             cwd: sourceRoot,
             projectId,
             vaultRoot,
             kind,
             slug,
-            frontmatter: {
-              ...parsed.data,
-              ...extraFm,
+            body: candidateBody,
+            title,
+            status,
+            extra: decisionStatus || ''
+          });
+
+          if (identicalPath !== null) {
+            skippedIdenticalCount++;
+            skippedRecords.push({
               id: slug,
-              title,
-              status,
-              source: 'imported'
-            },
-            body: parsed.content || rawContent,
-            source: 'imported'
-          });
-
-          if (kind === 'decision') {
-            importedDecisionsCount++;
+              kind,
+              slug,
+              sourcePath: filePath,
+              vaultPath: identicalPath,
+              status: 'skipped-identical'
+            });
           } else {
-            importedTrapsCount++;
-          }
+            const res = await upsertRecord({
+              cwd: sourceRoot,
+              projectId,
+              vaultRoot,
+              kind,
+              slug,
+              frontmatter: {
+                ...parsed.data,
+                ...extraFm,
+                id: slug,
+                title,
+                status,
+                source: 'imported'
+              },
+              body: candidateBody,
+              source: 'imported'
+            });
 
-          importedRecords.push({
-            id: res.id,
-            kind,
-            slug,
-            sourcePath: filePath,
-            vaultPath: res.path
-          });
+            if (kind === 'decision') {
+              importedDecisionsCount++;
+            } else {
+              importedTrapsCount++;
+            }
+
+            importedRecords.push({
+              id: res.id,
+              kind,
+              slug,
+              sourcePath: filePath,
+              vaultPath: res.path,
+              status: 'imported'
+            });
+          }
         } catch {
           skippedFilesCount++;
           skippedPaths.push(filePath);
@@ -305,31 +418,56 @@ async function importWorkflowTreeDirect(
               try {
                 const parsed = matter(content);
                 const title = (parsed.data.title as string) || extractTitleFromMarkdown(parsed.content) || `Plan: ${slug}`;
-                const res = await upsertRecord({
+                const planStatus = normalizeRecordStatus(parsed.data.status).status;
+                const candidateBody = parsed.content || content;
+                const identicalPath = await findIdenticalVaultRecord({
                   cwd: sourceRoot,
                   projectId,
                   vaultRoot,
                   kind: 'plan',
                   slug,
-                  frontmatter: {
-                    ...parsed.data,
+                  body: candidateBody,
+                  title,
+                  status: planStatus
+                });
+                if (identicalPath !== null) {
+                  skippedIdenticalCount++;
+                  skippedRecords.push({
                     id: slug,
-                    title,
-                    status: normalizeRecordStatus(parsed.data.status).status,
+                    kind: 'plan',
+                    slug,
+                    sourcePath: planFilePath,
+                    vaultPath: identicalPath,
+                    status: 'skipped-identical'
+                  });
+                } else {
+                  const res = await upsertRecord({
+                    cwd: sourceRoot,
+                    projectId,
+                    vaultRoot,
+                    kind: 'plan',
+                    slug,
+                    frontmatter: {
+                      ...parsed.data,
+                      id: slug,
+                      title,
+                      status: planStatus,
+                      source: 'imported'
+                    },
+                    body: candidateBody,
                     source: 'imported'
-                  },
-                  body: parsed.content || content,
-                  source: 'imported'
-                });
+                  });
 
-                importedPlansCount++;
-                importedRecords.push({
-                  id: res.id,
-                  kind: 'plan',
-                  slug,
-                  sourcePath: planFilePath,
-                  vaultPath: res.path
-                });
+                  importedPlansCount++;
+                  importedRecords.push({
+                    id: res.id,
+                    kind: 'plan',
+                    slug,
+                    sourcePath: planFilePath,
+                    vaultPath: res.path,
+                    status: 'imported'
+                  });
+                }
               } catch {
                 skippedFilesCount++;
                 skippedPaths.push(planFilePath);
@@ -352,31 +490,55 @@ async function importWorkflowTreeDirect(
             if (stateContent) {
               try {
                 const stateSlug = `${slug}-state`;
-                const res = await upsertRecord({
+                const stateTitle = `State: ${slug}`;
+                const identicalPath = await findIdenticalVaultRecord({
                   cwd: sourceRoot,
                   projectId,
                   vaultRoot,
                   kind: 'state',
                   slug: stateSlug,
-                  frontmatter: {
-                    id: stateSlug,
-                    title: `State: ${slug}`,
-                    relatedSlug: slug,
-                    status: 'active',
-                    source: 'imported'
-                  },
                   body: stateContent,
-                  source: 'imported'
+                  title: stateTitle,
+                  status: 'active'
                 });
+                if (identicalPath !== null) {
+                  skippedIdenticalCount++;
+                  skippedRecords.push({
+                    id: stateSlug,
+                    kind: 'state',
+                    slug: stateSlug,
+                    sourcePath: stateFilePath,
+                    vaultPath: identicalPath,
+                    status: 'skipped-identical'
+                  });
+                } else {
+                  const res = await upsertRecord({
+                    cwd: sourceRoot,
+                    projectId,
+                    vaultRoot,
+                    kind: 'state',
+                    slug: stateSlug,
+                    frontmatter: {
+                      id: stateSlug,
+                      title: stateTitle,
+                      relatedSlug: slug,
+                      status: 'active',
+                      source: 'imported'
+                    },
+                    body: stateContent,
+                    source: 'imported'
+                  });
 
-                importedStateCount++;
-                importedRecords.push({
-                  id: res.id,
-                  kind: 'state',
-                  slug: stateSlug,
-                  sourcePath: stateFilePath,
-                  vaultPath: res.path
-                });
+                  importedStateCount++;
+                  importedRecords.push({
+                    id: res.id,
+                    kind: 'state',
+                    slug: stateSlug,
+                    sourcePath: stateFilePath,
+                    vaultPath: res.path,
+                    status: 'imported'
+                  });
+                }
               } catch {
                 skippedFilesCount++;
                 skippedPaths.push(stateFilePath);
@@ -420,8 +582,31 @@ async function importWorkflowTreeDirect(
 
           const firstLine = sec.split('\n')[0].trim();
           const logSlug = `log-${slugify(firstLine.slice(0, 30))}-${i + 1}`;
+          const logBody = `## ${sec}`;
 
           try {
+            const identicalPath = await findIdenticalVaultRecord({
+              cwd: sourceRoot,
+              projectId,
+              vaultRoot,
+              kind: 'log',
+              slug: logSlug,
+              body: logBody,
+              title: firstLine,
+              status: 'active'
+            });
+            if (identicalPath !== null) {
+              skippedIdenticalCount++;
+              skippedRecords.push({
+                id: logSlug,
+                kind: 'log',
+                slug: logSlug,
+                sourcePath: changelogFile,
+                vaultPath: identicalPath,
+                status: 'skipped-identical'
+              });
+              continue;
+            }
             const res = await upsertRecord({
               cwd: sourceRoot,
               projectId,
@@ -434,7 +619,7 @@ async function importWorkflowTreeDirect(
                 status: 'active',
                 source: 'imported'
               },
-              body: `## ${sec}`,
+              body: logBody,
               source: 'imported'
             });
 
@@ -444,7 +629,8 @@ async function importWorkflowTreeDirect(
               kind: 'log',
               slug: logSlug,
               sourcePath: changelogFile,
-              vaultPath: res.path
+              vaultPath: res.path,
+              status: 'imported'
             });
           } catch {
             // Ignore individual log parse failure
@@ -470,8 +656,10 @@ async function importWorkflowTreeDirect(
     importedLogsCount,
     importedStateCount,
     skippedFilesCount,
+    skippedIdenticalCount,
     totalImported,
     records: importedRecords,
+    skippedRecords,
     skippedPaths
   };
 }

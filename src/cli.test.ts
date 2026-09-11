@@ -502,7 +502,8 @@ describe('CLI Integration', { concurrency: false }, () => {
       ]);
       assert.equal(importTextCode, 0);
       assert.ok(capturedLogs.includes('Imported Legacy Workflow Tree into Vault'));
-      assert.ok(capturedLogs.includes('Specs:     1'));
+      // Second run on the unchanged tree is an idempotent no-op (AC4).
+      assert.ok(capturedLogs.includes('Specs:     0'));
     } finally {
       console.log = origLog;
       try {

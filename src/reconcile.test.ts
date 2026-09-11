@@ -22,6 +22,8 @@ import { RecordFrontmatter } from "./types.js";
 test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-reconcile-test-"));
   const vaultRoot = path.join(tempDir, "vault");
+  const tempProductRoot = path.join(tempDir, "product");
+  fs.mkdirSync(tempProductRoot, { recursive: true });
   const projectId = "proj-reconcile";
 
   t.after(() => {
@@ -367,11 +369,11 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
     );
 
     // Initial doctor scan warns about sidecar
-    const docBefore = await runDoctor({ vaultRoot });
+    const docBefore = await runDoctor({ vaultRoot, cwd: tempProductRoot });
     assert.ok(docBefore.warnings.some((w) => w.includes("conflict sidecar")));
 
     // Doctor with --fix removes it
-    const docAfter = await runDoctor({ vaultRoot, fix: true });
+    const docAfter = await runDoctor({ vaultRoot, fix: true, cwd: tempProductRoot });
     assert.ok((docAfter.pollution.fixedCount ?? 0) >= 1);
     assert.strictEqual(fs.existsSync(sidecarPath), false);
   });
@@ -396,7 +398,7 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
       }),
       "utf8"
     );
-    const docAfter = await runDoctor({ vaultRoot, fix: true });
+    const docAfter = await runDoctor({ vaultRoot, fix: true, cwd: tempProductRoot });
     assert.strictEqual(fs.existsSync(sidecarPath), true);
     assert.strictEqual(fs.existsSync(record.path), true);
     void docAfter;

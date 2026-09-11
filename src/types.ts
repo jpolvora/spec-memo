@@ -852,6 +852,8 @@ export interface DoctorOptions {
   rebuild?: boolean;
   fix?: boolean;
   checkCapture?: string;
+  /** Delete git-tracked residue too (default false: tracked paths are skipped and reported). */
+  includeTracked?: boolean;
 }
 
 export interface HybridState {
@@ -1040,6 +1042,10 @@ export interface DoctorResult {
     detected: boolean;
     fixedCount?: number;
     items: DoctorPollutionItem[];
+    /** Tracked candidates skipped by the default fix guard (deleted only with includeTracked). */
+    skippedTracked?: string[];
+    /** Candidates suppressed by the ignore boundary (AC1 filter) before residue classification. */
+    excludedByIgnoreCount?: number;
   };
   agentHooks?: AgentHooksInspection;
   exclusionBoundary?: {
@@ -1069,6 +1075,8 @@ export interface ImportItem {
   slug: string;
   sourcePath: string;
   vaultPath: string;
+  /** Per-record outcome: freshly written vs skipped as byte-identical to the vault copy. */
+  status?: 'imported' | 'skipped-identical';
 }
 
 export interface ImportOptions {
@@ -1090,7 +1098,11 @@ export interface ImportResult {
   importedStateCount: number;
   skippedFilesCount: number;
   totalImported: number;
+  /** Records skipped because the vault copy already matches by stable id + content hash. */
+  skippedIdenticalCount: number;
   records: ImportItem[];
+  /** Per-record ok/skipped visibility for identical re-imports (vault paths of skipped records). */
+  skippedRecords: ImportItem[];
   skippedPaths: string[];
 }
 
