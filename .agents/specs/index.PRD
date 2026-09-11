@@ -260,6 +260,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-06 | install-hooks-skills-interactive | Shared installer wizard, explicit permission gates, Codex hooks, scoped global paths, conflict policies, and MCP skill-install validation | npm test 609 pass |
 | 2026-09-06 | status-vaults-tab-ui | Status Vaults tab modal forms + POST /api/vaults/sync | v0.27.1 |
 | 2026-09-06 | status-vaults-tab-ui-polish | Status Vaults tab Actions column visual polish, side-by-side button grid, semantic accents, responsive layout | v0.27.2 |
+| 2026-09-10 | us-55-sync-partial-failure | Vault-git `pull --rebase --autostash` dirty-tree hardening + `applyChangeset` AC6 offender skip-and-log (`skipped`/`conflictDetails`, capture stays strict) | npm test 659 pass |
 
 ## Archive
 

@@ -1123,7 +1123,7 @@ export async function flushVaultGit(
     if (config.vaultGit.remoteUrl) {
       await withVaultGitRemoteExclusive(vaultRoot, options.trigger, async () => {
         const branch = resolveVaultGitBranch(config, vaultRoot);
-        const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', 'origin', branch], 'pull');
+        const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', '--autostash', 'origin', branch], 'pull');
         pulled = pullRes.ok;
         if (!pullRes.ok) {
           remoteError = pullRes.error;

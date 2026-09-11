@@ -247,3 +247,4 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 
 | 2026-09-08 | vault-dedup-merge-and-local-config | Consumer .spec-memo.json binding, memo init/status source, vault rename + smart dedup merge, REST/CLI/UI; v0.28.0; npm test 652 pass; PR #52 merged |
 | 2026-09-08 | vault-merge-ui-and-acyclicity-polish | Status monitor merge modal target ID & coupled controls, vault-manager merge cycle pre-validation & alias clearing; v0.28.1; npm test 654 pass |
+| 2026-09-10 | us-55-sync-partial-failure | Vault-git `pull --rebase --autostash` dirty-tree hardening + `applyChangeset` AC6 offender skip-and-log (`skipped`/`conflictDetails`, capture stays strict); npm test 659 pass |
