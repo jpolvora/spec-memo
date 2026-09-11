@@ -318,3 +318,174 @@ test("Multi-Machine Vault Sync & Delta Engine", async (t) => {
     assert.strictEqual(fetchedAfter, null, "Purged record must be removed from vaultB after sync");
   });
 });
+
+test("US-55 AC3/AC4: applyChangeset skips AC6 offenders and applies the rest", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-sync-ac6-test-"));
+  const vaultC = path.join(tempDir, "vault-c");
+  const vaultD = path.join(tempDir, "vault-d");
+  const projId = "proj-ac6";
+
+  t.after(() => {
+    closeIndex(vaultC);
+    closeIndex(vaultD);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  initVault({ vaultRoot: vaultC, projectId: projId, displayName: "AC6 source" });
+  initVault({ vaultRoot: vaultD, projectId: projId, displayName: "AC6 target" });
+
+  const now = new Date().toISOString();
+  const offenderPatterns = ["dist/bundle.js"];
+  const mixedChangeset = {
+    schemaVersion: 1 as const,
+    generatedAt: now,
+    records: [
+      {
+        frontmatter: {
+          id: "trap-valid-1",
+          slug: "trap-valid-1",
+          kind: "trap" as const,
+          status: "active" as const,
+          source: "agent" as const,
+          created: now,
+          updated: now,
+          project: projId,
+          severity: "high" as const,
+          pathPatterns: ["src/sync.ts"]
+        },
+        body: "# Valid trap\nDO NOT drop valid records.",
+        project: projId
+      },
+      {
+        frontmatter: {
+          id: "trap-ac6-offender",
+          slug: "trap-ac6-offender",
+          kind: "trap" as const,
+          status: "active" as const,
+          source: "agent" as const,
+          created: now,
+          updated: now,
+          project: projId,
+          severity: "high" as const,
+          pathPatterns: offenderPatterns
+        },
+        body: "# AC6 offender\nFully-ignored pathPatterns must not veto the changeset.",
+        project: projId
+      },
+      {
+        frontmatter: {
+          id: "decision-valid-2",
+          slug: "decision-valid-2",
+          kind: "decision" as const,
+          status: "active" as const,
+          source: "agent" as const,
+          created: now,
+          updated: now,
+          project: projId
+        },
+        body: "# Valid decision\nMust apply alongside the skipped offender.",
+        project: projId
+      }
+    ]
+  };
+
+  const result = await applyChangeset(vaultD, mixedChangeset);
+  assert.strictEqual(result.applied, 2);
+  assert.ok(result.skipped >= 1, `expected skipped >= 1, got ${result.skipped}`);
+  assert.strictEqual(result.conflicts, 0);
+  assert.ok(
+    result.recordsApplied.some((r) => r.includes("trap-ac6-offender") && r.includes("skipped")),
+    "offender must be identifiable in recordsApplied"
+  );
+  assert.ok(
+    (result.conflictDetails || []).some((d) => d.id === "trap-ac6-offender" && d.resolution === "skipped"),
+    "offender must be identifiable in conflictDetails"
+  );
+  const keptTrap = await getRecord({ vaultRoot: vaultD, projectId: projId, kind: "trap", id: "trap-valid-1" });
+  assert.ok(keptTrap, "valid trap must apply despite the offender");
+  const keptDecision = await getRecord({ vaultRoot: vaultD, projectId: projId, kind: "decision", id: "decision-valid-2" });
+  assert.ok(keptDecision, "valid decision must apply despite the offender");
+  const dropped = await getRecord({ vaultRoot: vaultD, projectId: projId, kind: "trap", id: "trap-ac6-offender" });
+  assert.strictEqual(dropped, null, "offender must not be written");
+
+  await t.test("all-offender changeset returns structured skip instead of throwing", async () => {
+    const allOffender = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          frontmatter: {
+            id: "trap-ac6-only",
+            slug: "trap-ac6-only",
+            kind: "trap" as const,
+            status: "active" as const,
+            source: "agent" as const,
+            created: now,
+            updated: now,
+            project: projId,
+            severity: "high" as const,
+            pathPatterns: offenderPatterns
+          },
+          body: "# Only offender\nMust not throw.",
+          project: projId
+        }
+      ]
+    };
+    const onlyResult = await applyChangeset(vaultD, allOffender);
+    assert.strictEqual(onlyResult.applied, 0);
+    assert.ok(onlyResult.skipped >= 1);
+  });
+
+  await t.test("direct upsert capture path still throws AC6 (strictness preserved)", async () => {
+    await assert.rejects(
+      async () => {
+        await upsertRecord({
+          vaultRoot: vaultD,
+          projectId: projId,
+          kind: "trap",
+          slug: "direct-ac6-guard",
+          frontmatter: { severity: "high", pathPatterns: ["dist/direct-ac6.js"] },
+          body: "# Direct capture\nMust stay strict."
+        });
+      },
+      {
+        message: /all pathPatterns match ignored paths/
+      }
+    );
+  });
+
+  await t.test("linkedPaths-only offender is strict (not skipped as ignored-path)", async () => {
+    const linkedOnly = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      records: [
+        {
+          frontmatter: {
+            id: "trap-linked-only",
+            slug: "trap-linked-only",
+            kind: "trap" as const,
+            status: "active" as const,
+            source: "agent" as const,
+            created: now,
+            updated: now,
+            project: projId,
+            severity: "high" as const,
+            pathPatterns: ["src/valid-module.ts"],
+            linkedPaths: offenderPatterns
+          },
+          body: "# Linked-only offender\nValid pathPatterns, ignored linkedPaths.",
+          project: projId
+        }
+      ]
+    };
+    // Must throw (strict) rather than silently skip a record with valid pathPatterns.
+    await assert.rejects(
+      async () => {
+        await applyChangeset(vaultD, linkedOnly);
+      },
+      {
+        message: /all linkedPaths match ignored paths/
+      }
+    );
+  });
+});

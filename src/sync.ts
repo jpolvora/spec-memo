@@ -119,6 +119,26 @@ export function mergeRecordMetadata(
   return merged;
 }
 
+/**
+ * True when `err` is the capture-ignore AC6 strictness throw for the
+ * **pathPatterns** field (`sanitizePathPatterns`: all pathPatterns match
+ * ignored paths, code `CAPTURE_IGNORE_AC6`).
+ * Sync-apply context must skip-and-log these offenders instead of
+ * aborting the whole transactional changeset; direct `upsert` stays strict.
+ * A linkedPaths offender is NOT a skip: it propagates (strict abort) so a
+ * record with valid pathPatterns is never silently dropped as "ignored-path".
+ */
+export function isCaptureIgnoreSkip(err: unknown): boolean {
+  const code = (err as { code?: unknown })?.code;
+  const field = (err as { field?: unknown })?.field;
+  if (code !== undefined || field !== undefined) {
+    return code === 'CAPTURE_IGNORE_AC6' && field === 'pathPatterns';
+  }
+  // Legacy fallback for unstamped errors carrying the historical message.
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes('all pathPatterns match ignored paths');
+}
+
 export interface CleanSidecarsOptions {
   prefer?: 'local' | 'remote';
   dryRun?: boolean;
@@ -528,15 +548,32 @@ export async function applyChangeset(
             // AC2 & AC3: Bodies match but metadata differs -> auto-merge metadata cleanly
             const mergedFm = mergeRecordMetadata(existing.frontmatter, item.frontmatter);
             if (!dryRun) {
-              await upsertRecord({
-                vaultRoot,
-                projectId: projId,
-                kind,
-                slug,
-                frontmatter: mergedFm,
-                body: existing.body,
-                allowDuplicate: kind !== "trap"
-              });
+              try {
+                await upsertRecord({
+                  vaultRoot,
+                  projectId: projId,
+                  kind,
+                  slug,
+                  frontmatter: mergedFm,
+                  body: existing.body,
+                  allowDuplicate: kind !== "trap"
+                });
+              } catch (err: unknown) {
+                if (!isCaptureIgnoreSkip(err)) throw err;
+                skipped++;
+                recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
+                conflictDetails.push({
+                  id: recId,
+                  kind,
+                  projectId: projId,
+                  category: "metadata_divergence",
+                  resolution: "skipped",
+                  localTime: existing.frontmatter.updated || existing.frontmatter.created,
+                  remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                  message: `Skipped AC6 offender (all pathPatterns match ignored paths): ${projId}/${kind}/${recId}`
+                });
+                continue;
+              }
             }
             applied++;
             autoMerged++;
@@ -559,14 +596,31 @@ export async function applyChangeset(
           } else if (effectiveStrategy === "remote-wins") {
             // Remote wins: incoming record overwrites
             if (!dryRun) {
-              await upsertRecord({
-                vaultRoot,
-                projectId: projId,
-                kind,
-                slug,
-                frontmatter: item.frontmatter,
-                body: item.body
-              });
+              try {
+                await upsertRecord({
+                  vaultRoot,
+                  projectId: projId,
+                  kind,
+                  slug,
+                  frontmatter: item.frontmatter,
+                  body: item.body
+                });
+              } catch (err: unknown) {
+                if (!isCaptureIgnoreSkip(err)) throw err;
+                skipped++;
+                recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
+                conflictDetails.push({
+                  id: recId,
+                  kind,
+                  projectId: projId,
+                  category: "metadata_divergence",
+                  resolution: "skipped",
+                  localTime: existing.frontmatter.updated || existing.frontmatter.created,
+                  remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                  message: `Skipped AC6 offender (all pathPatterns match ignored paths): ${projId}/${kind}/${recId}`
+                });
+                continue;
+              }
             }
             applied++;
             recordsApplied.push(`${projId}/${kind}/${recId} (remote-wins)`);
@@ -598,25 +652,42 @@ export async function applyChangeset(
             if (remoteTime > localTime) {
               // Remote is newer
               if (!dryRun) {
-                if (kind === "log") {
-                  const mergedSlug = `${slug}.remote.${Date.now()}`;
-                  await upsertRecord({
-                    vaultRoot,
-                    projectId: projId,
+                try {
+                  if (kind === "log") {
+                    const mergedSlug = `${slug}.remote.${Date.now()}`;
+                    await upsertRecord({
+                      vaultRoot,
+                      projectId: projId,
+                      kind,
+                      slug: mergedSlug,
+                      frontmatter: item.frontmatter,
+                      body: item.body
+                    });
+                  } else {
+                    await upsertRecord({
+                      vaultRoot,
+                      projectId: projId,
+                      kind,
+                      slug,
+                      frontmatter: item.frontmatter,
+                      body: item.body
+                    });
+                  }
+                } catch (err: unknown) {
+                  if (!isCaptureIgnoreSkip(err)) throw err;
+                  skipped++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
+                  conflictDetails.push({
+                    id: recId,
                     kind,
-                    slug: mergedSlug,
-                    frontmatter: item.frontmatter,
-                    body: item.body
-                  });
-                } else {
-                  await upsertRecord({
-                    vaultRoot,
                     projectId: projId,
-                    kind,
-                    slug,
-                    frontmatter: item.frontmatter,
-                    body: item.body
+                    category: "metadata_divergence",
+                    resolution: "skipped",
+                    localTime: existing.frontmatter.updated || existing.frontmatter.created,
+                    remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                    message: `Skipped AC6 offender (all pathPatterns match ignored paths): ${projId}/${kind}/${recId}`
                   });
+                  continue;
                 }
               }
               applied++;
@@ -656,15 +727,31 @@ export async function applyChangeset(
             journal.push({ filePath: targetFilePath, originalContent: null });
           }
           if (!dryRun) {
-            await upsertRecord({
-              vaultRoot,
-              projectId: projId,
-              kind,
-              slug,
-              frontmatter: item.frontmatter,
-              body: item.body,
-              allowDuplicate: kind !== "trap"
-            });
+            try {
+              await upsertRecord({
+                vaultRoot,
+                projectId: projId,
+                kind,
+                slug,
+                frontmatter: item.frontmatter,
+                body: item.body,
+                allowDuplicate: kind !== "trap"
+              });
+            } catch (err: unknown) {
+              if (!isCaptureIgnoreSkip(err)) throw err;
+              skipped++;
+              recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
+              conflictDetails.push({
+                id: recId,
+                kind,
+                projectId: projId,
+                category: "metadata_divergence",
+                resolution: "skipped",
+                remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                message: `Skipped AC6 offender (all pathPatterns match ignored paths): ${projId}/${kind}/${recId}`
+              });
+              continue;
+            }
           }
           applied++;
           recordsApplied.push(`${projId}/${kind}/${recId}`);

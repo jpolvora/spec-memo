@@ -512,4 +512,68 @@ describe('vault-git-hybrid-sync', () => {
       'fatal: http://***:***@host/repo.git denied'
     );
   });
+
+  it('US-55 AC1: flushVaultGit pull autostashes a dirty tree during rebase', async () => {
+    const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-vg-remote-'));
+    const remoteBare = path.join(remoteDir, 'remote.git');
+    try {
+      execFileSync('git', ['init', '--bare', remoteBare]);
+      enableVaultGit(tempVault, { remoteUrl: remoteBare, branch: 'master' });
+      assert.equal(initVaultGit(tempVault), true);
+      execFileSync('git', ['checkout', '-B', 'master'], { cwd: tempVault });
+      execFileSync('git', ['config', 'user.name', 'spec-memo-test'], { cwd: tempVault });
+      execFileSync('git', ['config', 'user.email', 'spec-memo-test@example.com'], { cwd: tempVault });
+      // Tracked root file outside the flush add-paths (projects/config.json/.gitignore),
+      // so its dirt survives the flush commit and is still unstaged at pull time.
+      fs.writeFileSync(path.join(tempVault, 'notes.txt'), 'v1\n');
+      execFileSync('git', ['-C', tempVault, 'add', '-A']);
+      execFileSync(
+        'git',
+        ['-c', 'user.name=spec-memo-test', '-c', 'user.email=spec-memo-test@example.com', 'commit', '-m', 'seed'],
+        { cwd: tempVault }
+      );
+      execFileSync('git', ['push', '-u', 'origin', 'master'], { cwd: tempVault });
+      // Advance the remote on an unrelated file (no content conflict with notes.txt).
+      const cloneDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-vg-clone-'));
+      try {
+        execFileSync('git', ['clone', remoteBare, cloneDir]);
+        execFileSync('git', ['checkout', '-B', 'master', 'origin/master'], { cwd: cloneDir });
+        execFileSync('git', ['config', 'user.name', 'spec-memo-test'], { cwd: cloneDir });
+        execFileSync('git', ['config', 'user.email', 'spec-memo-test@example.com'], { cwd: cloneDir });
+        fs.writeFileSync(path.join(cloneDir, 'remote.txt'), 'remote advance\n');
+        execFileSync('git', ['-C', cloneDir, 'add', '-A']);
+        execFileSync(
+          'git',
+          ['-c', 'user.name=spec-memo-test', '-c', 'user.email=spec-memo-test@example.com', 'commit', '-m', 'remote advance'],
+          { cwd: cloneDir }
+        );
+        execFileSync('git', ['push', 'origin', 'master'], { cwd: cloneDir });
+      } finally {
+        try {
+          fs.rmSync(cloneDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        } catch {
+          // ignore Windows lock races
+        }
+      }
+      // Re-dirty the tracked file after the flush commit would have run.
+      fs.writeFileSync(path.join(tempVault, 'notes.txt'), 'v1\ndirty-after-commit\n');
+      const flush = await flushVaultGit(tempVault, { trigger: 'sync' });
+      assert.equal(flush.pulled, true);
+      assert.equal(flush.pushed, true);
+      assert.equal(flush.ok, true);
+      if (flush.error) {
+        assert.equal(flush.error.includes('unstaged changes'), false);
+      }
+      assert.ok(
+        fs.readFileSync(path.join(tempVault, 'notes.txt'), 'utf8').includes('dirty-after-commit'),
+        'autostash must round-trip the dirty tree'
+      );
+    } finally {
+      try {
+        fs.rmSync(remoteDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {
+        // ignore Windows lock races
+      }
+    }
+  });
 });

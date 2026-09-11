@@ -532,6 +532,9 @@ Options:
   --vaultRoot     Override vault root directory
   --productRoot   Path to product repository root
   --check-capture Evaluate whether a path is CAPTURED or IGNORED by exclusion rules
+  --fix          Delete in-repo workflow residue (skips git-tracked files by default)
+  --include-tracked Also delete git-tracked residue when used with --fix
+  --rebuild       Rebuild the SQLite FTS index
   --json          Output result as JSON
   -h, --help      Show this help message`);
     return;
@@ -1819,6 +1822,11 @@ async function runCliInner(
       const cwd = (parsed.options.cwd as string) || productRoot;
       const rebuild = parsed.options.rebuild === true || parsed.options.rebuild === 'true';
       const fix = parsed.options.fix === true || parsed.options.fix === 'true';
+      const includeTracked =
+        parsed.options['include-tracked'] === true ||
+        parsed.options['include-tracked'] === 'true' ||
+        parsed.options.includeTracked === true ||
+        parsed.options.includeTracked === 'true';
       const checkCapture =
         (parsed.options['check-capture'] as string) ||
         (parsed.options.checkCapture as string) ||
@@ -1830,6 +1838,7 @@ async function runCliInner(
         vaultRoot,
         rebuild,
         fix,
+        includeTracked,
         checkCapture
       });
 
@@ -1888,6 +1897,19 @@ async function runCliInner(
           console.log(`  [POLLUTION DETECTED] ${result.pollution.items.length} item(s) found:`);
           for (const item of result.pollution.items) {
             console.log(`    - [${item.type}] ${item.path}`);
+          }
+        }
+        if ((result.pollution.excludedByIgnoreCount || 0) > 0) {
+          console.log(
+            `  Excluded by ignore boundary: ${result.pollution.excludedByIgnoreCount} candidate(s) matched .spec-memo-ignore / config.json ignorePaths.`
+          );
+        }
+        if ((result.pollution.skippedTracked || []).length > 0) {
+          console.log(
+            `  Skipped git-tracked: ${(result.pollution.skippedTracked || []).length} file(s) (use --include-tracked to delete):`
+          );
+          for (const skipped of result.pollution.skippedTracked || []) {
+            console.log(`    - ${skipped}`);
           }
         }
 
@@ -1963,7 +1985,7 @@ async function runCliInner(
         console.log(`  Plans:     ${result.importedPlansCount}`);
         console.log(`  State:     ${result.importedStateCount}`);
         console.log(`  Logs:      ${result.importedLogsCount}`);
-        console.log(`  Total:     ${result.totalImported} (skipped files: ${result.skippedFilesCount})`);
+        console.log(`  Total:     ${result.totalImported} (skipped files: ${result.skippedFilesCount}, identical: ${result.skippedIdenticalCount})`);
       }
 
       return 0;

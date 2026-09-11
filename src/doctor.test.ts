@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { runDoctor, scanForRepoPollution } from './doctor.js';
 import { upsertRecord } from './store.js';
 import { openIndex, closeIndex } from './indexer.js';
@@ -63,7 +64,7 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     fs.mkdirSync(planDir, { recursive: true });
     fs.writeFileSync(path.join(planDir, 'foo.md'), '# Planted Plan Residue\n', 'utf8');
 
-    const pollution = scanForRepoPollution(tempProductRepo);
+    const pollution = scanForRepoPollution(tempProductRepo).items;
     assert.ok(pollution.some((p) => p.type === 'plan_residue' && p.path.includes('.agents/plans/foo.md')));
 
     const doc = await runDoctor({
@@ -88,7 +89,7 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     fs.mkdirSync(nestedShared, { recursive: true });
     fs.writeFileSync(path.join(nestedShared, 'MEMORY.md'), '# Nested in-repo memory\n', 'utf8');
 
-    const pollution = scanForRepoPollution(tempProductRepo);
+    const pollution = scanForRepoPollution(tempProductRepo).items;
     assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path === 'MEMORY.md'));
     assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('trap-01.md')));
     assert.ok(pollution.some((p) => p.type === 'memory_residue' && p.path.includes('ws-shared/MEMORY.md')));
@@ -99,7 +100,7 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     fs.mkdirSync(docsMemoryDir, { recursive: true });
     fs.writeFileSync(path.join(docsMemoryDir, 'guide.md'), '# Architecture Memory Guide\n', 'utf8');
 
-    const pollution = scanForRepoPollution(tempProductRepo);
+    const pollution = scanForRepoPollution(tempProductRepo).items;
     assert.equal(pollution.some((p) => p.path.includes('docs/architecture/memory/guide.md')), false);
   });
 
@@ -108,7 +109,7 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     fs.writeFileSync(path.join(tempProductRepo, '.state.md'), '# State\n', 'utf8');
     fs.writeFileSync(path.join(tempProductRepo, 'telemetry.jsonl'), '{"event": "start"}\n', 'utf8');
 
-    const pollution = scanForRepoPollution(tempProductRepo);
+    const pollution = scanForRepoPollution(tempProductRepo).items;
     assert.ok(pollution.some((p) => p.type === 'state_residue' && p.path.includes('run.json')));
     assert.ok(pollution.some((p) => p.type === 'state_residue' && p.path.includes('.state.md')));
     assert.ok(pollution.some((p) => p.type === 'telemetry_residue' && p.path.includes('telemetry.jsonl')));
@@ -150,6 +151,8 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
   });
 
   it('should support cleaning up in-repo pollution when fix flag is true', async () => {
+    // Real git repo so `git ls-files` resolves (untracked residue is still deleted).
+    execFileSync('git', ['init'], { cwd: tempProductRepo, stdio: 'ignore' });
     const planDir = path.join(tempProductRepo, '.agents', 'plans');
     fs.mkdirSync(planDir, { recursive: true });
     const plantedFile = path.join(planDir, 'residue.md');
@@ -175,7 +178,7 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     fs.writeFileSync(path.join(vaultPlansDir, 'plan-01.md'), '# Vault Plan\n', 'utf8');
 
     // scanForRepoPollution targeting vaultRoot should return empty
-    const pollution = scanForRepoPollution(tempVaultRoot, tempVaultRoot);
+    const pollution = scanForRepoPollution(tempVaultRoot, tempVaultRoot).items;
     assert.equal(pollution.length, 0);
 
     // runDoctor with cwd = tempVaultRoot should not report pollution
@@ -185,6 +188,140 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     });
     assert.equal(doc.pollution.detected, false);
     assert.equal(doc.pollution.items.length, 0);
+  });
+
+  it('ignore-aware scan suppresses live plans/memory/state covered by .spec-memo-ignore (AC1/AC5)', async () => {
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'trap',
+      slug: 'ignore-fixture-trap',
+      frontmatter: { id: 'ignore-fixture-trap', title: 'Ignore Fixture Trap' },
+      body: 'Body content'
+    });
+
+    const planRunDir = path.join(tempProductRepo, '.agents', 'plans', 'run-1');
+    fs.mkdirSync(planRunDir, { recursive: true });
+    fs.writeFileSync(path.join(planRunDir, 'plan.md'), '# Live Plan\n', 'utf8');
+    const sharedMemDir = path.join(tempProductRepo, 'ws-shared', 'memory');
+    fs.mkdirSync(sharedMemDir, { recursive: true });
+    fs.writeFileSync(path.join(sharedMemDir, 'trap-a.md'), '# Live Trap\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'MEMORY.md'), '# Live Memory\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'run.state.md'), '# Live State\n', 'utf8');
+    fs.writeFileSync(
+      path.join(tempProductRepo, '.spec-memo-ignore'),
+      ['.agents/plans/', 'ws-shared/memory/', 'MEMORY.md', '*.state.md'].join('\n') + '\n',
+      'utf8'
+    );
+
+    const scan = scanForRepoPollution(tempProductRepo, tempVaultRoot);
+    assert.equal(scan.items.length, 0);
+    assert.ok(scan.excludedByIgnoreCount > 0);
+
+    const doc = await runDoctor({ cwd: tempProductRepo, vaultRoot: tempVaultRoot });
+    assert.equal(doc.pollution.detected, false);
+    assert.equal(doc.healthy, true);
+    assert.ok((doc.pollution.excludedByIgnoreCount || 0) > 0);
+
+    // NS1: removing the ignore file re-exposes the residue (no over-suppression).
+    fs.rmSync(path.join(tempProductRepo, '.spec-memo-ignore'));
+    const rescan = scanForRepoPollution(tempProductRepo, tempVaultRoot);
+    assert.ok(rescan.items.some((p) => p.type === 'plan_residue'));
+    assert.ok(rescan.items.some((p) => p.type === 'memory_residue'));
+    assert.ok(rescan.items.some((p) => p.type === 'state_residue'));
+  });
+
+  it('run.json boundary matches on filename boundary, not bare suffix (AC2/NS2)', async () => {
+    fs.writeFileSync(path.join(tempProductRepo, 'Default.abprun.json'), '{}\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'my-run.json'), '{}\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'my_run.json'), '{}\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'my.run.json'), '{}\n', 'utf8');
+    fs.writeFileSync(path.join(tempProductRepo, 'run.json'), '{"step": 1}\n', 'utf8');
+    const nestedDir = path.join(tempProductRepo, 'nested', 'dir');
+    fs.mkdirSync(nestedDir, { recursive: true });
+    fs.writeFileSync(path.join(nestedDir, 'run.json'), '{"step": 2}\n', 'utf8');
+
+    const scan = scanForRepoPollution(tempProductRepo, tempVaultRoot);
+    assert.equal(
+      scan.items.some((p) => p.path.includes('abprun.json')),
+      false
+    );
+    for (const userFile of ['my-run.json', 'my_run.json', 'my.run.json']) {
+      assert.equal(
+        scan.items.some((p) => p.path === userFile),
+        false,
+        `${userFile} is a user file, not state residue`
+      );
+    }
+    assert.ok(scan.items.some((p) => p.type === 'state_residue' && p.path === 'run.json'));
+    assert.ok(
+      scan.items.some((p) => p.type === 'state_residue' && p.path === 'nested/dir/run.json')
+    );
+  });
+
+  it('--fix skips git-tracked files by default and deletes them only with --include-tracked (AC3/NS3)', async () => {
+    execFileSync('git', ['init'], { cwd: tempProductRepo, stdio: 'ignore' });
+    const trackedMemory = path.join(tempProductRepo, 'MEMORY.md');
+    fs.writeFileSync(trackedMemory, '# Curated Memory\n', 'utf8');
+    execFileSync('git', ['add', 'MEMORY.md'], { cwd: tempProductRepo, stdio: 'ignore' });
+    const untrackedState = path.join(tempProductRepo, 'notes.state.md');
+    fs.writeFileSync(untrackedState, '# Scratch State\n', 'utf8');
+
+    const doc = await runDoctor({ cwd: tempProductRepo, vaultRoot: tempVaultRoot, fix: true });
+    assert.ok(fs.existsSync(trackedMemory));
+    assert.ok(!fs.existsSync(untrackedState));
+    assert.ok((doc.pollution.skippedTracked || []).some((p) => p.includes('MEMORY.md')));
+    assert.ok(doc.warnings.some((w) => w.includes('--include-tracked')));
+
+    const docIncluded = await runDoctor({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      fix: true,
+      includeTracked: true
+    });
+    assert.ok(!fs.existsSync(trackedMemory));
+    assert.equal((docIncluded.pollution.skippedTracked || []).length, 0);
+    assert.ok(docIncluded.warnings.some((w) => w.includes('--include-tracked')));
+  });
+
+  it('dual-mode fixture with tracked MEMORY.md reaches healthy without deletions (AC5)', async () => {
+    execFileSync('git', ['init'], { cwd: tempProductRepo, stdio: 'ignore' });
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'trap',
+      slug: 'dual-mode-trap',
+      frontmatter: { id: 'dual-mode-trap', title: 'Dual Mode Trap' },
+      body: 'Body content'
+    });
+
+    const planRunDir = path.join(tempProductRepo, '.agents', 'plans', 'run-1');
+    fs.mkdirSync(planRunDir, { recursive: true });
+    const livePlan = path.join(planRunDir, 'plan.md');
+    fs.writeFileSync(livePlan, '# Live Plan\n', 'utf8');
+    const sharedMemDir = path.join(tempProductRepo, 'ws-shared', 'memory');
+    fs.mkdirSync(sharedMemDir, { recursive: true });
+    const liveTrap = path.join(sharedMemDir, 'trap-a.md');
+    fs.writeFileSync(liveTrap, '# Live Trap\n', 'utf8');
+    const trackedMemory = path.join(tempProductRepo, 'MEMORY.md');
+    fs.writeFileSync(trackedMemory, '# Curated Memory\n', 'utf8');
+    execFileSync('git', ['add', 'MEMORY.md'], { cwd: tempProductRepo, stdio: 'ignore' });
+    fs.writeFileSync(
+      path.join(tempProductRepo, '.spec-memo-ignore'),
+      ['.agents/plans/', 'ws-shared/memory/', 'MEMORY.md'].join('\n') + '\n',
+      'utf8'
+    );
+
+    const doc = await runDoctor({ cwd: tempProductRepo, vaultRoot: tempVaultRoot });
+    assert.equal(doc.healthy, true);
+    assert.equal(doc.pollution.detected, false);
+    assert.ok((doc.pollution.excludedByIgnoreCount || 0) > 0);
+
+    const fixed = await runDoctor({ cwd: tempProductRepo, vaultRoot: tempVaultRoot, fix: true });
+    assert.equal(fixed.pollution.fixedCount, 0);
+    assert.ok(fs.existsSync(livePlan));
+    assert.ok(fs.existsSync(liveTrap));
+    assert.ok(fs.existsSync(trackedMemory));
   });
 });
 

@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.28.1**.
+**Local working memory for coding agents outside the product repository.** Version **0.28.2**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -164,6 +164,7 @@ Add to `~/.cursor/mcp.json` or open **Cursor Settings > MCP**:
   }
 }
 ```
+> Do **not** add `--status` / `--status-port` to stdio host args. Every editor window spawns its own `memo serve`, so a fixed status port collides (`EADDRINUSE`). The `:3124` companion is opt-in via `memo serve --sse` (or a single explicit `memo serve --status`), not per-window MCP config. `memo setup` strips these flags automatically.
 
 #### Antigravity / Gemini IDE
 Add to `~/.gemini/config/mcp_config.json` or active workspace config:
@@ -481,11 +482,12 @@ HTTP routes:
 ### How to diagnose
 
 ```bash
-memo doctor              # vault + FTS + in-repo pollution scan
+memo doctor              # vault + FTS + ignore-aware in-repo pollution scan
 memo doctor --json
 memo doctor --rebuild    # rebuild SQLite FTS5 from markdown
-memo doctor --fix       # delete leftover in-tree workflow residue
+memo doctor --fix       # delete leftover in-tree workflow residue (tracked files need --include-tracked)
 memo doctor --check-capture <path>  # verify CAPTURED vs IGNORED exclusion boundary
+memo import --from <repo>  # idempotent per-record legacy tree import (safe to re-run)
 ```
 
 Also useful: `memo rank` (trap recurrence), `memo wiki --regenerate` (vault project page), `memo gc --dry-run`, and the status page live log while the SSE daemon is up.
@@ -700,11 +702,16 @@ Inspect vault integrity, SQLite FTS index status, and detect leftover in-repo wo
 memo doctor
 
 # Check and automatically clean up in-tree workflow pollution files
+# (respects .spec-memo-ignore; tracked files are never deleted without --include-tracked;
+# run.json matches on filename boundary so runaway.json is safe)
 memo doctor --fix
 
 # Rebuild the SQLite FTS5 index from vault markdown records
 memo doctor --rebuild
 ```
+
+Legacy tree import is idempotent per record: re-running `memo import --from <repo>` skips
+already-imported records instead of duplicating them.
 
 ### 3. Import Legacy Workflow Trees (`import`)
 
@@ -760,7 +767,7 @@ In `~/.spec-memo/config.json`:
 
 `vaultGit.atomic` defaults to `false` (batched): mutations write markdown only; git commit + remote pull/push run on `memo sync`, MCP/CLI `session_end`, or graceful `memo serve` shutdown. Set `"atomic": true` for per-mutation commit and push (fail-open; errors go to `error.logs`).
 
-When **both** `mode: hybrid` and `vaultGit.enabled` are set, `memo sync` dispatches hybrid HTTP and vault-git in parallel. Either channel can fail without crashing the MCP/SSE server. CLI one-shot `memo upsert` in batched mode does not flush git on process exit; run `memo sync`.
+When **both** `mode: hybrid` and `vaultGit.enabled` are set, `memo sync` dispatches hybrid HTTP and vault-git in parallel. Either channel can fail without crashing the MCP/SSE server. CLI one-shot `memo upsert` in batched mode does not flush git on process exit; run `memo sync`. Vault-git pull uses `git pull --rebase --autostash` so a daemon-dirtied tree no longer aborts the pull, and `memo sync --all` reports per-channel partial failure instead of failing silently.
 
 ### 5. Promoting Records to Product Documentation (`promote`)
 

@@ -219,6 +219,32 @@ describe('hooks-install', () => {
     assert.match(inspection.summary, /Cursor \(Active\)/);
   });
 
+  it('doctor inspect ignores .bak backup files in hook directory when checking version', async () => {
+    await installHooks({
+      host: 'cursor',
+      productRoot,
+      cwd: productRoot,
+      apply: true,
+      force: true,
+      packageVersion: '1.0.0'
+    });
+    fs.writeFileSync(
+      path.join(productRoot, '.cursor', 'hooks', 'spec-memo-record.sh.12345.bak'),
+      '// generated-by: spec-memo@0.5.0\n',
+      'utf8'
+    );
+    const inspection = inspectAgentHooks({
+      productRoot,
+      cwd: productRoot,
+      homeDir,
+      runningVersion: '1.0.0'
+    });
+    const cursor = inspection.hosts.find((h) => h.host === 'Cursor');
+    assert.ok(cursor);
+    assert.equal(cursor.version, '1.0.0');
+    assert.equal(cursor.outdated, false);
+  });
+
   it('generated record scripts include session id and non-empty body', async () => {
     await installHooks({
       host: 'cursor',

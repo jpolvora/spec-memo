@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-09-10 21:30] Agent: Cursor
+- **Prompt**: `/ws-spec-to-pr @.agents/specs/0051-us-55.spec.md full auto no-ship` — fix `memo sync --all` partial failure (vault-git pull dies on dirty tree; hybrid AC6 throw aborts whole changeset)
+- **Done**: `src/vault.ts` pull now `git pull --rebase --autostash origin <branch>` (AC1); `src/sync.ts` `applyChangeset` wraps all 4 `upsertRecord` sites with AC6 skip-and-log (`skipped` + `conflictDetails` `metadata_divergence/skipped`, direct capture stays strict) via new `isCaptureIgnoreSkip` (AC3/AC4); regression tests for dirty-tree pull and AC6-offender changesets (AC5); tracking docs updated (FEATURES/PLAN/PRODUCT.PRD/index.PRD Done logs). No version bump, no commit, no PR per no-ship.
+- **Result**: `npm run build` clean; `npm test` 659 pass / 0 fail (48 suites); diff bounded to `src/vault.ts`, `src/sync.ts`, tests, docs
+
 ### [2026-09-06 15:50] Agent: Cursor Grok 4.6
 - **Prompt**: Implement spec 0049 status Vaults tab modal forms and per-project sync; bump, commit, PR
 - **Done**: Replaced Vaults tab prompt/confirm with modal forms; added POST /api/vaults/sync (pull/push/both via syncDual/hybrid/vault-git); preserved /api/ paths on activity events; tests and tracking

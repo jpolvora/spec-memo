@@ -642,7 +642,8 @@ export const REQUIRED_VAULT_GITIGNORE = [
   'memo.sqlite-shm',
   '.sync/',
   'error.logs',
-  'telemetry/'
+  'telemetry/',
+  'backups/'
 ];
 
 export interface CommitVaultChangeOptions {
@@ -796,9 +797,12 @@ export function initVaultGit(vaultRoot: string = getVaultRoot()): boolean {
     ensureVaultGitignore(vaultRoot);
 
     if (config.vaultGit.remoteUrl) {
-      const add = gitExec(vaultRoot, ['remote', 'add', 'origin', config.vaultGit.remoteUrl], 'init');
-      if (!add.ok) {
+      const remotes = gitExec(vaultRoot, ['remote'], 'init');
+      const originExists = remotes.ok && remotes.stdout.split(/\r?\n/).some((r) => r.trim() === 'origin');
+      if (originExists) {
         gitExec(vaultRoot, ['remote', 'set-url', 'origin', config.vaultGit.remoteUrl], 'init');
+      } else {
+        gitExec(vaultRoot, ['remote', 'add', 'origin', config.vaultGit.remoteUrl], 'init');
       }
     }
     return true;
@@ -833,9 +837,12 @@ async function initVaultGitAsync(vaultRoot: string): Promise<boolean> {
     ensureVaultGitignore(vaultRoot);
 
     if (config.vaultGit.remoteUrl) {
-      const add = await gitExecAsync(vaultRoot, ['remote', 'add', 'origin', config.vaultGit.remoteUrl], 'init');
-      if (!add.ok) {
+      const remotes = await gitExecAsync(vaultRoot, ['remote'], 'init');
+      const originExists = remotes.ok && remotes.stdout.split(/\r?\n/).some((r) => r.trim() === 'origin');
+      if (originExists) {
         await gitExecAsync(vaultRoot, ['remote', 'set-url', 'origin', config.vaultGit.remoteUrl], 'init');
+      } else {
+        await gitExecAsync(vaultRoot, ['remote', 'add', 'origin', config.vaultGit.remoteUrl], 'init');
       }
     }
     return true;
@@ -1116,7 +1123,7 @@ export async function flushVaultGit(
     if (config.vaultGit.remoteUrl) {
       await withVaultGitRemoteExclusive(vaultRoot, options.trigger, async () => {
         const branch = resolveVaultGitBranch(config, vaultRoot);
-        const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', 'origin', branch], 'pull');
+        const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', '--autostash', 'origin', branch], 'pull');
         pulled = pullRes.ok;
         if (!pullRes.ok) {
           remoteError = pullRes.error;

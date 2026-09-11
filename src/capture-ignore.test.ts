@@ -148,7 +148,7 @@ describe('Capture ignore marker and safety boundary', () => {
           },
           body: 'Should fail'
         }),
-      /all pathPatterns match ignored paths/
+      /all linkedPaths match ignored paths/
     );
   });
 
