@@ -188,6 +188,16 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       assert.strictEqual(typeof other[key]['spec-memo'].command, 'string');
       assert.deepStrictEqual(other[key]['spec-memo'].args, ['serve']);
     }
+    // Stdio host configs must never auto-start the :3124 status monitor: every
+    // editor window spawns its own `memo serve`, so a fixed status port collides.
+    for (const host of SUPPORTED_HOSTS) {
+      const withStatus = generateHostMcpSnippet(host, 'memo', ['serve', '--status', '--status-port', '3124', '--no-status']);
+      const str = JSON.stringify(withStatus);
+      assert.ok(!str.includes('--status'), `${host} snippet must strip --status/--no-status`);
+      assert.ok(!str.includes('3124'), `${host} snippet must strip --status-port 3124`);
+      assert.ok(!str.includes('--status-port'), `${host} snippet must strip --status-port`);
+      assert.ok(str.includes('serve'), `${host} snippet must keep serve`);
+    }
   });
 
   await t.test('Phase 1: Doctor reports mode, remote URL, token status, and hybrid state', async () => {

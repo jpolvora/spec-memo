@@ -79,6 +79,31 @@ export function resolveHostConfigPath(host: HostName): string {
 }
 
 /**
+ * Stdio host MCP config MUST NOT auto-start the :3124 status monitor.
+ * Every editor window spawns its own `memo serve`, so a fixed status port
+ * collides (EADDRINUSE) once more than one window is open. The companion is
+ * opt-in via `memo serve --sse`, never via per-window host MCP args.
+ */
+export function stripStatusAutostartArgs(args: string[]): string[] {
+  const cleaned: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--status' || arg === '--no-status') {
+      continue;
+    }
+    if (arg === '--status-port') {
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--status-port=')) {
+      continue;
+    }
+    cleaned.push(arg);
+  }
+  return cleaned;
+}
+
+/**
  * Generate host-specific MCP configuration snippet.
  * OpenCode uses `type: "local"` + `command: string[]` (McpLocalConfig);
  * all other stdio hosts use `command: string` + `args: string[]`.
@@ -94,13 +119,15 @@ export function generateHostMcpSnippet(
     throw new Error(`Unsupported host '${host}'. Supported hosts: ${SUPPORTED_HOSTS.join(', ')}`);
   }
 
+  const safeArgs = stripStatusAutostartArgs(args);
+
   switch (normalizedHost) {
     case 'cursor':
       return {
         mcpServers: {
           'spec-memo': {
             command,
-            args
+            args: safeArgs
           }
         }
       };
@@ -109,12 +136,12 @@ export function generateHostMcpSnippet(
         servers: {
           'spec-memo': {
             command,
-            args
+            args: safeArgs
           }
         }
       };
     case 'opencode': {
-      const fullCommand = [command, ...args];
+      const fullCommand = [command, ...safeArgs];
       const vaultRoot = options.vaultRoot?.trim();
       const defaultRoot = path.join(os.homedir(), '.spec-memo');
       const isNonDefault =
@@ -152,7 +179,7 @@ export function generateHostMcpSnippet(
         mcpServers: {
           'spec-memo': {
             command,
-            args
+            args: safeArgs
           }
         }
       };

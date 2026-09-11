@@ -164,6 +164,7 @@ Add to `~/.cursor/mcp.json` or open **Cursor Settings > MCP**:
   }
 }
 ```
+> Do **not** add `--status` / `--status-port` to stdio host args. Every editor window spawns its own `memo serve`, so a fixed status port collides (`EADDRINUSE`). The `:3124` companion is opt-in via `memo serve --sse` (or a single explicit `memo serve --status`), not per-window MCP config. `memo setup` strips these flags automatically.
 
 #### Antigravity / Gemini IDE
 Add to `~/.gemini/config/mcp_config.json` or active workspace config:
