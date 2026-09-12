@@ -94,6 +94,16 @@ function normalizedCommand(command: string): string {
 }
 
 /**
+ * Redact bearer material before a discovered command line is reported
+ * (stdout or --json). A serve instance started with `--auth-token` on the
+ * command line must never have the secret echoed into terminal scrollback,
+ * CI logs, or JSON artifacts (#58 review).
+ */
+export function redactCommandForDisplay(command: string): string {
+  return String(command).replace(/(--auth-?token[=\s]+)([^\s"']+)/gi, '$1[REDACTED]');
+}
+
+/**
  * True when a command line belongs to the memo serve family: it must contain
  * a spec-memo server marker (`spec-memo` plus `dist/cli.js` or `dist/mcp.js`)
  * AND the standalone `serve` token. Plain `node` work (`ng serve`,
@@ -128,6 +138,20 @@ function normalizedRoot(root: string): string {
   return root.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * True when a command line serves the scoped vault root. Requires a
+ * path-segment boundary after the root so a sibling prefix
+ * (`.../.spec-memo-backup`) never matches a scope of `.../.spec-memo` (#58).
+ */
+export function matchesScopeRoot(command: string, scopeRoot: string): boolean {
+  const hay = normalizedCommand(command).toLowerCase();
+  return new RegExp(`${escapeRegExp(scopeRoot)}(?=[/\\s"']|$)`).test(hay);
+}
+
 /**
  * Filter a raw process list down to shutdown targets. Never returns PID 0/1.
  * The invoking PID is reported as `skipped-self` when it would otherwise
@@ -148,7 +172,7 @@ export function filterShutdownTargets(
     const scope = classifyMemoCommand(proc.command);
     if (!scope) continue;
     if (scope === 'canvas' && !options.includeCanvas) continue;
-    if (scopeRoot && !normalizedCommand(proc.command).toLowerCase().includes(scopeRoot)) {
+    if (scopeRoot && !matchesScopeRoot(proc.command, scopeRoot)) {
       continue;
     }
     if (proc.pid === currentPid) {

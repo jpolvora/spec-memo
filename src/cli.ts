@@ -1612,6 +1612,7 @@ async function runCliInner(
         parsed.options.includeCanvas === true;
 
       const { runShutdown } = await import('./shutdown.js');
+      const { redactCommandForDisplay } = await import('./shutdown.js');
       const { report, exitCode } = await runShutdown({
         vaultRoot: scopeRoot,
         timeoutMs,
@@ -1619,14 +1620,20 @@ async function runCliInner(
         dryRun,
         includeCanvas
       });
+      // Never echo bearer material: redact --auth-token values from reported
+      // command lines before stdout / --json output (#58 review).
+      const displayTargets = report.targets.map((t) => ({
+        ...t,
+        command: redactCommandForDisplay(t.command)
+      }));
 
       if (parsed.isJson) {
-        printJson(report);
-      } else if (report.targets.length === 0) {
+        printJson({ ...report, targets: displayTargets });
+      } else if (displayTargets.length === 0) {
         console.log('No running memo serve processes found.');
       } else {
         console.log(`spec-memo — Shutdown (${report.summary.total} target(s), timeout ${report.timeoutMs} ms)\n`);
-        for (const t of report.targets) {
+        for (const t of displayTargets) {
           const reason = t.reason ? ` — ${t.reason}` : '';
           console.log(`  [${t.result}] PID ${t.pid} (${t.scope}): ${t.command}${reason}`);
         }

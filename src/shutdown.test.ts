@@ -5,6 +5,8 @@ import {
   filterShutdownTargets,
   isCanvasCommand,
   isMemoServeCommand,
+  matchesScopeRoot,
+  redactCommandForDisplay,
   resolveShutdownTimeoutMs,
   runShutdown,
   type MemoProcessInfo,
@@ -125,6 +127,34 @@ describe('shutdown discovery filtering (spec 0053 AC2/AC3)', () => {
       { currentPid: 1 }
     );
     assert.deepEqual(filtered.targets.map((t) => t.pid), [303]);
+  });
+
+  it('PR-58 review: scope requires a path boundary; tokens are redacted', () => {
+    const root = '/home/dev/.spec-memo';
+    assert.equal(
+      matchesScopeRoot('node /opt/spec-memo/dist/cli.js serve --vaultRoot /home/dev/.spec-memo', root),
+      true
+    );
+    assert.equal(
+      matchesScopeRoot('node /opt/spec-memo/dist/cli.js serve --vaultRoot /home/dev/.spec-memo/', root),
+      true
+    );
+    assert.equal(
+      matchesScopeRoot(
+        'node /opt/spec-memo/dist/cli.js serve --vaultRoot /home/dev/.spec-memo-backup',
+        root
+      ),
+      false
+    );
+    assert.equal(
+      redactCommandForDisplay('node a/dist/cli.js serve --auth-token s3cr3t --port 3123'),
+      'node a/dist/cli.js serve --auth-token [REDACTED] --port 3123'
+    );
+    assert.equal(
+      redactCommandForDisplay('node a/dist/cli.js serve --auth-token=s3cr3t'),
+      'node a/dist/cli.js serve --auth-token=[REDACTED]'
+    );
+    assert.equal(redactCommandForDisplay(SERVE_POSIX), SERVE_POSIX);
   });
 });
 
