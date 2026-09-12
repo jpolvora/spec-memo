@@ -70,7 +70,6 @@ describe('shutdown discovery filtering (spec 0053 AC2/AC3)', () => {
     assert.equal(classifyMemoCommand(CANVAS), 'canvas');
     assert.equal(classifyMemoCommand(SERVE_POSIX), 'serve');
     assert.equal(classifyMemoCommand(NG_SERVE), null);
-
     const procs: MemoProcessInfo[] = [
       { pid: 101, command: SERVE_POSIX },
       { pid: 102, command: CANVAS }
@@ -112,6 +111,20 @@ describe('shutdown discovery filtering (spec 0053 AC2/AC3)', () => {
       vaultRoot: 'C:/Users/jpolv/.spec-memo'
     });
     assert.deepEqual(scoped.targets.map((t) => t.pid), [301]);
+  });
+
+  it('PR-58 review: canvas needs the spec-memo marker; serve wins over canvas path', () => {
+    assert.equal(isCanvasCommand('node canvas-renderer.js'), false);
+    assert.equal(isCanvasCommand('npm run canvas-test'), false);
+    assert.equal(classifyMemoCommand('node canvas-renderer.js'), null);
+    const serveInCanvasPath =
+      'node /opt/spec-memo/dist/cli.js serve --vaultRoot /home/dev/canvas-projects/.spec-memo';
+    assert.equal(classifyMemoCommand(serveInCanvasPath), 'serve');
+    const filtered = filterShutdownTargets(
+      [{ pid: 303, command: serveInCanvasPath }],
+      { currentPid: 1 }
+    );
+    assert.deepEqual(filtered.targets.map((t) => t.pid), [303]);
   });
 });
 
@@ -209,6 +222,21 @@ describe('shutdown stop paths (spec 0053 AC4/AC5/AC6)', () => {
     assert.equal(exitCode, 0);
     assert.equal(report.ok, true);
     assert.equal(report.summary.total, 0);
+  });
+
+  it('PR-58 review: recycled pid is revalidated before SIGKILL', async () => {
+    const { ops, calls } = stubOps([407], [407]);
+    const { report } = await runShutdown({
+      listProcesses: async () => [{ pid: 407, command: SERVE_POSIX }],
+      signalOps: ops,
+      currentPid: 1,
+      timeoutMs: 20,
+      verifyTarget: () => false
+    });
+    assert.equal(report.targets[0]?.result, 'skipped');
+    assert.match(report.targets[0]?.reason || '', /no longer matches/);
+    assert.ok(calls.some((c) => c === 'kill 407 SIGTERM'));
+    assert.ok(!calls.some((c) => c.includes('SIGKILL')));
   });
 });
 

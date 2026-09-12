@@ -78,6 +78,12 @@ export interface ShutdownRunOptions extends ShutdownFilterOptions {
   dryRun?: boolean;
   listProcesses?: () => Promise<MemoProcessInfo[]>;
   signalOps?: ShutdownSignalOps;
+  /**
+   * Revalidate that a pid is still the same shutdown target before a lethal
+   * signal (guards against PID reuse between discovery and kill). Defaults to
+   * re-listing processes and matching pid + scope + command.
+   */
+  verifyTarget?: (target: ShutdownTarget) => Promise<boolean> | boolean;
 }
 
 const SERVE_TOKEN_RE = /(^|\s)serve(\s|$)/;
@@ -101,15 +107,20 @@ export function isMemoServeCommand(command: string): boolean {
   return SERVE_TOKEN_RE.test(norm);
 }
 
-/** True for `memo canvas` / `serve-canvas` graph UI processes. */
+/** True for `memo canvas` graph UI processes (spec-memo marker required). */
 export function isCanvasCommand(command: string): boolean {
   if (!command) return false;
-  return CANVAS_TOKEN_RE.test(normalizedCommand(command));
+  const norm = normalizedCommand(command);
+  if (!norm.includes('spec-memo')) return false;
+  if (!norm.includes('dist/cli.js') && !norm.includes('dist/mcp.js')) return false;
+  return CANVAS_TOKEN_RE.test(norm);
 }
 
 export function classifyMemoCommand(command: string): ShutdownScope | null {
-  if (isCanvasCommand(command)) return 'canvas';
+  // Serve first: a serve orphan whose vault path contains `canvas` is still a
+  // serve process and must not be hidden by the canvas classifier.
   if (isMemoServeCommand(command)) return 'serve';
+  if (isCanvasCommand(command)) return 'canvas';
   return null;
 }
 
@@ -203,7 +214,8 @@ async function waitForExit(
 async function stopOneTarget(
   target: ShutdownTarget,
   options: { timeoutMs: number; force: boolean; dryRun: boolean },
-  ops: ShutdownSignalOps
+  ops: ShutdownSignalOps,
+  verifyTarget?: (target: ShutdownTarget) => Promise<boolean> | boolean
 ): Promise<ShutdownTargetResult> {
   const base = { pid: target.pid, command: target.command, scope: target.scope };
   if (options.dryRun) {
@@ -213,7 +225,24 @@ async function stopOneTarget(
     return { ...base, result: 'already-exited' };
   }
 
+  // Revalidate identity before any lethal signal: the pid may have been
+  // recycled for an unrelated process during the graceful wait.
+  const verified = async (): Promise<boolean> => {
+    if (!verifyTarget) return true;
+    try {
+      return await verifyTarget(target);
+    } catch {
+      return false;
+    }
+  };
+  const unverified = () => ({
+    ...base,
+    result: 'skipped' as const,
+    reason: 'pid no longer matches a memo serve command; skipped force kill'
+  });
+
   if (options.force) {
+    if (!(await verified())) return unverified();
     try {
       ops.kill(target.pid, 'SIGKILL');
     } catch (err: unknown) {
@@ -243,6 +272,7 @@ async function stopOneTarget(
   if (await waitForExit(target.pid, options.timeoutMs, ops)) {
     return { ...base, result: 'stopped-graceful' };
   }
+  if (!(await verified())) return unverified();
   try {
     ops.kill(target.pid, 'SIGKILL');
   } catch (err: unknown) {
@@ -373,10 +403,11 @@ export async function runShutdown(options: ShutdownRunOptions = {}): Promise<{
   const ops = options.signalOps ?? defaultSignalOps;
   const dryRun = options.dryRun === true;
   const force = options.force === true;
+  const listFn = options.listProcesses ?? listMemoProcesses;
 
   let processes: MemoProcessInfo[] = [];
   try {
-    processes = await (options.listProcesses ?? listMemoProcesses)();
+    processes = await listFn();
   } catch {
     processes = [];
   }
@@ -387,10 +418,25 @@ export async function runShutdown(options: ShutdownRunOptions = {}): Promise<{
     includeCanvas: options.includeCanvas
   });
 
+  // Default pre-kill revalidation: confirm the pid still runs the same
+  // command before SIGKILL. Fail-closed (skip) when identity cannot be
+  // confirmed, so a recycled pid is never killed.
+  const verifyTarget =
+    options.verifyTarget ??
+    (async (target: ShutdownTarget): Promise<boolean> => {
+      try {
+        const current = await listFn();
+        const found = current.find((p) => p.pid === target.pid);
+        return !!found && found.command === target.command && classifyMemoCommand(found.command) === target.scope;
+      } catch {
+        return false;
+      }
+    });
+
   const results: ShutdownTargetResult[] = [...skippedSelf];
   for (const target of targets) {
     try {
-      results.push(await stopOneTarget(target, { timeoutMs, force, dryRun }, ops));
+      results.push(await stopOneTarget(target, { timeoutMs, force, dryRun }, ops, verifyTarget));
     } catch (err: unknown) {
       results.push({
         pid: target.pid,
