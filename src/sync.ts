@@ -139,6 +139,27 @@ export function isCaptureIgnoreSkip(err: unknown): boolean {
   return msg.includes('all pathPatterns match ignored paths');
 }
 
+/**
+ * True for transient compiled-view rebuild failures (Windows file locks,
+ * EISDIR when a view path is blocked). The record markdown is already written
+ * before `rebuildCompiledViews` runs, so sync-apply must count the record as
+ * applied and let the end-of-apply resilient rebuild retry — not abort the
+ * whole changeset (#55 follow-up).
+ */
+export function isViewRebuildSkip(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException)?.code;
+  if (code === 'EISDIR' || code === 'EPERM' || code === 'EBUSY' || code === 'EACCES' || code === 'ENOENT') {
+    return true;
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes('UNKNOWN: unknown error') ||
+    msg.includes('illegal operation on a directory') ||
+    (/TRAPS\.md|DECISIONS\.md|PROMPTS\.md|SESSIONS\.md|INDEX\.md/.test(msg) &&
+      (msg.includes('EISDIR') || msg.includes('EPERM') || msg.includes('EBUSY') || msg.includes('UNKNOWN')))
+  );
+}
+
 export interface CleanSidecarsOptions {
   prefer?: 'local' | 'remote';
   dryRun?: boolean;
@@ -559,6 +580,23 @@ export async function applyChangeset(
                   allowDuplicate: kind !== "trap"
                 });
               } catch (err: unknown) {
+                if (isViewRebuildSkip(err)) {
+                  // Record markdown persisted; only the compiled view failed.
+                  applied++;
+                  autoMerged++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (auto-merged, view-rebuild-skipped)`);
+                  conflictDetails.push({
+                    id: recId,
+                    kind,
+                    projectId: projId,
+                    category: "metadata_divergence",
+                    resolution: "skipped",
+                    localTime: existing.frontmatter.updated || existing.frontmatter.created,
+                    remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                    message: `View rebuild skipped (transient lock): ${projId}/${kind}/${recId}`
+                  });
+                  continue;
+                }
                 if (!isCaptureIgnoreSkip(err)) throw err;
                 skipped++;
                 recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
@@ -606,6 +644,21 @@ export async function applyChangeset(
                   body: item.body
                 });
               } catch (err: unknown) {
+                if (isViewRebuildSkip(err)) {
+                  applied++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (remote-wins, view-rebuild-skipped)`);
+                  conflictDetails.push({
+                    id: recId,
+                    kind,
+                    projectId: projId,
+                    category: "metadata_divergence",
+                    resolution: "skipped",
+                    localTime: existing.frontmatter.updated || existing.frontmatter.created,
+                    remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                    message: `View rebuild skipped (transient lock): ${projId}/${kind}/${recId}`
+                  });
+                  continue;
+                }
                 if (!isCaptureIgnoreSkip(err)) throw err;
                 skipped++;
                 recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
@@ -674,6 +727,21 @@ export async function applyChangeset(
                     });
                   }
                 } catch (err: unknown) {
+                  if (isViewRebuildSkip(err)) {
+                    applied++;
+                    recordsApplied.push(`${projId}/${kind}/${recId} (view-rebuild-skipped)`);
+                    conflictDetails.push({
+                      id: recId,
+                      kind,
+                      projectId: projId,
+                      category: "metadata_divergence",
+                      resolution: "skipped",
+                      localTime: existing.frontmatter.updated || existing.frontmatter.created,
+                      remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                      message: `View rebuild skipped (transient lock): ${projId}/${kind}/${recId}`
+                    });
+                    continue;
+                  }
                   if (!isCaptureIgnoreSkip(err)) throw err;
                   skipped++;
                   recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
@@ -738,6 +806,20 @@ export async function applyChangeset(
                 allowDuplicate: kind !== "trap"
               });
             } catch (err: unknown) {
+              if (isViewRebuildSkip(err)) {
+                applied++;
+                recordsApplied.push(`${projId}/${kind}/${recId} (view-rebuild-skipped)`);
+                conflictDetails.push({
+                  id: recId,
+                  kind,
+                  projectId: projId,
+                  category: "metadata_divergence",
+                  resolution: "skipped",
+                  remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                  message: `View rebuild skipped (transient lock): ${projId}/${kind}/${recId}`
+                });
+                continue;
+              }
               if (!isCaptureIgnoreSkip(err)) throw err;
               skipped++;
               recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
@@ -791,15 +873,65 @@ export async function applyChangeset(
       }
 
       const projectsToRebuild = new Set<string>([...touchedProjects, ...sidecarProjects]);
+      const rebuildWarnings: string[] = [];
       if (!dryRun && (applied > 0 || autoMerged > 0 || sidecarsCleaned > 0)) {
+        // #55 follow-up: a transient Windows file lock on one project's
+        // TRAPS.md must not zero the entire pull. Rebuild per project with
+        // one retry, then skip-and-log the offender and keep applied counts.
         for (const projId of projectsToRebuild) {
-          rebuildCompiledViews(projId, vaultRoot);
+          try {
+            rebuildCompiledViews(projId, vaultRoot);
+          } catch (firstErr) {
+            await new Promise((r) => setTimeout(r, 100));
+            try {
+              rebuildCompiledViews(projId, vaultRoot);
+            } catch (retryErr) {
+              const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+              rebuildWarnings.push(`${projId}: ${msg}`);
+              conflictDetails.push({
+                id: projId,
+                kind: 'trap',
+                projectId: projId,
+                category: 'metadata_divergence',
+                resolution: 'skipped',
+                message: `Skipped compiled-view rebuild (transient lock): ${projId}: ${msg}`
+              });
+            }
+          }
         }
-        await rebuildIndex(vaultRoot);
+        try {
+          await rebuildIndex(vaultRoot);
+        } catch (firstErr) {
+          await new Promise((r) => setTimeout(r, 100));
+          try {
+            await rebuildIndex(vaultRoot);
+          } catch (retryErr) {
+            const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            rebuildWarnings.push(`index: ${msg}`);
+          }
+        }
+        if (rebuildWarnings.length > 0) {
+          try {
+            const { logErrorReport } = await import('./error-logger.js');
+            for (const w of rebuildWarnings) {
+              logErrorReport(
+                {
+                  level: 'WARN',
+                  subsystem: 'sync-reconcile',
+                  error: new Error(`Rebuild skipped (transient lock): ${w}`),
+                  context: { warning: w }
+                },
+                { vaultRoot }
+              );
+            }
+          } catch {
+            // Best-effort logging must never fail the apply
+          }
+        }
         commitVaultChange(
-          "sync changeset applied",
+          'sync changeset applied',
           vaultRoot,
-          Array.from(projectsToRebuild).map((p) => path.join("projects", p))
+          Array.from(projectsToRebuild).map((p) => path.join('projects', p))
         );
       }
 

@@ -322,6 +322,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-09-06 | status-vaults-tab-ui | Status Vaults tab modal forms and per-project sync; package 0.27.1 | npm test 615 pass |
 | 2026-09-06 | status-vaults-tab-ui-polish | Status Vaults tab Actions column visual polish, side-by-side button grid, semantic accents, responsive layout; package 0.27.2 | npm test 615 pass |
 | 2026-09-10 | us-55-sync-partial-failure | Vault-git `pull --rebase --autostash` dirty-tree hardening + `applyChangeset` AC6 offender skip-and-log (`skipped`/`conflictDetails`, capture stays strict) | npm test 659 pass |
+| 2026-09-12 | us-55-followup-evidence | Dual-sync sequential hybrid→vaultGit (ends autostash pile-up race), vault-git autostash abort+pop recovery, `applyChangeset` transient view-rebuild skip-and-log per record/project with retry, dual-sync dirty-state error surfacing + `all` flag preserved in fallback; v0.28.3 | npm test 667 pass |
 
 
 ## 12. Related docs

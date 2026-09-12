@@ -576,4 +576,22 @@ describe('vault-git-hybrid-sync', () => {
       }
     }
   });
+
+  it('US-55 follow-up: syncDual preserves all:true in hybrid fallback when hybrid fails', async () => {
+    const configPath = path.join(tempVault, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.mode = 'hybrid';
+    config.remote = { url: 'http://127.0.0.1:1' };
+    config.vaultGit = { enabled: true };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    initVaultGit(tempVault);
+    const report = await syncDual({ vaultRoot: tempVault, trigger: 'sync', all: true });
+    assert.ok(report.hybrid);
+    assert.equal(report.hybrid?.ok, false);
+    // Fallback report must echo the requested scope, not hardcoded false.
+    assert.equal(report.hybrid?.report?.all, true);
+    assert.ok(typeof report.hybrid?.error === 'string' && report.hybrid.error.length > 0);
+    // Sequential orchestration still runs vault-git after hybrid failure.
+    assert.ok(report.vaultGit);
+  });
 });

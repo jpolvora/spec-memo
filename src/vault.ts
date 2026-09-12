@@ -1127,6 +1127,29 @@ export async function flushVaultGit(
         pulled = pullRes.ok;
         if (!pullRes.ok) {
           remoteError = pullRes.error;
+          // #55 follow-up: a failed --autostash pull leaves the autostash
+          // behind (stash@{0}, stash@{1} pile-up). Abort the half-rebase and
+          // pop the autostash to restore the working tree instead of leaking.
+          try {
+            await gitExecAsync(vaultRoot, ['rebase', '--abort'], 'pull');
+            const stashList = await gitExecAsync(vaultRoot, ['stash', 'list'], 'pull');
+            if (stashList.ok && stashList.stdout.toLowerCase().includes('autostash')) {
+              const popRes = await gitExecAsync(vaultRoot, ['stash', 'pop'], 'pull');
+              if (!popRes.ok) {
+                logErrorReport(
+                  {
+                    subsystem: 'vault-git',
+                    mode: config.mode,
+                    error: `autostash pop failed after pull conflict: ${popRes.error || 'unknown'}`,
+                    context: { phase: 'flush', branch }
+                  },
+                  { vaultRoot }
+                );
+              }
+            }
+          } catch {
+            // Best-effort recovery must never mask the original pull error.
+          }
         } else {
           const pushRes = await gitExecAsync(vaultRoot, ['push', '-u', 'origin', branch], 'push');
           pushed = pushRes.ok;

@@ -489,3 +489,76 @@ test("US-55 AC3/AC4: applyChangeset skips AC6 offenders and applies the rest", a
     );
   });
 });
+
+test("US-55 follow-up: transient view-rebuild lock on one project does not zero the changeset", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-sync-rebuild-test-"));
+  const vaultT = path.join(tempDir, "vault-t");
+  const projBlocked = "proj-blocked";
+  const projHealthy = "proj-healthy";
+
+  t.after(() => {
+    closeIndex(vaultT);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  initVault({ vaultRoot: vaultT, projectId: projBlocked, displayName: "Blocked" });
+  initVault({ vaultRoot: vaultT, projectId: projHealthy, displayName: "Healthy" });
+
+  // Block compiled-view writes for one project: TRAPS.md as a directory makes
+  // writeFileSync throw EISDIR on every rebuild attempt (simulates Windows lock).
+  const blockedTraps = path.join(vaultT, "projects", projBlocked, "TRAPS.md");
+  try {
+    if (fs.existsSync(blockedTraps)) fs.rmSync(blockedTraps, { force: true });
+  } catch {
+    // ignore
+  }
+  fs.mkdirSync(blockedTraps, { recursive: true });
+
+  const now = new Date().toISOString();
+  const changeset = {
+    schemaVersion: 1 as const,
+    generatedAt: now,
+    records: [
+      {
+        frontmatter: {
+          id: "trap-blocked-1",
+          slug: "trap-blocked-1",
+          kind: "trap" as const,
+          status: "active" as const,
+          source: "agent" as const,
+          created: now,
+          updated: now,
+          project: projBlocked,
+          severity: "high" as const,
+          pathPatterns: ["src/blocked.ts"]
+        },
+        body: "# Blocked trap\nView rebuild fails but the record must still apply.",
+        project: projBlocked
+      },
+      {
+        frontmatter: {
+          id: "trap-healthy-1",
+          slug: "trap-healthy-1",
+          kind: "trap" as const,
+          status: "active" as const,
+          source: "agent" as const,
+          created: now,
+          updated: now,
+          project: projHealthy,
+          severity: "high" as const,
+          pathPatterns: ["src/healthy.ts"]
+        },
+        body: "# Healthy trap\nMust apply alongside the blocked project.",
+        project: projHealthy
+      }
+    ]
+  };
+
+  const result = await applyChangeset(vaultT, changeset);
+  assert.strictEqual(result.conflicts, 0);
+  assert.ok(result.applied >= 2, `expected applied >= 2, got ${result.applied}`);
+  const keptBlocked = await getRecord({ vaultRoot: vaultT, projectId: projBlocked, kind: "trap", id: "trap-blocked-1" });
+  assert.ok(keptBlocked, "blocked project's record must still apply despite view-rebuild failure");
+  const keptHealthy = await getRecord({ vaultRoot: vaultT, projectId: projHealthy, kind: "trap", id: "trap-healthy-1" });
+  assert.ok(keptHealthy, "healthy project's record must apply");
+});
