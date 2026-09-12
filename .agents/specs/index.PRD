@@ -192,9 +192,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 48 | `status-vaults-tab-ui` | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Vaults tab: modal forms and per-project sync |
 | 49 | [`us-54`](0052-us-54.spec.md) | `[x] done` | Phase 8 | Doctor ignore-aware pollution scan, `run.json` boundary, tracked-safe `--fix`, idempotent import; shipped in v0.28.2 (PR #57); verified green in #58 |
 
-| 50 | `memo-shutdown` | `[~]` implemented on `develop` (PR #58) | Phase 8: Agent Continuity & Knowledge Lifecycle | memo shutdown command for stopping orphaned MCP servers |
+| 50 | `memo-shutdown` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | memo shutdown command for stopping orphaned MCP servers |
 
-| 51 | [`us-55`](0051-us-55.spec.md) | `[~]` implemented on `develop` (PR #58) | Phase 8 | Sync partial-failure hardening + follow-up: sequential dual-sync, autostash recovery, view-rebuild resilience |
+| 51 | [`us-55`](0051-us-55.spec.md) | `[x]` done | Phase 8 | Sync partial-failure hardening + follow-up: sequential dual-sync, autostash recovery, view-rebuild resilience |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -269,6 +269,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-06 | status-vaults-tab-ui-polish | Status Vaults tab Actions column visual polish, side-by-side button grid, semantic accents, responsive layout | v0.27.2 |
 | 2026-09-10 | us-55-sync-partial-failure | Vault-git `pull --rebase --autostash` dirty-tree hardening + `applyChangeset` AC6 offender skip-and-log (`skipped`/`conflictDetails`, capture stays strict) | npm test 659 pass |
 | 2026-09-11 | us-54-doctor-import-idempotency | Doctor ignore-aware pollution scan, `run.json` filename-boundary match, tracked-safe `--fix` (`--include-tracked`), per-record idempotent import + regression tests; `src/reconcile.test.ts` wiper hygiene | `1f1280a` on `develop` (NOT merged to `master`, NOT shipped; shipAction=skip); npm test 663 pass |
+| 2026-09-12 | us-55-followup | Sequential dual-sync (hybrid→vaultGit), autostash abort+pop recovery, transient view-rebuild skip-and-log with retry, dirty-state error surfacing; v0.28.3 | PR #58 (merged `2acf002`); npm test 688 pass |
+| 2026-09-12 | memo-shutdown-56 | `memo shutdown` (alias `stop`) graceful stop for orphaned serve processes: discovery, SIGTERM-then-force, scoping, dry-run, JSON; v0.28.3 | PR #58 (merged `2acf002`); npm test 688 pass |
 
 ## Archive
 

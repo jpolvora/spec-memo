@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-09-12 13:35] Agent: Cursor
+- **Prompt**: PR #58 merged — sync tracked specs/plans state into `index.PRD` (`/ws-spec-manager /ws-spec-index`)
+- **Done**: `index.PRD` rows 50–51 (`memo-shutdown`, `us-55`) `[~]` → `[x]` done + Done log append (PR #58, merge `2acf002`, npm test 688 pass); `FEATURES.md` fixed stale dual-sync "in parallel" claim → sequential + added `memo shutdown` capability line. `PLAN.md`/`PRODUCT.PRD` Done logs already complete (verified).
+- **Result**: E1 satisfied (MERGED 2026-09-12T17:29:43Z); all tracking docs consistent with shipped v0.28.3; no code changes, no tests needed
+
 ### [2026-09-10 21:30] Agent: Cursor
 - **Prompt**: `/ws-spec-to-pr @.agents/specs/0051-us-55.spec.md full auto no-ship` — fix `memo sync --all` partial failure (vault-git pull dies on dirty tree; hybrid AC6 throw aborts whole changeset)
 - **Done**: `src/vault.ts` pull now `git pull --rebase --autostash origin <branch>` (AC1); `src/sync.ts` `applyChangeset` wraps all 4 `upsertRecord` sites with AC6 skip-and-log (`skipped` + `conflictDetails` `metadata_divergence/skipped`, direct capture stays strict) via new `isCaptureIgnoreSkip` (AC3/AC4); regression tests for dirty-tree pull and AC6-offender changesets (AC5); tracking docs updated (FEATURES/PLAN/PRODUCT.PRD/index.PRD Done logs). No version bump, no commit, no PR per no-ship.
