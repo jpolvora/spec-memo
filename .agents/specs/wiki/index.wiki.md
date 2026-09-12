@@ -67,3 +67,10 @@ Session and knowledge continuity across agents and time: prompt/session history 
 - [Cross-Agent Session Handoff Baton](continuity/session-handoff.md): Owner/branch-isolated single-use batons, precedence over shared batons, peek-then-claim in bootstrap, memo session handoff CLI, and status Active Handoffs panel.
 - [Per-Project Vault Wiki](continuity/project-wiki.md): Vault projects/{projectId}/WIKI.md, deterministic render, fail-open AI polish, status Wiki tab and /api/wiki routes, and memo wiki CLI.
 - [Vault Manager, Aliases and Local Binding](continuity/vault-manager.md): projectAliases redirect/cycle rules, .spec-memo.json file-first identity, dedup merge metrics, rename/delete semantics, and status Vaults tab.
+
+### documentation
+
+Harness and tooling documentation for authoring and maintaining this living wiki.
+
+- [ws-wiki Skill (Living Wiki Harness)](documentation/ws-wiki.md): The workflow-skills skill that sweeps specs into domain pages, verifies them against code, and publishes the site under docs/wiki.
+

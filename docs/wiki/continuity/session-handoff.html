@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cross-Agent Session Handoff Baton</title>
+<link rel="stylesheet" href="../../assets/css/wiki.css">
+</head>
+<body class="wiki-page">
+<header class="wiki-topbar">
+  <div class="wiki-topbar-left">
+    <button type="button" class="wiki-menu-toggle" id="wiki-menu-toggle" aria-label="Toggle navigation menu" title="Toggle navigation">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <a href="../index.html" class="wiki-topbar-brand">
+      <span class="wiki-brand-logo-mark">W</span>
+      <span class="wiki-brand-name">spec-memo <span class="wiki-brand-tag">Wiki</span></span>
+    </a>
+  </div>
+  <div class="wiki-topbar-center">
+    <div class="wiki-search-box">
+      <svg class="wiki-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="search" id="wiki-search-input" placeholder="Search wiki topics..." aria-label="Search wiki topics">
+    </div>
+  </div>
+  <div class="wiki-topbar-right">
+    <a href="../../" class="wiki-topbar-link">Home</a>
+    <a href="../index.html" class="wiki-topbar-link">Wiki Index</a>
+    <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-topbar-link">GitHub</a>
+    <button type="button" class="wiki-theme-toggle" id="wiki-theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme">
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-sidebar" id="wiki-sidebar" aria-label="Wiki navigation">
+  <div class="wiki-sidebar-inner">
+    <div class="wiki-sidebar-brand-block">
+      <a href="../index.html" class="wiki-sidebar-brand">
+        <div class="wiki-sidebar-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="wiki-sidebar-title-group">
+          <span class="wiki-sidebar-main-title">SPEC-MEMO</span>
+          <span class="wiki-sidebar-sub-title">Living Domain Wiki</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="wiki-sidebar-filter-wrapper">
+      <input type="text" id="wiki-filter-topics" class="wiki-filter-input" placeholder="Filter topics..." aria-label="Filter topics in sidebar">
+    </div>
+
+    <nav class="wiki-sidebar-sections">
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Navigation</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📖</span><span class="wiki-nav-text">Main page</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="../../" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🏠</span><span class="wiki-nav-text">Project Home</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🐙</span><span class="wiki-nav-text">GitHub Repository</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="wiki-nav-group wiki-topics-group">
+        <div class="wiki-nav-heading">Topics by Domain</div>
+      <div class="wiki-domain-section" data-domain="foundation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">FOUNDATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../foundation/bootstrap-and-drift.html" class="wiki-nav-link" title="Bootstrap Brief and Spec Drift"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Bootstrap Brief and Spec Drift</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/record-store.html" class="wiki-nav-link" title="Record Store and Kinds"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Store and Kinds</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/retrieval.html" class="wiki-nav-link" title="Retrieval and Search"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Retrieval and Search</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/vault-and-identity.html" class="wiki-nav-link" title="Vault Root and Project Identity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Root and Project Identity</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="curation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CURATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../curation/gc-and-ttl.html" class="wiki-nav-link" title="Garbage Collection, Record TTL, and Log Compaction"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Garbage Collection, Record TTL, and Log Compaction</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/promote-and-export.html" class="wiki-nav-link" title="Record Promotion and Skill Export"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Promotion and Skill Export</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/safety-and-capture.html" class="wiki-nav-link" title="Safety Boundaries, Secret Redaction, and Capture Exclusions"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Safety Boundaries, Secret Redaction, and Capture Exclusions</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/trap-lifecycle.html" class="wiki-nav-link" title="Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="interfaces">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">7</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../interfaces/agent-adapters.html" class="wiki-nav-link" title="Agent Adapters &amp; Installers"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Agent Adapters &amp; Installers</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/cli.html" class="wiki-nav-link" title="CLI Surface (`memo`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">CLI Surface (`memo`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/diagnostics.html" class="wiki-nav-link" title="Diagnostics (`memo doctor`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Diagnostics (`memo doctor`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/import.html" class="wiki-nav-link" title="Legacy Workflow Tree Import"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Legacy Workflow Tree Import</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/mcp-tooling.html" class="wiki-nav-link" title="MCP Version &amp; Skill Installation Tools"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">MCP Version &amp; Skill Installation Tools</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/viewer.html" class="wiki-nav-link" title="Human Viewer Compatibility"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Human Viewer Compatibility</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/virtual-file-system.html" class="wiki-nav-link" title="Virtual File System over MCP"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Virtual File System over MCP</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="connectivity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONNECTIVITY</span><span class="wiki-domain-badge">8</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../connectivity/backup-restore.html" class="wiki-nav-link" title="Backup &amp; Restore"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Backup &amp; Restore</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/canvas-viewer.html" class="wiki-nav-link" title="Canvas Viewer"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Canvas Viewer</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/deployment-modes.html" class="wiki-nav-link" title="Deployment Modes"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Deployment Modes</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/server-lifecycle.html" class="wiki-nav-link" title="Server Lifecycle"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Server Lifecycle</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/sse-transport.html" class="wiki-nav-link" title="SSE Transport"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">SSE Transport</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/status-monitor.html" class="wiki-nav-link" title="Status Monitor"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Status Monitor</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/telemetry.html" class="wiki-nav-link" title="Operational Telemetry"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Operational Telemetry</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/vault-sync.html" class="wiki-nav-link" title="Vault Sync"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Sync</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="continuity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONTINUITY</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="project-wiki.html" class="wiki-nav-link" title="Per-Project Vault Wiki"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Per-Project Vault Wiki</span></a></li>
+        <li class="wiki-nav-item"><a href="prompt-history.html" class="wiki-nav-link" title="Prompt History, Sessions &amp; Activity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Prompt History, Sessions &amp; Activity</span></a></li>
+        <li class="wiki-nav-item active"><a href="session-handoff.html" class="wiki-nav-link active" title="Cross-Agent Session Handoff Baton"><span class="wiki-topic-marker">▸</span><span class="wiki-nav-text">Cross-Agent Session Handoff Baton</span></a></li>
+        <li class="wiki-nav-item"><a href="vault-manager.html" class="wiki-nav-link" title="Vault Manager, Aliases &amp; Local Binding"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Manager, Aliases &amp; Local Binding</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="documentation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">DOCUMENTATION</span><span class="wiki-domain-badge">1</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../documentation/ws-wiki.html" class="wiki-nav-link" title="ws-wiki Skill (Living Wiki Harness)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">ws-wiki Skill (Living Wiki Harness)</span></a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Tools</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🔗</span><span class="wiki-nav-text">What links here</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/blob/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📄</span><span class="wiki-nav-text">View Markdown</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">⏳</span><span class="wiki-nav-text">Page History</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <button type="button" onclick="window.print()" class="wiki-nav-link wiki-nav-btn">
+              <span class="wiki-nav-icon">🖨️</span><span class="wiki-nav-text">Print / PDF</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</aside>
+  <main class="wiki-content-column">
+    <nav class="wiki-chrome"><a href="../../">Home</a> · <a href="../index.html">Wiki</a> · <span>CONTINUITY</span></nav>
+<div class="wiki-content-header-tabs">
+  <div class="wiki-tabs-left">
+    <span class="wiki-tab active">Article</span>
+    <a href="https://github.com/jpolvora/spec-memo/tree/master/.agents/specs" target="_blank" rel="noopener" class="wiki-tab">Specifications</a>
+  </div>
+  <div class="wiki-tabs-right">
+    <span class="wiki-tab active">Read</span>
+    <a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" class="wiki-tab" title="Edit this page on GitHub">Edit</a>
+    <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" class="wiki-tab" title="View commit history on GitHub">View history</a>
+  </div>
+</div>
+    <article class="wiki-article wiki-toc"><h1>Cross-Agent Session Handoff Baton</h1>
+<div class="wiki-tagline">From spec-memo Wiki, the living architecture &amp; domain knowledge base</div>
+<aside class="wiki-infobox" aria-label="Feature specification details">
+  <div class="wiki-infobox-header">
+    <div class="wiki-infobox-title">Cross-Agent Session Handoff Baton</div>
+    <div class="wiki-infobox-badge-wrap"><span class="wiki-infobox-badge">Domain: continuity</span></div>
+  </div>
+  <table class="wiki-infobox-table">
+    <tbody>
+      <tr>
+        <th>Domain</th>
+        <td><code>continuity</code></td>
+      </tr>
+      <tr>
+        <th>Feature</th>
+        <td><code>session-handoff</code></td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><span class="wiki-status-pill"><span class="wiki-status-dot"></span>Living Synthesis</span></td>
+      </tr>
+      <tr>
+        <th>Contract</th>
+        <td>Canonical Spec Wiki</td>
+      </tr>
+      <tr>
+        <th>Provenance</th>
+        <td>0001–0053</td>
+      </tr>
+      <tr>
+        <th>Framework</th>
+        <td>spec-memo</td>
+      </tr>
+      <tr>
+        <th>Manager</th>
+        <td><code>ws-wiki</code></td>
+      </tr>
+    </tbody>
+  </table>
+</aside>
+<div class="wiki-toc-box" id="toc" role="navigation" aria-label="Table of contents">
+  <div class="wiki-toc-header">
+    <span class="wiki-toc-title">Contents</span>
+    <button type="button" class="wiki-toc-toggle" id="wiki-toc-toggle" aria-expanded="true">[hide]</button>
+  </div>
+  <ol class="wiki-toc-list" id="wiki-toc-list">
+    <li class="wiki-toc-item"><a href="#feature-overview"><span class="wiki-toc-number">1</span> <span class="wiki-toc-text">Feature Overview</span></a></li>
+    <li class="wiki-toc-item"><a href="#business-rules-logic"><span class="wiki-toc-number">2</span> <span class="wiki-toc-text">Business Rules &amp; Logic</span></a></li>
+    <li class="wiki-toc-item"><a href="#technical-architecture"><span class="wiki-toc-number">3</span> <span class="wiki-toc-text">Technical Architecture</span></a></li>
+  </ol>
+</div>
+<h2 id="feature-overview">Feature Overview <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Feature Overview">[edit]</a></span></h2>
+<p>A handoff baton is a single-use, forward-looking transfer record that lets one agent session pass tactical context (next steps, failed approaches, open questions) to the next session in the same repository, even across different coding harnesses. Batons are owner/branch isolated by default so concurrent sessions or teammates cannot steal each other&#39;s context; an explicit <code>shared</code> flag makes a baton project-wide.</p>
+<p>Primary journeys:</p>
+<ul><li>An agent closes a session with a handoff payload via the <code>prompt</code> MCP tool (<code>action: &#39;session_end&#39;</code>, <code>handoff</code> object) or CLI <code>memo session end</code> flags.</li><li>The baton is written as JSON under the project vault <code>.sync/handoffs/</code>.</li><li>A later agent calls <code>bootstrap</code> (or <code>prompt</code> <code>action: &#39;session_start&#39;</code>).</li><li>The matching baton is peeked, rendered at the top of the brief as <code>## 🤝 Active Session Handoff</code>, and claimed exactly once.</li><li>An operator manages batons with CLI <code>memo session handoff</code>, <code>memo session handoff --all</code>, and <code>memo session handoff --cancel</code>.</li><li>An operator inspects and dismisses batons through the status monitor <strong>Active Handoffs</strong> panel.</li></ul>
+<p>Scope: this slice adds no MCP tool. It extends the existing <code>prompt</code> and <code>bootstrap</code> tools, plus CLI extras and status HTTP/UI.</p>
+<h2 id="business-rules-logic">Business Rules &amp; Logic <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Business Rules &amp; Logic">[edit]</a></span></h2>
+<h3 id="ingestion">Ingestion <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Ingestion">[edit]</a></span></h3>
+<ul><li>The <code>handoff</code> payload accepts <code>nextSteps</code> (array of strings, required when a handoff is present).</li><li>Optional fields: <code>failedApproaches</code>, <code>openQuestions</code>, <code>branch</code>, <code>owner</code>, and <code>shared</code> (default <code>false</code>).</li><li><code>createHandoff</code> filters empty entries and throws <code>handoff.nextSteps must contain at least one non-empty step.</code> when no non-empty step remains.</li><li><code>writeHandoffOnSessionEnd</code> returns <code>undefined</code> for an empty payload instead of throwing.</li></ul>
+<h3 id="owner-and-branch-resolution">Owner and branch resolution <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Owner and branch resolution">[edit]</a></span></h3>
+<ul><li><code>owner</code> = payload owner, else <code>git config user.email</code>, else <code>git config user.name</code>, else OS username, else <code>local</code>.</li><li><code>branch</code> = payload branch, else <code>git rev-parse --abbrev-ref HEAD</code>, else <code>unknown</code>.</li><li>Resolution failures fall back silently and do not crash.</li></ul>
+<h3 id="storage-and-superseding">Storage and superseding <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Storage and superseding">[edit]</a></span></h3>
+<ul><li>Batons live at <code>projects/{projectId}/.sync/handoffs/</code>.</li><li>Non-shared files are <code>{encodedOwner}__{encodedBranch}.json</code> (slashes replaced with <code>_</code>, percent-encoded, capped at 120 chars).</li><li>Shared batons use the single fixed filename <code>_shared.json</code>.</li><li>A new baton for the same owner+branch overwrites that owner+branch file, so the newest baton wins.</li><li>Batons for sibling branches and other owners are untouched.</li><li>Shared batons overwrite each other independently.</li></ul>
+<h3 id="eligibility-matching">Eligibility matching <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Eligibility matching">[edit]</a></span></h3>
+<ul><li>Eligible set: unclaimed, non-shared batons matching the current owner and current branch.</li><li>Among those, the newest <code>createdAt</code> is chosen.</li><li>If none match, the newest unclaimed shared baton is chosen.</li><li>Owner/branch match takes strict precedence over shared.</li><li>A shared baton of a different branch is still eligible for any branch.</li></ul>
+<h3 id="single-use-claiming">Single-use claiming <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Single-use claiming">[edit]</a></span></h3>
+<ul><li><code>claimHandoff</code> re-reads the file from disk before writing.</li><li>It rejects already-claimed records.</li><li>It rejects id-mismatched records (superseded).</li><li>On success it writes <code>claimed: true</code>, <code>claimedAt</code>, and <code>claimedBySession</code>.</li><li>Telemetry emits <code>handoff_claimed</code>.</li></ul>
+<h3 id="bootstrap-delivery">Bootstrap delivery <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Bootstrap delivery">[edit]</a></span></h3>
+<ul><li><code>bootstrap</code> calls <code>peekEligibleHandoff</code> before its budget pass.</li><li>It renders the baton and reserves the handoff/objective byte size as immutable before trimming traps and decisions.</li><li>The baton is claimed only after the brief fits inside <code>maxBytes</code> (default 8 KB).</li><li>Claiming happens under a vault lock.</li><li>Claim failures degrade to a notice and the standard brief.</li><li>Missing files return <code>null</code>; malformed JSON is ignored; a malformed baton never crashes <code>bootstrap</code>.</li></ul>
+<h3 id="cancellation-and-dismissal">Cancellation and dismissal <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Cancellation and dismissal">[edit]</a></span></h3>
+<ul><li><code>cancel_handoff</code> (and <code>memo session handoff --cancel</code>) deletes only the current owner+branch non-shared file.</li><li>When no such baton exists it returns <code>{ cancelled: false }</code> and the CLI exits <code>0</code>.</li><li><code>dismissHandoffById</code> deletes an unclaimed baton matching the supplied id (used by the status panel).</li></ul>
+<h3 id="session-objective">Session objective <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Session objective">[edit]</a></span></h3>
+<ul><li><code>session_start</code> may record an <code>objective</code> string.</li><li>Objectives are stored at <code>projects/{projectId}/.sync/objectives/{owner__branch}.json</code> and bound to owner+branch.</li><li><code>session_end</code> clears the objective.</li><li><code>session_start</code> without an objective also clears any stale objective for that owner/branch.</li><li><code>getSessionObjective</code> returns <code>null</code> when the referenced session file no longer exists.</li></ul>
+<h3 id="telemetry-and-isolation-invariants">Telemetry and isolation invariants <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Telemetry and isolation invariants">[edit]</a></span></h3>
+<ul><li><code>createHandoff</code> records <code>operation: &#39;handoff_created&#39;</code>.</li><li><code>claimHandoff</code> records <code>operation: &#39;handoff_claimed&#39;</code>.</li><li>Both carry <code>sessionId</code>, <code>branch</code>, <code>owner</code>, <code>shared</code>, and <code>handoffId</code> metadata.</li><li>A session on a different branch or under a different owner never sees or consumes a private baton.</li><li>Only <code>shared: true</code> crosses those boundaries.</li><li>Claiming is single-use: a second attempt on the same baton fails rather than re-delivering.</li></ul>
+<h2 id="technical-architecture">Technical Architecture <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Technical Architecture">[edit]</a></span></h2>
+<h3 id="core-module-src-handoff-ts">Core module <code>src/handoff.ts</code> <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Core module src/handoff.ts">[edit]</a></span></h3>
+<ul><li><code>createHandoff</code>, <code>listPendingHandoffs</code>, <code>matchEligibleHandoff</code>, <code>peekEligibleHandoff</code>.</li><li><code>claimHandoff</code>, <code>cancelHandoffForContext</code>, <code>dismissHandoffById</code>, <code>getActiveHandoffForContext</code>.</li><li><code>renderHandoffMarkdown</code>, <code>setSessionObjective</code>, <code>getSessionObjective</code>, <code>clearSessionObjective</code>.</li><li><code>deliverAndClaimHandoff</code>, <code>writeHandoffOnSessionEnd</code>, <code>resolveGitBranch</code>, <code>resolveOwner</code>.</li><li>Shared baton filename constant <code>_shared.json</code>; subdirs <code>.sync/handoffs</code> and <code>.sync/objectives</code>.</li></ul>
+<h3 id="types-src-types-ts">Types (<code>src/types.ts</code>) <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Types (src/types.ts)">[edit]</a></span></h3>
+<ul><li><code>HandoffPayload</code>: <code>nextSteps</code>, <code>failedApproaches</code>, <code>openQuestions</code>, <code>branch</code>, <code>owner</code>, <code>shared</code>.</li><li><code>HandoffRecord</code>: adds <code>id</code>, <code>harness</code>, <code>createdAt</code>, <code>sessionId</code>, <code>claimed</code>, <code>claimedAt</code>, <code>claimedBySession</code>.</li><li><code>SessionObjective</code>: <code>owner</code>, <code>branch</code>, <code>objective</code>, <code>sessionId</code>, <code>updatedAt</code>.</li></ul>
+<h3 id="integration-points">Integration points <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Integration points">[edit]</a></span></h3>
+<ul><li><code>src/prompt.ts</code> writes batons on <code>endSessionRecord</code> and archives <code>handoffArchive</code> into session frontmatter.</li><li><code>src/prompt.ts</code> claims on <code>startSessionRecord</code>.</li><li><code>cancelHandoffRecord</code> and <code>showHandoffRecord</code> back the CLI.</li><li><code>src/bootstrap.ts</code> peeks, renders, budgets, and claims.</li></ul>
+<h3 id="mcp-surface">MCP surface <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: MCP surface">[edit]</a></span></h3>
+<ul><li><code>prompt</code> actions <code>session_end</code> (with <code>handoff</code>/<code>shared</code>), <code>session_start</code> (with <code>objective</code>), and <code>cancel_handoff</code>.</li><li><code>bootstrap</code> returns <code>handoffMarkdown</code>, <code>handoff</code>, and <code>sessionObjective</code> in the brief.</li><li>No new tool is added.</li></ul>
+<h3 id="cli-src-cli-ts">CLI (<code>src/cli.ts</code>) <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: CLI (src/cli.ts)">[edit]</a></span></h3>
+<ul><li><code>memo session end &lt;id&gt; --handoff-steps &quot;A,B&quot; --handoff-failed &quot;X&quot; --handoff-questions &quot;Q&quot; [--shared]</code> builds the payload from comma-separated flags.</li><li><code>memo session handoff</code> shows the active baton.</li><li><code>memo session handoff --all</code> lists every pending baton.</li><li><code>memo session handoff --cancel</code> cancels the current one.</li><li>The CLI-only actions <code>handoff_show</code> and <code>handoff_list</code> route directly to <code>showHandoffRecord</code> and are not part of the MCP action enum.</li></ul>
+<h3 id="status-http-status-listener-3124">Status HTTP (status listener <code>:3124</code>) <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Status HTTP (status listener :3124)">[edit]</a></span></h3>
+<ul><li><code>GET /api/handoffs?project={id}</code> → <code>{ items, total, projectId, lastSeenRoot }</code>.</li><li>It returns <code>400</code> when <code>project</code> is missing or <code>all</code>.</li><li><code>DELETE /api/handoffs/{id}?project={id}</code> dismisses one unclaimed baton.</li><li>Both pass through <code>sanitizeToolOutput</code>.</li></ul>
+<h3 id="ui">UI <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: UI">[edit]</a></span></h3>
+<ul><li>The <strong>Active Handoffs</strong> panel (<code>id=&quot;handoffs-panel&quot;</code>, <code>id=&quot;handoffs-list&quot;</code>) appears on the Prompts &amp; Intent Stories tab.</li><li>It groups pending batons and offers per-baton Dismiss buttons.</li><li>The panel is embedded on the Prompts &amp; Intent Stories tab (<code>data-tab=&quot;tab-prompts&quot;</code>); the current <code>?tab=</code> deep-link handler covers <code>backups</code>, <code>wiki</code>, and <code>vaults</code> only, so <code>?tab=prompts</code> does not auto-open it.</li></ul>
+<h3 id="provenance">Provenance <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/session-handoff.md" target="_blank" rel="noopener" title="Edit section: Provenance">[edit]</a></span></h3>
+<ul><li><code>0036-session-handoff-baton.spec.md</code>.</li><li>Delivered through the <code>prompt</code> tool documented in <a href="prompt-history.html">Prompt History, Sessions &amp; Activity</a>.</li></ul>
+      <div class="wiki-catlinks">
+        <span class="wiki-catlinks-title">Categories:</span>
+        <a href="../index.html">spec-memo</a>
+         · <a href="../index.html#domain-continuity">CONTINUITY</a>
+        · <a href="../index.html">Living Architecture</a>
+      </div>
+    </article>
+    <footer class="wiki-page-footer">
+      <p>This living wiki page was synthesized from canonical specifications. Content is maintained under <a href="https://github.com/jpolvora/spec-memo">spec-memo</a>.</p>
+    </footer>
+  </main>
+</div>
+<script>
+(function() {
+  /* Theme initialization */
+  var themeToggle = document.getElementById('wiki-theme-toggle');
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch(e) {}
+  }
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved) applyTheme(saved);
+  } catch(e) {}
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  /* Table of Contents toggle */
+  var tocToggle = document.getElementById('wiki-toc-toggle');
+  var tocList = document.getElementById('wiki-toc-list');
+  if (tocToggle && tocList) {
+    tocToggle.addEventListener('click', function() {
+      var isHidden = tocList.style.display === 'none';
+      tocList.style.display = isHidden ? 'block' : 'none';
+      tocToggle.textContent = isHidden ? '[hide]' : '[show]';
+      tocToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+  }
+
+  /* Left sidebar topic filter */
+  var filterInput = document.getElementById('wiki-filter-topics');
+  if (filterInput) {
+    filterInput.addEventListener('input', function() {
+      var q = filterInput.value.toLowerCase().trim();
+      var sections = document.querySelectorAll('.wiki-domain-section');
+      sections.forEach(function(sec) {
+        var items = sec.querySelectorAll('.wiki-nav-item');
+        var visible = 0;
+        items.forEach(function(item) {
+          var txt = item.textContent.toLowerCase();
+          var match = !q || txt.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        sec.style.display = visible > 0 ? '' : 'none';
+      });
+    });
+  }
+
+  /* Top search input sync with sidebar filter */
+  var topSearch = document.getElementById('wiki-search-input');
+  if (topSearch && filterInput) {
+    topSearch.addEventListener('input', function() {
+      filterInput.value = topSearch.value;
+      filterInput.dispatchEvent(new Event('input'));
+    });
+  }
+
+  /* Mobile menu drawer toggle */
+  var menuToggle = document.getElementById('wiki-menu-toggle');
+  var sidebar = document.getElementById('wiki-sidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggle) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

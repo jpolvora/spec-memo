@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety Boundaries, Secret Redaction, and Capture Exclusions</title>
+<link rel="stylesheet" href="../../assets/css/wiki.css">
+</head>
+<body class="wiki-page">
+<header class="wiki-topbar">
+  <div class="wiki-topbar-left">
+    <button type="button" class="wiki-menu-toggle" id="wiki-menu-toggle" aria-label="Toggle navigation menu" title="Toggle navigation">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <a href="../index.html" class="wiki-topbar-brand">
+      <span class="wiki-brand-logo-mark">W</span>
+      <span class="wiki-brand-name">spec-memo <span class="wiki-brand-tag">Wiki</span></span>
+    </a>
+  </div>
+  <div class="wiki-topbar-center">
+    <div class="wiki-search-box">
+      <svg class="wiki-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="search" id="wiki-search-input" placeholder="Search wiki topics..." aria-label="Search wiki topics">
+    </div>
+  </div>
+  <div class="wiki-topbar-right">
+    <a href="../../" class="wiki-topbar-link">Home</a>
+    <a href="../index.html" class="wiki-topbar-link">Wiki Index</a>
+    <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-topbar-link">GitHub</a>
+    <button type="button" class="wiki-theme-toggle" id="wiki-theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme">
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-sidebar" id="wiki-sidebar" aria-label="Wiki navigation">
+  <div class="wiki-sidebar-inner">
+    <div class="wiki-sidebar-brand-block">
+      <a href="../index.html" class="wiki-sidebar-brand">
+        <div class="wiki-sidebar-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="wiki-sidebar-title-group">
+          <span class="wiki-sidebar-main-title">SPEC-MEMO</span>
+          <span class="wiki-sidebar-sub-title">Living Domain Wiki</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="wiki-sidebar-filter-wrapper">
+      <input type="text" id="wiki-filter-topics" class="wiki-filter-input" placeholder="Filter topics..." aria-label="Filter topics in sidebar">
+    </div>
+
+    <nav class="wiki-sidebar-sections">
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Navigation</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📖</span><span class="wiki-nav-text">Main page</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="../../" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🏠</span><span class="wiki-nav-text">Project Home</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🐙</span><span class="wiki-nav-text">GitHub Repository</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="wiki-nav-group wiki-topics-group">
+        <div class="wiki-nav-heading">Topics by Domain</div>
+      <div class="wiki-domain-section" data-domain="foundation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">FOUNDATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../foundation/bootstrap-and-drift.html" class="wiki-nav-link" title="Bootstrap Brief and Spec Drift"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Bootstrap Brief and Spec Drift</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/record-store.html" class="wiki-nav-link" title="Record Store and Kinds"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Store and Kinds</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/retrieval.html" class="wiki-nav-link" title="Retrieval and Search"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Retrieval and Search</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/vault-and-identity.html" class="wiki-nav-link" title="Vault Root and Project Identity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Root and Project Identity</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="curation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CURATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="gc-and-ttl.html" class="wiki-nav-link" title="Garbage Collection, Record TTL, and Log Compaction"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Garbage Collection, Record TTL, and Log Compaction</span></a></li>
+        <li class="wiki-nav-item"><a href="promote-and-export.html" class="wiki-nav-link" title="Record Promotion and Skill Export"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Promotion and Skill Export</span></a></li>
+        <li class="wiki-nav-item active"><a href="safety-and-capture.html" class="wiki-nav-link active" title="Safety Boundaries, Secret Redaction, and Capture Exclusions"><span class="wiki-topic-marker">▸</span><span class="wiki-nav-text">Safety Boundaries, Secret Redaction, and Capture Exclusions</span></a></li>
+        <li class="wiki-nav-item"><a href="trap-lifecycle.html" class="wiki-nav-link" title="Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="interfaces">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">7</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../interfaces/agent-adapters.html" class="wiki-nav-link" title="Agent Adapters &amp; Installers"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Agent Adapters &amp; Installers</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/cli.html" class="wiki-nav-link" title="CLI Surface (`memo`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">CLI Surface (`memo`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/diagnostics.html" class="wiki-nav-link" title="Diagnostics (`memo doctor`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Diagnostics (`memo doctor`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/import.html" class="wiki-nav-link" title="Legacy Workflow Tree Import"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Legacy Workflow Tree Import</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/mcp-tooling.html" class="wiki-nav-link" title="MCP Version &amp; Skill Installation Tools"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">MCP Version &amp; Skill Installation Tools</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/viewer.html" class="wiki-nav-link" title="Human Viewer Compatibility"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Human Viewer Compatibility</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/virtual-file-system.html" class="wiki-nav-link" title="Virtual File System over MCP"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Virtual File System over MCP</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="connectivity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONNECTIVITY</span><span class="wiki-domain-badge">8</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../connectivity/backup-restore.html" class="wiki-nav-link" title="Backup &amp; Restore"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Backup &amp; Restore</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/canvas-viewer.html" class="wiki-nav-link" title="Canvas Viewer"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Canvas Viewer</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/deployment-modes.html" class="wiki-nav-link" title="Deployment Modes"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Deployment Modes</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/server-lifecycle.html" class="wiki-nav-link" title="Server Lifecycle"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Server Lifecycle</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/sse-transport.html" class="wiki-nav-link" title="SSE Transport"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">SSE Transport</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/status-monitor.html" class="wiki-nav-link" title="Status Monitor"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Status Monitor</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/telemetry.html" class="wiki-nav-link" title="Operational Telemetry"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Operational Telemetry</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/vault-sync.html" class="wiki-nav-link" title="Vault Sync"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Sync</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="continuity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONTINUITY</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../continuity/project-wiki.html" class="wiki-nav-link" title="Per-Project Vault Wiki"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Per-Project Vault Wiki</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/prompt-history.html" class="wiki-nav-link" title="Prompt History, Sessions &amp; Activity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Prompt History, Sessions &amp; Activity</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/session-handoff.html" class="wiki-nav-link" title="Cross-Agent Session Handoff Baton"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Cross-Agent Session Handoff Baton</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/vault-manager.html" class="wiki-nav-link" title="Vault Manager, Aliases &amp; Local Binding"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Manager, Aliases &amp; Local Binding</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="documentation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">DOCUMENTATION</span><span class="wiki-domain-badge">1</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../documentation/ws-wiki.html" class="wiki-nav-link" title="ws-wiki Skill (Living Wiki Harness)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">ws-wiki Skill (Living Wiki Harness)</span></a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Tools</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🔗</span><span class="wiki-nav-text">What links here</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/blob/master/.agents/specs/wiki/curation/safety-and-capture.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📄</span><span class="wiki-nav-text">View Markdown</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/curation/safety-and-capture.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">⏳</span><span class="wiki-nav-text">Page History</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <button type="button" onclick="window.print()" class="wiki-nav-link wiki-nav-btn">
+              <span class="wiki-nav-icon">🖨️</span><span class="wiki-nav-text">Print / PDF</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</aside>
+  <main class="wiki-content-column">
+    <nav class="wiki-chrome"><a href="../../">Home</a> · <a href="../index.html">Wiki</a> · <span>CURATION</span></nav>
+<div class="wiki-content-header-tabs">
+  <div class="wiki-tabs-left">
+    <span class="wiki-tab active">Article</span>
+    <a href="https://github.com/jpolvora/spec-memo/tree/master/.agents/specs" target="_blank" rel="noopener" class="wiki-tab">Specifications</a>
+  </div>
+  <div class="wiki-tabs-right">
+    <span class="wiki-tab active">Read</span>
+    <a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/curation/safety-and-capture.md" target="_blank" rel="noopener" class="wiki-tab" title="Edit this page on GitHub">Edit</a>
+    <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/curation/safety-and-capture.md" target="_blank" rel="noopener" class="wiki-tab" title="View commit history on GitHub">View history</a>
+  </div>
+</div>
+    <article class="wiki-article wiki-toc"><h1>Safety Boundaries, Secret Redaction, and Capture Exclusions</h1>
+<div class="wiki-tagline">From spec-memo Wiki, the living architecture &amp; domain knowledge base</div>
+<aside class="wiki-infobox" aria-label="Feature specification details">
+  <div class="wiki-infobox-header">
+    <div class="wiki-infobox-title">Safety Boundaries, Secret Redaction, and Capture Exclusions</div>
+    <div class="wiki-infobox-badge-wrap"><span class="wiki-infobox-badge">Domain: curation</span></div>
+  </div>
+  <table class="wiki-infobox-table">
+    <tbody>
+      <tr>
+        <th>Domain</th>
+        <td><code>curation</code></td>
+      </tr>
+      <tr>
+        <th>Feature</th>
+        <td><code>safety-and-capture</code></td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><span class="wiki-status-pill"><span class="wiki-status-dot"></span>Living Synthesis</span></td>
+      </tr>
+      <tr>
+        <th>Contract</th>
+        <td>Canonical Spec Wiki</td>
+      </tr>
+      <tr>
+        <th>Provenance</th>
+        <td>0001–0053</td>
+      </tr>
+      <tr>
+        <th>Framework</th>
+        <td>spec-memo</td>
+      </tr>
+      <tr>
+        <th>Manager</th>
+        <td><code>ws-wiki</code></td>
+      </tr>
+    </tbody>
+  </table>
+</aside>
+<div class="wiki-toc-box" id="toc" role="navigation" aria-label="Table of contents">
+  <div class="wiki-toc-header">
+    <span class="wiki-toc-title">Contents</span>
+    <button type="button" class="wiki-toc-toggle" id="wiki-toc-toggle" aria-expanded="true">[hide]</button>
+  </div>
+  <ol class="wiki-toc-list" id="wiki-toc-list">
+    <li class="wiki-toc-item"><a href="#feature-overview"><span class="wiki-toc-number">1</span> <span class="wiki-toc-text">Feature Overview</span></a></li>
+    <li class="wiki-toc-item"><a href="#business-rules-logic"><span class="wiki-toc-number">2</span> <span class="wiki-toc-text">Business Rules &amp; Logic</span></a></li>
+    <li class="wiki-toc-item"><a href="#technical-architecture"><span class="wiki-toc-number">3</span> <span class="wiki-toc-text">Technical Architecture</span></a></li>
+  </ol>
+</div>
+<h2 id="feature-overview">Feature Overview <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/curation/safety-and-capture.md" target="_blank" rel="noopener" title="Edit section: Feature Overview">[edit]</a></span></h2>
+<p>This page covers the two policy layers that keep bad data out of the vault: secret redaction/refusal and the product-tree write guard from <code>0003-curator-gc-and-safety.spec.md</code>, plus the lexical capture-exclusion boundary from <code>0040-capture-ignore-marker.spec.md</code>.</p>
+<ul><li>Secret redaction refuses writes whose body/frontmatter/details contain recognized credential signatures, and scrubs caller-facing read payloads.</li><li>The write guard refuses creating memory record files inside the detected consumer product repository.</li><li>Capture exclusions (<code>isPathIgnored</code>) keep ignored files out of <code>pathPatterns</code>/<code>linkedPaths</code>, prompt excerpts, bootstrap focus paths, and targeted searches. <code>memo doctor --check-capture &lt;path&gt;</code> explains the decision.</li></ul>
+<p>Journeys:</p>
+<ul><li>An agent tries <code>upsert</code> with a PEM block or <code>ghp_…</code> token → the operation throws a safety error; nothing is persisted.</li><li>An author adds a <code>.spec-memo-ignore</code> file and runs <code>memo doctor --check-capture src/secrets/key.env</code> to confirm it prints <code>IGNORED</code> with the matching pattern, line, and source layer.</li><li>A prompt record cites a vendored binary path → the excerpt is stored with <code>[PATH_IGNORED]</code> instead of the literal path.</li></ul>
+<h2 id="business-rules-logic">Business Rules &amp; Logic <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/curation/safety-and-capture.md" target="_blank" rel="noopener" title="Edit section: Business Rules &amp; Logic">[edit]</a></span></h2>
+<p><strong>Secret signatures</strong> (<code>SECRET_PATTERNS</code>, src/safety.ts). Named detectors, each a regex:</p>
+<ul><li>Private Key (full PEM block) and Private Key Header (<code>-----BEGIN … PRIVATE KEY-----</code>).</li><li>AWS Access Key ID (<code>AKIA</code>, <code>ASIA</code>, <code>A3T…</code>, <code>AGPA</code>, <code>AIDA</code>, <code>AROA</code>, <code>AIPA</code>, <code>ANPA</code>, <code>ANVA</code> + 16 uppercase alnum).</li><li>GitHub Personal Access Token (<code>ghp_</code>, <code>gho_</code>, <code>ghu_</code>, <code>ghs_</code>, <code>ghr_</code> + 36–255 chars).</li><li>Slack token (<code>xox[baprs]-…</code>).</li><li>Generic API key/secret assignment (<code>api_key|apikey|secret_key|private_key|auth_token|access_token|secret_token|client_secret</code> <code>:</code>/<code>=</code> quoted value ≥ 16 chars).</li><li>Stripe/generic secret key (<code>sk_live</code>, <code>sk_test</code>, <code>rk_live</code>, <code>rk_test</code>).</li><li>Bearer token header (<code>Bearer &lt;25+ token chars&gt;</code>).</li></ul>
+<p><strong>Write-time behavior is fail-closed refusal, not redaction.</strong> <code>assertNoSecrets</code> throws <code>Safety violation: Secret detected in &lt;context&gt; (&lt;names&gt;). …</code> on <code>upsert</code> (<code>options.body</code> as <code>record body</code>, <code>options.frontmatter</code> as <code>record frontmatter</code>) and on <code>append</code> (<code>options.event</code> as <code>event log body</code>, <code>options.details</code> as <code>event log details</code>). Detection is recursive over strings, arrays, and object values (<code>scanPayloadForSecrets</code>), and match names are de-duplicated.</p>
+<p><strong>Read-time redaction.</strong> <code>redactSecretsInPayload</code> replaces each match in strings with <code>[REDACTED:&lt;pattern name&gt;]</code>. <code>sanitizeToolOutput</code> composes <code>stripVaultPaths(redactSecretsInPayload(redactPathsDeep(payload)))</code>: absolute filesystem paths become <code>[path]</code>, and vault path keys (<code>path</code>, <code>filepath</code>, <code>targetPath</code>, <code>purgedFiles</code>, <code>compactedPlans</code>, <code>vaultPath</code>, <code>vaultRoot</code>, <code>dbPath</code>, <code>absolutePath</code>, <code>backupPath</code>) are dropped. Allowlisted keys survive: <code>configFilePath</code>, <code>destination</code>, and a <code>path</code> value ending in <code>.spec-memo.json</code>.</p>
+<p><strong>Product-tree write guard</strong> (<code>assertNotInProductRoot</code>, src/safety.ts). Throws <code>Safety violation: Attempted to write memory record inside consumer product repository (…)</code> when the target resolves inside <code>productRoot</code>, unless (a) no productRoot is known, (b) productRoot equals/is inside the vault root (it is the vault, not a consumer repo), or (c) the target is inside the vault root. Applied by <code>upsertRecord</code>, <code>appendEvent</code>, and <code>forgetRecord</code>. Path comparison is case-insensitive with separators normalized.</p>
+<p><strong>Capture-ignore sources and precedence.</strong> Merged in this order: built-in <code>DEFAULT_IGNORE_PATTERNS</code>, then the project-root <code>.spec-memo-ignore</code>, then <code>config.json</code> <code>projects.&lt;id&gt;.ignorePaths</code>. All three are unioned; later negation (<code>!pattern</code>) resets the ignored flag.</p>
+<p><strong>Built-in baseline</strong> (active even with no marker file): <code>.git/</code>, <code>node_modules/</code>, <code>dist/</code>, <code>build/</code>, <code>.venv/</code>, <code>.env</code>, <code>.env.*</code>, <code>*.pem</code>, <code>*.key</code>, <code>*.crt</code>, <code>*.p12</code>, <code>*.pfx</code>, <code>*.bin</code>, <code>*.exe</code>, <code>*.dll</code>, <code>*.so</code>, <code>*.dylib</code>, <code>*.zip</code>, <code>*.tar</code>, <code>*.gz</code>, <code>*.7z</code>, <code>*.rar</code>, <code>*.iso</code>, <code>*.dmg</code>, <code>*.img</code>, <code>*.sqlite</code>, <code>*.db</code>.</p>
+<p><strong>Marker parsing.</strong> Blank lines and <code>#</code> comments ignored; leading <code>!</code> marks a negation; a bare <code>!</code> is an invalid line. Each pattern is validated through the same glob matcher used by search (<code>matchesPathPattern</code>); invalid syntax is reported to stderr and collected in <code>invalidLines</code> while valid lines still apply. Parsing never crashes the daemon.</p>
+<p><strong>Caching.</strong> Rule sets are cached per logical key <code>&lt;productRoot&gt;|&lt;projectId&gt;|&lt;vaultRoot&gt;</code>, invalidated when <code>.spec-memo-ignore</code> mtime or the vault <code>config.json</code> mtime/size/content changes. <code>clearIgnoreCacheForTests</code> resets the cache.</p>
+<p><strong>Path resolution.</strong> A relative path is resolved against the product root. Any path outside the product root is treated as ignored (<code>normalizeRelativePath</code> returns null → <code>ignored: true</code>). Curated-tree matched, directory-only, and <code>**</code> patterns are handled by <code>pathMatchesRule</code>.</p>
+<p><strong>Enforcement points.</strong></p>
+<ul><li><code>upsert</code>: <code>pathPatterns</code> and <code>linkedPaths</code> each pass through <code>sanitizePathPatterns</code>. Ignored patterns are stripped; if every pattern is ignored the upsert throws <code>Safety violation: all &lt;field&gt; match ignored paths.</code> carrying <code>code: CAPTURE_IGNORE_AC6</code> and <code>field: pathPatterns|linkedPaths</code>.</li><li><code>prompt action:record</code>: file references in turn bodies/excerpts are rewritten to <code>[PATH_IGNORED]</code>.</li><li><code>bootstrap</code>: a focus <code>path</code> matching an ignore rule is disregarded and the brief falls back to project-wide compilation.</li><li><code>search</code> with <code>--path</code>: if the target path is ignored the search returns no matches.</li></ul>
+<p><strong>Read-only marker guarantee.</strong> <code>spec-memo</code> never creates, edits, or deletes <code>.spec-memo-ignore</code> in the consumer repo. Missing marker is normal: built-in rules apply with no warning and no side effects.</p>
+<p><strong>Diagnostics.</strong></p>
+<ul><li><code>memo doctor --check-capture &lt;relativeOrAbsolutePath&gt;</code> prints <code>CAPTURED (no ignore rule matched)</code> or <code>IGNORED (matched line N: &lt;pattern&gt;, source: builtin|.spec-memo-ignore|config.json)</code>; when the match has no rule it prints <code>IGNORED (outside repository root or matched ignore boundary)</code>. Exit code 0 when CAPTURED, 1 when IGNORED.</li><li>Full <code>memo doctor</code> reports an <code>exclusionBoundary</code> card: <code>activeRuleCount</code>, <code>invalidLineCount</code>, and per-line invalid details; invalid marker lines become warnings.</li><li>Both features are enforced without adding any MCP tool.</li></ul>
+<h2 id="technical-architecture">Technical Architecture <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/curation/safety-and-capture.md" target="_blank" rel="noopener" title="Edit section: Technical Architecture">[edit]</a></span></h2>
+<p><strong>Modules.</strong> <code>src/safety.ts</code> owns secret detection/redaction, path sanitization, and the product-tree guard; it re-exports <code>isPathIgnored</code> from <code>src/capture-ignore.ts</code>. <code>src/capture-ignore.ts</code> owns rule loading, matching, redaction of prompt text, and capture diagnostics, and imports <code>matchesPathPattern</code> from <code>src/indexer.ts</code> and <code>isPathInside</code> from <code>src/safety.ts</code>.</p>
+<p><strong>Key API surface.</strong></p>
+<ul><li><code>detectSecrets(text)</code>, <code>scanPayloadForSecrets(payload)</code>, <code>assertNoSecrets(payload, context)</code>, <code>redactSecretsInPayload(payload)</code>, <code>stripVaultPaths(payload)</code>, <code>sanitizeToolOutput(payload)</code> (src/safety.ts).</li><li><code>isPathInside(target, root)</code>, <code>assertNotInProductRoot(target, productRoot, isGit, vaultRoot)</code>, <code>assertAllowedIdeRulePromote(...)</code>, <code>assertValidProjectId(...)</code> (src/safety.ts).</li><li><code>loadIgnoreRules(productRoot, {projectId, vaultRoot})</code>, <code>evaluatePathIgnore(...)</code>, <code>isPathIgnored(...)</code>, <code>sanitizePathPatterns(patterns, productRoot, options, field)</code>, <code>redactIgnoredPathsInText(...)</code>, <code>checkCapturePath(...)</code>, <code>formatCheckCaptureResult(...)</code>, <code>resolveCaptureProductRoot(...)</code>, <code>CAPTURE_IGNORE_AC6_CODE</code> (src/capture-ignore.ts).</li><li><code>DEFAULT_IGNORE_PATTERNS</code> is exported and used as the built-in baseline.</li></ul>
+<p><strong>Diagnostics contract.</strong> <code>runDoctor</code> (src/doctor.ts) short-circuits when <code>checkCapture</code> is set, returning a result with <code>captureCheck</code> (<code>status</code>, <code>path</code>, <code>relativePath</code>, <code>match { pattern, line, source }</code>) and <code>exclusionBoundary</code>. The CLI maps <code>--check-capture</code> (or a second positional) to <code>DoctorOptions.checkCapture</code>. <code>IgnoreRuleSource = &#39;builtin&#39; | &#39;.spec-memo-ignore&#39; | &#39;config.json&#39;</code>.</p>
+<p><strong>Side effects and failure modes.</strong> Refusals throw before any file is written, so no partial record exists. Ignore parsing is advisory on malformed lines (stderr warning + <code>invalidLines</code>) and never prevents valid rules from running. All path checks are lexical, not content DLP; deep content scanning is left to the secret detectors above.</p>
+<p><strong>Provenance.</strong> <code>0003-curator-gc-and-safety.spec.md</code> (secret patterns, <code>assertNoSecrets</code>, <code>assertNotInProductRoot</code>) and <code>0040-capture-ignore-marker.spec.md</code> (<code>.spec-memo-ignore</code>, <code>DEFAULT_IGNORE_PATTERNS</code>, <code>ignorePaths</code>, <code>isPathIgnored</code>, <code>memo doctor --check-capture</code>, read-only marker). Current code adds a stable <code>CAPTURE_IGNORE_AC6</code> error code so sync-apply can distinguish <code>pathPatterns</code> skips from <code>linkedPaths</code> aborts.</p>
+      <div class="wiki-catlinks">
+        <span class="wiki-catlinks-title">Categories:</span>
+        <a href="../index.html">spec-memo</a>
+         · <a href="../index.html#domain-curation">CURATION</a>
+        · <a href="../index.html">Living Architecture</a>
+      </div>
+    </article>
+    <footer class="wiki-page-footer">
+      <p>This living wiki page was synthesized from canonical specifications. Content is maintained under <a href="https://github.com/jpolvora/spec-memo">spec-memo</a>.</p>
+    </footer>
+  </main>
+</div>
+<script>
+(function() {
+  /* Theme initialization */
+  var themeToggle = document.getElementById('wiki-theme-toggle');
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch(e) {}
+  }
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved) applyTheme(saved);
+  } catch(e) {}
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  /* Table of Contents toggle */
+  var tocToggle = document.getElementById('wiki-toc-toggle');
+  var tocList = document.getElementById('wiki-toc-list');
+  if (tocToggle && tocList) {
+    tocToggle.addEventListener('click', function() {
+      var isHidden = tocList.style.display === 'none';
+      tocList.style.display = isHidden ? 'block' : 'none';
+      tocToggle.textContent = isHidden ? '[hide]' : '[show]';
+      tocToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+  }
+
+  /* Left sidebar topic filter */
+  var filterInput = document.getElementById('wiki-filter-topics');
+  if (filterInput) {
+    filterInput.addEventListener('input', function() {
+      var q = filterInput.value.toLowerCase().trim();
+      var sections = document.querySelectorAll('.wiki-domain-section');
+      sections.forEach(function(sec) {
+        var items = sec.querySelectorAll('.wiki-nav-item');
+        var visible = 0;
+        items.forEach(function(item) {
+          var txt = item.textContent.toLowerCase();
+          var match = !q || txt.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        sec.style.display = visible > 0 ? '' : 'none';
+      });
+    });
+  }
+
+  /* Top search input sync with sidebar filter */
+  var topSearch = document.getElementById('wiki-search-input');
+  if (topSearch && filterInput) {
+    topSearch.addEventListener('input', function() {
+      filterInput.value = topSearch.value;
+      filterInput.dispatchEvent(new Event('input'));
+    });
+  }
+
+  /* Mobile menu drawer toggle */
+  var menuToggle = document.getElementById('wiki-menu-toggle');
+  var sidebar = document.getElementById('wiki-sidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggle) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

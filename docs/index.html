@@ -42,6 +42,7 @@
         <li><a href="#hosts" class="nav-link">Quick Start</a></li>
         <li><a href="#kinds" class="nav-link">Memory Kinds</a></li>
         <li><a href="#catalog" class="nav-link">Tool Reference</a></li>
+        <li><a href="wiki/index.html" class="nav-link">Wiki</a></li>
         <li><a href="#architecture" class="nav-link">Architecture</a></li>
         <li><a href="#status" class="nav-link">Status Monitor</a></li>
         <li><a href="#faq" class="nav-link">FAQ &amp; Setup</a></li>
@@ -903,6 +904,61 @@ memo doctor --fix</code></pre>
             </p>
           </div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Living Feature Wiki -->
+  <section id="wiki" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Living Feature Wiki</span>
+        <h2 class="section-title">Explore the Domain Knowledge Base</h2>
+        <p class="section-subtitle">
+          A continuously synchronized wiki synthesized from every specification of record and verified against
+          the shipped code. Browse 28 living feature pages across six bounded contexts, generated from
+          <code>.agents/specs/wiki/</code> by the <code>ws-wiki</code> harness.
+        </p>
+      </div>
+
+      <div class="arch-boxes-grid">
+        <div class="arch-box">
+          <div class="arch-box-title"><span>🧱</span> Foundation</div>
+          <p class="arch-box-desc">Vault root and project identity, the record store and schema, the disposable FTS index, bootstrap briefs, and spec drift.</p>
+        </div>
+        <div class="arch-box">
+          <div class="arch-box-title"><span>🧹</span> Curation</div>
+          <p class="arch-box-desc">Garbage collection and TTL, log compaction, trap deduplication and recurrence, secret redaction, capture exclusions, and promotion.</p>
+        </div>
+        <div class="arch-box">
+          <div class="arch-box-title"><span>🔌</span> Interfaces</div>
+          <p class="arch-box-desc">The memo CLI, doctor diagnostics, the importer, agent adapters and hooks, viewers, MCP tooling, and installers.</p>
+        </div>
+        <div class="arch-box">
+          <div class="arch-box-title"><span>🌐</span> Connectivity</div>
+          <p class="arch-box-desc">Deployment modes, HTTP/SSE transport, the status monitor, Canvas viewer, telemetry, vault sync, backup and restore.</p>
+        </div>
+        <div class="arch-box">
+          <div class="arch-box-title"><span>🔁</span> Continuity</div>
+          <p class="arch-box-desc">Prompt and session history, cross-agent handoff batons, per-project vault wikis, and the vault alias/merge manager.</p>
+        </div>
+        <div class="arch-box">
+          <div class="arch-box-title"><span>🛠️</span> Documentation</div>
+          <p class="arch-box-desc">How the <code>ws-wiki</code> harness sweeps specs, verifies statements against code, and publishes this site.</p>
+        </div>
+      </div>
+
+      <div class="hero-cta-group" style="margin-top: 2rem;">
+        <a href="wiki/index.html" class="btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+          <span>Open the Living Wiki</span>
+        </a>
+        <a href="https://github.com/jpolvora/spec-memo/tree/master/.agents/specs/wiki" target="_blank" rel="noopener" class="btn-secondary">
+          <span>View Markdown Sources</span>
+        </a>
       </div>
     </div>
   </section>
