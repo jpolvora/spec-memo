@@ -29,3 +29,6 @@ credentials.json
 .agents/skills/ws-shared/memory/
 .agents/skills/**/runs/
 
+# ws-wiki runtime checkpoints (never commit)
+.agents/specs/wiki/*.state.json
+

@@ -271,6 +271,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-11 | us-54-doctor-import-idempotency | Doctor ignore-aware pollution scan, `run.json` filename-boundary match, tracked-safe `--fix` (`--include-tracked`), per-record idempotent import + regression tests; `src/reconcile.test.ts` wiper hygiene | `1f1280a` on `develop` (NOT merged to `master`, NOT shipped; shipAction=skip); npm test 663 pass |
 | 2026-09-12 | us-55-followup | Sequential dual-sync (hybrid→vaultGit), autostash abort+pop recovery, transient view-rebuild skip-and-log with retry, dirty-state error surfacing; v0.28.3 | PR #58 (merged `2acf002`); npm test 688 pass |
 | 2026-09-12 | memo-shutdown-56 | `memo shutdown` (alias `stop`) graceful stop for orphaned serve processes: discovery, SIGTERM-then-force, scoping, dry-run, JSON; v0.28.3 | PR #58 (merged `2acf002`); npm test 688 pass |
+| 2026-09-12 | project-wiki-site | Living feature wiki published on the docs website: ported `ws-wiki` site generator, `docs/wiki/**`, homepage Wiki section, `check:site` CI drift gate; v0.28.4 | develop `dd96f13` + ship commit |
 
 ## Archive
 

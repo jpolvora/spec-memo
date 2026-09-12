@@ -324,6 +324,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-09-10 | us-55-sync-partial-failure | Vault-git `pull --rebase --autostash` dirty-tree hardening + `applyChangeset` AC6 offender skip-and-log (`skipped`/`conflictDetails`, capture stays strict) | npm test 659 pass |
 | 2026-09-12 | us-55-followup-evidence | Dual-sync sequential hybrid→vaultGit (ends autostash pile-up race), vault-git autostash abort+pop recovery, `applyChangeset` transient view-rebuild skip-and-log per record/project with retry, dual-sync dirty-state error surfacing + `all` flag preserved in fallback; v0.28.3 | npm test 667 pass |
 | 2026-09-12 | memo-shutdown-56 | `memo shutdown` (alias `stop`) graceful stop for orphaned serve processes with discovery, SIGTERM-then-force, scoping, dry-run, JSON; v0.28.3 | npm test 683 pass |
+| 2026-09-12 | project-wiki-site | Publish living feature wiki on the docs website (ported `ws-wiki` generator, `docs/wiki/**`, homepage section, `check:site` CI gate); v0.28.4 | npm test pass |
 
 
 ## 12. Related docs

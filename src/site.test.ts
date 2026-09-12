@@ -64,6 +64,24 @@ describe('Website and GitHub Pages deploy pipeline', () => {
     );
   });
 
+  it('docs/wiki contains the generated living feature wiki and skill page', () => {
+    const wikiIndexPath = path.join(docsDir, 'wiki', 'index.html');
+    assert.ok(fs.existsSync(wikiIndexPath), 'docs/wiki/index.html must exist');
+    const wikiHtml = fs.readFileSync(wikiIndexPath, 'utf-8');
+    assert.ok(
+      wikiHtml.includes('spec-memo Wiki'),
+      'docs/wiki/index.html must carry the spec-memo Wiki infobox'
+    );
+    assert.ok(
+      wikiHtml.includes('foundation/vault-and-identity.html'),
+      'docs/wiki/index.html must link generated domain pages'
+    );
+    assert.ok(
+      fs.existsSync(path.join(docsDir, 'wiki', 'documentation', 'ws-wiki.html')),
+      'docs/wiki/documentation/ws-wiki.html must exist'
+    );
+  });
+
   it('.github/workflows/deploy-site.yml exists and defines GitHub Pages deploy step', () => {
     const wfPath = path.join(root, '.github', 'workflows', 'deploy-site.yml');
     assert.ok(fs.existsSync(wfPath), '.github/workflows/deploy-site.yml must exist');

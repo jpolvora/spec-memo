@@ -190,6 +190,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 | Agent contract | `[x]` [`AGENTS.md`](AGENTS.md) |
 | Human README | `[x]` [`README.md`](README.md) |
 | Runtime (Phases 1–7 complete) | `[x]` |
+| Living feature wiki & published site (`docs/wiki/`, `ws-wiki` generator, CI drift gate) | `[x]` |
 
 
 

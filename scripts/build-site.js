@@ -137,7 +137,7 @@ if (shouldCheck) {
     process.exit(1);
   }
   console.log(
-    `Check passed: site matches package.json (v${siteVersion}); wiki ${wikiResult.skipped ? 'skipped' : `${wikiResult.pages} page(s)`}`
+    `Check passed: site version matches package.json (v${siteVersion}); wiki ${wikiResult.skipped ? 'skipped' : `${wikiResult.pages} page(s)`}`
   );
   process.exit(0);
 }

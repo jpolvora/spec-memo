@@ -1,5 +1,10 @@
 # Changelog
 
+### [2026-09-12 14:14] Agent: opencode
+- **Prompt**: Publish the living feature wiki on the docs website (port the `ws-wiki` site generator, homepage link/section/dedicated skill page, CI drift gate); commit, push, ship PR
+- **Done**: `scripts/build-wiki-site.js` ported from workflow-skills and adapted; `docs/wiki/**` generated from `.agents/specs/wiki/**`; `docs/sitemap.xml` rewritten; homepage Wiki nav + section + `docs/assets/css/wiki.css`; `documentation/ws-wiki.md` page; wiki regeneration + `check:site` wired into `scripts/build-site.js` and gated in CI; version 0.28.4; site test message contract preserved
+- **Result**: `npm run build` clean; `npm test` 689 pass / 0 fail; `npm run build:site` + `check:site` PASS; wiki validate 29 pages PASS
+
 ### [2026-09-12 13:45] Agent: Cursor
 - **Prompt**: `/ws-spec-to-pr-lite 0053-memo-shutdown full auto` — stopped pre-Step 0 (spec already shipped); user chose verify-shipped-state-on-master
 - **Done**: Checked out `master` at merge `2acf002` (v0.28.3): `npm run build` clean, shutdown+cli 56/56 pass, full `npm test` 688/688 pass; smoke-verified `shutdown` in help, `--dry-run --json` shape (exit 0), `stop` alias (exit 0), unknown-flag rejection (exit 1), README section. Noted `index.PRD` `[x]` sync lives on `develop` (`cfa60f9`, user-committed) and rides the next release. Restored `develop`, tree clean.
