@@ -1,8 +1,8 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.28.3**.
+**Local working memory for coding agents outside the product repository.** Version **0.28.4**.
 
-[Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
+[Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
 Product git repositories should contain product code: source, tests, and shipped documentation. Agent working state—anti-regression traps, architecture decisions, feature specifications, implementation plans, execution state, and changelogs—belongs in a curated vault **outside** the product repository, queried through an MCP server and matching CLI.
 
@@ -685,6 +685,14 @@ All memory is stored in `$SPEC_MEMO_ROOT` (defaults to `~/.spec-memo/`):
 - **Secret Redaction & Safety**: Built-in pattern filters automatically redact API keys, JWTs, private keys, and bearer tokens from memory records before writing. Writes directed to the product repository root are rejected by default.
 - **Automatic Trap Deduplication**: When saving a new trap, `spec-memo` checks token overlap against existing traps with matching path patterns. If overlap exceeds 70%, the older trap is automatically marked as `superseded`.
 - **Spec Code Drift Detection**: When specifications declare `linkedPaths` and `verifiedAtSha`, `bootstrap` compares git status and file contents against the verified commit SHA, warning the agent if the product code drifted from the specification.
+
+### Living Feature Wiki & Published Site
+
+The repository ships a **living feature wiki** at `.agents/specs/wiki/`, synthesized from every specification of record and reconciled against shipped code. It is authored by the `workflow-skills` **`ws-wiki`** skill (`init` → `sweep` → `verify` → `apply`); the runtime does not write it.
+
+- Source of truth is Markdown: `index.wiki.md` plus `{domain}/{feature}.md` pages, each carrying `## Feature Overview`, `## Business Rules & Logic`, and `## Technical Architecture`.
+- `npm run build:site` renders the wiki to static HTML under `docs/wiki/` and rewrites `docs/sitemap.xml`; `npm run check:site` fails when the generated site is stale.
+- The published wiki is linked from the website navigation and served at [https://jpolvora.github.io/spec-memo/wiki/](https://jpolvora.github.io/spec-memo/wiki/).
 
 ---
 

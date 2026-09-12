@@ -12,6 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { buildWikiSite, resolveWikiDir, buildSitemapXml } from './build-wiki-site.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -92,27 +93,61 @@ html = html.replace(/\r\n?/g, '\n');
 const currentDiskHtml = fs.readFileSync(indexPath, 'utf-8').replace(/\r\n?/g, '\n');
 const hasChanges = currentDiskHtml !== html;
 
+// 2b. Living wiki HTML + sitemap
+const wikiDir = resolveWikiDir(root);
+const wikiOutDir = path.join(root, 'docs', 'wiki');
+const wikiResult = buildWikiSite({
+  repoRoot: root,
+  wikiDir,
+  outDir: wikiOutDir,
+  check: shouldCheck,
+});
+const sitemapPath = path.join(root, 'docs', 'sitemap.xml');
+const nextSitemap = buildSitemapXml(wikiResult.skipped ? [] : wikiResult.sitemapLocs);
+const siteProblems = [];
+
 if (shouldCheck) {
   if (currentHtmlVersion !== siteVersion || hasChanges) {
-    console.error(
-      `Version mismatch: docs/index.html (v${currentHtmlVersion}) != package.json (v${siteVersion}). Run: npm run build:site`
+    siteProblems.push(
+      `docs/index.html (v${currentHtmlVersion}) != package.json (v${siteVersion}). Run: npm run build:site`
     );
-    process.exit(1);
   }
   const llmsPath = path.join(root, 'docs', 'llms.txt');
   if (fs.existsSync(llmsPath)) {
     const llms = fs.readFileSync(llmsPath, 'utf-8');
     const llmsMatch = llms.match(/spec-memo\s+v(\d+\.\d+\.\d+)/);
     if (!llmsMatch || llmsMatch[1] !== siteVersion) {
-      console.error(
-        `Version mismatch: docs/llms.txt (v${llmsMatch?.[1] ?? 'missing'}) != package.json (v${siteVersion}). Run: npm run build:site`
+      siteProblems.push(
+        `docs/llms.txt (v${llmsMatch?.[1] ?? 'missing'}) != package.json (v${siteVersion}). Run: npm run build:site`
       );
-      process.exit(1);
     }
   }
-  console.log(`Check passed: site version matches package.json (v${siteVersion})`);
+  siteProblems.push(...(wikiResult.staleReasons || []));
+  if (fs.existsSync(sitemapPath)) {
+    const onDiskSitemap = fs.readFileSync(sitemapPath, 'utf-8').replace(/\r\n?/g, '\n');
+    if (onDiskSitemap !== nextSitemap) {
+      siteProblems.push('docs/sitemap.xml stale. Run: npm run build:site');
+    }
+  } else {
+    siteProblems.push('docs/sitemap.xml missing. Run: npm run build:site');
+  }
+  if (siteProblems.length > 0) {
+    console.error('Site check failed:');
+    for (const problem of siteProblems) console.error(`  - ${problem}`);
+    process.exit(1);
+  }
+  console.log(
+    `Check passed: site version matches package.json (v${siteVersion}); wiki ${wikiResult.skipped ? 'skipped' : `${wikiResult.pages} page(s)`}`
+  );
   process.exit(0);
 }
+
+fs.writeFileSync(sitemapPath, nextSitemap, 'utf-8');
+console.log(
+  wikiResult.skipped
+    ? 'wiki build skipped (no index.wiki.md)'
+    : `wiki updated: ${wikiResult.pages} page(s) under docs/wiki/`
+);
 
 if (hasChanges) {
   fs.writeFileSync(indexPath, html, 'utf-8');

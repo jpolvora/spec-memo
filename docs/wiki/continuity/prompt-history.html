@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt History, Sessions &amp; Activity</title>
+<link rel="stylesheet" href="../../assets/css/wiki.css">
+</head>
+<body class="wiki-page">
+<header class="wiki-topbar">
+  <div class="wiki-topbar-left">
+    <button type="button" class="wiki-menu-toggle" id="wiki-menu-toggle" aria-label="Toggle navigation menu" title="Toggle navigation">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <a href="../index.html" class="wiki-topbar-brand">
+      <span class="wiki-brand-logo-mark">W</span>
+      <span class="wiki-brand-name">spec-memo <span class="wiki-brand-tag">Wiki</span></span>
+    </a>
+  </div>
+  <div class="wiki-topbar-center">
+    <div class="wiki-search-box">
+      <svg class="wiki-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="search" id="wiki-search-input" placeholder="Search wiki topics..." aria-label="Search wiki topics">
+    </div>
+  </div>
+  <div class="wiki-topbar-right">
+    <a href="../../" class="wiki-topbar-link">Home</a>
+    <a href="../index.html" class="wiki-topbar-link">Wiki Index</a>
+    <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-topbar-link">GitHub</a>
+    <button type="button" class="wiki-theme-toggle" id="wiki-theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme">
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-sidebar" id="wiki-sidebar" aria-label="Wiki navigation">
+  <div class="wiki-sidebar-inner">
+    <div class="wiki-sidebar-brand-block">
+      <a href="../index.html" class="wiki-sidebar-brand">
+        <div class="wiki-sidebar-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="wiki-sidebar-title-group">
+          <span class="wiki-sidebar-main-title">SPEC-MEMO</span>
+          <span class="wiki-sidebar-sub-title">Living Domain Wiki</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="wiki-sidebar-filter-wrapper">
+      <input type="text" id="wiki-filter-topics" class="wiki-filter-input" placeholder="Filter topics..." aria-label="Filter topics in sidebar">
+    </div>
+
+    <nav class="wiki-sidebar-sections">
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Navigation</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📖</span><span class="wiki-nav-text">Main page</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="../../" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🏠</span><span class="wiki-nav-text">Project Home</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🐙</span><span class="wiki-nav-text">GitHub Repository</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="wiki-nav-group wiki-topics-group">
+        <div class="wiki-nav-heading">Topics by Domain</div>
+      <div class="wiki-domain-section" data-domain="foundation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">FOUNDATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../foundation/bootstrap-and-drift.html" class="wiki-nav-link" title="Bootstrap Brief and Spec Drift"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Bootstrap Brief and Spec Drift</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/record-store.html" class="wiki-nav-link" title="Record Store and Kinds"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Store and Kinds</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/retrieval.html" class="wiki-nav-link" title="Retrieval and Search"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Retrieval and Search</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/vault-and-identity.html" class="wiki-nav-link" title="Vault Root and Project Identity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Root and Project Identity</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="curation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CURATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../curation/gc-and-ttl.html" class="wiki-nav-link" title="Garbage Collection, Record TTL, and Log Compaction"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Garbage Collection, Record TTL, and Log Compaction</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/promote-and-export.html" class="wiki-nav-link" title="Record Promotion and Skill Export"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Promotion and Skill Export</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/safety-and-capture.html" class="wiki-nav-link" title="Safety Boundaries, Secret Redaction, and Capture Exclusions"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Safety Boundaries, Secret Redaction, and Capture Exclusions</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/trap-lifecycle.html" class="wiki-nav-link" title="Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="interfaces">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">7</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../interfaces/agent-adapters.html" class="wiki-nav-link" title="Agent Adapters &amp; Installers"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Agent Adapters &amp; Installers</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/cli.html" class="wiki-nav-link" title="CLI Surface (`memo`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">CLI Surface (`memo`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/diagnostics.html" class="wiki-nav-link" title="Diagnostics (`memo doctor`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Diagnostics (`memo doctor`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/import.html" class="wiki-nav-link" title="Legacy Workflow Tree Import"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Legacy Workflow Tree Import</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/mcp-tooling.html" class="wiki-nav-link" title="MCP Version &amp; Skill Installation Tools"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">MCP Version &amp; Skill Installation Tools</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/viewer.html" class="wiki-nav-link" title="Human Viewer Compatibility"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Human Viewer Compatibility</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/virtual-file-system.html" class="wiki-nav-link" title="Virtual File System over MCP"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Virtual File System over MCP</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="connectivity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONNECTIVITY</span><span class="wiki-domain-badge">8</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../connectivity/backup-restore.html" class="wiki-nav-link" title="Backup &amp; Restore"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Backup &amp; Restore</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/canvas-viewer.html" class="wiki-nav-link" title="Canvas Viewer"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Canvas Viewer</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/deployment-modes.html" class="wiki-nav-link" title="Deployment Modes"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Deployment Modes</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/server-lifecycle.html" class="wiki-nav-link" title="Server Lifecycle"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Server Lifecycle</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/sse-transport.html" class="wiki-nav-link" title="SSE Transport"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">SSE Transport</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/status-monitor.html" class="wiki-nav-link" title="Status Monitor"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Status Monitor</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/telemetry.html" class="wiki-nav-link" title="Operational Telemetry"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Operational Telemetry</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/vault-sync.html" class="wiki-nav-link" title="Vault Sync"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Sync</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="continuity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONTINUITY</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="project-wiki.html" class="wiki-nav-link" title="Per-Project Vault Wiki"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Per-Project Vault Wiki</span></a></li>
+        <li class="wiki-nav-item active"><a href="prompt-history.html" class="wiki-nav-link active" title="Prompt History, Sessions &amp; Activity"><span class="wiki-topic-marker">▸</span><span class="wiki-nav-text">Prompt History, Sessions &amp; Activity</span></a></li>
+        <li class="wiki-nav-item"><a href="session-handoff.html" class="wiki-nav-link" title="Cross-Agent Session Handoff Baton"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Cross-Agent Session Handoff Baton</span></a></li>
+        <li class="wiki-nav-item"><a href="vault-manager.html" class="wiki-nav-link" title="Vault Manager, Aliases &amp; Local Binding"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Manager, Aliases &amp; Local Binding</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="documentation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">DOCUMENTATION</span><span class="wiki-domain-badge">1</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../documentation/ws-wiki.html" class="wiki-nav-link" title="ws-wiki Skill (Living Wiki Harness)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">ws-wiki Skill (Living Wiki Harness)</span></a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Tools</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🔗</span><span class="wiki-nav-text">What links here</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/blob/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📄</span><span class="wiki-nav-text">View Markdown</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">⏳</span><span class="wiki-nav-text">Page History</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <button type="button" onclick="window.print()" class="wiki-nav-link wiki-nav-btn">
+              <span class="wiki-nav-icon">🖨️</span><span class="wiki-nav-text">Print / PDF</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</aside>
+  <main class="wiki-content-column">
+    <nav class="wiki-chrome"><a href="../../">Home</a> · <a href="../index.html">Wiki</a> · <span>CONTINUITY</span></nav>
+<div class="wiki-content-header-tabs">
+  <div class="wiki-tabs-left">
+    <span class="wiki-tab active">Article</span>
+    <a href="https://github.com/jpolvora/spec-memo/tree/master/.agents/specs" target="_blank" rel="noopener" class="wiki-tab">Specifications</a>
+  </div>
+  <div class="wiki-tabs-right">
+    <span class="wiki-tab active">Read</span>
+    <a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" class="wiki-tab" title="Edit this page on GitHub">Edit</a>
+    <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" class="wiki-tab" title="View commit history on GitHub">View history</a>
+  </div>
+</div>
+    <article class="wiki-article wiki-toc"><h1>Prompt History, Sessions &amp; Activity</h1>
+<div class="wiki-tagline">From spec-memo Wiki, the living architecture &amp; domain knowledge base</div>
+<aside class="wiki-infobox" aria-label="Feature specification details">
+  <div class="wiki-infobox-header">
+    <div class="wiki-infobox-title">Prompt History, Sessions &amp; Activity</div>
+    <div class="wiki-infobox-badge-wrap"><span class="wiki-infobox-badge">Domain: continuity</span></div>
+  </div>
+  <table class="wiki-infobox-table">
+    <tbody>
+      <tr>
+        <th>Domain</th>
+        <td><code>continuity</code></td>
+      </tr>
+      <tr>
+        <th>Feature</th>
+        <td><code>prompt-history</code></td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><span class="wiki-status-pill"><span class="wiki-status-dot"></span>Living Synthesis</span></td>
+      </tr>
+      <tr>
+        <th>Contract</th>
+        <td>Canonical Spec Wiki</td>
+      </tr>
+      <tr>
+        <th>Provenance</th>
+        <td>0001–0053</td>
+      </tr>
+      <tr>
+        <th>Framework</th>
+        <td>spec-memo</td>
+      </tr>
+      <tr>
+        <th>Manager</th>
+        <td><code>ws-wiki</code></td>
+      </tr>
+    </tbody>
+  </table>
+</aside>
+<div class="wiki-toc-box" id="toc" role="navigation" aria-label="Table of contents">
+  <div class="wiki-toc-header">
+    <span class="wiki-toc-title">Contents</span>
+    <button type="button" class="wiki-toc-toggle" id="wiki-toc-toggle" aria-expanded="true">[hide]</button>
+  </div>
+  <ol class="wiki-toc-list" id="wiki-toc-list">
+    <li class="wiki-toc-item"><a href="#feature-overview"><span class="wiki-toc-number">1</span> <span class="wiki-toc-text">Feature Overview</span></a></li>
+    <li class="wiki-toc-item"><a href="#business-rules-logic"><span class="wiki-toc-number">2</span> <span class="wiki-toc-text">Business Rules &amp; Logic</span></a></li>
+    <li class="wiki-toc-item"><a href="#technical-architecture"><span class="wiki-toc-number">3</span> <span class="wiki-toc-text">Technical Architecture</span></a></li>
+  </ol>
+</div>
+<h2 id="feature-overview">Feature Overview <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Feature Overview">[edit]</a></span></h2>
+<p>spec-memo persists agent conversational turns and work intervals outside the product repository. Two vault record kinds back this: <code>prompt</code> (one conversational turn) and <code>session</code> (a work interval with lifecycle and deliverables). Together they power full-text retrieval, automated rule derivation, intent-story export, and timesheet/invoicing activity reports while keeping product git free of transcripts.</p>
+<p>Primary journeys:</p>
+<ul><li>An agent records a turn through the 11th MCP tool <code>prompt</code> (<code>action: &#39;record&#39;</code>).</li><li>An agent opens and closes work sessions with <code>session_start</code> / <code>session_end</code>.</li><li>An agent recalls history with <code>list</code>, <code>search</code>, <code>session</code>, and <code>get</code>.</li><li>An operator browses the status monitor <strong>Prompts &amp; Intent Stories</strong> tab, filters by vault/IDE/model/agent/session/date/client, expands rows, and opens the details drawer.</li><li>An operator uses the <strong>Activity &amp; Invoicing</strong> tab for printable billing timesheets and the <strong>Derived Rules</strong> tab for candidate rules.</li><li>A maintainer runs CLI <code>memo prompt …</code>, <code>memo prompts …</code>, <code>memo session …</code>, and <code>memo activity …</code> for listing, search, session reconstruction, export, and cross-project invoicing.</li></ul>
+<p>Core interactions:</p>
+<ul><li>Prompt/session mutations write Markdown plus SQLite FTS.</li><li>Compiled views <code>PROMPTS.md</code> and <code>SESSIONS.md</code> are regenerated.</li><li>A debounced hybrid push is scheduled on mutations.</li><li><code>session_end</code> also flushes dual sync (hybrid plus vault-git) when enabled, fail-open.</li></ul>
+<h2 id="business-rules-logic">Business Rules &amp; Logic <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Business Rules &amp; Logic">[edit]</a></span></h2>
+<h3 id="record-kinds-and-storage">Record kinds and storage <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Record kinds and storage">[edit]</a></span></h3>
+<ul><li><code>prompt</code> and <code>session</code> are valid <code>RecordKind</code> values.</li><li>They map to subdirectories <code>prompts/</code> and <code>sessions/</code> under <code>projects/{projectId}/</code> (<code>getSubdirForKind</code> in <code>src/store.ts</code>).</li><li>All files live in the vault, never in the product tree.</li></ul>
+<h3 id="identity-and-frontmatter">Identity and frontmatter <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Identity and frontmatter">[edit]</a></span></h3>
+<ul><li>Prompt id with both <code>sessionId</code> and <code>turn</code>: <code>prompt-{sessionId}-t{turn}</code>.</li><li>Prompt id otherwise: <code>prompt-{Date.now()}-{6 hex}</code>.</li><li>Session record id: <code>session-{sessionId}</code>.</li><li><code>session_start</code> without a <code>sessionId</code> generates <code>{timestamp}-{6 hex}</code>.</li><li>Prompt frontmatter: <code>id</code>, <code>kind</code>, <code>project</code>, <code>status</code>, <code>created</code>, <code>updated</code>, <code>source</code>, <code>ide</code>, <code>model</code>, <code>agent</code>, <code>sessionId</code>, <code>turn</code>, <code>taskSlug</code>, <code>client</code>, <code>billable</code>, <code>branch</code>, <code>gitSha</code>, <code>linkedPaths</code>, <code>tags</code>.</li><li>Session frontmatter adds <code>startTime</code>, <code>endTime</code>, <code>durationMinutes</code>, <code>deliverables</code>, <code>summary</code>, and <code>handoffArchive</code>.</li><li><code>ide</code> defaults to <code>generic</code>; <code>billable</code> defaults to <code>true</code>.</li></ul>
+<h3 id="turn-allocation-and-write-safety">Turn allocation and write safety <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Turn allocation and write safety">[edit]</a></span></h3>
+<ul><li>When <code>sessionId</code> is present and <code>turn</code> is omitted, the next turn is <code>max(existing turn) + 1</code>.</li><li>Turn allocation and write occur under one vault lock, reentrant with <code>upsertRecord</code>, so concurrent turns cannot collide on deterministic ids.</li><li><code>record</code> requires a non-empty <code>body</code>.</li><li>The body is first passed through capture-ignore path redaction, then <code>redactSecretsInPayload</code>, before persistence.</li></ul>
+<h3 id="session-lifecycle">Session lifecycle <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Session lifecycle">[edit]</a></span></h3>
+<ul><li><code>session_start</code> refuses to restart a session whose record is already <code>completed</code>.</li><li>It preserves an existing <code>startTime</code>, <code>created</code>, <code>taskSlug</code>, <code>client</code>, <code>billable</code>, and <code>summary</code>.</li><li>On start it delivers/claims an eligible handoff and sets or clears the owner/branch session objective.</li><li><code>session_end</code> requires <code>sessionId</code> and an existing session record; otherwise it errors with &quot;Call session_start first&quot;.</li><li><code>endTime</code> defaults to now (or <code>until</code>).</li><li><code>durationMinutes</code> is computed from <code>endTime - startTime</code>, rounded to whole minutes, and is never taken from pagination <code>limit</code>.</li><li>Re-ending a completed session preserves the existing duration.</li><li>New deliverables merge into existing ones, de-duplicated by the <code>(url, sha, type)</code> triple.</li><li>The session is marked <code>completed</code>, <code>handoffArchive</code> is recorded when a handoff was written, and the objective is cleared.</li><li>After a successful <code>session_end</code>, <code>syncDual</code> runs with <code>trigger: &#39;session_end&#39;</code> when hybrid has a remote URL or <code>vaultGit.enabled</code> (and mode is not <code>remote</code>); sync errors are logged, never fatal.</li></ul>
+<h3 id="query-pagination-and-search">Query, pagination, and search <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Query, pagination, and search">[edit]</a></span></h3>
+<ul><li><code>list</code>, <code>search</code>, and session listing clamp <code>limit</code> to 1–100 (default 20) and <code>offset</code> to ≥ 0.</li><li>They return the envelope <code>{ total, limit, offset, hasMore, items }</code>.</li><li>Default sort is <code>date-desc</code>.</li><li><code>search</code> is FTS5-only over <code>prompt</code> records in <code>records_fts</code>; there is no substring fallback.</li><li>An empty query returns an empty page.</li><li>Metadata filters are AND-combined: <code>ide</code> exact (case-insensitive), <code>model</code>/<code>agent</code> substring (case-insensitive), <code>sessionId</code>/<code>taskSlug</code>/<code>client</code> exact, <code>billable</code> boolean exact, <code>tags</code> all-must-match, and <code>created</code> bounds via <code>since</code>/<code>until</code>.</li><li>Unparseable dates throw <code>Invalid since date</code> / <code>Invalid until date</code>.</li><li><code>get</code> resolves the id first as a <code>prompt</code> record, then as a <code>session</code> record, and fails otherwise.</li></ul>
+<h3 id="rule-derivation-and-promotion">Rule derivation and promotion <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Rule derivation and promotion">[edit]</a></span></h3>
+<ul><li>Signal groups and base confidence: <code>always</code>/<code>every time</code> (process, 0.85); <code>never</code>/<code>do not</code>/<code>don&#39;t</code>/<code>under no circumstances</code> (constraint, 0.9); <code>must not</code>/<code>cannot</code>/<code>should never</code> (constraint, 0.9); <code>must</code>/<code>strictly required</code>/<code>mandatory</code> (architecture, 0.85); <code>refuse</code>/<code>reject</code>/<code>prohibit</code> (security, 0.9).</li><li>Extracted text must be at least 15 characters.</li><li>Repeated identical instructions are grouped by a normalized key; each occurrence adds 0.05 confidence up to 0.99.</li><li><code>saveTraps</code> persists only candidates with confidence ≥ 0.8.</li><li>Derived trap id: <code>trap-derived-{slug32}-{suffix8}</code>, severity <code>high</code>, tags <code>[&#39;derived-rule&#39;, category]</code>.</li><li><code>promote</code> destinations must resolve inside the product root and match the IDE allowlist: <code>.cursor/rules/*</code>, <code>.github/copilot-instructions.md</code>, <code>CLAUDE.md</code>, <code>GEMINI.md</code>.</li><li>Promotion requires a <code>cwd</code> or a project with <code>lastSeenRoot</code>; otherwise the call is rejected.</li></ul>
+<h3 id="export-and-activity-reporting">Export and activity reporting <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Export and activity reporting">[edit]</a></span></h3>
+<ul><li><code>export_story</code> merges all turns of a session into one Markdown document with metadata, deliverables, and a chronological turn log.</li><li>When an output path is given, the cwd must be a consumer product repository, not the vault root or a path inside it.</li><li>The destination must be outside the product root.</li><li><code>activity_report</code> aggregates sessions and prompts across the selected project(s) or all vaults (<code>crossProject</code>).</li><li>Only billable sessions contribute to <code>totalDurationMinutes</code>, <code>totalBillableHours</code>, <code>byClient</code>, and <code>byProject</code>.</li><li>Missing clients default to <code>internal</code>; client matching is case-insensitive; hours round to two decimals.</li><li><code>totalPrompts</code> counts prompt records within the date bounds and client filter.</li></ul>
+<h2 id="technical-architecture">Technical Architecture <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Technical Architecture">[edit]</a></span></h2>
+<h3 id="mcp-tool-prompt-src-tools-ts-schema-in-src-types-ts">MCP tool <code>prompt</code> (<code>src/tools.ts</code>, schema in <code>src/types.ts</code>) <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: MCP tool prompt (src/tools.ts, schema in src/types.ts)">[edit]</a></span></h3>
+<ul><li>Actions: <code>record</code>, <code>list</code>, <code>get</code>, <code>search</code>, <code>session</code>, <code>session_start</code>, <code>session_end</code>, <code>cancel_handoff</code>, <code>activity_report</code>, <code>derive_rules</code>, <code>export_story</code>.</li><li>The Zod schema additionally accepts <code>feedback</code> (submits memory feedback).</li><li>Context fields include <code>branch</code>, <code>gitSha</code>, <code>linkedPaths</code>, <code>handoff</code>, <code>objective</code>, <code>shared</code>, <code>crossProject</code>, <code>cwd</code>, <code>projectId</code>, and <code>vaultRoot</code>.</li><li><code>handoff</code> carries <code>nextSteps</code> (required if present), <code>failedApproaches</code>, <code>openQuestions</code>, <code>branch</code>, <code>owner</code>, and <code>shared</code>.</li></ul>
+<h3 id="core-modules">Core modules <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Core modules">[edit]</a></span></h3>
+<ul><li><code>src/prompt.ts</code>: <code>recordPromptTurn</code>, <code>startSessionRecord</code>, <code>endSessionRecord</code>, <code>getSessionTurns</code>, <code>exportSessionStory</code>, <code>listPrompts</code>, <code>searchPrompts</code>, <code>listSessions</code>, <code>deriveRulesFromPrompts</code>, <code>generateActivityReport</code>, <code>cancelHandoffRecord</code>, <code>showHandoffRecord</code>, <code>generatePromptId</code>, <code>generateSessionId</code>.</li><li><code>src/rules-engine.ts</code>: <code>extractRulesFromPrompts</code>, <code>formatDerivedRulesForExport</code> (formats <code>cursor</code>, <code>copilot</code>, <code>claude</code>, <code>gemini</code>, <code>markdown</code>).</li></ul>
+<h3 id="persistence">Persistence <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Persistence">[edit]</a></span></h3>
+<ul><li>Markdown records with YAML frontmatter (fields listed under Business Rules).</li><li>FTS rows land in <code>records_fts</code> via <code>src/indexer.ts</code>.</li><li><code>rebuildCompiledViews</code> emits <code>PROMPTS.md</code> and <code>SESSIONS.md</code> alongside <code>INDEX.md</code> / <code>TRAPS.md</code> / <code>DECISIONS.md</code>.</li></ul>
+<h3 id="cli-src-cli-ts">CLI (<code>src/cli.ts</code>) <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: CLI (src/cli.ts)">[edit]</a></span></h3>
+<ul><li><code>memo prompt &lt;action&gt;</code> with alias <code>memo prompts</code>.</li><li><code>memo session start|end|handoff|show|export [sessionId]</code>.</li><li><code>memo activity</code>.</li><li>Key flags: <code>--body</code>, <code>--session-id</code>, <code>--turn</code>, <code>--task-slug</code>/<code>--slug</code>, <code>--client</code>, <code>--billable</code>, <code>--ide</code>, <code>--model</code>, <code>--agent</code>, <code>--since</code>, <code>--until</code>, <code>--query</code>, <code>--limit</code>, <code>--offset</code>, <code>--cross-project</code>/<code>--all</code>, <code>--output</code>/<code>-o</code>, <code>--summary</code>, <code>--pr</code>, <code>--deliverables</code>, <code>--save-traps</code>, <code>--promote</code>, <code>--format</code>.</li><li><code>--pr</code> appends a <code>{ type: &#39;pr&#39;, url, title }</code> deliverable.</li></ul>
+<h3 id="status-http-status-listener-3124-config-ports-status">Status HTTP (status listener <code>:3124</code>, config <code>ports.status</code>) <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Status HTTP (status listener :3124, config ports.status)">[edit]</a></span></h3>
+<ul><li><code>GET /api/prompts</code> filters <code>project</code>, <code>query</code>, <code>ide</code>, <code>model</code>, <code>agent</code>, <code>session</code>/<code>sessionId</code>, <code>taskSlug</code>/<code>slug</code>, <code>client</code>, <code>billable</code>, <code>since</code>, <code>until</code>, <code>tag</code>, <code>limit</code>, <code>offset</code>, <code>sort</code>, <code>crossProject</code>.</li><li><code>GET /api/prompts/sessions/{sessionId}</code> returns turns and requires <code>project</code>.</li><li><code>GET /api/prompts/sessions/{sessionId}/export</code> returns a Markdown download.</li><li><code>GET /api/prompts/{id}</code> returns the record plus <code>renderedHtml</code> via <code>renderPromptMarkdownHtml</code> and <code>secretsRedacted</code>.</li><li><code>GET /api/sessions</code> and <code>GET /api/activity</code> return session lists and aggregates.</li><li><code>POST /api/prompts/derive-rules</code> derives rules and optionally saves traps.</li><li>Record and listing responses pass through <code>sanitizeToolOutput</code>; the shared <code>winJson</code> helper does not sanitize, and <code>POST /api/prompts/derive-rules</code> error responses plus the session Markdown export emit raw content.</li></ul>
+<h3 id="ui-src-status-ts-generatestatushtml">UI (<code>src/status.ts</code> <code>generateStatusHtml</code>) <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: UI (src/status.ts generateStatusHtml)">[edit]</a></span></h3>
+<ul><li><code>tab-prompts</code>: master table with IDE chips, vault selector, search/model/agent/client fields, date pickers, page size (10/20/50/100), pagination, and a details drawer.</li><li><code>tab-invoicing</code>: billing timesheet view.</li><li><code>tab-rules</code>: derived-rule candidates.</li></ul>
+<h3 id="deployment-parity">Deployment parity <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Deployment parity">[edit]</a></span></h3>
+<ul><li><code>local</code> runs against the local vault.</li><li><code>hybrid</code> schedules debounced pushes (<code>scheduleHybridPush</code>).</li><li><code>remote</code> proxies tool calls to the remote daemon with zero local writes.</li></ul>
+<h3 id="provenance">Provenance <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/continuity/prompt-history.md" target="_blank" rel="noopener" title="Edit section: Provenance">[edit]</a></span></h3>
+<ul><li><code>0029-prompt-history-and-query.spec.md</code> (primary).</li><li>Extended by <code>0036-session-handoff-baton.spec.md</code> (session objective, cancel_handoff).</li><li><code>0034-memory-hit-count.spec.md</code> (feedback action).</li></ul>
+      <div class="wiki-catlinks">
+        <span class="wiki-catlinks-title">Categories:</span>
+        <a href="../index.html">spec-memo</a>
+         · <a href="../index.html#domain-continuity">CONTINUITY</a>
+        · <a href="../index.html">Living Architecture</a>
+      </div>
+    </article>
+    <footer class="wiki-page-footer">
+      <p>This living wiki page was synthesized from canonical specifications. Content is maintained under <a href="https://github.com/jpolvora/spec-memo">spec-memo</a>.</p>
+    </footer>
+  </main>
+</div>
+<script>
+(function() {
+  /* Theme initialization */
+  var themeToggle = document.getElementById('wiki-theme-toggle');
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch(e) {}
+  }
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved) applyTheme(saved);
+  } catch(e) {}
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  /* Table of Contents toggle */
+  var tocToggle = document.getElementById('wiki-toc-toggle');
+  var tocList = document.getElementById('wiki-toc-list');
+  if (tocToggle && tocList) {
+    tocToggle.addEventListener('click', function() {
+      var isHidden = tocList.style.display === 'none';
+      tocList.style.display = isHidden ? 'block' : 'none';
+      tocToggle.textContent = isHidden ? '[hide]' : '[show]';
+      tocToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+  }
+
+  /* Left sidebar topic filter */
+  var filterInput = document.getElementById('wiki-filter-topics');
+  if (filterInput) {
+    filterInput.addEventListener('input', function() {
+      var q = filterInput.value.toLowerCase().trim();
+      var sections = document.querySelectorAll('.wiki-domain-section');
+      sections.forEach(function(sec) {
+        var items = sec.querySelectorAll('.wiki-nav-item');
+        var visible = 0;
+        items.forEach(function(item) {
+          var txt = item.textContent.toLowerCase();
+          var match = !q || txt.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        sec.style.display = visible > 0 ? '' : 'none';
+      });
+    });
+  }
+
+  /* Top search input sync with sidebar filter */
+  var topSearch = document.getElementById('wiki-search-input');
+  if (topSearch && filterInput) {
+    topSearch.addEventListener('input', function() {
+      filterInput.value = topSearch.value;
+      filterInput.dispatchEvent(new Event('input'));
+    });
+  }
+
+  /* Mobile menu drawer toggle */
+  var menuToggle = document.getElementById('wiki-menu-toggle');
+  var sidebar = document.getElementById('wiki-sidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggle) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

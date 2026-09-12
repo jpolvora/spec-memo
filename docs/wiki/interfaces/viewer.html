@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human Viewer Compatibility</title>
+<link rel="stylesheet" href="../../assets/css/wiki.css">
+</head>
+<body class="wiki-page">
+<header class="wiki-topbar">
+  <div class="wiki-topbar-left">
+    <button type="button" class="wiki-menu-toggle" id="wiki-menu-toggle" aria-label="Toggle navigation menu" title="Toggle navigation">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <a href="../index.html" class="wiki-topbar-brand">
+      <span class="wiki-brand-logo-mark">W</span>
+      <span class="wiki-brand-name">spec-memo <span class="wiki-brand-tag">Wiki</span></span>
+    </a>
+  </div>
+  <div class="wiki-topbar-center">
+    <div class="wiki-search-box">
+      <svg class="wiki-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="search" id="wiki-search-input" placeholder="Search wiki topics..." aria-label="Search wiki topics">
+    </div>
+  </div>
+  <div class="wiki-topbar-right">
+    <a href="../../" class="wiki-topbar-link">Home</a>
+    <a href="../index.html" class="wiki-topbar-link">Wiki Index</a>
+    <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-topbar-link">GitHub</a>
+    <button type="button" class="wiki-theme-toggle" id="wiki-theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme">
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-sidebar" id="wiki-sidebar" aria-label="Wiki navigation">
+  <div class="wiki-sidebar-inner">
+    <div class="wiki-sidebar-brand-block">
+      <a href="../index.html" class="wiki-sidebar-brand">
+        <div class="wiki-sidebar-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="wiki-sidebar-title-group">
+          <span class="wiki-sidebar-main-title">SPEC-MEMO</span>
+          <span class="wiki-sidebar-sub-title">Living Domain Wiki</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="wiki-sidebar-filter-wrapper">
+      <input type="text" id="wiki-filter-topics" class="wiki-filter-input" placeholder="Filter topics..." aria-label="Filter topics in sidebar">
+    </div>
+
+    <nav class="wiki-sidebar-sections">
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Navigation</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📖</span><span class="wiki-nav-text">Main page</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="../../" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🏠</span><span class="wiki-nav-text">Project Home</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🐙</span><span class="wiki-nav-text">GitHub Repository</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="wiki-nav-group wiki-topics-group">
+        <div class="wiki-nav-heading">Topics by Domain</div>
+      <div class="wiki-domain-section" data-domain="foundation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">FOUNDATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../foundation/bootstrap-and-drift.html" class="wiki-nav-link" title="Bootstrap Brief and Spec Drift"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Bootstrap Brief and Spec Drift</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/record-store.html" class="wiki-nav-link" title="Record Store and Kinds"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Store and Kinds</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/retrieval.html" class="wiki-nav-link" title="Retrieval and Search"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Retrieval and Search</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/vault-and-identity.html" class="wiki-nav-link" title="Vault Root and Project Identity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Root and Project Identity</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="curation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CURATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../curation/gc-and-ttl.html" class="wiki-nav-link" title="Garbage Collection, Record TTL, and Log Compaction"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Garbage Collection, Record TTL, and Log Compaction</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/promote-and-export.html" class="wiki-nav-link" title="Record Promotion and Skill Export"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Promotion and Skill Export</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/safety-and-capture.html" class="wiki-nav-link" title="Safety Boundaries, Secret Redaction, and Capture Exclusions"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Safety Boundaries, Secret Redaction, and Capture Exclusions</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/trap-lifecycle.html" class="wiki-nav-link" title="Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="interfaces">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">7</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="agent-adapters.html" class="wiki-nav-link" title="Agent Adapters &amp; Installers"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Agent Adapters &amp; Installers</span></a></li>
+        <li class="wiki-nav-item"><a href="cli.html" class="wiki-nav-link" title="CLI Surface (`memo`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">CLI Surface (`memo`)</span></a></li>
+        <li class="wiki-nav-item"><a href="diagnostics.html" class="wiki-nav-link" title="Diagnostics (`memo doctor`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Diagnostics (`memo doctor`)</span></a></li>
+        <li class="wiki-nav-item"><a href="import.html" class="wiki-nav-link" title="Legacy Workflow Tree Import"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Legacy Workflow Tree Import</span></a></li>
+        <li class="wiki-nav-item"><a href="mcp-tooling.html" class="wiki-nav-link" title="MCP Version &amp; Skill Installation Tools"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">MCP Version &amp; Skill Installation Tools</span></a></li>
+        <li class="wiki-nav-item active"><a href="viewer.html" class="wiki-nav-link active" title="Human Viewer Compatibility"><span class="wiki-topic-marker">▸</span><span class="wiki-nav-text">Human Viewer Compatibility</span></a></li>
+        <li class="wiki-nav-item"><a href="virtual-file-system.html" class="wiki-nav-link" title="Virtual File System over MCP"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Virtual File System over MCP</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="connectivity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONNECTIVITY</span><span class="wiki-domain-badge">8</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../connectivity/backup-restore.html" class="wiki-nav-link" title="Backup &amp; Restore"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Backup &amp; Restore</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/canvas-viewer.html" class="wiki-nav-link" title="Canvas Viewer"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Canvas Viewer</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/deployment-modes.html" class="wiki-nav-link" title="Deployment Modes"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Deployment Modes</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/server-lifecycle.html" class="wiki-nav-link" title="Server Lifecycle"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Server Lifecycle</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/sse-transport.html" class="wiki-nav-link" title="SSE Transport"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">SSE Transport</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/status-monitor.html" class="wiki-nav-link" title="Status Monitor"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Status Monitor</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/telemetry.html" class="wiki-nav-link" title="Operational Telemetry"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Operational Telemetry</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/vault-sync.html" class="wiki-nav-link" title="Vault Sync"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Sync</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="continuity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONTINUITY</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../continuity/project-wiki.html" class="wiki-nav-link" title="Per-Project Vault Wiki"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Per-Project Vault Wiki</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/prompt-history.html" class="wiki-nav-link" title="Prompt History, Sessions &amp; Activity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Prompt History, Sessions &amp; Activity</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/session-handoff.html" class="wiki-nav-link" title="Cross-Agent Session Handoff Baton"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Cross-Agent Session Handoff Baton</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/vault-manager.html" class="wiki-nav-link" title="Vault Manager, Aliases &amp; Local Binding"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Manager, Aliases &amp; Local Binding</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="documentation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">DOCUMENTATION</span><span class="wiki-domain-badge">1</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../documentation/ws-wiki.html" class="wiki-nav-link" title="ws-wiki Skill (Living Wiki Harness)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">ws-wiki Skill (Living Wiki Harness)</span></a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Tools</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🔗</span><span class="wiki-nav-text">What links here</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/blob/master/.agents/specs/wiki/interfaces/viewer.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📄</span><span class="wiki-nav-text">View Markdown</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/interfaces/viewer.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">⏳</span><span class="wiki-nav-text">Page History</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <button type="button" onclick="window.print()" class="wiki-nav-link wiki-nav-btn">
+              <span class="wiki-nav-icon">🖨️</span><span class="wiki-nav-text">Print / PDF</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</aside>
+  <main class="wiki-content-column">
+    <nav class="wiki-chrome"><a href="../../">Home</a> · <a href="../index.html">Wiki</a> · <span>INTERFACES</span></nav>
+<div class="wiki-content-header-tabs">
+  <div class="wiki-tabs-left">
+    <span class="wiki-tab active">Article</span>
+    <a href="https://github.com/jpolvora/spec-memo/tree/master/.agents/specs" target="_blank" rel="noopener" class="wiki-tab">Specifications</a>
+  </div>
+  <div class="wiki-tabs-right">
+    <span class="wiki-tab active">Read</span>
+    <a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/interfaces/viewer.md" target="_blank" rel="noopener" class="wiki-tab" title="Edit this page on GitHub">Edit</a>
+    <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/interfaces/viewer.md" target="_blank" rel="noopener" class="wiki-tab" title="View commit history on GitHub">View history</a>
+  </div>
+</div>
+    <article class="wiki-article wiki-toc"><h1>Human Viewer Compatibility</h1>
+<div class="wiki-tagline">From spec-memo Wiki, the living architecture &amp; domain knowledge base</div>
+<aside class="wiki-infobox" aria-label="Feature specification details">
+  <div class="wiki-infobox-header">
+    <div class="wiki-infobox-title">Human Viewer Compatibility</div>
+    <div class="wiki-infobox-badge-wrap"><span class="wiki-infobox-badge">Domain: interfaces</span></div>
+  </div>
+  <table class="wiki-infobox-table">
+    <tbody>
+      <tr>
+        <th>Domain</th>
+        <td><code>interfaces</code></td>
+      </tr>
+      <tr>
+        <th>Feature</th>
+        <td><code>viewer</code></td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><span class="wiki-status-pill"><span class="wiki-status-dot"></span>Living Synthesis</span></td>
+      </tr>
+      <tr>
+        <th>Contract</th>
+        <td>Canonical Spec Wiki</td>
+      </tr>
+      <tr>
+        <th>Provenance</th>
+        <td>0001–0053</td>
+      </tr>
+      <tr>
+        <th>Framework</th>
+        <td>spec-memo</td>
+      </tr>
+      <tr>
+        <th>Manager</th>
+        <td><code>ws-wiki</code></td>
+      </tr>
+    </tbody>
+  </table>
+</aside>
+<div class="wiki-toc-box" id="toc" role="navigation" aria-label="Table of contents">
+  <div class="wiki-toc-header">
+    <span class="wiki-toc-title">Contents</span>
+    <button type="button" class="wiki-toc-toggle" id="wiki-toc-toggle" aria-expanded="true">[hide]</button>
+  </div>
+  <ol class="wiki-toc-list" id="wiki-toc-list">
+    <li class="wiki-toc-item"><a href="#feature-overview"><span class="wiki-toc-number">1</span> <span class="wiki-toc-text">Feature Overview</span></a></li>
+    <li class="wiki-toc-item"><a href="#business-rules-logic"><span class="wiki-toc-number">2</span> <span class="wiki-toc-text">Business Rules &amp; Logic</span></a></li>
+    <li class="wiki-toc-item"><a href="#technical-architecture"><span class="wiki-toc-number">3</span> <span class="wiki-toc-text">Technical Architecture</span></a></li>
+  </ol>
+</div>
+<h2 id="feature-overview">Feature Overview <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/interfaces/viewer.md" target="_blank" rel="noopener" title="Edit section: Feature Overview">[edit]</a></span></h2>
+<p>The vault is designed to be opened directly by standard Markdown tools — Obsidian, VS Code Markdown preview, and similar viewers — with no plugin, binary, or GUI runtime required by spec-memo. Viewer support is purely passive: the vault layout and record schemas are standards-compliant Markdown with YAML frontmatter, so a human can browse the same knowledge an agent reads over MCP.</p>
+<p>This page documents the file-format compatibility contract. The MCP/CLI surfaces remain the only supported way to write records; viewers are read-only.</p>
+<h2 id="business-rules-logic">Business Rules &amp; Logic <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/interfaces/viewer.md" target="_blank" rel="noopener" title="Edit section: Business Rules &amp; Logic">[edit]</a></span></h2>
+<ul><li>Record files are <code>&lt;slug&gt;.md</code> containing YAML frontmatter followed by Markdown body. <code>parseRecord</code> reads them; <code>serializeRecord</code> writes them with trimmed body content.</li><li>Directory layout is stable and human-navigable: <code>projects/&lt;projectId&gt;/</code> holds <code>INDEX.md</code>, <code>TRAPS.md</code>, <code>DECISIONS.md</code>, <code>PROMPTS.md</code>, <code>SESSIONS.md</code>, <code>WIKI.md</code>, and kind subdirectories (<code>traps/</code>, <code>decisions/</code>, <code>specs/</code>, <code>plans/</code>, <code>logs/</code>, <code>reviews/</code>, <code>scratch/</code>, plus prompt/session stores).</li><li>Compiled views link to records with standard relative Markdown links (text is the record id, target is the kind subdir plus <code>&lt;id&gt;.md</code>, for example a link to the <code>traps/trap-id.md</code> file), and also print an Obsidian-compatible wikilink token as inline code, e.g. `<code> </code>[[trap-id]]<code> </code>`. Resolvers therefore work in both plain Markdown viewers and Obsidian without configuration.</li><li>The per-project <code>WIKI.md</code> uses project-relative Markdown links to each record (target <code>./&lt;subdir&gt;/&lt;id&gt;.md</code>) plus `<code> </code>[[id]]<code> </code><code> wikilink tokens, and links the compiled views </code>INDEX.md<code>, </code>TRAPS.md<code>, and </code>DECISIONS.md` in the same directory.</li><li>Compiled views are regenerated, never hand-edited: <code>AUTO-GENERATED</code> material is overwritten by <code>rebuildCompiledViews</code>. <code>WIKI.md</code> carries <code>&lt;!-- AUTO-GENERATED BY spec-memo wiki — DO NOT EDIT DIRECTLY --&gt;</code> semantics.</li><li>No viewer-specific plugins, runtime binaries, or proprietary dependencies are required. Opening the vault root as an Obsidian vault or VS Code workspace must not error on vault contents.</li><li>Relative link targets are project-relative files that exist on disk; links do not point outside the vault project directory.</li><li>Frontmatter uses ordinary YAML scalars and arrays (<code>id</code>, <code>kind</code>, <code>title</code>, <code>status</code>, <code>severity</code>, <code>pathPatterns</code>, <code>tags</code>, <code>occurrences</code>, <code>lastSeen</code>, <code>hits</code>, <code>created</code>, <code>updated</code>), which generic Markdown viewers render as a metadata block rather than executable content.</li><li>The default vault root is <code>~/.spec-memo</code> (overridable via <code>SPEC_MEMO_ROOT</code> or <code>--vaultRoot</code>); a human can open that directory directly. <code>config.json</code> and <code>memo.sqlite</code> are non-Markdown files that viewers simply ignore.</li><li>Compiled views are plain Markdown with a scannable title and bullet lists; trap/decision entries show status, path patterns, and the <code>[[id]]</code> token inline. A reader can follow either the relative link (plain Markdown) or the wikilink token (Obsidian).</li><li>Viewer access is read-only in spirit: the agent contract treats MCP/CLI as the only writer, and compiled views are regenerated so hand edits are overwritten.</li></ul>
+<h2 id="technical-architecture">Technical Architecture <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/interfaces/viewer.md" target="_blank" rel="noopener" title="Edit section: Technical Architecture">[edit]</a></span></h2>
+<ul><li><code>src/schema.ts</code>: <code>parseRecord</code> / <code>serializeRecord</code> define the on-disk Markdown + frontmatter contract.</li><li><code>src/compiler.ts</code>: <code>rebuildCompiledViews(projectId, vaultRoot)</code> writes <code>TRAPS.md</code>, <code>DECISIONS.md</code>, <code>PROMPTS.md</code>, <code>SESSIONS.md</code>, and <code>INDEX.md</code>. Trap and decision bullets include a relative Markdown link and a quoted <code>[[id]]</code> wikilink; supersedes relations are rendered as <code>[[...]]</code> tokens.</li><li><code>src/wiki.ts</code>: <code>renderWikiMarkdown</code> builds <code>WIKI.md</code> from a <code>template.md</code>, <code>mdLink</code> emits a relative Markdown link whose target is <code>./&lt;subdir&gt;/&lt;id&gt;.md</code>, and <code>regenerateWiki</code> persists it. <code>splitWikiSections</code> / <code>readWikiSection</code> parse level-2 sections for section reads.</li><li><code>src/vault.ts</code>: <code>RECORD_SUBDIRS</code> and the vault structure define the human-visible tree; record subdirectories are keyed by kind via <code>getSubdirForKind</code>.</li><li>Reads for viewers go through <code>memo wiki</code> (print/regenerate <code>WIKI.md</code>) and <code>memo get</code>; there is no viewer UI process in the core engine.</li><li><code>memo wiki --project &lt;id&gt;</code> prints an existing <code>WIKI.md</code>; <code>memo wiki --regenerate</code> rebuilds it from vault sources. <code>readWikiFile</code>, <code>parseLastGenerated</code>, and <code>readWikiSection</code> support human and programmatic section reads.</li><li><code>insertWikiLink</code>-style tokens are emitted as inline-code `<code> </code>[[id]]<code> </code>` so they are copy-paste friendly and do not create dangling links when a record is archived; the companion relative link always points at the real record file.</li></ul>
+<p>Provenance: <code>0015-viewer.spec.md</code>.</p>
+      <div class="wiki-catlinks">
+        <span class="wiki-catlinks-title">Categories:</span>
+        <a href="../index.html">spec-memo</a>
+         · <a href="../index.html#domain-interfaces">INTERFACES</a>
+        · <a href="../index.html">Living Architecture</a>
+      </div>
+    </article>
+    <footer class="wiki-page-footer">
+      <p>This living wiki page was synthesized from canonical specifications. Content is maintained under <a href="https://github.com/jpolvora/spec-memo">spec-memo</a>.</p>
+    </footer>
+  </main>
+</div>
+<script>
+(function() {
+  /* Theme initialization */
+  var themeToggle = document.getElementById('wiki-theme-toggle');
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch(e) {}
+  }
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved) applyTheme(saved);
+  } catch(e) {}
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  /* Table of Contents toggle */
+  var tocToggle = document.getElementById('wiki-toc-toggle');
+  var tocList = document.getElementById('wiki-toc-list');
+  if (tocToggle && tocList) {
+    tocToggle.addEventListener('click', function() {
+      var isHidden = tocList.style.display === 'none';
+      tocList.style.display = isHidden ? 'block' : 'none';
+      tocToggle.textContent = isHidden ? '[hide]' : '[show]';
+      tocToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+  }
+
+  /* Left sidebar topic filter */
+  var filterInput = document.getElementById('wiki-filter-topics');
+  if (filterInput) {
+    filterInput.addEventListener('input', function() {
+      var q = filterInput.value.toLowerCase().trim();
+      var sections = document.querySelectorAll('.wiki-domain-section');
+      sections.forEach(function(sec) {
+        var items = sec.querySelectorAll('.wiki-nav-item');
+        var visible = 0;
+        items.forEach(function(item) {
+          var txt = item.textContent.toLowerCase();
+          var match = !q || txt.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        sec.style.display = visible > 0 ? '' : 'none';
+      });
+    });
+  }
+
+  /* Top search input sync with sidebar filter */
+  var topSearch = document.getElementById('wiki-search-input');
+  if (topSearch && filterInput) {
+    topSearch.addEventListener('input', function() {
+      filterInput.value = topSearch.value;
+      filterInput.dispatchEvent(new Event('input'));
+    });
+  }
+
+  /* Mobile menu drawer toggle */
+  var menuToggle = document.getElementById('wiki-menu-toggle');
+  var sidebar = document.getElementById('wiki-sidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggle) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

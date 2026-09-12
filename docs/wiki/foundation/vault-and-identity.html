@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vault Root and Project Identity</title>
+<link rel="stylesheet" href="../../assets/css/wiki.css">
+</head>
+<body class="wiki-page">
+<header class="wiki-topbar">
+  <div class="wiki-topbar-left">
+    <button type="button" class="wiki-menu-toggle" id="wiki-menu-toggle" aria-label="Toggle navigation menu" title="Toggle navigation">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <a href="../index.html" class="wiki-topbar-brand">
+      <span class="wiki-brand-logo-mark">W</span>
+      <span class="wiki-brand-name">spec-memo <span class="wiki-brand-tag">Wiki</span></span>
+    </a>
+  </div>
+  <div class="wiki-topbar-center">
+    <div class="wiki-search-box">
+      <svg class="wiki-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="search" id="wiki-search-input" placeholder="Search wiki topics..." aria-label="Search wiki topics">
+    </div>
+  </div>
+  <div class="wiki-topbar-right">
+    <a href="../../" class="wiki-topbar-link">Home</a>
+    <a href="../index.html" class="wiki-topbar-link">Wiki Index</a>
+    <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-topbar-link">GitHub</a>
+    <button type="button" class="wiki-theme-toggle" id="wiki-theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme">
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-sidebar" id="wiki-sidebar" aria-label="Wiki navigation">
+  <div class="wiki-sidebar-inner">
+    <div class="wiki-sidebar-brand-block">
+      <a href="../index.html" class="wiki-sidebar-brand">
+        <div class="wiki-sidebar-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="wiki-sidebar-title-group">
+          <span class="wiki-sidebar-main-title">SPEC-MEMO</span>
+          <span class="wiki-sidebar-sub-title">Living Domain Wiki</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="wiki-sidebar-filter-wrapper">
+      <input type="text" id="wiki-filter-topics" class="wiki-filter-input" placeholder="Filter topics..." aria-label="Filter topics in sidebar">
+    </div>
+
+    <nav class="wiki-sidebar-sections">
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Navigation</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📖</span><span class="wiki-nav-text">Main page</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="../../" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🏠</span><span class="wiki-nav-text">Project Home</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🐙</span><span class="wiki-nav-text">GitHub Repository</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="wiki-nav-group wiki-topics-group">
+        <div class="wiki-nav-heading">Topics by Domain</div>
+      <div class="wiki-domain-section" data-domain="foundation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">FOUNDATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="bootstrap-and-drift.html" class="wiki-nav-link" title="Bootstrap Brief and Spec Drift"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Bootstrap Brief and Spec Drift</span></a></li>
+        <li class="wiki-nav-item"><a href="record-store.html" class="wiki-nav-link" title="Record Store and Kinds"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Store and Kinds</span></a></li>
+        <li class="wiki-nav-item"><a href="retrieval.html" class="wiki-nav-link" title="Retrieval and Search"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Retrieval and Search</span></a></li>
+        <li class="wiki-nav-item active"><a href="vault-and-identity.html" class="wiki-nav-link active" title="Vault Root and Project Identity"><span class="wiki-topic-marker">▸</span><span class="wiki-nav-text">Vault Root and Project Identity</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="curation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CURATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../curation/gc-and-ttl.html" class="wiki-nav-link" title="Garbage Collection, Record TTL, and Log Compaction"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Garbage Collection, Record TTL, and Log Compaction</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/promote-and-export.html" class="wiki-nav-link" title="Record Promotion and Skill Export"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Promotion and Skill Export</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/safety-and-capture.html" class="wiki-nav-link" title="Safety Boundaries, Secret Redaction, and Capture Exclusions"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Safety Boundaries, Secret Redaction, and Capture Exclusions</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/trap-lifecycle.html" class="wiki-nav-link" title="Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="interfaces">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">7</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../interfaces/agent-adapters.html" class="wiki-nav-link" title="Agent Adapters &amp; Installers"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Agent Adapters &amp; Installers</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/cli.html" class="wiki-nav-link" title="CLI Surface (`memo`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">CLI Surface (`memo`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/diagnostics.html" class="wiki-nav-link" title="Diagnostics (`memo doctor`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Diagnostics (`memo doctor`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/import.html" class="wiki-nav-link" title="Legacy Workflow Tree Import"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Legacy Workflow Tree Import</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/mcp-tooling.html" class="wiki-nav-link" title="MCP Version &amp; Skill Installation Tools"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">MCP Version &amp; Skill Installation Tools</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/viewer.html" class="wiki-nav-link" title="Human Viewer Compatibility"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Human Viewer Compatibility</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/virtual-file-system.html" class="wiki-nav-link" title="Virtual File System over MCP"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Virtual File System over MCP</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="connectivity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONNECTIVITY</span><span class="wiki-domain-badge">8</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../connectivity/backup-restore.html" class="wiki-nav-link" title="Backup &amp; Restore"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Backup &amp; Restore</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/canvas-viewer.html" class="wiki-nav-link" title="Canvas Viewer"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Canvas Viewer</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/deployment-modes.html" class="wiki-nav-link" title="Deployment Modes"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Deployment Modes</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/server-lifecycle.html" class="wiki-nav-link" title="Server Lifecycle"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Server Lifecycle</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/sse-transport.html" class="wiki-nav-link" title="SSE Transport"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">SSE Transport</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/status-monitor.html" class="wiki-nav-link" title="Status Monitor"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Status Monitor</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/telemetry.html" class="wiki-nav-link" title="Operational Telemetry"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Operational Telemetry</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/vault-sync.html" class="wiki-nav-link" title="Vault Sync"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Sync</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="continuity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONTINUITY</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../continuity/project-wiki.html" class="wiki-nav-link" title="Per-Project Vault Wiki"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Per-Project Vault Wiki</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/prompt-history.html" class="wiki-nav-link" title="Prompt History, Sessions &amp; Activity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Prompt History, Sessions &amp; Activity</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/session-handoff.html" class="wiki-nav-link" title="Cross-Agent Session Handoff Baton"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Cross-Agent Session Handoff Baton</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/vault-manager.html" class="wiki-nav-link" title="Vault Manager, Aliases &amp; Local Binding"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Manager, Aliases &amp; Local Binding</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="documentation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">DOCUMENTATION</span><span class="wiki-domain-badge">1</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../documentation/ws-wiki.html" class="wiki-nav-link" title="ws-wiki Skill (Living Wiki Harness)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">ws-wiki Skill (Living Wiki Harness)</span></a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Tools</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🔗</span><span class="wiki-nav-text">What links here</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/blob/master/.agents/specs/wiki/foundation/vault-and-identity.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📄</span><span class="wiki-nav-text">View Markdown</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/foundation/vault-and-identity.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">⏳</span><span class="wiki-nav-text">Page History</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <button type="button" onclick="window.print()" class="wiki-nav-link wiki-nav-btn">
+              <span class="wiki-nav-icon">🖨️</span><span class="wiki-nav-text">Print / PDF</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</aside>
+  <main class="wiki-content-column">
+    <nav class="wiki-chrome"><a href="../../">Home</a> · <a href="../index.html">Wiki</a> · <span>FOUNDATION</span></nav>
+<div class="wiki-content-header-tabs">
+  <div class="wiki-tabs-left">
+    <span class="wiki-tab active">Article</span>
+    <a href="https://github.com/jpolvora/spec-memo/tree/master/.agents/specs" target="_blank" rel="noopener" class="wiki-tab">Specifications</a>
+  </div>
+  <div class="wiki-tabs-right">
+    <span class="wiki-tab active">Read</span>
+    <a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/foundation/vault-and-identity.md" target="_blank" rel="noopener" class="wiki-tab" title="Edit this page on GitHub">Edit</a>
+    <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/foundation/vault-and-identity.md" target="_blank" rel="noopener" class="wiki-tab" title="View commit history on GitHub">View history</a>
+  </div>
+</div>
+    <article class="wiki-article wiki-toc"><h1>Vault Root and Project Identity</h1>
+<div class="wiki-tagline">From spec-memo Wiki, the living architecture &amp; domain knowledge base</div>
+<aside class="wiki-infobox" aria-label="Feature specification details">
+  <div class="wiki-infobox-header">
+    <div class="wiki-infobox-title">Vault Root and Project Identity</div>
+    <div class="wiki-infobox-badge-wrap"><span class="wiki-infobox-badge">Domain: foundation</span></div>
+  </div>
+  <table class="wiki-infobox-table">
+    <tbody>
+      <tr>
+        <th>Domain</th>
+        <td><code>foundation</code></td>
+      </tr>
+      <tr>
+        <th>Feature</th>
+        <td><code>vault-and-identity</code></td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><span class="wiki-status-pill"><span class="wiki-status-dot"></span>Living Synthesis</span></td>
+      </tr>
+      <tr>
+        <th>Contract</th>
+        <td>Canonical Spec Wiki</td>
+      </tr>
+      <tr>
+        <th>Provenance</th>
+        <td>0001–0053</td>
+      </tr>
+      <tr>
+        <th>Framework</th>
+        <td>spec-memo</td>
+      </tr>
+      <tr>
+        <th>Manager</th>
+        <td><code>ws-wiki</code></td>
+      </tr>
+    </tbody>
+  </table>
+</aside>
+<div class="wiki-toc-box" id="toc" role="navigation" aria-label="Table of contents">
+  <div class="wiki-toc-header">
+    <span class="wiki-toc-title">Contents</span>
+    <button type="button" class="wiki-toc-toggle" id="wiki-toc-toggle" aria-expanded="true">[hide]</button>
+  </div>
+  <ol class="wiki-toc-list" id="wiki-toc-list">
+    <li class="wiki-toc-item"><a href="#feature-overview"><span class="wiki-toc-number">1</span> <span class="wiki-toc-text">Feature Overview</span></a></li>
+    <li class="wiki-toc-item"><a href="#business-rules-logic"><span class="wiki-toc-number">2</span> <span class="wiki-toc-text">Business Rules &amp; Logic</span></a></li>
+    <li class="wiki-toc-item"><a href="#technical-architecture"><span class="wiki-toc-number">3</span> <span class="wiki-toc-text">Technical Architecture</span></a></li>
+  </ol>
+</div>
+<h2 id="feature-overview">Feature Overview <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/foundation/vault-and-identity.md" target="_blank" rel="noopener" title="Edit section: Feature Overview">[edit]</a></span></h2>
+<p>The vault is the local working-memory store that lives outside any product repository. Its root is resolved with a fixed priority chain and defaults to <code>~/.spec-memo</code>; the <code>$SPEC_MEMO_ROOT</code> environment variable overrides it. Every record operation first binds a working directory (<code>cwd</code>) to a stable <code>projectId</code>, then reads or writes under <code>&lt;vaultRoot&gt;/projects/&lt;projectId&gt;/</code>.</p>
+<p>Project identity exists so two distinct clones (or worktrees) of the same repository share one memory partition, while a remote-less local repo still gets a deterministic partition. Identity is derived from the normalized git remote URL; when no remote exists, a hash of the canonical absolute path is used. A per-directory <code>.spec-memo.json</code> file can override the bound id without touching vault code.</p>
+<p>Agent journeys: an agent starts a session by calling <code>bootstrap</code> with <code>cwd = product root</code>; the runtime resolves identity and scaffolds the project vault. Operators inspect the same binding through <code>memo doctor</code>, <code>memo status</code>, and <code>memo vault list</code>. All MCP tool handlers (<code>bootstrap</code>, <code>search</code>, <code>get</code>, <code>upsert</code>, <code>append</code>, <code>forget</code>, <code>gc</code>, <code>promote</code>, <code>prompt</code>) resolve identity from the <code>cwd</code>/<code>projectId</code> arguments; no dedicated identity tool exists (the MCP surface stays at 11 tools).</p>
+<p>Operator surfaces that expose identity: <code>memo doctor</code> reports project binding (normalized remote vs path fallback) and vault structure; <code>memo status</code> reports the resolved vault root and per-project metadata; <code>memo vault list</code> prints <code>id</code>, <code>displayName</code>, and record count per project; <code>memo setup [--mode local|hybrid|remote]</code> writes deployment configuration. <code>bootstrap</code> with no <code>projectId</code> is the canonical binding path used by all other tools.</p>
+<p>A typical vault layout after a bind:</p>
+<pre><code class="language-text">$SPEC_MEMO_ROOT/                 # default ~/.spec-memo
+├── config.json                  # VaultConfig (ports, ttl, bootstrap, vaultGit, mode)
+├── memo.sqlite                  # disposable FTS5 index
+└── projects/&lt;projectId&gt;/
+    ├── project.json             # ProjectMetadata
+    ├── INDEX.md TRAPS.md DECISIONS.md PROMPTS.md SESSIONS.md
+    └── traps/ decisions/ specs/ plans/ logs/ reviews/ scratch/ prompts/ sessions/</code></pre>
+<p>The <code>0011-dogfood-remap</code> proof is a consumer-side configuration exercise: setting <code>plans.dir</code> and <code>plans.specsDir</code> to absolute paths under a <code>~/.spec-memo-test/&lt;project&gt;/</code> directory keeps plan/spec artifacts outside the product git tree with zero <code>spec-memo</code> code changes. It demonstrated that tree isolation is achievable through configuration redirection alone and flagged that runtime relocation of <code>{sharedDir}</code> and <code>MEMORY.md</code> was the Phase 1/2 work.</p>
+<h2 id="business-rules-logic">Business Rules &amp; Logic <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/foundation/vault-and-identity.md" target="_blank" rel="noopener" title="Edit section: Business Rules &amp; Logic">[edit]</a></span></h2>
+<p>Vault root resolution (<code>getVaultRoot</code>) tries candidates in order and picks the first <em>usable</em> one:</p>
+<ol><li>Explicit override argument (<code>--vaultRoot</code> / options.vaultRoot).</li><li><code>$SPEC_MEMO_ROOT</code> environment variable.</li><li><code>vaultRoot</code> pointer in bootstrap <code>~/.spec-memo/config.json</code>.</li><li>Current directory when it contains both <code>config.json</code> and <code>projects/</code>.</li><li>Fallback <code>~/.spec-memo/</code> (always returned even if currently inaccessible).</li></ol>
+<p>A candidate is usable when it exists as a writable directory, or when its nearest existing ancestor is a writable directory. Empty, non-directory, or non-writable candidates are skipped.</p>
+<p>Vault scaffolding (<code>ensureVaultStructure</code>) creates <code>&lt;root&gt;/</code>, <code>&lt;root&gt;/projects/</code>, <code>&lt;root&gt;/telemetry/</code>, and writes default <code>&lt;root&gt;/config.json</code> only when missing. <code>DEFAULT_VAULT_CONFIG</code> establishes concrete defaults: <code>defaultRemote: origin</code>, <code>enableTelemetry: true</code>, <code>ttl.scratchDays: 7</code>, <code>ttl.reviewDays: 14</code>, <code>bootstrap.maxBytes: 8192</code>, <code>bootstrap.maxTraps: 10</code>, and <code>ports</code> <code>sse: 3123</code>, <code>status: 3124</code>, <code>canvas: 3125</code>.</p>
+<p>Project vault scaffolding (<code>ensureProjectVault</code>) creates the record subdirectories <code>RECORD_SUBDIRS = traps, decisions, specs, plans, logs, reviews, scratch, prompts, sessions</code> and writes <code>project.json</code> with <code>projectId</code>, <code>gitRemote</code>, <code>displayName</code>, <code>lastSeenRoot</code>, <code>knownRoots</code>, <code>createdAt</code>, <code>updatedAt</code>. <code>knownRoots</code> is the union of all previously seen roots plus the current one; <code>displayName</code> defaults to the basename of the first-seen root and is never blanked once set.</p>
+<p>Git remote normalization (<code>normalizeGitRemote</code>) strips credentials/userinfo, protocol variants (<code>git+</code>, <code>ssh://</code>, <code>https://</code>, <code>git://</code>), a trailing <code>.git</code>, and trailing slashes, then lowercases host and path. Special cases: <code>ssh.github.com</code> folds to <code>github.com</code>, <code>altssh.bitbucket.org</code> folds to <code>bitbucket.org</code>, Azure DevOps forms collapse to <code>dev.azure.com/&lt;org&gt;/&lt;project&gt;/&lt;repo&gt;</code> (handling <code>v1/</code>, <code>_git</code>, <code>defaultcollection</code>, and <code>*.visualstudio.com</code> orgs), and AWS CodeCommit URLs normalize to <code>&lt;host&gt;/&lt;repo&gt;</code> with the <code>v1/</code> prefix removed. <code>projectId</code> from a remote (<code>generateProjectIdFromRemote</code>) lowercases and replaces every character outside <code>[a-z0-9._-]</code> with <code>-</code>, collapsing runs and trimming edge dashes.</p>
+<p>Fallback identity (<code>generateProjectIdFromPath</code>) is <code>local-&lt;sanitized-basename&gt;-&lt;sha256(canonical-lowercase-path)[0..8]&gt;</code>. Remote selection prefers <code>origin</code>, then <code>upstream</code>, then the first configured remote; it reads <code>.git/config</code> first and falls back to <code>git remote get-url</code>. If the resolved remote URL points at a local directory that is itself a git repo, the resolver recurses to that repo&#39;s upstream (up to 3 hops) so clones-of-clones share identity; a pure local repo with no upstream yields a path-based id and <code>isFallback: true</code>.</p>
+<p>File-first override: <code>findLocalSpecMemoConfig</code> walks upward from the usable <code>cwd</code> to the enclosing git root (or filesystem root), checking <code>.spec-memo.json</code> at each level. Malformed or unreadable files are ignored and the walk continues. <code>projectId</code> in that file is honored only when filesystem-safe; it is then passed through alias resolution. The config file may carry only the known override keys <code>bootstrap</code>, <code>ports</code>, <code>vaultGit</code>, <code>telemetry</code>, <code>ttl</code>, and <code>sync</code>; any key matching <code>token|secret|password|api_?key|auth|private_?key|bearer|credentials</code> is stripped and the whole override is dropped if a payload secret scan still flags it. Discovery never reads a config from inside the vault root itself.</p>
+<p>Project aliases live in <code>config.json</code> under <code>projectAliases</code> (source id → canonical id). <code>resolveCanonicalProjectId</code> follows the chain and throws <code>VaultManagerError</code> on a detected cycle. <code>isFilesystemSafeProjectId</code> accepts only <code>^[a-z0-9._-]+$</code> and rejects the reserved token <code>all</code>.</p>
+<p>Safety invariants: <code>findGitRoot</code> never returns the vault root or any directory inside it, so the vault is never mistaken for a consumer repo. <code>assertNotInProductRoot</code> blocks record writes into the consumer product tree. The entire vault is protected by a re-entrant file lock (<code>&lt;vaultRoot&gt;/.memo.lock</code>): an exclusive lock has an 8 s acquisition deadline and steals a lock whose mtime is older than 10 s; mutations and scaffolding run under it.</p>
+<h2 id="technical-architecture">Technical Architecture <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/foundation/vault-and-identity.md" target="_blank" rel="noopener" title="Edit section: Technical Architecture">[edit]</a></span></h2>
+<p>Primary modules: <code>src/vault.ts</code> (<code>getVaultRoot</code>, <code>ensureVaultStructure</code>, <code>ensureProjectVault</code>, <code>initVault</code>, lock helpers), <code>src/identity.ts</code> (<code>normalizeGitRemote</code>, <code>generateProjectIdFromRemote</code>, <code>generateProjectIdFromPath</code>, <code>getGitRemoteUrl</code>, <code>resolveProjectIdentity</code>, <code>findLocalSpecMemoConfig</code>, <code>getEffectiveVaultConfig</code>), and <code>src/vault-manager.ts</code> (<code>resolveCanonicalProjectId</code>, <code>isFilesystemSafeProjectId</code>). Types are in <code>src/types.ts</code> (<code>ProjectIdentity</code>, <code>ProjectMetadata</code>, <code>VaultConfig</code>).</p>
+<p><code>ProjectIdentity</code> is the binding contract: <code>projectId</code>, <code>normalizedRemote</code> (null for fallback), <code>rootPath</code> (product working tree), <code>isGit</code>, <code>isFallback</code>, <code>vaultProjectPath</code> (<code>&lt;vaultRoot&gt;/projects/&lt;projectId&gt;</code>), optional <code>identitySource</code> (<code>file</code> | <code>git</code> | <code>path</code>), and optional <code>configFilePath</code>. The resolution order inside <code>resolveProjectIdentity</code> is <code>.spec-memo.json</code> (source <code>file</code>) → git remote (<code>git</code>) → path hash (<code>path</code>). Alias resolution is applied to the base id before the vault path is formed.</p>
+<p><code>getEffectiveVaultConfig(cwd, vaultRoot)</code> merges global <code>config.json</code> with allowed local <code>.spec-memo.json</code> overrides one level deep for nested objects and by replacement for scalars. Only identity binding and status reporting consume overrides today.</p>
+<p>Persistence side effects: <code>ensureVaultStructure</code> may create directories and <code>config.json</code>; <code>ensureProjectVault</code> creates subdirectories and rewrites <code>project.json</code> with <code>updatedAt = now</code> on every bind. Both stay entirely under <code>&lt;vaultRoot&gt;</code>. <code>vaultGit</code> is opt-in and orthogonal to identity: <code>initVaultGit</code> runs only when <code>config.vaultGit.enabled</code> is true and mode is not <code>remote</code>, and writes a <code>.gitignore</code> containing <code>memo.sqlite</code>, <code>memo.sqlite-wal</code>, <code>memo.sqlite-shm</code>, <code>.sync/</code>, <code>error.logs</code>, <code>telemetry/</code>, and <code>backups/</code>.</p>
+<p>Provenance: <code>0002-vault-and-identity.spec.md</code> (vault layout, remote normalization, fallback id, <code>project.json</code>), refined by dogfood isolation evidence in <code>0011-dogfood-remap.spec.md</code>; <code>0047-vault-merge-alias.spec.md</code> and <code>0050-vault-dedup-merge-and-local-config.spec.md</code> added alias resolution and local override handling.</p>
+      <div class="wiki-catlinks">
+        <span class="wiki-catlinks-title">Categories:</span>
+        <a href="../index.html">spec-memo</a>
+         · <a href="../index.html#domain-foundation">FOUNDATION</a>
+        · <a href="../index.html">Living Architecture</a>
+      </div>
+    </article>
+    <footer class="wiki-page-footer">
+      <p>This living wiki page was synthesized from canonical specifications. Content is maintained under <a href="https://github.com/jpolvora/spec-memo">spec-memo</a>.</p>
+    </footer>
+  </main>
+</div>
+<script>
+(function() {
+  /* Theme initialization */
+  var themeToggle = document.getElementById('wiki-theme-toggle');
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch(e) {}
+  }
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved) applyTheme(saved);
+  } catch(e) {}
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  /* Table of Contents toggle */
+  var tocToggle = document.getElementById('wiki-toc-toggle');
+  var tocList = document.getElementById('wiki-toc-list');
+  if (tocToggle && tocList) {
+    tocToggle.addEventListener('click', function() {
+      var isHidden = tocList.style.display === 'none';
+      tocList.style.display = isHidden ? 'block' : 'none';
+      tocToggle.textContent = isHidden ? '[hide]' : '[show]';
+      tocToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+  }
+
+  /* Left sidebar topic filter */
+  var filterInput = document.getElementById('wiki-filter-topics');
+  if (filterInput) {
+    filterInput.addEventListener('input', function() {
+      var q = filterInput.value.toLowerCase().trim();
+      var sections = document.querySelectorAll('.wiki-domain-section');
+      sections.forEach(function(sec) {
+        var items = sec.querySelectorAll('.wiki-nav-item');
+        var visible = 0;
+        items.forEach(function(item) {
+          var txt = item.textContent.toLowerCase();
+          var match = !q || txt.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        sec.style.display = visible > 0 ? '' : 'none';
+      });
+    });
+  }
+
+  /* Top search input sync with sidebar filter */
+  var topSearch = document.getElementById('wiki-search-input');
+  if (topSearch && filterInput) {
+    topSearch.addEventListener('input', function() {
+      filterInput.value = topSearch.value;
+      filterInput.dispatchEvent(new Event('input'));
+    });
+  }
+
+  /* Mobile menu drawer toggle */
+  var menuToggle = document.getElementById('wiki-menu-toggle');
+  var sidebar = document.getElementById('wiki-sidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggle) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

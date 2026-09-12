@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retrieval and Search</title>
+<link rel="stylesheet" href="../../assets/css/wiki.css">
+</head>
+<body class="wiki-page">
+<header class="wiki-topbar">
+  <div class="wiki-topbar-left">
+    <button type="button" class="wiki-menu-toggle" id="wiki-menu-toggle" aria-label="Toggle navigation menu" title="Toggle navigation">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <a href="../index.html" class="wiki-topbar-brand">
+      <span class="wiki-brand-logo-mark">W</span>
+      <span class="wiki-brand-name">spec-memo <span class="wiki-brand-tag">Wiki</span></span>
+    </a>
+  </div>
+  <div class="wiki-topbar-center">
+    <div class="wiki-search-box">
+      <svg class="wiki-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="search" id="wiki-search-input" placeholder="Search wiki topics..." aria-label="Search wiki topics">
+    </div>
+  </div>
+  <div class="wiki-topbar-right">
+    <a href="../../" class="wiki-topbar-link">Home</a>
+    <a href="../index.html" class="wiki-topbar-link">Wiki Index</a>
+    <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-topbar-link">GitHub</a>
+    <button type="button" class="wiki-theme-toggle" id="wiki-theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme">
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-sidebar" id="wiki-sidebar" aria-label="Wiki navigation">
+  <div class="wiki-sidebar-inner">
+    <div class="wiki-sidebar-brand-block">
+      <a href="../index.html" class="wiki-sidebar-brand">
+        <div class="wiki-sidebar-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="wiki-sidebar-title-group">
+          <span class="wiki-sidebar-main-title">SPEC-MEMO</span>
+          <span class="wiki-sidebar-sub-title">Living Domain Wiki</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="wiki-sidebar-filter-wrapper">
+      <input type="text" id="wiki-filter-topics" class="wiki-filter-input" placeholder="Filter topics..." aria-label="Filter topics in sidebar">
+    </div>
+
+    <nav class="wiki-sidebar-sections">
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Navigation</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📖</span><span class="wiki-nav-text">Main page</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="../../" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🏠</span><span class="wiki-nav-text">Project Home</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🐙</span><span class="wiki-nav-text">GitHub Repository</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="wiki-nav-group wiki-topics-group">
+        <div class="wiki-nav-heading">Topics by Domain</div>
+      <div class="wiki-domain-section" data-domain="foundation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">FOUNDATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="bootstrap-and-drift.html" class="wiki-nav-link" title="Bootstrap Brief and Spec Drift"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Bootstrap Brief and Spec Drift</span></a></li>
+        <li class="wiki-nav-item"><a href="record-store.html" class="wiki-nav-link" title="Record Store and Kinds"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Store and Kinds</span></a></li>
+        <li class="wiki-nav-item active"><a href="retrieval.html" class="wiki-nav-link active" title="Retrieval and Search"><span class="wiki-topic-marker">▸</span><span class="wiki-nav-text">Retrieval and Search</span></a></li>
+        <li class="wiki-nav-item"><a href="vault-and-identity.html" class="wiki-nav-link" title="Vault Root and Project Identity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Root and Project Identity</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="curation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CURATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../curation/gc-and-ttl.html" class="wiki-nav-link" title="Garbage Collection, Record TTL, and Log Compaction"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Garbage Collection, Record TTL, and Log Compaction</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/promote-and-export.html" class="wiki-nav-link" title="Record Promotion and Skill Export"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Promotion and Skill Export</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/safety-and-capture.html" class="wiki-nav-link" title="Safety Boundaries, Secret Redaction, and Capture Exclusions"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Safety Boundaries, Secret Redaction, and Capture Exclusions</span></a></li>
+        <li class="wiki-nav-item"><a href="../curation/trap-lifecycle.html" class="wiki-nav-link" title="Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="interfaces">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">7</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../interfaces/agent-adapters.html" class="wiki-nav-link" title="Agent Adapters &amp; Installers"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Agent Adapters &amp; Installers</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/cli.html" class="wiki-nav-link" title="CLI Surface (`memo`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">CLI Surface (`memo`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/diagnostics.html" class="wiki-nav-link" title="Diagnostics (`memo doctor`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Diagnostics (`memo doctor`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/import.html" class="wiki-nav-link" title="Legacy Workflow Tree Import"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Legacy Workflow Tree Import</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/mcp-tooling.html" class="wiki-nav-link" title="MCP Version &amp; Skill Installation Tools"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">MCP Version &amp; Skill Installation Tools</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/viewer.html" class="wiki-nav-link" title="Human Viewer Compatibility"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Human Viewer Compatibility</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/virtual-file-system.html" class="wiki-nav-link" title="Virtual File System over MCP"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Virtual File System over MCP</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="connectivity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONNECTIVITY</span><span class="wiki-domain-badge">8</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../connectivity/backup-restore.html" class="wiki-nav-link" title="Backup &amp; Restore"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Backup &amp; Restore</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/canvas-viewer.html" class="wiki-nav-link" title="Canvas Viewer"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Canvas Viewer</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/deployment-modes.html" class="wiki-nav-link" title="Deployment Modes"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Deployment Modes</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/server-lifecycle.html" class="wiki-nav-link" title="Server Lifecycle"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Server Lifecycle</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/sse-transport.html" class="wiki-nav-link" title="SSE Transport"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">SSE Transport</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/status-monitor.html" class="wiki-nav-link" title="Status Monitor"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Status Monitor</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/telemetry.html" class="wiki-nav-link" title="Operational Telemetry"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Operational Telemetry</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/vault-sync.html" class="wiki-nav-link" title="Vault Sync"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Sync</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="continuity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONTINUITY</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../continuity/project-wiki.html" class="wiki-nav-link" title="Per-Project Vault Wiki"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Per-Project Vault Wiki</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/prompt-history.html" class="wiki-nav-link" title="Prompt History, Sessions &amp; Activity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Prompt History, Sessions &amp; Activity</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/session-handoff.html" class="wiki-nav-link" title="Cross-Agent Session Handoff Baton"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Cross-Agent Session Handoff Baton</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/vault-manager.html" class="wiki-nav-link" title="Vault Manager, Aliases &amp; Local Binding"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Manager, Aliases &amp; Local Binding</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="documentation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">DOCUMENTATION</span><span class="wiki-domain-badge">1</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../documentation/ws-wiki.html" class="wiki-nav-link" title="ws-wiki Skill (Living Wiki Harness)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">ws-wiki Skill (Living Wiki Harness)</span></a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Tools</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🔗</span><span class="wiki-nav-text">What links here</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/blob/master/.agents/specs/wiki/foundation/retrieval.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📄</span><span class="wiki-nav-text">View Markdown</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/foundation/retrieval.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">⏳</span><span class="wiki-nav-text">Page History</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <button type="button" onclick="window.print()" class="wiki-nav-link wiki-nav-btn">
+              <span class="wiki-nav-icon">🖨️</span><span class="wiki-nav-text">Print / PDF</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</aside>
+  <main class="wiki-content-column">
+    <nav class="wiki-chrome"><a href="../../">Home</a> · <a href="../index.html">Wiki</a> · <span>FOUNDATION</span></nav>
+<div class="wiki-content-header-tabs">
+  <div class="wiki-tabs-left">
+    <span class="wiki-tab active">Article</span>
+    <a href="https://github.com/jpolvora/spec-memo/tree/master/.agents/specs" target="_blank" rel="noopener" class="wiki-tab">Specifications</a>
+  </div>
+  <div class="wiki-tabs-right">
+    <span class="wiki-tab active">Read</span>
+    <a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/foundation/retrieval.md" target="_blank" rel="noopener" class="wiki-tab" title="Edit this page on GitHub">Edit</a>
+    <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/foundation/retrieval.md" target="_blank" rel="noopener" class="wiki-tab" title="View commit history on GitHub">View history</a>
+  </div>
+</div>
+    <article class="wiki-article wiki-toc"><h1>Retrieval and Search</h1>
+<div class="wiki-tagline">From spec-memo Wiki, the living architecture &amp; domain knowledge base</div>
+<aside class="wiki-infobox" aria-label="Feature specification details">
+  <div class="wiki-infobox-header">
+    <div class="wiki-infobox-title">Retrieval and Search</div>
+    <div class="wiki-infobox-badge-wrap"><span class="wiki-infobox-badge">Domain: foundation</span></div>
+  </div>
+  <table class="wiki-infobox-table">
+    <tbody>
+      <tr>
+        <th>Domain</th>
+        <td><code>foundation</code></td>
+      </tr>
+      <tr>
+        <th>Feature</th>
+        <td><code>retrieval</code></td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><span class="wiki-status-pill"><span class="wiki-status-dot"></span>Living Synthesis</span></td>
+      </tr>
+      <tr>
+        <th>Contract</th>
+        <td>Canonical Spec Wiki</td>
+      </tr>
+      <tr>
+        <th>Provenance</th>
+        <td>0001–0053</td>
+      </tr>
+      <tr>
+        <th>Framework</th>
+        <td>spec-memo</td>
+      </tr>
+      <tr>
+        <th>Manager</th>
+        <td><code>ws-wiki</code></td>
+      </tr>
+    </tbody>
+  </table>
+</aside>
+<div class="wiki-toc-box" id="toc" role="navigation" aria-label="Table of contents">
+  <div class="wiki-toc-header">
+    <span class="wiki-toc-title">Contents</span>
+    <button type="button" class="wiki-toc-toggle" id="wiki-toc-toggle" aria-expanded="true">[hide]</button>
+  </div>
+  <ol class="wiki-toc-list" id="wiki-toc-list">
+    <li class="wiki-toc-item"><a href="#feature-overview"><span class="wiki-toc-number">1</span> <span class="wiki-toc-text">Feature Overview</span></a></li>
+    <li class="wiki-toc-item"><a href="#business-rules-logic"><span class="wiki-toc-number">2</span> <span class="wiki-toc-text">Business Rules &amp; Logic</span></a></li>
+    <li class="wiki-toc-item"><a href="#technical-architecture"><span class="wiki-toc-number">3</span> <span class="wiki-toc-text">Technical Architecture</span></a></li>
+  </ol>
+</div>
+<h2 id="feature-overview">Feature Overview <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/foundation/retrieval.md" target="_blank" rel="noopener" title="Edit section: Feature Overview">[edit]</a></span></h2>
+<p>Retrieval is executed by the <code>search</code> MCP tool and <code>memo search</code> CLI command. It queries a local SQLite FTS5 index (<code>&lt;vaultRoot&gt;/memo.sqlite</code>) that is a pure, disposable projection of the Markdown vault. Deleting or corrupting the database is safe: <code>rebuildIndex()</code> reconstructs it from <code>projects/*/&lt;subdir&gt;/*.md</code>.</p>
+<p>Markdown remains the source of truth and the index is rebuildable at any time, so search results are reproducible from disk. Three optional layers sit on top of lexical FTS: an embeddings-style similarity filter (<code>config.embeddings</code>), opt-in cross-project search, and retrieval hit accounting. <code>explain</code> adds an ephemeral per-hit scoring breakdown without changing ranking or stored state.</p>
+<p>Agent journeys: a session calls <code>search</code> to discover relevant traps/decisions, optionally passes <code>hitIds</code> to acknowledge rows it actually used, and may read a specific record with <code>get</code>. Operators browse the same corpus through the <code>:3124</code> status monitor Memory tab (<code>GET /api/records</code>, <code>GET /api/records/search</code>) and the Canvas graph, both read-only with respect to hit counters.</p>
+<h2 id="business-rules-logic">Business Rules &amp; Logic <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/foundation/retrieval.md" target="_blank" rel="noopener" title="Edit section: Business Rules &amp; Logic">[edit]</a></span></h2>
+<p>Index schema (<code>openIndex</code>): virtual FTS5 table <code>records_fts(id, projectId UNINDEXED, kind UNINDEXED, status UNINDEXED, title, tags, pathPatterns, body, filepath UNINDEXED, updated UNINDEXED, tokenize=&#39;porter ascii&#39;)</code>, plus a <code>record_links(source_id, target_id, link_type, source_project)</code> table. The database runs in WAL mode with <code>synchronous = NORMAL</code> and is pooled per vault root. <code>indexRecord</code> deletes the existing <code>(id, projectId)</code> row before inserting, so upserts are idempotent.</p>
+<p>Indexing surfaces: <code>id</code>, <code>projectId</code>, <code>kind</code>, <code>status</code>, <code>title</code>, space-joined <code>tags</code>, space-joined <code>pathPatterns</code>, <code>body</code>, <code>filepath</code>, and <code>updated</code>. <code>rebuildIndex</code> scans every project subdirectory and re-indexes each <code>*.md</code>; compiled views live at the project root (not in a subdirectory), so they are not indexed.</p>
+<p>Search defaults and filters (<code>searchIndex</code>):</p>
+<ul><li>When neither <code>projectId</code> nor <code>crossProject</code> is supplied, the active project is resolved from <code>cwd</code>.</li><li><code>kind</code> filter is inclusive when provided; tags must all match; <code>path</code> matches against the record&#39;s <code>pathPatterns</code> using the glob matcher <code>matchesAnyPattern</code> (<code>*</code>, <code>**</code>, <code>?</code> supported).</li><li>Without an explicit <code>kinds</code> list, the FTS path excludes only <code>scratch</code> unless <code>includeScratch: true</code>. <code>crossProject</code> without <code>kinds</code> excludes <code>scratch</code>, <code>state</code>, and <code>review</code>. (The MCP description mentions scratch/log/review defaults, but current code filters only <code>scratch</code> on the default project-scoped path.)</li><li><code>status</code> filters exactly when provided.</li><li>Query sanitization (<code>sanitizeFtsQuery</code>): a fully quoted phrase is preserved; otherwise tokens are split, <code>AND</code>/<code>OR</code>/<code>NOT</code> preserved as operators, FTS-special characters stripped, and remaining tokens wrapped as prefix terms (<code>&quot;term&quot;*</code>).</li><li><code>limit</code> defaults to 50; relevance-mode rows are fetched in batches of <code>max(limit * 4, 100)</code> until the limit is reached.</li><li>If <code>path</code> is inside a capture-ignored product area, search returns <code>[]</code> immediately.</li><li>Expiration: expired <code>scratch</code>/<code>review</code> records are dropped unless <code>includeExpired: true</code>; <code>asOf</code> enables point-in-time filtering.</li></ul>
+<p>Sort modes (<code>sort</code>):</p>
+<ul><li><code>relevance</code> (default) — FTS <code>rank</code> ascending; without a query, <code>updated</code> descending.</li><li><code>updated</code> — <code>updated</code> descending.</li><li><code>occurrences</code> — full-scan ranking over the active set (same universe as <code>memo rank</code>), default kinds <code>[&#39;trap&#39;]</code>, default status <code>active</code>; ordered by <code>occurrences</code> desc, then <code>lastSeen</code>, then severity, then id.</li><li><code>hits</code> — full-scan ranking, default kinds <code>trap, decision, spec, plan</code>, default status <code>active</code>; ordered by <code>hits</code> desc, then <code>lastHit</code> desc, then <code>updated</code> desc.</li></ul>
+<p>Invalid <code>sort</code> values fail tool argument validation (Zod enum), not a silent fallback.</p>
+<p>Embeddings (<code>0001-embeddings-search.spec.md</code>): when <code>config.json</code> has <code>embeddings.enabled</code>, the FTS path additionally computes a local term-frequency cosine similarity (<code>calculateVectorSimilarity</code>) between the query and <code>title + tags + body</code>, dropping hits below <code>embeddings.minSimilarity ?? 0.3</code>. This is a local lexical approximation, not an external embedding library; when disabled, no embedding code path runs and FTS remains the default backend. It applies only to the FTS path, not the <code>occurrences</code>/<code>hits</code> full-scan paths.</p>
+<p>Cross-project (<code>0010-cross-project-search.spec.md</code>): <code>crossProject: true</code> (CLI <code>--all</code> / <code>--cross-project</code>) removes the project clause so all vault projects are queried; each hit carries its originating <code>projectId</code>. Default searches stay scoped to the active project. Ephemeral kinds (<code>scratch</code>, <code>state</code>, <code>review</code>) remain excluded when no explicit <code>kinds</code> is given. Current hit objects expose <code>projectId</code> but do not embed a project display name; operators see display names in the vault list.</p>
+<p>Retrieval hits (<code>0034-memory-hit-count.spec.md</code>): orthogonal to <code>occurrences</code> (which is recurrence-on-upsert). <code>hits</code> (integer <code>&gt;= 0</code>) and <code>lastHit</code> (ISO timestamp) live in record frontmatter and default to <code>0</code>/absent when missing — read paths never rewrite the file just to report zero. Hit-eligible kinds are exactly <code>trap</code>, <code>decision</code>, <code>spec</code>, <code>plan</code>. Increments happen when: a record is present in a returned <code>bootstrap</code> brief payload; a hit-eligible <code>get</code> succeeds; or a record id is listed in <code>search.hitIds</code> and appears in the result set. Bare <code>search</code> never increments, even when sorted by <code>hits</code> or <code>occurrences</code>. Unknown ids in <code>hitIds</code> are ignored. <code>occurrences</code>/<code>lastSeen</code> are never touched by hit recording.</p>
+<p>Session de-dupe: when <code>sessionId</code> is a non-empty string, the same record increments at most once per session. Seen ids are kept in <code>&lt;vaultRoot&gt;/.sync/memory-hit-sessions.json</code> with a 7-day TTL and a 500-entry in-memory hot cache; the disk file retains all non-expired sessions. Without <code>sessionId</code>, every qualifying bootstrap inclusion or <code>get</code> increments (CLI one-shot behavior). Hit persistence is fail-open: a write error still returns success for the originating tool and is logged with subsystem <code>memory-hits</code>. A bump rewrites frontmatter (<code>hits + 1</code>, <code>lastHit = now</code>), updates the FTS row, rebuilds compiled views, and requests a vault-git commit following the existing atomic/batched policy.</p>
+<p>Explain (<code>0038-search-ranking-explain.spec.md</code>): <code>explain: true</code> (CLI <code>--explain</code>) attaches a per-hit <code>SearchScoreExplain</code>: <code>ftsBm25</code>, <code>pathPatternBoost</code>, <code>severityMultiplier</code>, <code>hitsBoost</code>, <code>occurrencesBoost</code>, <code>feedbackMultiplier</code>, and <code>finalScore</code>. Multipliers: path match <code>1.25</code> else <code>1</code>; severity <code>critical 1.4</code>, <code>high 1.3</code>, <code>medium 1</code>, <code>low 0.9</code>; hits <code>1 + min(hits, 20) * 0.02</code>; occurrences <code>1 + min(max(occ - 1, 0), 20) * 0.03</code>; feedback uses the salience multiplier. Values are rounded to 2 decimals and any non-finite input falls back to <code>1</code> (neutral). Explain is computed ephemerally and never alters ranking, ordering, or index state. For <code>sort: hits</code>/<code>occurrences</code> the raw rank is synthesized from the counter when FTS rank is absent.</p>
+<p>Status monitor: <code>GET /api/records/search</code> accepts <code>project</code>, <code>kind</code>, <code>sort</code>, <code>limit</code>, <code>q</code>, <code>explain</code>, <code>crossProject</code>, <code>includeExpired</code>, and <code>asOf</code> and returns <code>{ hits }</code>. <code>GET /api/records</code> is the read-only Memory listing (<code>{ records }</code>) fed by <code>listMemoryRecords</code>: it excludes <code>prompt</code>, <code>session</code>, <code>log</code>, and <code>scratch</code> unless <code>includeEphemeral</code>; hides expired by default; sorts by <code>hits</code> (default), <code>occurrences</code>, or <code>updated</code>; and never increments hits. Both routes enforce the same bearer auth as the rest of <code>/api/*</code> (401 when unauthorized).</p>
+<h2 id="technical-architecture">Technical Architecture <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/foundation/retrieval.md" target="_blank" rel="noopener" title="Edit section: Technical Architecture">[edit]</a></span></h2>
+<p>Modules: <code>src/indexer.ts</code> (<code>openIndex</code>, <code>closeIndex</code>, <code>indexRecord</code>, <code>removeRecord</code>, <code>searchIndex</code>, <code>rebuildIndex</code>, <code>matchesPathPattern</code>, <code>matchesAnyPattern</code>, <code>sanitizeFtsQuery</code>, <code>calculateVectorSimilarity</code>), <code>src/sqlite.ts</code> (Node &gt;= 22 guard, native-binding resolution, ABI-mismatch error wrapping), <code>src/ranking-explain.ts</code> (<code>computeSearchExplain</code>, <code>formatSearchExplainTree</code>, multiplier helpers), <code>src/hits.ts</code> (<code>recordMemoryHits</code>, <code>collectBootstrapHitIds</code>, <code>listMemoryRecords</code>, <code>isHitEligibleKind</code>), <code>src/recurrence.ts</code> (<code>occurrenceOf</code>, <code>compareSearchHits</code>, <code>compareHitsSearch</code>), <code>src/salience.ts</code> (feedback multiplier), and <code>src/expiration.ts</code>.</p>
+<p>MCP <code>search</code> contract (<code>src/tools.ts</code>): <code>query</code>, <code>kinds[]</code>, <code>status</code>, <code>tags[]</code>, <code>path</code>, <code>includeScratch</code>, <code>projectId</code>, <code>crossProject</code>, <code>limit</code>, <code>sort</code> (<code>relevance|occurrences|updated|hits</code>), <code>hitIds[]</code>, <code>sessionId</code>, <code>explain</code>, <code>includeExpired</code>, <code>asOf</code>, <code>cwd</code>, <code>vaultRoot</code>. Hit recording happens in the tool handler after results are returned: result <code>projectId</code> values become per-id hints, ids that map to conflicting projects are treated as ambiguous and excluded, and <code>recordMemoryHits</code> resolves each remaining id across the vault (fail-closed on multiple matching files).</p>
+<p>CLI mapping (<code>src/cli.ts</code>): positionals become <code>query</code>; <code>--kind</code>, <code>--tag(s)</code>, <code>--path</code>, <code>--scratch</code>, <code>--all</code> (→ <code>crossProject</code>), <code>--limit</code>, <code>--sort</code>, <code>--hit-ids a,b</code> (→ <code>hitIds</code>), <code>--session-id</code>, <code>--include-expired</code>, <code>--as-of</code>, <code>--explain</code>, <code>--json</code>. Non-JSON output renders one line per hit plus an indented explain tree when present. <code>memo doctor --rebuild</code> triggers the same full re-index.</p>
+<p>Native dependency guard (<code>src/sqlite.ts</code>): the runtime requires Node.js major &gt;= 22; a native ABI mismatch (for example after a Node upgrade) is wrapped with an actionable rebuild hint referencing <code>npm rebuild better-sqlite3</code> and <code>memo doctor --rebuild</code>, and the binding path is resolved relative to the installed package rather than the process <code>cwd</code> (important when an SSE daemon serves remote clients).</p>
+<p>Side effects: search is read-only except when <code>hitIds</code> (or a <code>get</code>/<code>bootstrap</code> inclusion) triggers a hit bump. <code>rebuildIndex</code> rebuilds both <code>records_fts</code> and <code>record_links</code> inside a transaction and returns <code>{ indexed }</code>. <code>memo doctor --rebuild</code> invokes the same rebuild.</p>
+<p>Provenance: <code>0004-fts-index.spec.md</code> (FTS5 disposable index and filters), <code>0001-embeddings-search.spec.md</code> (optional embeddings backend), <code>0010-cross-project-search.spec.md</code> (opt-in cross-project), <code>0034-memory-hit-count.spec.md</code> (<code>hits</code>/<code>lastHit</code>), and <code>0038-search-ranking-explain.spec.md</code> (<code>explain</code>).</p>
+      <div class="wiki-catlinks">
+        <span class="wiki-catlinks-title">Categories:</span>
+        <a href="../index.html">spec-memo</a>
+         · <a href="../index.html#domain-foundation">FOUNDATION</a>
+        · <a href="../index.html">Living Architecture</a>
+      </div>
+    </article>
+    <footer class="wiki-page-footer">
+      <p>This living wiki page was synthesized from canonical specifications. Content is maintained under <a href="https://github.com/jpolvora/spec-memo">spec-memo</a>.</p>
+    </footer>
+  </main>
+</div>
+<script>
+(function() {
+  /* Theme initialization */
+  var themeToggle = document.getElementById('wiki-theme-toggle');
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch(e) {}
+  }
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved) applyTheme(saved);
+  } catch(e) {}
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  /* Table of Contents toggle */
+  var tocToggle = document.getElementById('wiki-toc-toggle');
+  var tocList = document.getElementById('wiki-toc-list');
+  if (tocToggle && tocList) {
+    tocToggle.addEventListener('click', function() {
+      var isHidden = tocList.style.display === 'none';
+      tocList.style.display = isHidden ? 'block' : 'none';
+      tocToggle.textContent = isHidden ? '[hide]' : '[show]';
+      tocToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+  }
+
+  /* Left sidebar topic filter */
+  var filterInput = document.getElementById('wiki-filter-topics');
+  if (filterInput) {
+    filterInput.addEventListener('input', function() {
+      var q = filterInput.value.toLowerCase().trim();
+      var sections = document.querySelectorAll('.wiki-domain-section');
+      sections.forEach(function(sec) {
+        var items = sec.querySelectorAll('.wiki-nav-item');
+        var visible = 0;
+        items.forEach(function(item) {
+          var txt = item.textContent.toLowerCase();
+          var match = !q || txt.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        sec.style.display = visible > 0 ? '' : 'none';
+      });
+    });
+  }
+
+  /* Top search input sync with sidebar filter */
+  var topSearch = document.getElementById('wiki-search-input');
+  if (topSearch && filterInput) {
+    topSearch.addEventListener('input', function() {
+      filterInput.value = topSearch.value;
+      filterInput.dispatchEvent(new Event('input'));
+    });
+  }
+
+  /* Mobile menu drawer toggle */
+  var menuToggle = document.getElementById('wiki-menu-toggle');
+  var sidebar = document.getElementById('wiki-sidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggle) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

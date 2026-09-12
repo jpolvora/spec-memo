@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</title>
+<link rel="stylesheet" href="../../assets/css/wiki.css">
+</head>
+<body class="wiki-page">
+<header class="wiki-topbar">
+  <div class="wiki-topbar-left">
+    <button type="button" class="wiki-menu-toggle" id="wiki-menu-toggle" aria-label="Toggle navigation menu" title="Toggle navigation">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <a href="../index.html" class="wiki-topbar-brand">
+      <span class="wiki-brand-logo-mark">W</span>
+      <span class="wiki-brand-name">spec-memo <span class="wiki-brand-tag">Wiki</span></span>
+    </a>
+  </div>
+  <div class="wiki-topbar-center">
+    <div class="wiki-search-box">
+      <svg class="wiki-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="search" id="wiki-search-input" placeholder="Search wiki topics..." aria-label="Search wiki topics">
+    </div>
+  </div>
+  <div class="wiki-topbar-right">
+    <a href="../../" class="wiki-topbar-link">Home</a>
+    <a href="../index.html" class="wiki-topbar-link">Wiki Index</a>
+    <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-topbar-link">GitHub</a>
+    <button type="button" class="wiki-theme-toggle" id="wiki-theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme">
+      <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-sidebar" id="wiki-sidebar" aria-label="Wiki navigation">
+  <div class="wiki-sidebar-inner">
+    <div class="wiki-sidebar-brand-block">
+      <a href="../index.html" class="wiki-sidebar-brand">
+        <div class="wiki-sidebar-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="wiki-sidebar-title-group">
+          <span class="wiki-sidebar-main-title">SPEC-MEMO</span>
+          <span class="wiki-sidebar-sub-title">Living Domain Wiki</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="wiki-sidebar-filter-wrapper">
+      <input type="text" id="wiki-filter-topics" class="wiki-filter-input" placeholder="Filter topics..." aria-label="Filter topics in sidebar">
+    </div>
+
+    <nav class="wiki-sidebar-sections">
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Navigation</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📖</span><span class="wiki-nav-text">Main page</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="../../" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🏠</span><span class="wiki-nav-text">Project Home</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🐙</span><span class="wiki-nav-text">GitHub Repository</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="wiki-nav-group wiki-topics-group">
+        <div class="wiki-nav-heading">Topics by Domain</div>
+      <div class="wiki-domain-section" data-domain="foundation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">FOUNDATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../foundation/bootstrap-and-drift.html" class="wiki-nav-link" title="Bootstrap Brief and Spec Drift"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Bootstrap Brief and Spec Drift</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/record-store.html" class="wiki-nav-link" title="Record Store and Kinds"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Store and Kinds</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/retrieval.html" class="wiki-nav-link" title="Retrieval and Search"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Retrieval and Search</span></a></li>
+        <li class="wiki-nav-item"><a href="../foundation/vault-and-identity.html" class="wiki-nav-link" title="Vault Root and Project Identity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Root and Project Identity</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="curation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CURATION</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="gc-and-ttl.html" class="wiki-nav-link" title="Garbage Collection, Record TTL, and Log Compaction"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Garbage Collection, Record TTL, and Log Compaction</span></a></li>
+        <li class="wiki-nav-item"><a href="promote-and-export.html" class="wiki-nav-link" title="Record Promotion and Skill Export"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Record Promotion and Skill Export</span></a></li>
+        <li class="wiki-nav-item"><a href="safety-and-capture.html" class="wiki-nav-link" title="Safety Boundaries, Secret Redaction, and Capture Exclusions"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Safety Boundaries, Secret Redaction, and Capture Exclusions</span></a></li>
+        <li class="wiki-nav-item active"><a href="trap-lifecycle.html" class="wiki-nav-link active" title="Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience"><span class="wiki-topic-marker">▸</span><span class="wiki-nav-text">Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="interfaces">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">7</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../interfaces/agent-adapters.html" class="wiki-nav-link" title="Agent Adapters &amp; Installers"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Agent Adapters &amp; Installers</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/cli.html" class="wiki-nav-link" title="CLI Surface (`memo`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">CLI Surface (`memo`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/diagnostics.html" class="wiki-nav-link" title="Diagnostics (`memo doctor`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Diagnostics (`memo doctor`)</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/import.html" class="wiki-nav-link" title="Legacy Workflow Tree Import"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Legacy Workflow Tree Import</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/mcp-tooling.html" class="wiki-nav-link" title="MCP Version &amp; Skill Installation Tools"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">MCP Version &amp; Skill Installation Tools</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/viewer.html" class="wiki-nav-link" title="Human Viewer Compatibility"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Human Viewer Compatibility</span></a></li>
+        <li class="wiki-nav-item"><a href="../interfaces/virtual-file-system.html" class="wiki-nav-link" title="Virtual File System over MCP"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Virtual File System over MCP</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="connectivity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONNECTIVITY</span><span class="wiki-domain-badge">8</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../connectivity/backup-restore.html" class="wiki-nav-link" title="Backup &amp; Restore"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Backup &amp; Restore</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/canvas-viewer.html" class="wiki-nav-link" title="Canvas Viewer"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Canvas Viewer</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/deployment-modes.html" class="wiki-nav-link" title="Deployment Modes"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Deployment Modes</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/server-lifecycle.html" class="wiki-nav-link" title="Server Lifecycle"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Server Lifecycle</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/sse-transport.html" class="wiki-nav-link" title="SSE Transport"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">SSE Transport</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/status-monitor.html" class="wiki-nav-link" title="Status Monitor"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Status Monitor</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/telemetry.html" class="wiki-nav-link" title="Operational Telemetry"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Operational Telemetry</span></a></li>
+        <li class="wiki-nav-item"><a href="../connectivity/vault-sync.html" class="wiki-nav-link" title="Vault Sync"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Sync</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="continuity">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">CONTINUITY</span><span class="wiki-domain-badge">4</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../continuity/project-wiki.html" class="wiki-nav-link" title="Per-Project Vault Wiki"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Per-Project Vault Wiki</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/prompt-history.html" class="wiki-nav-link" title="Prompt History, Sessions &amp; Activity"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Prompt History, Sessions &amp; Activity</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/session-handoff.html" class="wiki-nav-link" title="Cross-Agent Session Handoff Baton"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Cross-Agent Session Handoff Baton</span></a></li>
+        <li class="wiki-nav-item"><a href="../continuity/vault-manager.html" class="wiki-nav-link" title="Vault Manager, Aliases &amp; Local Binding"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Vault Manager, Aliases &amp; Local Binding</span></a></li>
+        </ul>
+      </div>
+      <div class="wiki-domain-section" data-domain="documentation">
+        <div class="wiki-domain-header"><span class="wiki-domain-name">DOCUMENTATION</span><span class="wiki-domain-badge">1</span></div>
+        <ul class="wiki-domain-topics">
+        <li class="wiki-nav-item"><a href="../documentation/ws-wiki.html" class="wiki-nav-link" title="ws-wiki Skill (Living Wiki Harness)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">ws-wiki Skill (Living Wiki Harness)</span></a></li>
+        </ul>
+      </div>
+      </div>
+
+      <div class="wiki-nav-group">
+        <div class="wiki-nav-heading">Tools</div>
+        <ul class="wiki-nav-list">
+          <li class="wiki-nav-item">
+            <a href="../index.html" class="wiki-nav-link">
+              <span class="wiki-nav-icon">🔗</span><span class="wiki-nav-text">What links here</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/blob/master/.agents/specs/wiki/curation/trap-lifecycle.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">📄</span><span class="wiki-nav-text">View Markdown</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/curation/trap-lifecycle.md" target="_blank" rel="noopener" class="wiki-nav-link">
+              <span class="wiki-nav-icon">⏳</span><span class="wiki-nav-text">Page History</span>
+            </a>
+          </li>
+          <li class="wiki-nav-item">
+            <button type="button" onclick="window.print()" class="wiki-nav-link wiki-nav-btn">
+              <span class="wiki-nav-icon">🖨️</span><span class="wiki-nav-text">Print / PDF</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</aside>
+  <main class="wiki-content-column">
+    <nav class="wiki-chrome"><a href="../../">Home</a> · <a href="../index.html">Wiki</a> · <span>CURATION</span></nav>
+<div class="wiki-content-header-tabs">
+  <div class="wiki-tabs-left">
+    <span class="wiki-tab active">Article</span>
+    <a href="https://github.com/jpolvora/spec-memo/tree/master/.agents/specs" target="_blank" rel="noopener" class="wiki-tab">Specifications</a>
+  </div>
+  <div class="wiki-tabs-right">
+    <span class="wiki-tab active">Read</span>
+    <a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/curation/trap-lifecycle.md" target="_blank" rel="noopener" class="wiki-tab" title="Edit this page on GitHub">Edit</a>
+    <a href="https://github.com/jpolvora/spec-memo/commits/master/.agents/specs/wiki/curation/trap-lifecycle.md" target="_blank" rel="noopener" class="wiki-tab" title="View commit history on GitHub">View history</a>
+  </div>
+</div>
+    <article class="wiki-article wiki-toc"><h1>Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</h1>
+<div class="wiki-tagline">From spec-memo Wiki, the living architecture &amp; domain knowledge base</div>
+<aside class="wiki-infobox" aria-label="Feature specification details">
+  <div class="wiki-infobox-header">
+    <div class="wiki-infobox-title">Trap Lifecycle: Deduplication, Recurrence, Feedback, and Salience</div>
+    <div class="wiki-infobox-badge-wrap"><span class="wiki-infobox-badge">Domain: curation</span></div>
+  </div>
+  <table class="wiki-infobox-table">
+    <tbody>
+      <tr>
+        <th>Domain</th>
+        <td><code>curation</code></td>
+      </tr>
+      <tr>
+        <th>Feature</th>
+        <td><code>trap-lifecycle</code></td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><span class="wiki-status-pill"><span class="wiki-status-dot"></span>Living Synthesis</span></td>
+      </tr>
+      <tr>
+        <th>Contract</th>
+        <td>Canonical Spec Wiki</td>
+      </tr>
+      <tr>
+        <th>Provenance</th>
+        <td>0001–0053</td>
+      </tr>
+      <tr>
+        <th>Framework</th>
+        <td>spec-memo</td>
+      </tr>
+      <tr>
+        <th>Manager</th>
+        <td><code>ws-wiki</code></td>
+      </tr>
+    </tbody>
+  </table>
+</aside>
+<div class="wiki-toc-box" id="toc" role="navigation" aria-label="Table of contents">
+  <div class="wiki-toc-header">
+    <span class="wiki-toc-title">Contents</span>
+    <button type="button" class="wiki-toc-toggle" id="wiki-toc-toggle" aria-expanded="true">[hide]</button>
+  </div>
+  <ol class="wiki-toc-list" id="wiki-toc-list">
+    <li class="wiki-toc-item"><a href="#feature-overview"><span class="wiki-toc-number">1</span> <span class="wiki-toc-text">Feature Overview</span></a></li>
+    <li class="wiki-toc-item"><a href="#business-rules-logic"><span class="wiki-toc-number">2</span> <span class="wiki-toc-text">Business Rules &amp; Logic</span></a></li>
+    <li class="wiki-toc-item"><a href="#technical-architecture"><span class="wiki-toc-number">3</span> <span class="wiki-toc-text">Technical Architecture</span></a></li>
+  </ol>
+</div>
+<h2 id="feature-overview">Feature Overview <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/curation/trap-lifecycle.md" target="_blank" rel="noopener" title="Edit section: Feature Overview">[edit]</a></span></h2>
+<p>Traps are the anti-regression rules an agent records after a mistake. This page covers the full lifecycle: the trap record shape, automatic dedup/supersede, occurrence counting, layer/module classification, retrieval hits, explicit memory feedback, typed relationship links, salience dampening, and zero-LLM contradiction detection.</p>
+<p>Journeys:</p>
+<ul><li>Agent records a trap with <code>pathPatterns</code>; a later <code>upsert</code> of the same situation does not create a second file — it bumps <code>occurrences</code> on the surviving trap.</li><li>Agent/operator runs <code>memo rank --layer application</code> to see the worst repeating gaps, then <code>memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md</code> to export them.</li><li>Operator marks a stale trap with <code>memo feedback &lt;id&gt; --stale</code>; its retrieval score is dampened and, once it crosses the threshold, <code>bootstrap</code> prepends a stale warning and <code>memo doctor</code> flags it.</li><li><code>memo doctor</code> finds two active records where one <code>contradicts</code> the other and surfaces the pair.</li></ul>
+<p>Surfaces: MCP <code>upsert</code>, <code>search</code> (<code>sort</code>), <code>get</code>, <code>prompt action:feedback</code>, <code>promote</code>; CLI <code>memo rank</code>, <code>memo feedback</code>, <code>memo promote --format skill</code>, <code>memo doctor</code>; <code>:3124</code> Status Monitor Memory drawer (Mark Helpful / Flag Stale, typed-link graph).</p>
+<h2 id="business-rules-logic">Business Rules &amp; Logic <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/curation/trap-lifecycle.md" target="_blank" rel="noopener" title="Edit section: Business Rules &amp; Logic">[edit]</a></span></h2>
+<p><strong>Trap frontmatter shape</strong> (src/schema.ts): <code>title</code>, <code>severity</code> (low|medium|high|critical), <code>layer</code> (closed enum), <code>module</code>, <code>pathPatterns</code>, <code>tags</code>, <code>occurrences</code> (int ≥ 1), <code>lastSeen</code>, <code>hits</code> (int ≥ 0), <code>lastHit</code>, <code>helpfulCount</code> (int ≥ 0), <code>staleCount</code> (int ≥ 0), <code>lastFeedback</code>, <code>links [{ target, type }]</code>, <code>supersedes</code>. Trap bodies use <code>DO NOT</code> / <code>INSTEAD DO</code> and may carry <code>**Layer**:</code> / <code>**Module**:</code> classification lines.</p>
+<p><strong>Deduplication / recurrence bump.</strong> On an <code>upsert</code> of a new trap (<code>kind: trap</code>, <code>allowDuplicate</code> not set, no <code>supersedes</code>, no existing file at the same slug), the engine calls <code>findMatchingTrap</code>. A candidate must be <code>status: active</code>, a different id/slug, have an identical sorted <code>pathPatterns</code> set, and reach a body overlap of <code>&gt;= 0.7</code> (Jaccard-style: shared tokens / smaller token-set size, lowercased <code>\W+</code> split; <code>calculateTextOverlap</code>). On a match, the existing file is rewritten with <code>occurrences + 1</code>, <code>lastSeen = now</code>, <code>updated = now</code>, reindexed, and the result returns the existing id with <code>recurrence: true</code>. No new trap file is created.</p>
+<p><strong>Bypasses.</strong> <code>allowDuplicate: true</code> skips the matcher entirely. Supplying <code>supersedes</code> also skips the matcher and instead creates a new file whose <code>occurrences</code> is the superseded record&#39;s <code>occurrences + 1</code> (when <code>occurrences</code> was not supplied).</p>
+<p><strong>Edit vs repeat.</strong> Upserting the same <code>id</code> or <code>slug</code> (<code>existingRecord</code>) updates in place and never bumps <code>occurrences</code>. Only a distinct, matching payload counts as a repeat.</p>
+<p><strong>Layer classification.</strong> Closed enum: <code>application</code>, <code>domain</code>, <code>web</code>, <code>infrastructure</code>, <code>tests</code>, <code>devops</code>, <code>other</code>. Aliases: <code>front</code>/<code>frontend</code> → <code>web</code>; <code>back</code>/<code>backend</code> → <code>application</code>; <code>infra</code> → <code>infrastructure</code>; <code>na</code>/<code>n/a</code>/<code>none</code> → <code>other</code>. <code>security</code>, <code>segurança</code>, <code>seguranca</code> are <strong>not</strong> stored as a layer: they append <code>security</code> to <code>tags</code> and the layer falls back to the <code>**Layer**:</code> body alias or <code>other</code>. An omitted layer is filled from the <code>**Layer**:</code> body line; an omitted <code>module</code> from the <code>**Module**:</code> body line (trimmed free string). An explicit frontmatter layer that is a security label behaves the same as the body case.</p>
+<p><strong>Defaults and validation.</strong> New traps persist <code>occurrences: 1</code> and <code>lastSeen = created</code> when omitted. <code>occurrences</code> must be an integer ≥ 1; <code>layer</code> must be one of the enum values; <code>helpfulCount</code>/<code>staleCount</code> ≥ 0. <code>occurrenceOf</code> treats missing/malformed counts as 1; <code>helpfulCountOf</code>/<code>staleCountOf</code> treat missing/malformed as 0.</p>
+<p><strong>Ranking.</strong> <code>compareTrapRank</code> orders by <code>occurrences</code> desc, then <code>lastSeen</code> desc, then severity weight desc (critical 4, high 3, medium 2, low 1), then id asc. <code>search</code> with <code>sort: occurrences</code> uses the same tuple via <code>compareSearchHits</code> (falling back <code>lastSeen</code> to <code>updated</code>), scanning the full active trap set rather than an FTS pre-cap. <code>sort</code> accepts <code>relevance</code> (default), <code>occurrences</code>, <code>updated</code>, <code>hits</code>; an invalid value fails argument validation rather than silently falling back. <code>search</code> default for <code>sort: occurrences</code> is <code>kind: trap</code>, <code>status: active</code>.</p>
+<p><strong>CLI `memo rank`</strong> is CLI-only (not an MCP tool): <code>memo rank [--layer &lt;layer&gt;] [--limit N] [--json] [--backfill]</code>. It lists active traps ordered as above (default limit 10) and applies layer aliases to <code>--layer</code>. <code>--backfill</code> calls <code>backfillTrapRecurrence</code>, which writes normalized <code>layer</code>, <code>module</code>, <code>occurrences</code>, and <code>lastSeen</code> onto existing trap frontmatter without touching bodies. <code>--backfill</code> is refused in remote mode.</p>
+<p><strong>Retrieval hits vs occurrences.</strong> <code>hits</code>/<code>lastHit</code> are orthogonal (feature <code>0034-memory-hit-count.spec.md</code>): incremented when a trap/decision/spec/plan is included in a <code>bootstrap</code> brief or successfully fetched via <code>get</code> (bare <code>search</code> does not count; <code>search</code> with <code>hitIds</code> does). <code>occurrences</code> counts matched situations and is not changed by retrieval.</p>
+<p><strong>Feedback.</strong> <code>prompt action:feedback</code> (MCP) and <code>memo feedback &lt;id&gt; --helpful|--not-helpful|--stale|--wrong [--comment &quot;…&quot;]</code> (CLI) submit one of <code>helpful</code>, <code>not_helpful</code>, <code>stale</code>, <code>wrong</code>. Rules:</p>
+<ul><li><code>helpful</code> → <code>helpfulCount += 1</code> and <code>lastHit = now</code>.</li><li><code>stale</code> and <code>wrong</code> → <code>staleCount += 1</code>.</li><li><code>not_helpful</code> increments neither counter (only <code>lastFeedback</code> moves).</li><li>Every accepted submission sets <code>lastFeedback = now</code>. Corrupt count fields are repaired to numeric 0 before incrementing.</li><li>Missing <code>id</code> or an invalid type errors with the allowed list; an unknown record id errors <code>Record not found: &lt;id&gt;</code> (fail-open, no mutation). The body is never rewritten.</li></ul>
+<p><strong>Salience dampening.</strong> <code>salienceMultiplier</code> is <code>1</code> while <code>staleCount &lt;= helpfulCount</code>, otherwise <code>1 / (1 + staleCount - helpfulCount)</code>. <code>searchIndex</code> multiplies a hit&#39;s <code>rank</code> by this multiplier when the rank is defined, and stamps <code>helpfulCount</code>/<code>staleCount</code> on every hit.</p>
+<p><strong>Stale flag.</strong> <code>isFlaggedStale</code> is true when <code>staleCount &gt;= 3</code> and <code>staleCount &gt; helpfulCount</code>. Search hits get <code>flaggedStale: true</code>; <code>bootstrap</code> prepends the badge <code>⚠️ [POSSIBLY STALE]</code> to the record title; <code>memo doctor</code> lists such records under its potentially-obsolete scan.</p>
+<p><strong>Typed links and contradictions.</strong> <code>links</code> entries are <code>{ target, type }</code> with <code>type</code> in <code>fixes | contradicts | causes</code>. Invalid entries are dropped on parse. <code>memo doctor</code> performs a deterministic SQL check: a link of type <code>contradicts</code> where both source and target are <code>status: active</code> is reported as an active semantic contradiction, with a recommendation to archive or supersede. No LLM or network call is involved.</p>
+<p><strong>Retention.</strong> Traps are evergreen unless they carry <code>ttl</code>/<code>expires_at</code>; <code>gc</code> archives (never deletes by default) an expired trap. Dedup only ever considers active traps; superseded/archived traps are skipped.</p>
+<h2 id="technical-architecture">Technical Architecture <span class="wiki-edit-section"><a href="https://github.com/jpolvora/spec-memo/edit/master/.agents/specs/wiki/curation/trap-lifecycle.md" target="_blank" rel="noopener" title="Edit section: Technical Architecture">[edit]</a></span></h2>
+<p><strong>Modules.</strong></p>
+<ul><li><code>src/store.ts</code>: <code>upsertRecord</code>, <code>findMatchingTrap</code>, <code>calculateTextOverlap</code>, <code>backfillTrapRecurrence</code>. Write order: resolve slug/id → secret check → recurrence match (traps) → merge frontmatter → expiration compute → capture-ignore sanitize of <code>pathPatterns</code>/<code>linkedPaths</code> → <code>applyTrapClassification</code> → validate → product-tree guard → supersede older record → write + FTS index + compiled views + vault commit.</li><li><code>src/recurrence.ts</code>: <code>TRAP_LAYERS</code>, <code>aliasLayer</code>, <code>isSecurityLabel</code>, <code>parseBodyField</code>, <code>applyTrapClassification</code>, <code>occurrenceOf</code>, <code>lastSeenOf</code>, <code>hitCountOf</code>, <code>lastHitOf</code>, <code>compareTrapRank</code>, <code>compareSearchHits</code>, <code>compareHitsSearch</code>, <code>rankActiveTraps</code>, <code>formatAsSkill</code>, <code>enrichHitFromFile</code>.</li><li><code>src/salience.ts</code>: <code>RECORD_LINK_TYPES</code>, <code>STALE_BADGE</code>, <code>helpfulCountOf</code>, <code>staleCountOf</code>, <code>parseRecordLinks</code>, <code>isFlaggedStale</code>, <code>salienceMultiplier</code>, <code>applyStaleBadgeToTitle</code>, <code>cloneRecordWithStaleBadge</code>.</li><li><code>src/feedback.ts</code>: <code>FEEDBACK_TYPES</code>, <code>submitMemoryFeedback</code>.</li><li><code>src/indexer.ts</code>: <code>syncRecordLinks</code> (writes <code>record_links</code>), <code>findActiveSemanticContradictions</code>, <code>getRecordLinkGraph</code>, <code>enrichHitSalience</code>.</li><li><code>src/compiler.ts</code>: <code>TRAPS.md</code> active headings render <code>Severity | Layer | Occurrences | Hits | Source | Updated</code> and a <code>Supersedes</code> wikilink.</li><li><code>src/doctor.ts</code>: <code>scanPotentiallyObsoleteRecords</code>, <code>findActiveSemanticContradictions</code> wiring.</li></ul>
+<p><strong>Persistence.</strong> Trap markdown under <code>projects/&lt;projectId&gt;/traps/</code>; FTS row in <code>records_fts</code>; a lightweight relational table <code>record_links(source_id, target_id, link_type, source_project)</code> with PK <code>(source_id, target_id, link_type)</code>. <code>indexRecord</code> deletes existing links for the source then re-inserts the parsed set, so links stay synchronized with frontmatter. <code>rebuildIndex</code> clears <code>record_links</code> before repopulating.</p>
+<p><strong>Contracts.</strong></p>
+<ul><li>MCP <code>upsert</code> frontmatter accepts <code>layer</code>, <code>module</code>, <code>occurrences</code>, <code>lastSeen</code>, <code>supersedes</code>, <code>tags</code>, <code>pathPatterns</code>, etc.; <code>allowDuplicate</code> is an internal/store option (not exposed in the MCP <code>upsert</code> input schema).</li><li>MCP <code>search</code> <code>sort</code> enum includes <code>occurrences</code>; hits include <code>occurrences</code>, <code>lastSeen</code>, <code>hits</code>, <code>lastHit</code>, <code>layer</code>, <code>severity</code>, <code>helpfulCount</code>, <code>staleCount</code>, <code>flaggedStale</code>. Search hits do not expose <code>links</code>; only the status-monitor Memory listing does.</li><li>MCP <code>prompt</code> <code>action: feedback</code> requires <code>id</code> and <code>feedback</code> (plus optional <code>comment</code>).</li><li>CLI <code>memo feedback &lt;id&gt; --helpful|--not-helpful|--stale|--wrong [--comment]</code>; <code>memo rank [--layer] [--limit] [--backfill] [--json]</code>.</li><li><code>memo promote --format skill</code> is documented in the promotion page; <code>formatAsSkill</code> groups records by layer and emits title, <code>occurrences</code>, DO NOT, and INSTEAD DO per trap.</li></ul>
+<p><strong>Side effects.</strong> Recurrence bump writes the existing trap file and reindexes it (no tombstone, no new file). Feedback rewrites only frontmatter, reindexes, rebuilds compiled views, commits the vault change, records telemetry <code>operation: memory_feedback</code>, and schedules a hybrid push. Doctor is read-only.</p>
+<p><strong>Provenance.</strong> <code>0014-trap-dedup.spec.md</code> (dedup + <code>supersedes</code>; current code bumps occurrences instead of always superseding), <code>0022-trap-recurrence.spec.md</code> (<code>layer</code> enum, <code>module</code>, <code>occurrences</code>/<code>lastSeen</code>, <code>search.sort</code>, <code>memo rank --backfill</code>, <code>format: skill</code>), <code>0039-memory-feedback-salience.spec.md</code> (<code>helpfulCount</code>/<code>staleCount</code>, typed <code>links</code>, salience dampening, <code>flaggedStale</code>, doctor contradiction/obsolete scans). <code>0039</code> AC7 groups <code>stale</code>/<code>wrong</code> as the stale increment; <code>not_helpful</code> intentionally has no counter.</p>
+      <div class="wiki-catlinks">
+        <span class="wiki-catlinks-title">Categories:</span>
+        <a href="../index.html">spec-memo</a>
+         · <a href="../index.html#domain-curation">CURATION</a>
+        · <a href="../index.html">Living Architecture</a>
+      </div>
+    </article>
+    <footer class="wiki-page-footer">
+      <p>This living wiki page was synthesized from canonical specifications. Content is maintained under <a href="https://github.com/jpolvora/spec-memo">spec-memo</a>.</p>
+    </footer>
+  </main>
+</div>
+<script>
+(function() {
+  /* Theme initialization */
+  var themeToggle = document.getElementById('wiki-theme-toggle');
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch(e) {}
+  }
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved) applyTheme(saved);
+  } catch(e) {}
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  /* Table of Contents toggle */
+  var tocToggle = document.getElementById('wiki-toc-toggle');
+  var tocList = document.getElementById('wiki-toc-list');
+  if (tocToggle && tocList) {
+    tocToggle.addEventListener('click', function() {
+      var isHidden = tocList.style.display === 'none';
+      tocList.style.display = isHidden ? 'block' : 'none';
+      tocToggle.textContent = isHidden ? '[hide]' : '[show]';
+      tocToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+  }
+
+  /* Left sidebar topic filter */
+  var filterInput = document.getElementById('wiki-filter-topics');
+  if (filterInput) {
+    filterInput.addEventListener('input', function() {
+      var q = filterInput.value.toLowerCase().trim();
+      var sections = document.querySelectorAll('.wiki-domain-section');
+      sections.forEach(function(sec) {
+        var items = sec.querySelectorAll('.wiki-nav-item');
+        var visible = 0;
+        items.forEach(function(item) {
+          var txt = item.textContent.toLowerCase();
+          var match = !q || txt.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        sec.style.display = visible > 0 ? '' : 'none';
+      });
+    });
+  }
+
+  /* Top search input sync with sidebar filter */
+  var topSearch = document.getElementById('wiki-search-input');
+  if (topSearch && filterInput) {
+    topSearch.addEventListener('input', function() {
+      filterInput.value = topSearch.value;
+      filterInput.dispatchEvent(new Event('input'));
+    });
+  }
+
+  /* Mobile menu drawer toggle */
+  var menuToggle = document.getElementById('wiki-menu-toggle');
+  var sidebar = document.getElementById('wiki-sidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggle) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

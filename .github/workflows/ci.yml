@@ -28,3 +28,5 @@ jobs:
       - run: npm run build
       - name: Test (serial, native sqlite)
         run: node --test --test-concurrency=1 dist/**/*.test.js
+      - name: Check website + living wiki are in sync
+        run: npm run check:site

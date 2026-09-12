@@ -1,5 +1,20 @@
 # Changelog
 
+### [2026-09-12 14:14] Agent: opencode
+- **Prompt**: Publish the living feature wiki on the docs website (port the `ws-wiki` site generator, homepage link/section/dedicated skill page, CI drift gate); commit, push, ship PR
+- **Done**: `scripts/build-wiki-site.js` ported from workflow-skills and adapted; `docs/wiki/**` generated from `.agents/specs/wiki/**`; `docs/sitemap.xml` rewritten; homepage Wiki nav + section + `docs/assets/css/wiki.css`; `documentation/ws-wiki.md` page; wiki regeneration + `check:site` wired into `scripts/build-site.js` and gated in CI; version 0.28.4; site test message contract preserved
+- **Result**: `npm run build` clean; `npm test` 689 pass / 0 fail; `npm run build:site` + `check:site` PASS; wiki validate 29 pages PASS
+
+### [2026-09-12 13:45] Agent: Cursor
+- **Prompt**: `/ws-spec-to-pr-lite 0053-memo-shutdown full auto` — stopped pre-Step 0 (spec already shipped); user chose verify-shipped-state-on-master
+- **Done**: Checked out `master` at merge `2acf002` (v0.28.3): `npm run build` clean, shutdown+cli 56/56 pass, full `npm test` 688/688 pass; smoke-verified `shutdown` in help, `--dry-run --json` shape (exit 0), `stop` alias (exit 0), unknown-flag rejection (exit 1), README section. Noted `index.PRD` `[x]` sync lives on `develop` (`cfa60f9`, user-committed) and rides the next release. Restored `develop`, tree clean.
+- **Result**: Shipped state on `master` fully verified green; no code changes; lite pipeline correctly not run (reinvention guard)
+
+### [2026-09-12 13:35] Agent: Cursor
+- **Prompt**: PR #58 merged — sync tracked specs/plans state into `index.PRD` (`/ws-spec-manager /ws-spec-index`)
+- **Done**: `index.PRD` rows 50–51 (`memo-shutdown`, `us-55`) `[~]` → `[x]` done + Done log append (PR #58, merge `2acf002`, npm test 688 pass); `FEATURES.md` fixed stale dual-sync "in parallel" claim → sequential + added `memo shutdown` capability line. `PLAN.md`/`PRODUCT.PRD` Done logs already complete (verified).
+- **Result**: E1 satisfied (MERGED 2026-09-12T17:29:43Z); all tracking docs consistent with shipped v0.28.3; no code changes, no tests needed
+
 ### [2026-09-10 21:30] Agent: Cursor
 - **Prompt**: `/ws-spec-to-pr @.agents/specs/0051-us-55.spec.md full auto no-ship` — fix `memo sync --all` partial failure (vault-git pull dies on dirty tree; hybrid AC6 throw aborts whole changeset)
 - **Done**: `src/vault.ts` pull now `git pull --rebase --autostash origin <branch>` (AC1); `src/sync.ts` `applyChangeset` wraps all 4 `upsertRecord` sites with AC6 skip-and-log (`skipped` + `conflictDetails` `metadata_divergence/skipped`, direct capture stays strict) via new `isCaptureIgnoreSkip` (AC3/AC4); regression tests for dirty-tree pull and AC6-offender changesets (AC5); tracking docs updated (FEATURES/PLAN/PRODUCT.PRD/index.PRD Done logs). No version bump, no commit, no PR per no-ship.
