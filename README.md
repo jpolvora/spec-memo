@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.28.2**.
+**Local working memory for coding agents outside the product repository.** Version **0.28.3**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -103,7 +103,7 @@ If you prefer not using npm global link or want a standalone wrapper script:
 `spec-memo` supports **three operational deployment modes** configured via `memo setup`:
 
 1. **Local Mode (Default):** All memory records, indexing, and queries run directly on the local machine in `~/.spec-memo/`. Zero network dependencies.
-2. **Hybrid Mode:** Local vault remains the primary low-latency cache; transparently pulls updates from a shared daemon during `bootstrap` and debounces pushes on mutating operations (`upsert`, `append`, `forget`, `gc`). Manual sync via `memo sync`. Works offline seamlessly (fails open). When `vaultGit.enabled` is also set, `memo sync` runs hybrid HTTP and vault-git in parallel.
+2. **Hybrid Mode:** Local vault remains the primary low-latency cache; transparently pulls updates from a shared daemon during `bootstrap` and debounces pushes on mutating operations (`upsert`, `append`, `forget`, `gc`). Manual sync via `memo sync`. Works offline seamlessly (fails open). When `vaultGit.enabled` is also set, `memo sync` runs hybrid HTTP first, then vault-git sequentially in one run.
 3. **Remote Mode:** Agent hosts run a local stdio MCP proxy (`memo serve`) that forwards all 11 tools to a central remote daemon. Zero memory records stored on local disk. Fails closed with structured errors when unreachable.
 
 #### Configure with `memo setup`
@@ -331,6 +331,18 @@ memo serve --sse --json               # machine metadata (includes statusUrl)
 ```
 
 **Flags:** `--host` (default `127.0.0.1`), `--port`, `--status-port`, `--no-status`, `--auth-token`, `--vaultRoot`.
+
+### Stopping orphaned servers (`memo shutdown`)
+
+Editors/IDEs do not always stop the spec-memo MCP server on exit, leaving stdio/SSE instances holding the vault lock. Recover with:
+
+```bash
+memo shutdown --dry-run   # preview matched PIDs/ports, kills nothing
+memo shutdown             # SIGTERM first (each server flushes), force after timeout
+memo shutdown --json      # machine-readable result
+```
+
+`memo shutdown` (alias `memo stop`) stops stdio `memo serve` and SSE `memo serve --sse` for every vault root; `memo canvas` is excluded unless `--include-canvas` is passed. Scope with `--vaultRoot <path>`, tune the graceful wait with `--timeout-ms <n>` (else `SPEC_MEMO_SYNC_TIMEOUT_MS`, else 8000 ms), or `--force` for immediate termination. After shutdown, verify with `memo status`, restart the IDE (or `memo serve`), and resume persistence with `memo sync` when batched vault-git is enabled.
 
 ### Managing Authentication Tokens & Remote Access
 

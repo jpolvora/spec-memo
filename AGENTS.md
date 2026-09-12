@@ -183,7 +183,7 @@ Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI 
 | Recall | `search` → `get` |
 | Remember | `upsert` (never write `{plansDir}` / `MEMORY.md` into product git; hybrid schedules debounced push; batched vault-git does not commit until flush) |
 | Audit event | `append` |
-| Sync | `memo sync [--all] [--dry-run] [--prefer local|remote]` (hybrid HTTP, vault-git, or both in parallel when dual-mode) |
+| Sync | `memo sync [--all] [--dry-run] [--prefer local|remote]` (hybrid HTTP first, then vault-git sequentially when dual-mode) |
 | Reconcile conflicts | `memo reconcile [--prefer local|remote] [--strategy smart-merge|local-wins|remote-wins|sidecar] [--clean-sidecars]` |
 | Session close flush | MCP/CLI `prompt` `session_end` (batched vault-git + hybrid when enabled; fail-open) |
 | Housekeep | `gc` (`dryRun` first when unsure); `forget` (purge only with explicit user confirm) |
@@ -201,7 +201,7 @@ Optional private git remote backup of the vault root (`~/.spec-memo/`). Orthogon
 - **`vaultGit.enabled`:** Opt-in. When false or omitted, vault-git is a no-op.
 - **`vaultGit.atomic` (default `false`, batched):** Mutations write markdown + FTS only. Git commit + remote pull/push flush on `memo sync`, MCP/CLI `prompt` `session_end`, and graceful `memo serve` / SSE shutdown. CLI one-shot `memo upsert` does **not** flush on process exit—run `memo sync` or end the agent session.
 - **`vaultGit.atomic: true`:** Per-mutation structured git commit + remote sync (fail-open; errors logged to `error.logs` with `subsystem: vault-git`).
-- **Dual-mode:** When `mode: hybrid` and `vaultGit.enabled`, `memo sync` / `session_end` / shutdown dispatch **both** hybrid HTTP and vault-git concurrently (`Promise.allSettled`). Either channel may fail; the other still runs. Never crashes MCP/SSE.
+- **Dual-mode:** When `mode: hybrid` and `vaultGit.enabled`, `memo sync` / `session_end` / shutdown run hybrid HTTP first, then vault-git sequentially in one run. Either channel may fail; the other still runs. Never crashes MCP/SSE.
 - **Status/doctor:** `memo status` reports `Enabled (atomic|batched)`; doctor JSON includes `dirty` / `lastError` (credentials redacted).
 
 ### CLI Binary & PATH Resolution Contract
@@ -227,6 +227,7 @@ Agents executing shell commands or diagnosing environment issues must follow thi
 | Stdio | `memo serve` | Default for Cursor/Claude Desktop host spawn (proxies in remote mode) |
 | SSE | `memo serve --sse` | Prints SSE URL + status URL; `--json` emits `url` / `statusUrl` |
 | Flags | `--host` `--port` `--status-port` `--no-status` `--auth-token` `--vaultRoot` | Non-loopback without token **must fail** (`SPEC_MEMO_SSE_TOKEN` / `SPEC_MEMO_AUTH_TOKEN` / `--auth-token`) |
+| Shutdown | `memo shutdown [--vaultRoot] [--timeout-ms] [--force] [--dry-run] [--include-canvas] [--json]` (alias: `stop`) | Gracefully stop orphaned serve processes (SIGTERM first, force after timeout). Preview with `--dry-run`; canvas excluded by default. Use after IDE exit/update before restart. |
 
 On status companion bind failure: close SSE listener + activity bus before rejecting (trap `sse-status-bind-rollback`). On SSE transport disconnect: `await mcpServer.close()` (trap `sse-mcp-server-close`).
 

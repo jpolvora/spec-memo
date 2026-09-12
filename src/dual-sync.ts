@@ -47,6 +47,16 @@ const EMPTY_HYBRID: HybridSyncReport = {
   timestamp: new Date(0).toISOString()
 };
 
+function buildEmptyHybrid(all: boolean | undefined): HybridSyncReport {
+  return {
+    ...EMPTY_HYBRID,
+    all: Boolean(all),
+    pulled: { ...EMPTY_HYBRID.pulled },
+    pushed: { ...EMPTY_HYBRID.pushed },
+    timestamp: new Date().toISOString()
+  };
+}
+
 function isHybridReportSuccessful(report: HybridSyncReport, vaultRoot: string): boolean {
   if ((report.pulled?.conflicts ?? 0) > 0 || (report.pushed?.conflicts ?? 0) > 0) {
     return false;
@@ -55,8 +65,29 @@ function isHybridReportSuccessful(report: HybridSyncReport, vaultRoot: string): 
   return !state.dirty;
 }
 
+function describeHybridDirty(vaultRoot: string): string | undefined {
+  try {
+    const state = readHybridState(vaultRoot);
+    if (!state.dirty) return undefined;
+    if (state.lastError) return state.lastError;
+    const dirtyProjects = Object.entries(state.dirtyProjects || {})
+      .filter(([, v]) => Boolean(v))
+      .map(([k]) => k);
+    if (dirtyProjects.length > 0) {
+      return `Hybrid state dirty for project(s): ${dirtyProjects.join(', ')}`;
+    }
+    return 'Hybrid state dirty; review hybrid-state.json lastError';
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Dual-mode orchestrator: hybrid HTTP and vault-git run concurrently when both are enabled.
+ * Dual-mode orchestrator: hybrid HTTP runs first, then vault-git commits the
+ * hybrid-rewritten views in the same run. Sequential execution avoids the
+ * dirty-tree race where a concurrent hybrid pull dirties compiled views
+ * between the vault-git flush commit and `pull --rebase --autostash`
+ * (issue #55 follow-up: autostash pile-up).
  */
 export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport> {
   const started = performance.now();
@@ -72,72 +103,69 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
     );
   }
 
-  const hybridJob: Promise<DualSyncHybridChannel | undefined> = hybridEnabled
-    ? (async () => {
-        try {
-          if (trigger === 'session_end' || trigger === 'shutdown') {
-            await flushDebouncedPushes();
-          }
-          const report = await syncHybrid({
-            vaultRoot,
-            projectId: options.projectId,
-            all: options.all,
-            dryRun: options.dryRun,
-            force: options.force,
-            prefer: options.prefer,
-            strategy: options.strategy,
-            cleanSidecars: options.cleanSidecars
-          });
-          return { ok: isHybridReportSuccessful(report, vaultRoot), report };
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          logErrorReport(
-            {
-              subsystem: 'hybrid-sync',
-              mode: config.mode,
-              projectId: options.projectId,
-              error: err,
-              context: { phase: 'orchestrate', trigger }
-            },
-            { vaultRoot }
-          );
-          return { ok: false, error: msg, report: { ...EMPTY_HYBRID, timestamp: new Date().toISOString() } };
-        }
-      })()
-    : Promise.resolve(undefined);
+  let hybrid: DualSyncHybridChannel | undefined;
+  if (hybridEnabled) {
+    try {
+      if (trigger === 'session_end' || trigger === 'shutdown') {
+        await flushDebouncedPushes();
+      }
+      const report = await syncHybrid({
+        vaultRoot,
+        projectId: options.projectId,
+        all: options.all,
+        dryRun: options.dryRun,
+        force: options.force,
+        prefer: options.prefer,
+        strategy: options.strategy,
+        cleanSidecars: options.cleanSidecars
+      });
+      const ok = isHybridReportSuccessful(report, vaultRoot);
+      if (ok) {
+        hybrid = { ok, report };
+      } else {
+        const dirtyMsg = describeHybridDirty(vaultRoot);
+        const conflictCount = (report.pulled?.conflicts ?? 0) + (report.pushed?.conflicts ?? 0);
+        const fallback =
+          conflictCount > 0 ? `Hybrid sync reported ${conflictCount} conflict(s)` : undefined;
+        hybrid = { ok, report, ...(dirtyMsg || fallback ? { error: dirtyMsg ?? fallback } : {}) };
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logErrorReport(
+        {
+          subsystem: 'hybrid-sync',
+          mode: config.mode,
+          projectId: options.projectId,
+          error: err,
+          context: { phase: 'orchestrate', trigger }
+        },
+        { vaultRoot }
+      );
+      hybrid = { ok: false, error: msg, report: buildEmptyHybrid(options.all) };
+    }
+  }
 
-  const gitJob: Promise<VaultGitChannelResult | undefined> = gitEnabled
-    ? flushVaultGit(vaultRoot, {
+  let vaultGit: VaultGitChannelResult | undefined;
+  if (gitEnabled) {
+    try {
+      vaultGit = await flushVaultGit(vaultRoot, {
         dryRun: options.dryRun,
         trigger,
         sessionId: options.sessionId
-      })
-    : Promise.resolve(undefined);
-
-  const [hybridSettled, gitSettled] = await Promise.allSettled([hybridJob, gitJob]);
-
-  const hybrid =
-    hybridSettled.status === 'fulfilled'
-      ? hybridSettled.value
-      : {
-          ok: false,
-          error: hybridSettled.reason instanceof Error ? hybridSettled.reason.message : String(hybridSettled.reason)
-        };
-  const vaultGit =
-    gitSettled.status === 'fulfilled'
-      ? gitSettled.value
-      : {
-          ok: false,
-          committed: false,
-          pulled: false,
-          pushed: false,
-          message: safeVaultGitError(
-            gitSettled.reason instanceof Error ? gitSettled.reason.message : String(gitSettled.reason)
-          ) || 'vault-git sync failed',
-          error: safeVaultGitError(
-            gitSettled.reason instanceof Error ? gitSettled.reason.message : String(gitSettled.reason)
-          )
-        };
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const safe = safeVaultGitError(msg) || 'vault-git sync failed';
+      vaultGit = {
+        ok: false,
+        committed: false,
+        pulled: false,
+        pushed: false,
+        message: safe,
+        error: safe
+      };
+    }
+  }
 
   const enabledResults: boolean[] = [];
   if (hybrid) enabledResults.push(hybrid.ok);
