@@ -6,7 +6,7 @@ import os from "node:os";
 import { initVault } from "./vault.js";
 import { upsertRecord, getRecord, forgetRecord } from "./store.js";
 import { searchIndex, closeIndex } from "./indexer.js";
-import { exportChangeset, applyChangeset, syncVaults } from "./sync.js";
+import { exportChangeset, applyChangeset, syncVaults, isViewRebuildSkip } from "./sync.js";
 
 test("Multi-Machine Vault Sync & Delta Engine", async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-sync-test-"));
@@ -490,8 +490,7 @@ test("US-55 AC3/AC4: applyChangeset skips AC6 offenders and applies the rest", a
   });
 });
 
-test("US-55 follow-up: transient view-rebuild lock on one project does not zero the changeset", async (t) => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-sync-rebuild-test-"));
+test("US-55 follow-up: transient view-rebuild lock on one project does not zero the changeset", async (t) => {  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-sync-rebuild-test-"));
   const vaultT = path.join(tempDir, "vault-t");
   const projBlocked = "proj-blocked";
   const projHealthy = "proj-healthy";
@@ -561,4 +560,33 @@ test("US-55 follow-up: transient view-rebuild lock on one project does not zero 
   assert.ok(keptBlocked, "blocked project's record must still apply despite view-rebuild failure");
   const keptHealthy = await getRecord({ vaultRoot: vaultT, projectId: projHealthy, kind: "trap", id: "trap-healthy-1" });
   assert.ok(keptHealthy, "healthy project's record must apply");
+});
+
+test("PR-58 review: isViewRebuildSkip narrows to view-path errors only", () => {
+  const viewEisdir = new Error(
+    "EISDIR: illegal operation on a directory, open 'C:\\vault\\projects\\p\\TRAPS.md'"
+  ) as NodeJS.ErrnoException;
+  viewEisdir.code = 'EISDIR';
+  assert.equal(isViewRebuildSkip(viewEisdir), true);
+
+  const viewLock = new Error(
+    "UNKNOWN: unknown error, open 'C:\\vault\\projects\\p\\TRAPS.md'"
+  );
+  assert.equal(isViewRebuildSkip(viewLock), true);
+
+  // Same errno on the RECORD path (read-only dir, disk failure) must stay
+  // strict so a missing record is never reported as applied.
+  const recordEacces = new Error(
+    "EACCES: permission denied, open 'C:\\vault\\projects\\p\\traps\\trap-x.md'"
+  ) as NodeJS.ErrnoException;
+  recordEacces.code = 'EACCES';
+  assert.equal(isViewRebuildSkip(recordEacces), false);
+
+  const recordEnoent = new Error(
+    "ENOENT: no such file or directory, open 'C:\\vault\\projects\\p\\traps\\trap-x.md'"
+  ) as NodeJS.ErrnoException;
+  recordEnoent.code = 'ENOENT';
+  assert.equal(isViewRebuildSkip(recordEnoent), false);
+
+  assert.equal(isViewRebuildSkip(new Error('boom')), false);
 });

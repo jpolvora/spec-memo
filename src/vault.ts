@@ -1001,6 +1001,22 @@ async function syncVaultRemote(vaultRoot: string): Promise<void> {
   await flushVaultGit(vaultRoot, { dryRun: false, trigger: 'remote-follow' });
 }
 
+/**
+ * Parse `git stash list` output into refs of autostash entries (newest first).
+ * Only lines whose message mentions autostash qualify — user stashes are
+ * never selected, so recovery pops cannot restore the wrong entry (#58).
+ */
+export function parseAutostashRefs(stashListStdout: string): string[] {
+  const refs: string[] = [];
+  for (const line of stashListStdout.split('\n')) {
+    const match = line.match(/^(stash@\{\d+\}):/);
+    if (match && line.toLowerCase().includes('autostash')) {
+      refs.push(match[1]);
+    }
+  }
+  return refs;
+}
+
 async function withVaultGitRemoteExclusive<T>(
   vaultRoot: string,
   trigger: string | undefined,
@@ -1129,22 +1145,27 @@ export async function flushVaultGit(
           remoteError = pullRes.error;
           // #55 follow-up: a failed --autostash pull leaves the autostash
           // behind (stash@{0}, stash@{1} pile-up). Abort the half-rebase and
-          // pop the autostash to restore the working tree instead of leaking.
+          // drain every autostash entry by explicit ref — never a bare pop,
+          // which could restore a user stash. Re-list per iteration so refs
+          // stay fresh as entries drop.
           try {
             await gitExecAsync(vaultRoot, ['rebase', '--abort'], 'pull');
-            const stashList = await gitExecAsync(vaultRoot, ['stash', 'list'], 'pull');
-            if (stashList.ok && stashList.stdout.toLowerCase().includes('autostash')) {
-              const popRes = await gitExecAsync(vaultRoot, ['stash', 'pop'], 'pull');
+            for (let i = 0; i < 10; i++) {
+              const stashList = await gitExecAsync(vaultRoot, ['stash', 'list'], 'pull');
+              const refs = stashList.ok ? parseAutostashRefs(stashList.stdout) : [];
+              if (refs.length === 0) break;
+              const popRes = await gitExecAsync(vaultRoot, ['stash', 'pop', refs[0]], 'pull');
               if (!popRes.ok) {
                 logErrorReport(
                   {
                     subsystem: 'vault-git',
                     mode: config.mode,
-                    error: `autostash pop failed after pull conflict: ${popRes.error || 'unknown'}`,
+                    error: `autostash pop failed for ${refs[0]}: ${popRes.error || 'unknown'}`,
                     context: { phase: 'flush', branch }
                   },
                   { vaultRoot }
                 );
+                break;
               }
             }
           } catch {

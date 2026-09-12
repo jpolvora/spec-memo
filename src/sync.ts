@@ -145,19 +145,27 @@ export function isCaptureIgnoreSkip(err: unknown): boolean {
  * before `rebuildCompiledViews` runs, so sync-apply must count the record as
  * applied and let the end-of-apply resilient rebuild retry — not abort the
  * whole changeset (#55 follow-up).
+ *
+ * Narrow by origin: the error message must reference a compiled-view file
+ * (TRAPS/DECISIONS/PROMPTS/SESSIONS/INDEX.md). A bare errno on the record
+ * path itself (read-only dir, disk failure) stays strict and aborts, so a
+ * missing record is never reported as applied.
  */
 export function isViewRebuildSkip(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
   const code = (err as NodeJS.ErrnoException)?.code;
-  if (code === 'EISDIR' || code === 'EPERM' || code === 'EBUSY' || code === 'EACCES' || code === 'ENOENT') {
+  const isViewPath = /TRAPS\.md|DECISIONS\.md|PROMPTS\.md|SESSIONS\.md|INDEX\.md/.test(msg);
+  if (!isViewPath) return false;
+  if (
+    code === 'EISDIR' ||
+    code === 'EPERM' ||
+    code === 'EBUSY' ||
+    code === 'EACCES' ||
+    code === 'ENOENT'
+  ) {
     return true;
   }
-  const msg = err instanceof Error ? err.message : String(err);
-  return (
-    msg.includes('UNKNOWN: unknown error') ||
-    msg.includes('illegal operation on a directory') ||
-    (/TRAPS\.md|DECISIONS\.md|PROMPTS\.md|SESSIONS\.md|INDEX\.md/.test(msg) &&
-      (msg.includes('EISDIR') || msg.includes('EPERM') || msg.includes('EBUSY') || msg.includes('UNKNOWN')))
-  );
+  return msg.includes('illegal operation on a directory') || msg.includes('UNKNOWN: unknown error');
 }
 
 export interface CleanSidecarsOptions {

@@ -13,6 +13,7 @@ import {
   flushVaultGit,
   flushScheduledVaultGit,
   withVaultLockSync,
+  parseAutostashRefs,
   REQUIRED_VAULT_GITIGNORE
 } from './vault.js';
 import { upsertRecord, appendEvent, forgetRecord } from './store.js';
@@ -577,8 +578,7 @@ describe('vault-git-hybrid-sync', () => {
     }
   });
 
-  it('US-55 follow-up: syncDual preserves all:true in hybrid fallback when hybrid fails', async () => {
-    const configPath = path.join(tempVault, 'config.json');
+  it('US-55 follow-up: syncDual preserves all:true in hybrid fallback when hybrid fails', async () => {    const configPath = path.join(tempVault, 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     config.mode = 'hybrid';
     config.remote = { url: 'http://127.0.0.1:1' };
@@ -593,5 +593,16 @@ describe('vault-git-hybrid-sync', () => {
     assert.ok(typeof report.hybrid?.error === 'string' && report.hybrid.error.length > 0);
     // Sequential orchestration still runs vault-git after hybrid failure.
     assert.ok(report.vaultGit);
+  });
+
+  it('PR-58 review: parseAutostashRefs selects only autostash entries', () => {
+    const mixed = [
+      'stash@{0}: On master: autostash',
+      'stash@{1}: WIP on master: my manual work',
+      'stash@{2}: On master: AutoStash recovery point'
+    ].join('\n');
+    assert.deepEqual(parseAutostashRefs(mixed), ['stash@{0}', 'stash@{2}']);
+    assert.deepEqual(parseAutostashRefs('stash@{0}: WIP on master: user work\n'), []);
+    assert.deepEqual(parseAutostashRefs(''), []);
   });
 });
