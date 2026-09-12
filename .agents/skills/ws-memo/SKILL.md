@@ -568,8 +568,9 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 | `memo wiki` | Print or regenerate per-project vault wiki (`projects/{id}/WIKI.md`). Flags: `--project`, `--regenerate`, `--json`. Not available in remote mode. |
 | `memo canvas` | Launch graph visualizer dashboard (default port `3125`, configurable via `config.json` `ports.canvas`). Flags: `--port`, `--host`, `--project`. |
 | `memo serve` | Start MCP transport. Stdio (default) or HTTP/SSE (`--sse` port `3123`, status companion `:3124`, configurable via `config.json` `ports.sse` / `ports.status`). Off-loopback requires `--auth-token` or `SPEC_MEMO_AUTH_TOKEN`. |
+| `memo shutdown` | Gracefully stop orphaned serve processes (alias: `stop`). SIGTERM first (own handlers flush), force after timeout. Flags: `--vaultRoot`, `--timeout-ms`, `--force`, `--dry-run`, `--include-canvas`, `--json`. |
 | `memo hook install` | Install Git pre-commit write-block hook to block `.agents/plans/`, `MEMORY.md`, `.state.md`. Bypass: `SKIP_MEMO_HOOK=1`. |
-| `memo sync` | Hybrid HTTP and/or vault-git (`--all`, `--dry-run`). Dual-mode runs both in parallel. Batched git flush on sync / session_end / shutdown. |
+| `memo sync` | Hybrid HTTP and/or vault-git (`--all`, `--dry-run`). Dual-mode runs hybrid first, then vault-git sequentially in one run. Batched git flush on sync / session_end / shutdown. |
 | `memo sync-vault` | Peer-to-peer vault directory delta sync (`memo sync-vault <target> [--two-way] [--dry-run]`). |
 | `memo export-vault` | Export encrypted/portable vault archive (`--password`, `--output`, `--project`). |
 | `memo import-vault` | Restore vault archive (`--password`, `--archive`, `--overwrite`). |

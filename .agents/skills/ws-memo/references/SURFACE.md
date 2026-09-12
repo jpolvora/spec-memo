@@ -244,6 +244,7 @@ memo install-skills --global [--force] [--json]
 | `memo status` | Query read-only operational dashboard, daemon reachability probes, configuration, and storage statistics (aliases: `info`, `state`, `setup --check`). `--json`, `--check`. |
 | `memo setup` | Configure deployment mode (`local`, `hybrid`, `remote`) and host MCP snippets (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo serve` | Stdio MCP (default). In remote mode, proxies over stdio to remote daemon. `--sse` HTTP SSE on `--port` (default 3123, configurable via `config.json` `ports.sse`). Status companion co-starts with `--sse` unless `--no-status`; stdio opt-in via `--status` / `--status-port` (default 3124, configurable via `config.json` `ports.status`). `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
+| `memo shutdown` (alias `stop`) | Gracefully stop orphaned serve processes: SIGTERM first (own handlers flush fail-open), force after `--timeout-ms` (else `SPEC_MEMO_SYNC_TIMEOUT_MS`, else 8000 ms). `--vaultRoot` scope, `--dry-run` preview, `--include-canvas` opt-in (canvas excluded by default), `--force`, `--json`. |
 | `memo canvas` | Graph UI default port 3125 (configurable via `config.json` `ports.canvas`). `--project`, `--host`, `--json`. (Not available in remote mode). |
 | `memo doctor [productRoot]` | Vault + FTS + pollution + mode + remote health + hybrid state. `--rebuild` FTS. `--fix` delete leftover in-repo residue. `--json`. |
 | `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Proxies in remote mode. |
@@ -251,7 +252,7 @@ memo install-skills --global [--force] [--json]
 | `memo vault` | Manage vault projects: `list`, `alias --from --to`, `unalias --from`, `merge --source --target [--copy-records]`, `create`, `update`, `delete --confirm`. Not an MCP tool. |
 | `memo import` | Legacy `.agents` / `memory/` / plans → vault. `--from`. |
 | `memo hook install` | Pre-commit write-block. `--productRoot`. Bypass: `SKIP_MEMO_HOOK=1`. (Not available in remote mode). |
-| `memo sync` | Hybrid HTTP and/or vault-git. Dual-mode runs both in parallel. Batched vault-git (`atomic: false`, default) flushes on sync, session_end, and serve shutdown. |
+| `memo sync` | Hybrid HTTP and/or vault-git. Dual-mode runs hybrid first, then vault-git sequentially in one run. Batched vault-git (`atomic: false`, default) flushes on sync, session_end, and serve shutdown. |
 | `memo sync-vault <target>` | Peer vault delta sync. `--two-way` `--dry-run`. (Not available in remote mode). |
 | `memo export-vault` / `memo import-vault` | Portable archive; optional AES-256-GCM. Prefer `SPEC_MEMO_VAULT_PASSWORD`. (Not available in remote mode). |
 
@@ -260,7 +261,7 @@ memo install-skills --global [--force] [--json]
 ## Deployment Modes
 
 - **`local` (default):** Everything stored and queried directly on the local machine under `~/.spec-memo/`. Zero network requirements.
-- **`hybrid`:** Local vault is authoritative; transparently pulls deltas on `bootstrap` and debounces pushes on mutating operations. Manual sync via `memo sync`. Fails open if remote daemon is unreachable. When `vaultGit.enabled` is also set, `memo sync` / `session_end` / serve shutdown run hybrid HTTP and vault-git in parallel.
+- **`hybrid`:** Local vault is authoritative; transparently pulls deltas on `bootstrap` and debounces pushes on mutating operations. Manual sync via `memo sync`. Fails open if remote daemon is unreachable. When `vaultGit.enabled` is also set, `memo sync` / `session_end` / serve shutdown run hybrid HTTP first, then vault-git sequentially.
 - **`remote`:** Local agent hosts connect to local `memo serve` stdio proxy, which forwards all 11 tools to a shared remote daemon. Local disk stores no memory records. Fails closed if remote daemon is unreachable.
 
 ### Vault-git (`config.json` → `vaultGit`)

@@ -231,6 +231,7 @@ Utility Commands:
   setup         Configure deployment mode (local, hybrid, remote) and host MCP wiring
   doctor        Diagnose vault integrity and check product tree pollution
   sync          Synchronize vault records (hybrid mode or vault-git)
+  shutdown      Gracefully stop orphaned memo serve processes (alias: stop)
   rank          List traps by recurrence (occurrences)
   feedback      Submit helpful/stale/wrong feedback on a memory record
   init          Create .spec-memo.json in the project root with an auto-detected project id
@@ -287,6 +288,25 @@ Subcommands:
 Options:
   --json          Output result as JSON
   -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'shutdown' || cmd === 'stop') {
+    console.log(`Usage: memo shutdown [options] (alias: memo stop)
+
+Gracefully stop orphaned memo serve processes (stdio and SSE). Useful after an
+IDE update or exit leaves a previous MCP server running and holding the vault
+lock. Each target first receives SIGTERM so its own shutdown handlers flush
+(vault-git + hybrid, fail-open); survivors are force-terminated.
+
+Options:
+  --vaultRoot       Only stop instances serving this vault root
+  --timeout-ms <n>  Graceful wait per process in ms (default: SPEC_MEMO_SYNC_TIMEOUT_MS or 8000)
+  --force           Skip the graceful wait; force-terminate immediately
+  --dry-run         List matched processes without stopping anything
+  --include-canvas  Also stop memo canvas graph UI processes (excluded by default)
+  --json            Output result as JSON
+  -h, --help        Show this help message`);
     return;
   }
 
@@ -1544,6 +1564,86 @@ async function runCliInner(
       statusAuthToken
     });
     return 0;
+  }
+
+  // Handle memo shutdown command (alias: stop) — issue #56, spec 0053-memo-shutdown
+  if (parsed.command === 'shutdown' || parsed.command === 'stop') {
+    try {
+      const allowedShutdownFlags = new Set([
+        'vaultRoot',
+        'timeout-ms',
+        'timeoutMs',
+        'force',
+        'dry-run',
+        'dryRun',
+        'include-canvas',
+        'includeCanvas'
+      ]);
+      for (const key of Object.keys(parsed.options)) {
+        if (!allowedShutdownFlags.has(key)) {
+          throw new Error(
+            `Unknown flag --${key} for memo shutdown. Usage: memo shutdown [--vaultRoot <path>] [--timeout-ms <n>] [--force] [--dry-run] [--include-canvas] [--json]`
+          );
+        }
+      }
+      const scopeRoot =
+        (parsed.options.vaultRoot as string | undefined) || undefined;
+      const timeoutRaw =
+        (parsed.options['timeout-ms'] as string | undefined) ??
+        (parsed.options.timeoutMs as string | undefined);
+      let timeoutMs: number | undefined;
+      if (timeoutRaw !== undefined) {
+        const parsedTimeout = Number(timeoutRaw);
+        if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0) {
+          throw new Error(
+            `Invalid --timeout-ms value: ${String(timeoutRaw)}. Expected a positive number of milliseconds.`
+          );
+        }
+        timeoutMs = Math.floor(parsedTimeout);
+      }
+      const force = parsed.options.force === true || parsed.options.force === 'true';
+      const dryRun =
+        parsed.options['dry-run'] === true ||
+        parsed.options['dry-run'] === 'true' ||
+        parsed.options.dryRun === true;
+      const includeCanvas =
+        parsed.options['include-canvas'] === true ||
+        parsed.options['include-canvas'] === 'true' ||
+        parsed.options.includeCanvas === true;
+
+      const { runShutdown } = await import('./shutdown.js');
+      const { report, exitCode } = await runShutdown({
+        vaultRoot: scopeRoot,
+        timeoutMs,
+        force,
+        dryRun,
+        includeCanvas
+      });
+
+      if (parsed.isJson) {
+        printJson(report);
+      } else if (report.targets.length === 0) {
+        console.log('No running memo serve processes found.');
+      } else {
+        console.log(`spec-memo — Shutdown (${report.summary.total} target(s), timeout ${report.timeoutMs} ms)\n`);
+        for (const t of report.targets) {
+          const reason = t.reason ? ` — ${t.reason}` : '';
+          console.log(`  [${t.result}] PID ${t.pid} (${t.scope}): ${t.command}${reason}`);
+        }
+        console.log(
+          `Summary: graceful=${report.summary.stoppedGraceful}, forced=${report.summary.stoppedForced}, already-exited=${report.summary.alreadyExited}, skipped=${report.summary.skipped}, failed=${report.summary.failed}`
+        );
+      }
+      return exitCode;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'SHUTDOWN_ERROR' });
+      } else {
+        console.error(`Shutdown failed: ${msg}`);
+      }
+      return 1;
+    }
   }
 
   // Handle memo canvas command

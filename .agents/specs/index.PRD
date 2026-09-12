@@ -125,7 +125,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] Vault manager: alias redirect, merge, and project CRUD (`spec: 0047-vault-merge-alias.spec.md`)
 - [x] Interactive install-hooks and install-skills with explicit host permission (`spec: 0048-install-hooks-skills-interactive.context.md`)
 - [x] Status Vaults tab: modal forms and per-project sync (`spec: 0049-status-vaults-tab-ui.spec.md`)
-- [ ] memo shutdown command for stopping orphaned MCP servers (`spec: 0053-memo-shutdown.spec.md`)
+- [x] memo shutdown command for stopping orphaned MCP servers (`spec: 0053-memo-shutdown.spec.md`)
 
 
 
@@ -190,9 +190,11 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 47 | `install-hooks-skills-interactive` | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Interactive install-hooks and install-skills with explicit host permission |
 
 | 48 | `status-vaults-tab-ui` | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Vaults tab: modal forms and per-project sync |
-| 49 | [`us-54`](0052-us-54.spec.md) | `[~]` implemented on `develop` (unshipped, no PR) | Phase 8 | Doctor ignore-aware pollution scan, `run.json` boundary, tracked-safe `--fix`, idempotent import; commit `1f1280a`, 663/663 green |
+| 49 | [`us-54`](0052-us-54.spec.md) | `[x] done` | Phase 8 | Doctor ignore-aware pollution scan, `run.json` boundary, tracked-safe `--fix`, idempotent import; shipped in v0.28.2 (PR #57); verified green in #58 |
 
-| 50 | `memo-shutdown` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | memo shutdown command for stopping orphaned MCP servers |
+| 50 | `memo-shutdown` | `[~]` implemented on `develop` (PR #58) | Phase 8: Agent Continuity & Knowledge Lifecycle | memo shutdown command for stopping orphaned MCP servers |
+
+| 51 | [`us-55`](0051-us-55.spec.md) | `[~]` implemented on `develop` (PR #58) | Phase 8 | Sync partial-failure hardening + follow-up: sequential dual-sync, autostash recovery, view-rebuild resilience |
 
 ## 9. Inbox (unscheduled ideas)
 
