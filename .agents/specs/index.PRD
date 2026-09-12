@@ -125,6 +125,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] Vault manager: alias redirect, merge, and project CRUD (`spec: 0047-vault-merge-alias.spec.md`)
 - [x] Interactive install-hooks and install-skills with explicit host permission (`spec: 0048-install-hooks-skills-interactive.context.md`)
 - [x] Status Vaults tab: modal forms and per-project sync (`spec: 0049-status-vaults-tab-ui.spec.md`)
+- [ ] memo shutdown command for stopping orphaned MCP servers (`spec: 0053-memo-shutdown.spec.md`)
+
 
 
 
@@ -189,6 +191,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 48 | `status-vaults-tab-ui` | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Vaults tab: modal forms and per-project sync |
 | 49 | [`us-54`](0052-us-54.spec.md) | `[~]` implemented on `develop` (unshipped, no PR) | Phase 8 | Doctor ignore-aware pollution scan, `run.json` boundary, tracked-safe `--fix`, idempotent import; commit `1f1280a`, 663/663 green |
+
+| 50 | `memo-shutdown` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | memo shutdown command for stopping orphaned MCP servers |
 
 ## 9. Inbox (unscheduled ideas)
 
