@@ -5,9 +5,11 @@ import { commitVaultChange, withVaultLock } from '../vault.js';
 import { indexRecord, openIndex } from '../indexer.js';
 import { parseRecord, serializeRecord } from '../schema.js';
 import { sanitizeToolOutput, scanPayloadForSecrets } from '../safety.js';
+import { logErrorReport } from '../error-logger.js';
 import type { ActivityBus } from '../activity.js';
 import type { RecordKind, RecordFrontmatter } from '../types.js';
 import type { VaultAiAgent, VaultAiRefineInput } from './types.js';
+import { recordAiOpsEvent, readAiOpsConfig, isAiOpsLogEnabled } from './ops-log.js';
 
 /**
  * Kinds eligible for background refine by default (spec § Eligible kinds).
@@ -148,6 +150,86 @@ export function clearAiStateForTests(): void {
   aiActivityBus = null;
 }
 
+/**
+ * Durable AI ops journal row for one refine settlement (spec 0057, AC7).
+ * Fail-open: never throws; write errors are reported to `error.logs`
+ * (`ai` subsystem) inside `recordAiOpsEvent`. Zero rows when journaling is
+ * disabled (AC4) — checked against the vault disk config.
+ */
+function journalRefineSettlement(args: {
+  vaultRoot: string;
+  projectId: string;
+  id: string;
+  kind: RecordKind;
+  title: string;
+  tags: string[];
+  pathPatterns: string[];
+  bodyExcerpt: string;
+  ok: boolean;
+  durationMs: number;
+  searchTerms?: string[];
+  summary?: string;
+  error?: string;
+}): void {
+  try {
+    const config = readAiOpsConfig(args.vaultRoot);
+    if (!isAiOpsLogEnabled(config)) return;
+    recordAiOpsEvent({
+      vaultRoot: args.vaultRoot,
+      config,
+      operation: 'refine',
+      ok: args.ok,
+      durationMs: args.durationMs,
+      recordId: args.id,
+      projectId: args.projectId,
+      input: {
+        recordId: args.id,
+        kind: args.kind,
+        title: args.title,
+        tags: args.tags,
+        pathPatterns: args.pathPatterns,
+        bodyExcerpt: args.bodyExcerpt
+      },
+      output: args.ok ? { searchTerms: args.searchTerms, summary: args.summary } : undefined,
+      error: args.ok ? undefined : args.error,
+      metadata: { agent: 'vault-ai' }
+    });
+  } catch {
+    // Journal must never break the refine path (fail-open).
+  }
+}
+
+/** Adapter failure report to `error.logs` (spec 0057, AC24). Redacted, no bodies. */
+export function reportAiFailure(args: {
+  vaultRoot: string;
+  operation: 'refine' | 'rank';
+  recordId?: string;
+  projectId?: string;
+  durationMs: number;
+  error: unknown;
+}): void {
+  try {
+    const raw = args.error instanceof Error ? args.error.message : String(args.error);
+    const message = String(sanitizeToolOutput(raw)).slice(0, 500) || 'ai error';
+    logErrorReport(
+      {
+        subsystem: 'ai',
+        error: message,
+        projectId: args.projectId,
+        context: {
+          operation: args.operation,
+          recordId: args.recordId,
+          durationMs: Math.max(0, Math.round(args.durationMs)),
+          error: message
+        }
+      },
+      { vaultRoot: args.vaultRoot }
+    );
+  } catch {
+    // Reporting must never break the AI path (fail-open).
+  }
+}
+
 function emitAiActivity(
   operation: 'ai.refine.ok' | 'ai.refine.fail' | 'ai.rank.ok' | 'ai.rank.fail',
   ok: boolean,
@@ -275,6 +357,7 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
     if (isDropped(id, generation)) return;
 
     const inputHash = hashRecordBody(currentBody);
+    const bodyExcerpt = currentBody.slice(0, 2000);
     const input: VaultAiRefineInput = {
       id,
       kind,
@@ -293,6 +376,19 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
     if (isDropped(id, generation)) return;
     if (!result || result.ok !== true) {
       if (result?.error) recordAiLastError(result.error);
+      journalRefineSettlement({
+        vaultRoot,
+        projectId,
+        id,
+        kind,
+        title: currentTitle,
+        tags: currentTags,
+        pathPatterns: currentPatterns,
+        bodyExcerpt,
+        ok: false,
+        durationMs: Date.now() - started,
+        error: result?.error || 'ai refine failed'
+      });
       emitAiActivity('ai.refine.fail', false, Date.now() - started, id, projectId);
       return;
     }
@@ -303,6 +399,20 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
         ? result.summary.trim().slice(0, 500)
         : undefined;
     if (searchTerms.length === 0 && !summary) {
+      journalRefineSettlement({
+        vaultRoot,
+        projectId,
+        id,
+        kind,
+        title: currentTitle,
+        tags: currentTags,
+        pathPatterns: currentPatterns,
+        bodyExcerpt,
+        ok: true,
+        durationMs: Date.now() - started,
+        searchTerms: [],
+        summary: undefined
+      });
       emitAiActivity('ai.refine.ok', true, Date.now() - started, id, projectId);
       return;
     }
@@ -313,6 +423,19 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
       recordAiLastError(
         `ai refine output contained a redacted secret (${secretScan.matches.join(', ')})`
       );
+      journalRefineSettlement({
+        vaultRoot,
+        projectId,
+        id,
+        kind,
+        title: currentTitle,
+        tags: currentTags,
+        pathPatterns: currentPatterns,
+        bodyExcerpt,
+        ok: false,
+        durationMs: Date.now() - started,
+        error: `ai refine output contained a redacted secret (${secretScan.matches.join(', ')})`
+      });
       emitAiActivity('ai.refine.fail', false, Date.now() - started, id, projectId);
       return;
     }
@@ -367,9 +490,48 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
       ]);
     });
     emitAiActivity('ai.refine.ok', true, Date.now() - started, id, projectId);
+    journalRefineSettlement({
+      vaultRoot,
+      projectId,
+      id,
+      kind,
+      title: currentTitle,
+      tags: currentTags,
+      pathPatterns: currentPatterns,
+      bodyExcerpt,
+      ok: true,
+      durationMs: Date.now() - started,
+      searchTerms,
+      summary
+    });
   } catch (err) {
     // Agent or I/O failure: markdown stays intact, FTS keeps pre-refine text (AC17).
     recordAiLastError(err);
+    reportAiFailure({
+      vaultRoot,
+      operation: 'refine',
+      recordId: id,
+      projectId,
+      durationMs: Date.now() - started,
+      error: err
+    });
+    try {
+      journalRefineSettlement({
+        vaultRoot,
+        projectId,
+        id,
+        kind: args.kind,
+        title: args.title,
+        tags: args.tags,
+        pathPatterns: args.pathPatterns,
+        bodyExcerpt: args.body.slice(0, 2000),
+        ok: false,
+        durationMs: Date.now() - started,
+        error: err instanceof Error ? err.message : String(err)
+      });
+    } catch {
+      // Journal must never break the refine path (fail-open).
+    }
     emitAiActivity('ai.refine.fail', false, Date.now() - started, id, projectId);
   } finally {
     finishGeneration(id, generation);

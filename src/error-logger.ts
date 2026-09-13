@@ -18,6 +18,7 @@ export type ErrorLogSubsystem =
   | 'vault'
   | 'canvas'
   | 'cli'
+  | 'ai'
   | 'system';
 
 export interface ErrorReport {

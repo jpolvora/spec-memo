@@ -52,6 +52,12 @@ import {
   deriveRulesFromPrompts
 } from "./prompt.js";
 import { getVaultAiStatus } from "./ai/index.js";
+import {
+  listAiOpsEntries,
+  getAiOpsEntry,
+  sanitizeAiOpsEntry,
+  parseAiOpsListQuery
+} from "./ai/ops-log.js";
 
 /** Zero-dep markdown → safe HTML for prompt drawer (interview Q4). */
 export function renderPromptMarkdownHtml(body: string): string {
@@ -1191,6 +1197,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
 
   <nav class="nav-tabs">
     <button class="tab-btn active" data-tab="tab-activity">Activity & Status</button>
+    <button class="tab-btn" data-tab="tab-ai-ops">AI Ops</button>
     <button class="tab-btn" data-tab="tab-memory">Memory</button>
     <button class="tab-btn" data-tab="tab-prompts">Prompts & Intent Stories</button>
     <button class="tab-btn" data-tab="tab-invoicing">Activity & Invoicing</button>
@@ -1270,6 +1277,91 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div id="activity-log"></div>
     </section>
   </main>
+
+  <!-- TAB: AI Ops (durable analysis journal, spec 0057) -->
+  <section id="tab-ai-ops" class="tab-content" data-tab="tab-ai-ops">
+    <div class="prompts-container">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <div class="filter-group" style="max-width: 160px;">
+            <label for="aiops-operation-select">Operation:</label>
+            <select id="aiops-operation-select">
+              <option value="">All</option>
+              <option value="refine">refine</option>
+              <option value="rank">rank</option>
+            </select>
+          </div>
+          <div class="filter-group" style="max-width: 160px;">
+            <label for="aiops-ok-select">Result:</label>
+            <select id="aiops-ok-select">
+              <option value="">All</option>
+              <option value="true">ok</option>
+              <option value="false">fail</option>
+            </select>
+          </div>
+          <button type="button" id="btn-aiops-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Refresh</button>
+        </div>
+        <div id="aiops-error" class="helper-text" style="display:none; color: var(--err);"></div>
+      </div>
+
+      <div class="data-table-container">
+        <table class="data-table" id="aiops-table">
+          <thead>
+            <tr>
+              <th style="width: 150px;">Time</th>
+              <th style="width: 90px;">Operation</th>
+              <th style="width: 60px;">OK</th>
+              <th style="width: 90px;">Duration</th>
+              <th style="width: 160px;">Record</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="aiops-tbody">
+            <tr><td colspan="6" style="text-align:center; padding:30px; color:var(--muted);">Open this tab to load AI operations…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-bar">
+        <div><span id="aiops-count-badge">0 entries</span></div>
+        <div class="pagination-controls">
+          <button type="button" id="btn-aiops-prev" class="btn-secondary" disabled>&larr; Prev</button>
+          <span id="aiops-page-indicator">Page 1</span>
+          <button type="button" id="btn-aiops-next" class="btn-secondary" disabled>Next &rarr;</button>
+        </div>
+      </div>
+
+      <div class="metadata-card" id="aiops-detail" style="display:none; margin: 0;">
+        <div style="grid-column: 1 / -1; display:flex; justify-content:space-between; align-items:center;">
+          <strong id="aiops-detail-title">AI operation</strong>
+          <button type="button" id="btn-aiops-detail-close" class="btn-secondary" style="width:auto; margin:0; padding:4px 10px;">Close</button>
+        </div>
+        <div class="meta-item"><span class="meta-label">Operation</span><span class="meta-val" id="aiops-detail-operation">-</span></div>
+        <div class="meta-item"><span class="meta-label">Result</span><span class="meta-val" id="aiops-detail-ok">-</span></div>
+        <div class="meta-item"><span class="meta-label">Duration</span><span class="meta-val" id="aiops-detail-duration">-</span></div>
+        <div class="meta-item"><span class="meta-label">Timestamp</span><span class="meta-val" id="aiops-detail-time">-</span></div>
+        <div class="meta-item"><span class="meta-label">Record</span><span class="meta-val" id="aiops-detail-record">-</span></div>
+        <div class="meta-item"><span class="meta-label">Model</span><span class="meta-val" id="aiops-detail-model">-</span></div>
+        <div style="grid-column: 1 / -1;">
+          <details>
+            <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem;">Input</summary>
+            <pre id="aiops-detail-input" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
+          </details>
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <details>
+            <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem;">Output</summary>
+            <pre id="aiops-detail-output" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
+          </details>
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <details>
+            <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem;">Metadata</summary>
+            <pre id="aiops-detail-meta" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- TAB: Memory (retrieval hits) -->
   <section id="tab-memory" class="tab-content">
@@ -2311,6 +2403,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       });
       if (tabId === "tab-memory") {
         loadMemoryRecords();
+      } else if (tabId === "tab-ai-ops") {
+        loadAiOps(true);
       } else if (tabId === "tab-prompts") {
         loadPrompts();
       } else if (tabId === "tab-invoicing") {
@@ -2331,6 +2425,168 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         if (targetId) activateTab(targetId);
       });
     });
+
+    // --- AI OPS TAB LOGIC (spec 0057: durable analysis journal) ---
+    let aiopsOffset = 0;
+    let aiopsTotal = 0;
+    const AIOPS_PAGE_SIZE = 50;
+
+    function showAiOpsError(message) {
+      const errEl = document.getElementById("aiops-error");
+      errEl.textContent = message;
+      errEl.style.display = "block";
+    }
+
+    function hideAiOpsError() {
+      const errEl = document.getElementById("aiops-error");
+      errEl.textContent = "";
+      errEl.style.display = "none";
+    }
+
+    function hideAiOpsDetail() {
+      document.getElementById("aiops-detail").style.display = "none";
+    }
+
+    function aiopsLoadingRow(tbody, message) {
+      tbody.textContent = "";
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.setAttribute("colspan", "6");
+      td.setAttribute("style", "text-align:center; padding:30px; color:var(--muted);");
+      td.textContent = message;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+
+    function renderAiOpsRows(items, total) {
+      const tbody = document.getElementById("aiops-tbody");
+      tbody.textContent = "";
+      aiopsTotal = total;
+      document.getElementById("aiops-count-badge").textContent = total + " entr" + (total === 1 ? "y" : "ies");
+      const page = Math.floor(aiopsOffset / AIOPS_PAGE_SIZE) + 1;
+      const maxPage = Math.max(1, Math.ceil(total / AIOPS_PAGE_SIZE));
+      document.getElementById("aiops-page-indicator").textContent = "Page " + page + " of " + maxPage;
+      document.getElementById("btn-aiops-prev").disabled = aiopsOffset <= 0;
+      document.getElementById("btn-aiops-next").disabled = aiopsOffset + AIOPS_PAGE_SIZE >= total;
+      if (!items || items.length === 0) {
+        aiopsLoadingRow(tbody, "No AI operations recorded yet.");
+        return;
+      }
+      for (const item of items) {
+        const tr = document.createElement("tr");
+        tr.className = "master-row";
+        const time = document.createElement("td");
+        time.textContent = formatIsoShort(item.timestamp);
+        const op = document.createElement("td");
+        op.textContent = item.operation || "-";
+        const ok = document.createElement("td");
+        ok.textContent = item.ok ? "ok" : "fail";
+        ok.setAttribute("style", "color:" + (item.ok ? "var(--ok)" : "var(--err)") + "; font-weight:600;");
+        const dur = document.createElement("td");
+        dur.textContent = (item.durationMs != null ? Math.round(item.durationMs) + "ms" : "-");
+        const rec = document.createElement("td");
+        const recCode = document.createElement("code");
+        recCode.textContent = item.recordId || "-";
+        rec.appendChild(recCode);
+        const err = document.createElement("td");
+        err.textContent = item.error ? String(item.error).slice(0, 120) : "-";
+        err.setAttribute("title", item.error || "");
+        tr.appendChild(time);
+        tr.appendChild(op);
+        tr.appendChild(ok);
+        tr.appendChild(dur);
+        tr.appendChild(rec);
+        tr.appendChild(err);
+        tr.addEventListener("click", () => loadAiOpsDetail(item.id));
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadAiOps(reset) {
+      if (reset) aiopsOffset = 0;
+      const tbody = document.getElementById("aiops-tbody");
+      hideAiOpsError();
+      hideAiOpsDetail();
+      aiopsLoadingRow(tbody, "Loading AI operations…");
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", String(AIOPS_PAGE_SIZE));
+        params.set("offset", String(aiopsOffset));
+        const op = document.getElementById("aiops-operation-select").value;
+        if (op) params.set("operation", op);
+        const ok = document.getElementById("aiops-ok-select").value;
+        if (ok) params.set("ok", ok);
+        if (typeof selectedProject !== "undefined" && selectedProject) {
+          params.set("projectId", selectedProject);
+        }
+        // Plain fetch (not apiFetch): 401/500 must render inline on this tab
+        // without redirecting or breaking the other tabs (AC22).
+        const res = await fetch("/api/ai-ops?" + params.toString(), { credentials: "same-origin" });
+        if (!res.ok) {
+          throw new Error("AI ops request failed (" + res.status + ")");
+        }
+        const data = await res.json();
+        renderAiOpsRows(data.items || [], data.total || 0);
+      } catch (err) {
+        aiopsLoadingRow(tbody, "No AI operations available.");
+        showAiOpsError("Failed to load AI operations: " + (err && err.message ? err.message : String(err)));
+      }
+    }
+
+    async function loadAiOpsDetail(id) {
+      hideAiOpsError();
+      try {
+        const res = await fetch("/api/ai-ops/" + encodeURIComponent(id), { credentials: "same-origin" });
+        if (res.status === 404) {
+          showAiOpsError("AI operation not found.");
+          return;
+        }
+        if (!res.ok) {
+          throw new Error("AI ops detail request failed (" + res.status + ")");
+        }
+        const data = await res.json();
+        const entry = data.entry || {};
+        document.getElementById("aiops-detail-title").textContent = "AI operation " + (entry.id || id);
+        document.getElementById("aiops-detail-operation").textContent = entry.operation || "-";
+        document.getElementById("aiops-detail-ok").textContent = entry.ok ? "ok" : "fail";
+        document.getElementById("aiops-detail-duration").textContent =
+          (entry.durationMs != null ? Math.round(entry.durationMs) + "ms" : "-");
+        document.getElementById("aiops-detail-time").textContent = formatIsoShort(entry.timestamp);
+        document.getElementById("aiops-detail-record").textContent = entry.recordId || "-";
+        const modelBits = [];
+        if (entry.provider) modelBits.push(entry.provider);
+        if (entry.model) modelBits.push(entry.model);
+        if (entry.projectId) modelBits.push("project " + entry.projectId);
+        document.getElementById("aiops-detail-model").textContent = modelBits.length > 0 ? modelBits.join(" · ") : "-";
+        // textContent assignment: journal JSON is never parsed as HTML (AC20).
+        document.getElementById("aiops-detail-input").textContent =
+          JSON.stringify(entry.input !== undefined ? entry.input : null, null, 2);
+        document.getElementById("aiops-detail-output").textContent =
+          JSON.stringify(
+            entry.error ? { error: entry.error, output: entry.output !== undefined ? entry.output : null } : (entry.output !== undefined ? entry.output : null),
+            null,
+            2
+          );
+        document.getElementById("aiops-detail-meta").textContent =
+          JSON.stringify(entry.metadata !== undefined ? entry.metadata : null, null, 2);
+        document.getElementById("aiops-detail").style.display = "grid";
+      } catch (err) {
+        showAiOpsError("Failed to load AI operation detail: " + (err && err.message ? err.message : String(err)));
+      }
+    }
+
+    document.getElementById("btn-aiops-refresh").addEventListener("click", () => loadAiOps(true));
+    document.getElementById("aiops-operation-select").addEventListener("change", () => loadAiOps(true));
+    document.getElementById("aiops-ok-select").addEventListener("change", () => loadAiOps(true));
+    document.getElementById("btn-aiops-prev").addEventListener("click", () => {
+      aiopsOffset = Math.max(0, aiopsOffset - AIOPS_PAGE_SIZE);
+      loadAiOps(false);
+    });
+    document.getElementById("btn-aiops-next").addEventListener("click", () => {
+      aiopsOffset = aiopsOffset + AIOPS_PAGE_SIZE;
+      loadAiOps(false);
+    });
+    document.getElementById("btn-aiops-detail-close").addEventListener("click", hideAiOpsDetail);
 
     // --- MEMORY TAB LOGIC ---
     let memoryRecordsCache = [];
@@ -5754,6 +6010,63 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           scheduleHybridPush(vaultRoot, parsed.projectId);
         }
         writeJson(res, 200, { ok: true, result: sanitizeToolOutput(result) });
+        return;
+      }
+
+      // --- AI Ops journal (spec 0057): read-only list + detail, same auth as /api/* ---
+      if (req.method === "GET" && pathname === "/api/ai-ops") {
+        try {
+          const raw: Record<string, string> = {};
+          url.searchParams.forEach((value, key) => {
+            if (!(key in raw)) raw[key] = value;
+          });
+          const query = parseAiOpsListQuery(raw);
+          const result = listAiOpsEntries(vaultRoot, query);
+          writeJson(res, 200, sanitizeToolOutput({ items: result.items, total: result.total }));
+        } catch (err: unknown) {
+          const statusCode =
+            err instanceof Error && (err as { statusCode?: number }).statusCode === 400 ? 400 : 500;
+          if (statusCode === 500) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: req.method,
+              endpoint: "/api/ai-ops",
+              error: err
+            }, { vaultRoot, logPath: errorLogPath });
+          }
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, statusCode, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/api/ai-ops/")) {
+        try {
+          const id = decodeURIComponent(pathname.slice("/api/ai-ops/".length));
+          if (!id || id.includes("/") || id.includes("\\")) {
+            writeJson(res, 400, sanitizeToolOutput({ error: "Invalid ai-ops id" }));
+            return;
+          }
+          const entry = getAiOpsEntry(vaultRoot, id);
+          if (!entry) {
+            writeJson(res, 404, sanitizeToolOutput({ error: `AI ops entry '${id}' not found` }));
+            return;
+          }
+          writeJson(res, 200, sanitizeToolOutput({ ok: true, entry: sanitizeAiOpsEntry(entry) }));
+        } catch (err: unknown) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: req.method,
+            endpoint: "/api/ai-ops",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, 500, sanitizeToolOutput({ error: msg }));
+        }
         return;
       }
 

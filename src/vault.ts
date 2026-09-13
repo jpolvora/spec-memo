@@ -41,7 +41,9 @@ export const DEFAULT_VAULT_CONFIG: VaultConfig = {
     apiKeyEnv: 'CURSOR_API_KEY',
     timeoutMs: 15000,
     rankTopK: 20,
-    maxConcurrent: 1
+    maxConcurrent: 1,
+    opsLogMaxBytes: 8192,
+    opsLogMaxFileSizeMb: 10
   },
   ports: {
     sse: 3123,
@@ -680,6 +682,7 @@ export const REQUIRED_VAULT_GITIGNORE = [
   '.sync/',
   'error.logs',
   'telemetry/',
+  'ai-ops/',
   'backups/'
 ];
 

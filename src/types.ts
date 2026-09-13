@@ -382,6 +382,16 @@ export interface VaultAiConfig {
   timeoutMs: number;
   rankTopK: number;
   maxConcurrent: number;
+  /**
+   * Durable AI ops journal switch (spec 0057). Omitted equals `enabled`:
+   * journal rows are written if and only if AI runs, unless explicitly
+   * disabled with `false` (zero rows even when AI runs).
+   */
+  opsLogEnabled?: boolean;
+  /** Byte cap for serialized journal input+output per row (default 8192). */
+  opsLogMaxBytes?: number;
+  /** Rolling part rotation size in MB (default 10). */
+  opsLogMaxFileSizeMb?: number;
 }
 
 /**

@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.30.0
+version: 0.31.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -603,8 +603,16 @@ Optional intelligence layer on `upsert` / `search` / `bootstrap`. No 12th MCP to
 | `apiKeyEnv` | `"CURSOR_API_KEY"` | Env var naming the key. The raw key is never stored in `config.json`, markdown, telemetry, activity, or doctor JSON. |
 | `timeoutMs` | `15000` | Prompt/completion timeout; expiry fail-opens. |
 | `rankTopK` | `20` | Max candidates the agent may reorder after FTS. |
+| `maxConcurrent` | `1` | Global background refine parallelism cap. |
+| `opsLogEnabled` | follows `enabled` | Durable AI ops journal switch. Explicit `false` writes zero rows even when AI runs. |
+| `opsLogMaxBytes` | `8192` | Per-row serialized input+output cap; overflow truncates string fields and sets `metadata.truncated: true`. |
+| `opsLogMaxFileSizeMb` | `10` | Rolling part rotation size for `ai-ops-YYYY-MM-DD.part-N.jsonl` (UTC day). |
 
 Write path: eligible kinds (`trap`, `decision`, `spec`, `plan`) enqueue one background refine job per record id (coalesced, concurrency 1). `upsert` never awaits it. Refine writes only `aiSearchTerms` / `aiSummary` (≤500 chars) frontmatter + `aiRefineHash`, then re-indexes under the vault lock. Read path: `search` / `bootstrap` rerank FTS top-K only when a query is present and the agent is available; failures keep lexical order (`explain.aiRank: skipped`). `get` never calls the agent. Check `memo doctor --json` → `ai` (`enabled`, `provider`, `available`, `queueDepth`, `lastError`).
+
+AI Ops journal (durable analysis log, vault `ai-ops/`, never product git): one row per refine/rank settlement (ok and fail) with id, timestamp, operation, ok, durationMs, recordId/projectId/provider/model, redacted input/output, metadata, and error. Payloads pass `redactSecretsInPayload` / `sanitizeLogContext` (live API key values scrubbed, API keys never in journal JSON, UI, or `error.logs`); the stream is diagnostic only (never FTS `kind: log`). Journal I/O is fail-open (handled sync write under the vault lock; floating promises forbidden). Adapter/journal failures report to `error.logs` under subsystem `ai`.
+
+Status surface (companion `:3124`, same auth as `/api/status`): `GET /api/ai-ops?limit=&offset=&operation=&ok=&projectId=` → `{ items, total }` (limit default 50, max 200; invalid query 400; unauthenticated 401 with no ids leaked; list items omit full input/output, error truncated to 200 chars); `GET /api/ai-ops/{id}` → sanitized entry with truncated input/output/metadata (unknown id 404). Responses run through `sanitizeToolOutput` (no absolute vault paths). No MCP tool is added (tool list stays **11**). The **AI Ops** tab (`data-tab="tab-ai-ops"`, default landing stays Activity & Status) shows operation / ok-fail / project filters, a paginated table (time, operation, ok, duration, record id, error snippet), and a row-click detail pane with metadata plus collapsible input/output `<pre>` text (escaped, never `innerHTML` of journal JSON). Empty journal renders a non-error empty state; fetch failures render inline without breaking other tabs. Handler exceptions log to `error.logs` under subsystem `status-server` with endpoint `/api/ai-ops`.
 
 ---
 

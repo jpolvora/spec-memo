@@ -31,6 +31,32 @@ export { rankRecordsWithAgent, rankSearchHitsWithAgent } from './rank.js';
 export type { RankRecordsArgs, RankRecordsResult } from './rank.js';
 export { searchIndexRanked } from './search.js';
 export type { RankedSearchAi, RankedSearchResult } from './search.js';
+export {
+  recordAiOpsEvent,
+  listAiOpsEntries,
+  getAiOpsEntry,
+  sanitizeAiOpsEntry,
+  parseAiOpsListQuery,
+  isAiOpsLogEnabled,
+  resolveAiOpsLogLimits,
+  readAiOpsConfig,
+  resetAiOpsConfigCacheForTests,
+  truncateOpsPayloadToBudget,
+  getAiOpsDir,
+  withAiOpsJournal,
+  AiOpsJournaledAgent,
+  AiOpsListQuerySchema,
+  AI_OPS_ERROR_SNIPPET_MAX
+} from './ops-log.js';
+export type {
+  AiOpsEntry,
+  AiOpsListItem,
+  AiOpsListQuery,
+  AiOpsListResult,
+  AiOpsOperation,
+  RecordAiOpsArgs,
+  JournaledAgentOptions
+} from './ops-log.js';
 
 /**
  * Process-startup agent construction from `readVaultConfig` (AC4):

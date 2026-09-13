@@ -6,6 +6,8 @@ export const VAULT_AI_DEFAULT_API_KEY_ENV = 'CURSOR_API_KEY';
 export const VAULT_AI_DEFAULT_TIMEOUT_MS = 15000;
 export const VAULT_AI_DEFAULT_RANK_TOP_K = 20;
 export const VAULT_AI_DEFAULT_MAX_CONCURRENT = 1;
+export const VAULT_AI_DEFAULT_OPS_LOG_MAX_BYTES = 8192;
+export const VAULT_AI_DEFAULT_OPS_LOG_MAX_FILE_SIZE_MB = 10;
 
 const nonEmptyStringWithDefault = (fallback: string): z.ZodType<string> =>
   z.preprocess(
@@ -29,7 +31,21 @@ export const VaultAiConfigSchema = z.object({
   // values overflow the timer while bootstrap blocks on rank.
   timeoutMs: z.number().int().min(1000).max(120000).default(VAULT_AI_DEFAULT_TIMEOUT_MS),
   rankTopK: z.number().int().min(1).max(50).default(VAULT_AI_DEFAULT_RANK_TOP_K),
-  maxConcurrent: z.number().int().min(1).max(4).default(VAULT_AI_DEFAULT_MAX_CONCURRENT)
+  maxConcurrent: z.number().int().min(1).max(4).default(VAULT_AI_DEFAULT_MAX_CONCURRENT),
+  // Durable AI ops journal (spec 0057). `opsLogEnabled` omitted follows
+  // `enabled`; explicit false writes zero rows even when AI runs.
+  opsLogEnabled: z.boolean().optional(),
+  opsLogMaxBytes: z
+    .number()
+    .int()
+    .min(1024)
+    .max(65536)
+    .default(VAULT_AI_DEFAULT_OPS_LOG_MAX_BYTES),
+  opsLogMaxFileSizeMb: z
+    .number()
+    .min(1)
+    .max(100)
+    .default(VAULT_AI_DEFAULT_OPS_LOG_MAX_FILE_SIZE_MB)
 });
 
 export type ValidatedAiConfig = z.infer<typeof VaultAiConfigSchema> & VaultAiConfig;
@@ -42,7 +58,10 @@ export function defaultAiConfig(): VaultAiConfig {
     apiKeyEnv: VAULT_AI_DEFAULT_API_KEY_ENV,
     timeoutMs: VAULT_AI_DEFAULT_TIMEOUT_MS,
     rankTopK: VAULT_AI_DEFAULT_RANK_TOP_K,
-    maxConcurrent: VAULT_AI_DEFAULT_MAX_CONCURRENT
+    maxConcurrent: VAULT_AI_DEFAULT_MAX_CONCURRENT,
+    opsLogEnabled: undefined,
+    opsLogMaxBytes: VAULT_AI_DEFAULT_OPS_LOG_MAX_BYTES,
+    opsLogMaxFileSizeMb: VAULT_AI_DEFAULT_OPS_LOG_MAX_FILE_SIZE_MB
   };
 }
 

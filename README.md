@@ -503,7 +503,10 @@ The vault can use a pluggable AI agent as a backend for `upsert` / `search` / `b
     "model": "composer-2.5",
     "apiKeyEnv": "CURSOR_API_KEY",
     "timeoutMs": 15000,
-    "rankTopK": 20
+    "rankTopK": 20,
+    "opsLogEnabled": true,
+    "opsLogMaxBytes": 8192,
+    "opsLogMaxFileSizeMb": 10
   }
 }
 ```
@@ -512,6 +515,8 @@ The vault can use a pluggable AI agent as a backend for `upsert` / `search` / `b
 - Write path: after a successful `upsert` of a `trap`, `decision`, `spec`, or `plan`, a background refine job (single-flight per record id, default concurrency 1) asks the agent for retrieval aids. The upsert response never waits. Refine never rewrites `body` — it stores `aiSearchTerms` / `aiSummary` (max 500 chars) frontmatter plus an `aiRefineHash` idempotency hash, then rebuilds FTS for that record under the vault lock.
 - Read path: `search` and `bootstrap` still rank FTS candidates first; when AI is available the agent may reorder the top `rankTopK` (default 20). Timeouts, bad JSON, or a missing key keep the lexical order (fail-open). `get` by id never calls the agent. The existing local `embeddings` TF-cosine filter is independent and unchanged.
 - Status: `memo doctor --json` and `GET /api/status` include read-only `ai: { enabled, provider, available, queueDepth, lastError }` (secrets stripped). Activity emits `ai.refine.ok|fail` / `ai.rank.ok|fail` with record id and duration only — no prompt bodies. `search --explain` reports `aiRank: applied|skipped`.
+- AI Ops journal (durable analysis log, vault `ai-ops/`): every refine/rank settlement appends one JSONL row (`ai-ops-YYYY-MM-DD.part-N.jsonl`, UTC day, 10 MB rotation) with timestamp, operation, ok/fail, duration, redacted input/output, and metadata. `opsLogEnabled` omitted follows `ai.enabled` (disabled/Noop AI writes zero rows); explicit `false` writes zero rows even when AI runs. Payloads are redacted (`redactSecretsInPayload` / `sanitizeLogContext`, live API key values scrubbed) and capped at `opsLogMaxBytes` (default 8192, overflow truncates with `metadata.truncated: true`). Journal I/O is fail-open and never rejects tool results; the stream is diagnostic only (never indexed as vault `kind: log` records). Adapter/journal failures are reported to vault `error.logs` under subsystem `ai`.
+- AI Ops tab + REST (status companion `:3124`, same auth as `/api/status`): `GET /api/ai-ops?limit=&offset=&operation=&ok=&projectId=` returns `{ items, total }` (list items carry id, timestamp, operation, ok, durationMs, recordId, projectId, and a 200-char error snippet — no full input/output); `GET /api/ai-ops/{id}` returns one sanitized entry with truncated input/output/metadata (404 when unknown, 400 on invalid query, 401 unauthenticated). The **AI Ops** tab (`data-tab="tab-ai-ops"`) lists entries with operation / ok-fail / project filters, paginates, and loads row detail into an escaped pane (collapsible input/output/metadata `<pre>` text). Handler exceptions are logged to `error.logs` under subsystem `status-server` with endpoint `/api/ai-ops`.
 - The adapter calls `@cursor/sdk` `Agent.prompt` one-shot on a cloud no-repo runtime (`cloud: { repos: [] }`) — no vault or product `cwd` is ever handed filesystem tools. Unknown `ai.provider` values fail closed at startup (config parse error; MCP/SSE refuse to start half-wired).
 
 ### How to diagnose
@@ -684,6 +689,7 @@ All memory is stored in `$SPEC_MEMO_ROOT` (defaults to `~/.spec-memo/`):
 ├── config.json                 # Global vault configuration (TTL, budget, enableTelemetry, git sync)
 ├── memo.sqlite                 # Disposable SQLite FTS5 search index
 ├── telemetry/                  # Append-only daily rolling usage logs (telemetry-YYYY-MM-DD.part-N.jsonl)
+├── ai-ops/                     # Durable AI ops journal (ai-ops-YYYY-MM-DD.part-N.jsonl, redacted + byte-capped)
 └── projects/
     └── <projectId>/            # Hash derived from git remote origin
         ├── project.json        # Project metadata, remote URL, display name
