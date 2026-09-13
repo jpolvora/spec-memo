@@ -346,6 +346,15 @@ export function parseAiConfigPutBody(raw: unknown): { enabled: boolean; provider
     (err as { statusCode?: number }).statusCode = 400;
     throw err;
   }
+  // Contradictory bodies fail closed instead of silently coercing one side.
+  if (providerRaw !== undefined && rec.enabled !== undefined) {
+    const providerSaysEnabled = providerRaw === "cursor-sdk";
+    if ((rec.enabled === true) !== providerSaysEnabled) {
+      const err = new Error("Invalid AI config body (provider and enabled disagree)");
+      (err as { statusCode?: number }).statusCode = 400;
+      throw err;
+    }
+  }
   if (rec.model !== undefined) {
     if (typeof rec.model !== "string" || rec.model.trim().length === 0 || rec.model.trim().length > 64) {
       const err = new Error("Invalid AI config body (model must be a non-empty string max 64 chars)");

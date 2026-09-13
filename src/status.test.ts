@@ -2003,6 +2003,84 @@ test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t
     assert.strictEqual(reenabled.model, "my-custom-1.0", "provider-only update must not reset the model");
   });
 
+  await t.test("PUT /api/config/ai rejects contradictory provider+enabled", async () => {
+    const diskBefore = fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8");
+    for (const body of [
+      { provider: "cursor-sdk", enabled: false },
+      { provider: "noop", enabled: true }
+    ]) {
+      const res = await fetch(`${baseUrl}/api/config/ai`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.strictEqual(res.status, 400, `${JSON.stringify(body)} must 400`);
+      const data = await res.json() as { error?: string };
+      assert.match(String(data.error || ""), /disagree/i);
+    }
+    assert.strictEqual(fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8"), diskBefore);
+
+    for (const body of [
+      { provider: "cursor-sdk", enabled: true },
+      { provider: "noop", enabled: false }
+    ]) {
+      const res = await fetch(`${baseUrl}/api/config/ai`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.strictEqual(res.status, 200, `${JSON.stringify(body)} must succeed`);
+    }
+  });
+
+  await t.test("error-log list ids stay stable across interleaving appends", async () => {
+    clearErrorLogs(vaultRoot);
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("first stable entry"),
+      level: "ERROR"
+    }, { vaultRoot });
+    const before = await fetch(`${baseUrl}/api/error-logs`);
+    assert.strictEqual(before.status, 200);
+    const beforeList = await before.json() as { items: Array<{ id: string }>; total: number };
+    assert.strictEqual(beforeList.total, 1);
+    const stableId = beforeList.items[0].id;
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("second newer entry"),
+      level: "ERROR"
+    }, { vaultRoot });
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(stableId)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { ok: boolean; entry: { id: string; error: string } };
+    assert.ok(detail.entry.error.includes("first stable entry"), "append must not shift the detail target");
+  });
+
+  await t.test("error-log detail caps oversized error and stack with markers", async () => {
+    clearErrorLogs(vaultRoot);
+    const bigError = new Error(`e`.repeat(6000));
+    bigError.stack = `trace-line\n`.repeat(2000);
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: bigError,
+      level: "ERROR"
+    }, { vaultRoot });
+    const listRes = await fetch(`${baseUrl}/api/error-logs`);
+    const list = await listRes.json() as { items: Array<{ id: string; error: string }>; total: number };
+    assert.strictEqual(list.total, 1);
+    assert.ok(list.items[0].error.length <= 300);
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(list.items[0].id)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { entry: { error: string; stack?: string } };
+    assert.ok(detail.entry.error.length <= 4100, `detail error capped (got ${detail.entry.error.length})`);
+    assert.ok(detail.entry.error.includes("[truncated]"));
+    assert.ok(detail.entry.stack && detail.entry.stack.length <= 4100);
+    assert.ok(detail.entry.stack.includes("[truncated]"));
+  });
+
   await t.test("new routes require auth when token configured", async () => {    const authBus = createActivityBus();
     const authServer = await startStatusServer({
       vaultRoot,

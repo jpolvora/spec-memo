@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import crypto from 'node:crypto';
 import { getVaultRoot } from './vault.js';
 import { redactSecretsInPayload } from './safety.js';
 import { redactVaultGitError } from './vault-git-redact.js';
@@ -270,6 +271,9 @@ export const ERROR_LOG_LIST_ERROR_MAX = 300;
 /** Max chars for detail-view stack/context (AC15). */
 export const ERROR_LOG_DETAIL_STACK_MAX = 4000;
 
+/** Max chars for the detail-view error message (AC15 truncated contract). */
+export const ERROR_LOG_DETAIL_ERROR_MAX = 4000;
+
 export interface ErrorLogListItem {
   id: string;
   timestamp: string;
@@ -309,6 +313,19 @@ interface ParsedErrorBlock {
   error: string;
   stack?: string;
   context?: unknown;
+}
+
+/**
+ * Content-stable list id (`elog-` + 12 hex chars) so a detail fetch resolves
+ * the same block even when new entries are appended between list and detail
+ * (positional indexes would shift under concurrent writers).
+ */
+export function errorLogStableId(e: Pick<ParsedErrorBlock, 'timestamp' | 'level' | 'subsystem' | 'error' | 'stack'>): string {
+  return `elog-${crypto
+    .createHash('sha1')
+    .update(`${e.timestamp}|${e.level}|${e.subsystem}|${e.error}|${e.stack ?? ''}`)
+    .digest('hex')
+    .slice(0, 12)}`;
 }
 
 function parseErrorLogBlock(block: string): ParsedErrorBlock | null {
@@ -507,10 +524,9 @@ export function listErrorLogEntries(
   }
   // Newest-first: file order is oldest-first, so reverse.
   parsed.reverse();
-  // Global newest-first indices assigned BEFORE filtering so that list ids
-  // resolve identically in getErrorLogEntry (filtered clicks open the right row).
-  const indexed = parsed.map((e, globalIdx) => ({ e, globalIdx }));
-  const filtered = indexed.filter(({ e }) => {
+  // List ids are content-stable hashes (errorLogStableId), so filtered rows
+  // and detail fetches resolve the same block (see getErrorLogEntry).
+  const filtered = parsed.filter((e) => {
     if (query.level && e.level !== query.level) return false;
     if (query.subsystem && e.subsystem !== query.subsystem) return false;
     return true;
@@ -519,9 +535,9 @@ export function listErrorLogEntries(
   const limit = query.limit ?? 50;
   const offset = query.offset ?? 0;
   const window = filtered.slice(offset, offset + limit);
-  const items: ErrorLogListItem[] = window.map(({ e, globalIdx }) => {
+  const items: ErrorLogListItem[] = window.map((e) => {
     const item: ErrorLogListItem = {
-      id: `elog-${globalIdx}`,
+      id: errorLogStableId(e),
       timestamp: e.timestamp,
       level: e.level,
       subsystem: e.subsystem,
@@ -536,17 +552,16 @@ export function listErrorLogEntries(
 }
 
 /**
- * Fetch one parsed block by list id (newest-first index id `elog-N`
- * over the same 2MiB tail window). Returns null when unknown.
+ * Fetch one parsed block by list id over the same 2MiB tail window.
+ * List-issued content-stable ids resolve by hash; legacy positional `elog-N`
+ * ids still resolve positionally (subject to append shift). Returns null when unknown.
  */
 export function getErrorLogEntry(
   vaultRoot?: string,
   id?: string,
   customPath?: string
 ): ErrorLogDetail | null {
-  if (!id || !/^elog-\d+$/.test(id)) return null;
-  const index = Number(id.slice('elog-'.length));
-  if (!Number.isInteger(index) || index < 0) return null;
+  if (!id || !/^elog-(?:[0-9a-f]{12}|\d+)$/.test(id)) return null;
   const targetPath = resolveErrorLogPath(vaultRoot, customPath);
   if (!fs.existsSync(targetPath)) return null;
   const { content } = readErrorLogTail(targetPath);
@@ -562,14 +577,20 @@ export function getErrorLogEntry(
     }
   }
   parsed.reverse();
-  const entry = parsed[index];
+  let entry = parsed.find((e) => errorLogStableId(e) === id);
+  if (!entry && /^elog-\d+$/.test(id)) {
+    entry = parsed[Number(id.slice('elog-'.length))];
+  }
   if (!entry) return null;
   const detail: ErrorLogDetail = {
     id,
     timestamp: entry.timestamp,
     level: entry.level,
     subsystem: entry.subsystem,
-    error: entry.error
+    error:
+      entry.error.length > ERROR_LOG_DETAIL_ERROR_MAX
+        ? `${entry.error.slice(0, ERROR_LOG_DETAIL_ERROR_MAX)}…[truncated]`
+        : entry.error
   };
   if (entry.endpoint) detail.endpoint = entry.endpoint;
   if (entry.tool) detail.tool = entry.tool;
@@ -577,7 +598,7 @@ export function getErrorLogEntry(
   if (entry.stack) {
     detail.stack =
       entry.stack.length > ERROR_LOG_DETAIL_STACK_MAX
-        ? entry.stack.slice(0, ERROR_LOG_DETAIL_STACK_MAX)
+        ? `${entry.stack.slice(0, ERROR_LOG_DETAIL_STACK_MAX)}…[truncated]`
         : entry.stack;
   }
   if (entry.context !== undefined) {
