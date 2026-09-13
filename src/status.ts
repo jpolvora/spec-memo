@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { getVaultRoot, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts, flushVaultGit, readVaultConfig } from "./vault.js";
+import { getVaultRoot, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts, flushVaultGit, readVaultConfig, updateVaultAiConfig, getVaultProjects } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
 import { getPackageVersion } from "./version.js";
@@ -16,7 +16,7 @@ import {
   resolveBackupPath
 } from "./backup.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
-import { logErrorReport } from "./error-logger.js";
+import { logErrorReport, listErrorLogEntries, getErrorLogEntry, parseErrorLogListQuery } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
@@ -131,6 +131,229 @@ export function wrapWikiH2Html(html: string): string {
     out += `<details><summary><h2>${title}</h2></summary>${body}</details>`;
   }
   return out;
+}
+
+/** Allowlisted ?tab= values → panel ids (spec 0058, AC7–AC8). Unknown → tab-home. */
+export function statusTabIdForParam(raw: string | null | undefined): string {
+  const v = String(raw || "").trim();
+  switch (v) {
+    case "activity":
+      return "tab-activity";
+    case "memory":
+      return "tab-memory";
+    case "prompts":
+      return "tab-prompts";
+    case "invoicing":
+      return "tab-invoicing";
+    case "rules":
+      return "tab-rules";
+    case "backups":
+      return "tab-backups";
+    case "wiki":
+      return "tab-wiki";
+    case "vaults":
+      return "tab-vaults";
+    case "home":
+    case "tab-home":
+      return "tab-home";
+    case "error-logs":
+    case "tab-error-logs":
+      return "tab-error-logs";
+    case "ai-config":
+    case "tab-ai-config":
+      return "tab-ai-config";
+    case "ai-ops":
+    case "tab-ai-ops":
+      return "tab-ai-ops";
+    default:
+      return "tab-home";
+  }
+}
+
+export interface StatusDashboardPayload {
+  projectsCount: number;
+  eventsBuffered: number;
+  activeClientsCount: number;
+  uptimeMs: number;
+  mcpAvailable: boolean;
+  memoryRecords: number;
+  promptRecords: number;
+  backupCount: number;
+  errorLogCount: number;
+  aiEnabled: boolean;
+  wikiPresent: number;
+  aiOpsCount: number;
+}
+
+/**
+ * Build the Home dashboard payload (spec 0058, AC33–AC34, AC38).
+ * Reuses existing list/count helpers; no second SQLite schema.
+ * projectId scopes memory/prompts/wiki only; vault/backup/error counts stay global.
+ */
+export function buildStatusDashboard(
+  vaultRoot: string,
+  opts: { projectId?: string; eventsBuffered?: number; activeClientsCount?: number; uptimeMs?: number; mcpAvailable?: boolean } = {}
+): StatusDashboardPayload {
+  const projectId = opts.projectId && opts.projectId !== "all" ? opts.projectId : undefined;
+  let projectsCount = 0;
+  try {
+    projectsCount = getVaultProjectList(vaultRoot).length;
+  } catch {
+    projectsCount = 0;
+  }
+  let memoryRecords = 0;
+  try {
+    memoryRecords = listMemoryRecords({ vaultRoot, projectId }).length;
+  } catch {
+    memoryRecords = 0;
+  }
+  let promptRecords = 0;
+  try {
+    const result = listPrompts({ vaultRoot, projectId, crossProject: !projectId, limit: 1, offset: 0 });
+    promptRecords = typeof result.total === "number" ? result.total : 0;
+  } catch {
+    promptRecords = 0;
+  }
+  let backupCount = 0;
+  try {
+    backupCount = listBackups(vaultRoot).length;
+  } catch {
+    backupCount = 0;
+  }
+  let errorLogCount = 0;
+  try {
+    errorLogCount = listErrorLogEntries(vaultRoot, { limit: 1, offset: 0 }).total;
+  } catch {
+    errorLogCount = 0;
+  }
+  let aiEnabled = false;
+  try {
+    aiEnabled = getVaultAiStatus(vaultRoot).enabled === true;
+  } catch {
+    aiEnabled = false;
+  }
+  let wikiPresent = 0;
+  try {
+    if (projectId) {
+      wikiPresent = readWikiFile(projectId, vaultRoot).exists ? 1 : 0;
+    } else {
+      wikiPresent = countWikisPresent(vaultRoot);
+    }
+  } catch {
+    wikiPresent = 0;
+  }
+  let aiOpsCount = 0;
+  try {
+    aiOpsCount = listAiOpsEntries(vaultRoot, { limit: 1, offset: 0 }).total;
+  } catch {
+    aiOpsCount = 0;
+  }
+  return {
+    projectsCount,
+    eventsBuffered: opts.eventsBuffered ?? 0,
+    activeClientsCount: opts.activeClientsCount ?? 0,
+    uptimeMs: opts.uptimeMs ?? 0,
+    mcpAvailable: opts.mcpAvailable ?? false,
+    memoryRecords,
+    promptRecords,
+    backupCount,
+    errorLogCount,
+    aiEnabled,
+    wikiPresent,
+    aiOpsCount
+  };
+}
+
+function countWikisPresent(vaultRoot: string): number {
+  let count = 0;
+  try {
+    for (const p of getVaultProjects(vaultRoot)) {
+      try {
+        if (readWikiFile(p.id, vaultRoot).exists) count += 1;
+      } catch {
+        // ignore per-project failures
+      }
+    }
+  } catch {
+    return 0;
+  }
+  return count;
+}
+
+/** Read-only AI config snapshot for GET /api/config/ai (no secrets, AC21–AC22, AC30). */
+export function buildAiConfigSnapshot(vaultRoot: string): {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  apiKeyEnv: string;
+  hasApiKey: boolean;
+  available: boolean;
+} {
+  const { config } = readVaultConfig(vaultRoot);
+  const ai = config.ai;
+  const enabled = ai?.enabled === true;
+  const apiKeyEnv = (ai?.apiKeyEnv || "CURSOR_API_KEY").trim() || "CURSOR_API_KEY";
+  const model = (ai?.model || "composer-2.5").trim() || "composer-2.5";
+  let available = false;
+  try {
+    available = getVaultAiStatus(vaultRoot).available === true;
+  } catch {
+    available = false;
+  }
+  return {
+    enabled,
+    provider: enabled ? (ai?.provider || "cursor-sdk") : "noop",
+    model,
+    apiKeyEnv,
+    hasApiKey: Boolean(process.env[apiKeyEnv] && String(process.env[apiKeyEnv]).length > 0),
+    available
+  };
+}
+
+/**
+ * Validate PUT /api/config/ai body (AC23–AC24, AC26).
+ * Returns a normalized patch or throws a 400-flavoured Error (no write on throw).
+ */
+export function parseAiConfigPutBody(raw: unknown): { enabled: boolean; provider: "noop" | "cursor-sdk"; model: string } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    const err = new Error("Invalid AI config body (object required)");
+    (err as { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
+  const rec = raw as Record<string, unknown>;
+  if ("apiKey" in rec || "token" in rec) {
+    const err = new Error("Invalid AI config body (apiKey/token must stay in the environment)");
+    (err as { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
+  const providerRaw = rec.provider;
+  if (providerRaw !== undefined && providerRaw !== "noop" && providerRaw !== "cursor-sdk") {
+    const err = new Error("Invalid AI config provider (only noop and cursor-sdk are implemented)");
+    (err as { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
+  if (rec.enabled !== undefined && typeof rec.enabled !== "boolean") {
+    const err = new Error("Invalid AI config body (enabled must be a boolean)");
+    (err as { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
+  if (rec.model !== undefined) {
+    if (typeof rec.model !== "string" || rec.model.trim().length === 0 || rec.model.trim().length > 64) {
+      const err = new Error("Invalid AI config body (model must be a non-empty string max 64 chars)");
+      (err as { statusCode?: number }).statusCode = 400;
+      throw err;
+    }
+  }
+  const provider: "noop" | "cursor-sdk" =
+    providerRaw === "cursor-sdk" ? "cursor-sdk" : providerRaw === "noop" ? "noop" : rec.enabled === true ? "cursor-sdk" : "noop";
+  if (provider === "noop") {
+    return { enabled: false, provider: "noop", model: typeof rec.model === "string" && rec.model.trim() ? rec.model.trim() : "composer-2.5" };
+  }
+  return {
+    enabled: true,
+    provider: "cursor-sdk",
+    model: typeof rec.model === "string" && rec.model.trim() ? rec.model.trim() : "composer-2.5"
+  };
 }
 
 
@@ -533,28 +756,155 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     header h1 span { color: var(--accent); font-weight: 500; font-size: 0.82rem; margin-left: 8px; }
     header h1 .version-tag { color: var(--muted); font-weight: 400; font-size: 0.75rem; margin-left: 6px; }
     
-    .nav-tabs {
+    .status-body {
       display: flex;
-      gap: 4px;
-      border-bottom: 1px solid var(--border);
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+    #status-sidebar {
+      width: 248px;
+      min-width: 248px;
       background: var(--card);
-      padding: 0 24px;
+      border-right: 1px solid var(--border);
+      padding: 12px 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: width 0.18s ease, min-width 0.18s ease;
+    }
+    #status-sidebar.collapsed {
+      width: 52px;
+      min-width: 52px;
+      padding: 12px 6px;
+      overflow-x: hidden;
+    }
+    #status-sidebar.collapsed .nav-cat-children,
+    #status-sidebar.collapsed .nav-cat-header .nav-cat-label,
+    #status-sidebar.collapsed .nav-cat-header .nav-cat-caret {
+      display: none;
+    }
+    #status-sidebar.collapsed .nav-cat-header {
+      justify-content: center;
+    }
+    #status-sidebar.collapsed .tab-btn {
+      justify-content: center;
+      padding: 8px 4px;
+      font-size: 0;
+    }
+    #status-sidebar.collapsed .tab-btn .nav-icon {
+      font-size: 1rem;
+    }
+    #status-sidebar.collapsed .tab-btn .nav-label {
+      display: none;
+    }
+    #sidebar-collapse {
+      width: auto;
+      margin: 0 0 8px 0;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+    }
+    .nav-category {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 2px;
+    }
+    .nav-cat-header {
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 8px 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      margin-top: 0;
+      text-align: left;
+    }
+    .nav-cat-header:hover { color: var(--bright); background: var(--bg); }
+    .nav-cat-header .nav-cat-caret { margin-left: auto; font-size: 0.65rem; }
+    .nav-category.closed .nav-cat-children { display: none; }
+    .nav-category.closed .nav-cat-header .nav-cat-caret { transform: rotate(-90deg); }
+    .nav-cat-children {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-left: 4px;
+    }
+    #status-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
     .tab-btn {
       background: transparent;
       border: none;
-      border-bottom: 2px solid transparent;
+      border-left: 2px solid transparent;
+      border-radius: 0 6px 6px 0;
       color: var(--muted);
       font-size: 0.85rem;
       font-weight: 500;
-      padding: 10px 16px;
+      padding: 8px 12px;
       cursor: pointer;
-      border-radius: 0;
       margin-top: 0;
-      transition: color 0.15s, border-color 0.15s;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
     }
-    .tab-btn:hover { color: var(--bright); border-color: var(--border); }
-    .tab-btn.active { color: var(--accent); border-color: var(--accent); }
+    .tab-btn:hover { color: var(--bright); background: var(--bg); }
+    .tab-btn.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-bg); }
+    .tab-btn .nav-icon { flex: none; width: 1.2em; text-align: center; }
+    .home-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      padding: 16px 24px;
+      overflow-y: auto;
+    }
+    .home-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      margin-top: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .home-card:hover { border-color: var(--accent); }
+    .home-card .home-card-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; }
+    .home-card .home-card-value { font-size: 1.4rem; font-weight: 600; color: var(--bright); }
+    .home-card .home-card-sub { font-size: 0.75rem; color: var(--muted); }
+    @media (max-width: 900px) {
+      #status-sidebar {
+        position: absolute;
+        z-index: 400;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+      }
+      #status-sidebar.collapsed {
+        position: static;
+        box-shadow: none;
+      }
+    }
 
     .badges { display: flex; gap: 8px; flex-wrap: wrap; }
     .badge {
@@ -1195,22 +1545,83 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     </div>
   </header>
 
-  <nav class="nav-tabs">
-    <button class="tab-btn active" data-tab="tab-activity">Activity & Status</button>
-    <button class="tab-btn" data-tab="tab-ai-ops">AI Ops</button>
-    <button class="tab-btn" data-tab="tab-memory">Memory</button>
-    <button class="tab-btn" data-tab="tab-prompts">Prompts & Intent Stories</button>
-    <button class="tab-btn" data-tab="tab-invoicing">Activity & Invoicing</button>
-    <button class="tab-btn" data-tab="tab-rules">Derived Rules</button>
-    <button class="tab-btn" data-tab="tab-backups">Backups</button>
-    <button class="tab-btn" data-tab="tab-wiki">Wiki</button>
-    <button class="tab-btn" data-tab="tab-vaults">Vaults</button>
+  <div class="status-body">
+  <nav id="status-sidebar" aria-label="Status navigation">
+    <button type="button" id="sidebar-collapse" class="btn-secondary" title="Collapse sidebar">&#9776;</button>
+    <div class="nav-category" data-category="Overview">
+      <button type="button" class="nav-cat-header"><span class="nav-icon">&#9673;</span><span class="nav-cat-label">Overview</span><span class="nav-cat-caret">&#9662;</span></button>
+      <div class="nav-cat-children">
+        <button class="tab-btn active" data-tab="tab-home"><span class="nav-icon">&#8962;</span><span class="nav-label">Home</span></button>
+        <button class="tab-btn" data-tab="tab-activity"><span class="nav-icon">&#9679;</span><span class="nav-label">Activity &amp; Status</span></button>
+      </div>
+    </div>
+    <div class="nav-category" data-category="Memory">
+      <button type="button" class="nav-cat-header"><span class="nav-icon">&#9673;</span><span class="nav-cat-label">Memory</span><span class="nav-cat-caret">&#9662;</span></button>
+      <div class="nav-cat-children">
+        <button class="tab-btn" data-tab="tab-memory"><span class="nav-icon">&#9679;</span><span class="nav-label">Records</span></button>
+        <button class="tab-btn" data-tab="tab-wiki"><span class="nav-icon">&#9679;</span><span class="nav-label">Wiki</span></button>
+      </div>
+    </div>
+    <div class="nav-category" data-category="Sessions">
+      <button type="button" class="nav-cat-header"><span class="nav-icon">&#9673;</span><span class="nav-cat-label">Sessions</span><span class="nav-cat-caret">&#9662;</span></button>
+      <div class="nav-cat-children">
+        <button class="tab-btn" data-tab="tab-prompts"><span class="nav-icon">&#9679;</span><span class="nav-label">Prompts &amp; Stories</span></button>
+        <button class="tab-btn" data-tab="tab-invoicing"><span class="nav-icon">&#9679;</span><span class="nav-label">Activity &amp; Invoicing</span></button>
+        <button class="tab-btn" data-tab="tab-rules"><span class="nav-icon">&#9679;</span><span class="nav-label">Derived Rules</span></button>
+      </div>
+    </div>
+    <div class="nav-category" data-category="Vault">
+      <button type="button" class="nav-cat-header"><span class="nav-icon">&#9673;</span><span class="nav-cat-label">Vault</span><span class="nav-cat-caret">&#9662;</span></button>
+      <div class="nav-cat-children">
+        <button class="tab-btn" data-tab="tab-vaults"><span class="nav-icon">&#9679;</span><span class="nav-label">Vaults</span></button>
+        <button class="tab-btn" data-tab="tab-backups"><span class="nav-icon">&#9679;</span><span class="nav-label">Backups</span></button>
+      </div>
+    </div>
+    <div class="nav-category" data-category="AI">
+      <button type="button" class="nav-cat-header"><span class="nav-icon">&#9673;</span><span class="nav-cat-label">AI</span><span class="nav-cat-caret">&#9662;</span></button>
+      <div class="nav-cat-children">
+        <button class="tab-btn" data-tab="tab-ai-config"><span class="nav-icon">&#9679;</span><span class="nav-label">Assistant</span></button>
+        <button class="tab-btn" data-tab="tab-ai-ops"><span class="nav-icon">&#9679;</span><span class="nav-label">AI Ops</span></button>
+      </div>
+    </div>
+    <div class="nav-category" data-category="Diagnostics">
+      <button type="button" class="nav-cat-header"><span class="nav-icon">&#9673;</span><span class="nav-cat-label">Diagnostics</span><span class="nav-cat-caret">&#9662;</span></button>
+      <div class="nav-cat-children">
+        <button class="tab-btn" data-tab="tab-error-logs"><span class="nav-icon">&#9679;</span><span class="nav-label">Error logs</span></button>
+      </div>
+    </div>
   </nav>
 
+  <div id="status-main">
   <div class="banner-container" id="banner-container"></div>
 
+  <!-- TAB: Home dashboard (default landing, spec 0058) -->
+  <section id="tab-home" class="tab-content active">
+    <div class="prompts-container">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <strong style="color: var(--bright); font-size: 0.95rem;">Home</strong>
+          <span class="helper-text" id="home-subtitle" style="margin: 0;">Vault overview — counts and health, not a second live stream.</span>
+          <button type="button" id="btn-home-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Refresh</button>
+        </div>
+        <div id="home-error" class="helper-text" style="display:none; color: var(--err);"></div>
+      </div>
+      <div class="home-grid" id="home-grid">
+        <button type="button" class="home-card" data-tab="tab-activity"><span class="home-card-label">MCP / uptime</span><span class="home-card-value" id="home-mcp">—</span><span class="home-card-sub" id="home-mcp-sub">Activity &amp; Status</span></button>
+        <button type="button" class="home-card" data-tab="tab-activity"><span class="home-card-label">Live events (global)</span><span class="home-card-value" id="home-events">—</span><span class="home-card-sub" id="home-events-sub">Activity &amp; Status</span></button>
+        <button type="button" class="home-card" data-tab="tab-vaults"><span class="home-card-label">Vaults (global)</span><span class="home-card-value" id="home-vaults">—</span><span class="home-card-sub">Vaults</span></button>
+        <button type="button" class="home-card" data-tab="tab-memory"><span class="home-card-label">Memory records</span><span class="home-card-value" id="home-memory">—</span><span class="home-card-sub">Records</span></button>
+        <button type="button" class="home-card" data-tab="tab-prompts"><span class="home-card-label">Prompts</span><span class="home-card-value" id="home-prompts">—</span><span class="home-card-sub">Prompts &amp; Stories</span></button>
+        <button type="button" class="home-card" data-tab="tab-backups"><span class="home-card-label">Backups (global)</span><span class="home-card-value" id="home-backups">—</span><span class="home-card-sub">Backups</span></button>
+        <button type="button" class="home-card" data-tab="tab-wiki"><span class="home-card-label">Wiki</span><span class="home-card-value" id="home-wiki">—</span><span class="home-card-sub">Wiki</span></button>
+        <button type="button" class="home-card" data-tab="tab-ai-config" id="home-ai-card"><span class="home-card-label">AI</span><span class="home-card-value" id="home-ai">—</span><span class="home-card-sub" id="home-ai-sub">Assistant</span></button>
+        <button type="button" class="home-card" data-tab="tab-error-logs"><span class="home-card-label">Error logs (global)</span><span class="home-card-value" id="home-errors">—</span><span class="home-card-sub">Error logs</span></button>
+      </div>
+    </div>
+  </section>
+
   <!-- TAB 1: Activity & Status -->
-  <main id="tab-activity" class="tab-content active">
+  <main id="tab-activity" class="tab-content">
     <aside>
       <div class="panel">
         <h2>Architecture & Topology</h2>
@@ -1359,6 +1770,38 @@ export function generateStatusHtml(version = getPackageVersion()): string {
             <pre id="aiops-detail-meta" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
           </details>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: AI assistant config (spec 0058; API key stays in env) -->
+  <section id="tab-ai-config" class="tab-content">
+    <div class="prompts-container">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <div class="filter-group" style="max-width: 260px;">
+            <label for="ai-provider-select">Provider:</label>
+            <select id="ai-provider-select">
+              <option value="noop">Disabled / Noop</option>
+              <option value="cursor-sdk">cursor-sdk</option>
+              <option value="opencode" disabled>opencode (Coming soon)</option>
+              <option value="freellmapi" disabled>freellmapi (Coming soon)</option>
+            </select>
+          </div>
+          <div class="filter-group" style="max-width: 260px;">
+            <label for="ai-model-input">Model:</label>
+            <input type="text" id="ai-model-input" value="composer-2.5" autocomplete="off">
+          </div>
+          <button type="button" id="btn-ai-config-save" class="btn-primary" style="width:auto; margin-top:0; padding:6px 16px;">Save</button>
+        </div>
+        <div class="helper-text">The API key is read from the environment (<span id="ai-key-env">CURSOR_API_KEY</span>) only — it is never stored in config or shown here.</div>
+        <div id="ai-config-status" class="helper-text" style="display:none;"></div>
+      </div>
+      <div class="metadata-card" style="margin: 0;">
+        <div class="meta-item"><span class="meta-label">Enabled</span><span class="meta-val" id="ai-config-enabled">-</span></div>
+        <div class="meta-item"><span class="meta-label">Provider</span><span class="meta-val" id="ai-config-provider">-</span></div>
+        <div class="meta-item"><span class="meta-label">Model</span><span class="meta-val" id="ai-config-model">-</span></div>
+        <div class="meta-item"><span class="meta-label">Key present</span><span class="meta-val" id="ai-config-haskey">-</span></div>
       </div>
     </div>
   </section>
@@ -1829,6 +2272,77 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     </div>
   </section>
 
+  <!-- TAB: Error logs viewer (spec 0058) -->
+  <section id="tab-error-logs" class="tab-content">
+    <div class="prompts-container">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <div class="filter-group" style="max-width: 160px;">
+            <label for="errorlog-level-select">Level:</label>
+            <select id="errorlog-level-select">
+              <option value="">All</option>
+              <option value="ERROR">ERROR</option>
+              <option value="WARN">WARN</option>
+              <option value="FATAL">FATAL</option>
+            </select>
+          </div>
+          <div class="filter-group" style="max-width: 220px;">
+            <label for="errorlog-subsystem-input">Subsystem:</label>
+            <input type="text" id="errorlog-subsystem-input" placeholder="e.g. status-server" autocomplete="off">
+          </div>
+          <button type="button" id="btn-errorlog-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Refresh</button>
+        </div>
+        <div id="errorlog-error" class="helper-text" style="display:none; color: var(--err);"></div>
+      </div>
+
+      <div class="data-table-container">
+        <table class="data-table" id="errorlog-table">
+          <thead>
+            <tr>
+              <th style="width: 170px;">Time</th>
+              <th style="width: 80px;">Level</th>
+              <th style="width: 140px;">Subsystem</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="errorlog-tbody">
+            <tr><td colspan="4" style="text-align:center; padding:30px; color:var(--muted);">Open this tab to load error logs…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-bar">
+        <div><span id="errorlog-count-badge">0 entries</span></div>
+        <div class="pagination-controls">
+          <button type="button" id="btn-errorlog-prev" class="btn-secondary" disabled>&larr; Prev</button>
+          <span id="errorlog-page-indicator">Page 1</span>
+          <button type="button" id="btn-errorlog-next" class="btn-secondary" disabled>Next &rarr;</button>
+        </div>
+      </div>
+
+      <div class="metadata-card" id="errorlog-detail" style="display:none; margin: 0;">
+        <div style="grid-column: 1 / -1; display:flex; justify-content:space-between; align-items:center;">
+          <strong id="errorlog-detail-title">Error detail</strong>
+          <button type="button" id="btn-errorlog-detail-close" class="btn-secondary" style="width:auto; margin:0; padding:4px 10px;">Close</button>
+        </div>
+        <div class="meta-item"><span class="meta-label">Timestamp</span><span class="meta-val" id="errorlog-detail-time">-</span></div>
+        <div class="meta-item"><span class="meta-label">Level</span><span class="meta-val" id="errorlog-detail-level">-</span></div>
+        <div class="meta-item"><span class="meta-label">Subsystem</span><span class="meta-val" id="errorlog-detail-subsystem">-</span></div>
+        <div class="meta-item"><span class="meta-label">Endpoint</span><span class="meta-val" id="errorlog-detail-endpoint">-</span></div>
+        <div style="grid-column: 1 / -1;">
+          <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Error</div>
+          <pre id="errorlog-detail-error" style="white-space: pre-wrap; word-break: break-word; font-size: 0.78rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto;"></pre>
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Stack</div>
+          <pre id="errorlog-detail-stack" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto;"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  </div><!-- /#status-main -->
+  </div><!-- /.status-body -->
+
   <!-- Slide-out Side Details Drawer -->
   <div class="drawer-overlay" id="drawer-overlay"></div>
   <div class="drawer" id="prompt-drawer">
@@ -2282,6 +2796,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       lastSeq = 0;
       document.getElementById("activity-log").innerHTML = "";
       reconnectStream(false);
+      const homeActive = document.getElementById("tab-home") && document.getElementById("tab-home").classList.contains("active");
+      if (homeActive) loadDashboard();
     }
 
     function reconnectStream(initial = false) {
@@ -2394,6 +2910,47 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     }
 
+    const TAB_ID_TO_PARAM = {
+      "tab-activity": "activity",
+      "tab-memory": "memory",
+      "tab-prompts": "prompts",
+      "tab-invoicing": "invoicing",
+      "tab-rules": "rules",
+      "tab-backups": "backups",
+      "tab-wiki": "wiki",
+      "tab-vaults": "vaults",
+      "tab-home": "home",
+      "tab-error-logs": "error-logs",
+      "tab-ai-config": "ai-config",
+      "tab-ai-ops": "ai-ops"
+    };
+    const TAB_PARAM_TO_ID = {
+      activity: "tab-activity",
+      memory: "tab-memory",
+      prompts: "tab-prompts",
+      invoicing: "tab-invoicing",
+      rules: "tab-rules",
+      backups: "tab-backups",
+      wiki: "tab-wiki",
+      vaults: "tab-vaults",
+      home: "tab-home",
+      "error-logs": "tab-error-logs",
+      "ai-config": "tab-ai-config",
+      "ai-ops": "tab-ai-ops"
+    };
+
+    function syncTabToUrl(tabId) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = TAB_ID_TO_PARAM[tabId];
+        if (tabParam) {
+          params.set("tab", tabParam);
+        }
+        const qs = params.toString();
+        history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+      } catch {}
+    }
+
     function activateTab(tabId) {
       document.querySelectorAll(".tab-btn").forEach((b) => {
         b.classList.toggle("active", b.getAttribute("data-tab") === tabId);
@@ -2401,10 +2958,17 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       document.querySelectorAll(".tab-content").forEach((c) => {
         c.classList.toggle("active", c.id === tabId);
       });
-      if (tabId === "tab-memory") {
+      syncTabToUrl(tabId);
+      if (tabId === "tab-home") {
+        loadDashboard();
+      } else if (tabId === "tab-memory") {
         loadMemoryRecords();
       } else if (tabId === "tab-ai-ops") {
         loadAiOps(true);
+      } else if (tabId === "tab-ai-config") {
+        loadAiConfig();
+      } else if (tabId === "tab-error-logs") {
+        loadErrorLogs(true);
       } else if (tabId === "tab-prompts") {
         loadPrompts();
       } else if (tabId === "tab-invoicing") {
@@ -2418,6 +2982,330 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     }
 
+    // Sidebar category expand/collapse (persisted in sessionStorage statusNavOpen).
+    function readNavOpen() {
+      try {
+        const raw = sessionStorage.getItem("statusNavOpen");
+        if (raw) return JSON.parse(raw);
+      } catch {}
+      return {};
+    }
+    function writeNavOpen(state) {
+      try {
+        sessionStorage.setItem("statusNavOpen", JSON.stringify(state));
+      } catch {}
+    }
+    function initSidebarNav() {
+      const sidebar = document.getElementById("status-sidebar");
+      if (!sidebar) return;
+      const openState = readNavOpen();
+      sidebar.querySelectorAll(".nav-category").forEach((cat) => {
+        const name = cat.getAttribute("data-category") || "";
+        if (name && openState[name] === false) cat.classList.add("closed");
+      });
+      sidebar.querySelectorAll(".nav-cat-header").forEach((header) => {
+        header.addEventListener("click", () => {
+          const cat = header.closest(".nav-category");
+          if (!cat) return;
+          cat.classList.toggle("closed");
+          const name = cat.getAttribute("data-category") || "";
+          if (name) {
+            const state = readNavOpen();
+            state[name] = !cat.classList.contains("closed");
+            writeNavOpen(state);
+          }
+        });
+      });
+      const collapseBtn = document.getElementById("sidebar-collapse");
+      function applyCollapsed(collapsed) {
+        sidebar.classList.toggle("collapsed", collapsed);
+        try {
+          sessionStorage.setItem("statusNavCollapsed", collapsed ? "1" : "0");
+        } catch {}
+        if (collapseBtn) collapseBtn.innerHTML = collapsed ? "&#9776;" : "&#9776; Collapse";
+      }
+      let collapsed = false;
+      try {
+        const stored = sessionStorage.getItem("statusNavCollapsed");
+        if (stored === "1") collapsed = true;
+        else if (stored === "0") collapsed = false;
+        else if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) collapsed = true;
+      } catch {
+        if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) collapsed = true;
+      }
+      applyCollapsed(collapsed);
+      if (collapseBtn) {
+        collapseBtn.addEventListener("click", () => {
+          applyCollapsed(!sidebar.classList.contains("collapsed"));
+        });
+      }
+    }
+    initSidebarNav();
+
+    // Home dashboard cards activate their target tab like the sidebar.
+    document.querySelectorAll(".home-card[data-tab]").forEach((card) => {
+      card.addEventListener("click", () => {
+        const targetId = card.getAttribute("data-tab");
+        if (targetId) activateTab(targetId);
+      });
+    });
+
+    // --- HOME DASHBOARD (spec 0058: counts and health, no live stream) ---
+    function setHomeText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+
+    async function loadDashboard() {
+      const errEl = document.getElementById("home-error");
+      function showHomeError(message) {
+        if (!errEl) return;
+        errEl.textContent = message;
+        errEl.style.display = "block";
+      }
+      function hideHomeError() {
+        if (!errEl) return;
+        errEl.textContent = "";
+        errEl.style.display = "none";
+      }
+      hideHomeError();
+      try {
+        let u = "/api/dashboard";
+        if (selectedProject) u += "?project=" + encodeURIComponent(selectedProject);
+        const res = await fetch(u, { credentials: "same-origin" });
+        if (!res.ok) {
+          showHomeError("Dashboard unavailable (HTTP " + res.status + "). Other pages are unaffected.");
+          return;
+        }
+        const d = await res.json();
+        const num = (v) => (typeof v === "number" && isFinite(v) ? String(v) : (v == null ? "—" : String(v)));
+        setHomeText("home-mcp", d.mcpAvailable ? "Listening" : "Unavailable");
+        setHomeText("home-mcp-sub", d.uptimeMs != null ? ("uptime " + formatUptime(d.uptimeMs)) : "Activity & Status");
+        setHomeText("home-events", num(d.eventsBuffered));
+        setHomeText("home-events-sub", "active clients: " + num(d.activeClientsCount));
+        setHomeText("home-vaults", num(d.projectsCount));
+        setHomeText("home-memory", num(d.memoryRecords));
+        setHomeText("home-prompts", num(d.promptRecords));
+        setHomeText("home-backups", num(d.backupCount));
+        setHomeText("home-wiki", num(d.wikiPresent));
+        setHomeText("home-errors", num(d.errorLogCount));
+        const aiVal = d.aiEnabled ? ("on" + (d.aiOpsCount ? " · " + d.aiOpsCount + " ops" : "")) : "off";
+        setHomeText("home-ai", aiVal);
+        const aiCard = document.getElementById("home-ai-card");
+        if (aiCard) aiCard.setAttribute("data-tab", d.aiEnabled ? "tab-ai-ops" : "tab-ai-config");
+        setHomeText("home-ai-sub", d.aiEnabled ? "AI Ops" : "Assistant");
+      } catch (e) {
+        showHomeError("Dashboard fetch failed. Other pages are unaffected.");
+      }
+    }
+
+    // --- ERROR LOGS VIEWER (spec 0058) ---
+    let errorlogOffset = 0;
+    const ERRORLOG_PAGE_SIZE = 50;
+
+    function showErrorLogError(message) {
+      const errEl = document.getElementById("errorlog-error");
+      if (!errEl) return;
+      errEl.textContent = message;
+      errEl.style.display = "block";
+    }
+
+    function hideErrorLogError() {
+      const errEl = document.getElementById("errorlog-error");
+      if (!errEl) return;
+      errEl.textContent = "";
+      errEl.style.display = "none";
+    }
+
+    function hideErrorLogDetail() {
+      const el = document.getElementById("errorlog-detail");
+      if (el) el.style.display = "none";
+    }
+
+    function errorlogLoadingRow(tbody, message) {
+      tbody.textContent = "";
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.setAttribute("colspan", "4");
+      td.setAttribute("style", "text-align:center; padding:30px; color:var(--muted);");
+      td.textContent = message;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+
+    function renderErrorLogRows(items, total, truncated) {
+      const tbody = document.getElementById("errorlog-tbody");
+      if (!tbody) return;
+      tbody.textContent = "";
+      const badge = document.getElementById("errorlog-count-badge");
+      if (badge) badge.textContent = total + " entr" + (total === 1 ? "y" : "ies") + (truncated ? " (truncated)" : "");
+      const page = Math.floor(errorlogOffset / ERRORLOG_PAGE_SIZE) + 1;
+      const maxPage = Math.max(1, Math.ceil(total / ERRORLOG_PAGE_SIZE));
+      const indicator = document.getElementById("errorlog-page-indicator");
+      if (indicator) indicator.textContent = "Page " + page + " of " + maxPage;
+      const prevBtn = document.getElementById("btn-errorlog-prev");
+      const nextBtn = document.getElementById("btn-errorlog-next");
+      if (prevBtn) prevBtn.disabled = errorlogOffset <= 0;
+      if (nextBtn) nextBtn.disabled = errorlogOffset + ERRORLOG_PAGE_SIZE >= total;
+      if (!items || items.length === 0) {
+        errorlogLoadingRow(tbody, "No error logs recorded yet.");
+        return;
+      }
+      for (const item of items) {
+        const tr = document.createElement("tr");
+        tr.className = "master-row";
+        const time = document.createElement("td");
+        time.textContent = formatIsoShort(item.timestamp);
+        const level = document.createElement("td");
+        level.textContent = item.level || "-";
+        level.setAttribute("style", "color:" + (item.level === "WARN" ? "var(--warn)" : "var(--err)") + "; font-weight:600;");
+        const sub = document.createElement("td");
+        sub.textContent = item.subsystem || "-";
+        const err = document.createElement("td");
+        err.textContent = item.error ? String(item.error).slice(0, 160) : "-";
+        err.setAttribute("title", item.error || "");
+        tr.appendChild(time);
+        tr.appendChild(level);
+        tr.appendChild(sub);
+        tr.appendChild(err);
+        tr.addEventListener("click", () => loadErrorLogDetail(item.id));
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadErrorLogs(reset) {
+      if (reset) errorlogOffset = 0;
+      hideErrorLogError();
+      hideErrorLogDetail();
+      const tbody = document.getElementById("errorlog-tbody");
+      if (tbody) errorlogLoadingRow(tbody, "Loading error logs…");
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", String(ERRORLOG_PAGE_SIZE));
+        params.set("offset", String(errorlogOffset));
+        const levelSel = document.getElementById("errorlog-level-select");
+        const subInput = document.getElementById("errorlog-subsystem-input");
+        if (levelSel && levelSel.value) params.set("level", levelSel.value);
+        if (subInput && subInput.value.trim()) params.set("subsystem", subInput.value.trim());
+        const res = await fetch("/api/error-logs?" + params.toString(), { credentials: "same-origin" });
+        if (!res.ok) {
+          let msg = "Error logs unavailable (HTTP " + res.status + ").";
+          try {
+            const body = await res.json();
+            if (body && body.error) msg = String(body.error);
+          } catch {}
+          showErrorLogError(msg);
+          if (tbody) errorlogLoadingRow(tbody, msg);
+          return;
+        }
+        const data = await res.json();
+        renderErrorLogRows(data.items || [], data.total || 0, data.truncated === true);
+      } catch (e) {
+        const msg = "Error logs fetch failed.";
+        showErrorLogError(msg);
+        if (tbody) errorlogLoadingRow(tbody, msg);
+      }
+    }
+
+    async function loadErrorLogDetail(id) {
+      hideErrorLogError();
+      try {
+        const res = await fetch("/api/error-logs/" + encodeURIComponent(id), { credentials: "same-origin" });
+        if (!res.ok) {
+          showErrorLogError("Error detail unavailable (HTTP " + res.status + ").");
+          return;
+        }
+        const data = await res.json();
+        const entry = data.entry || data;
+        const panel = document.getElementById("errorlog-detail");
+        if (panel) panel.style.display = "grid";
+        const title = document.getElementById("errorlog-detail-title");
+        if (title) title.textContent = "Error " + (entry.id || id);
+        setHomeText("errorlog-detail-time", entry.timestamp ? formatIsoShort(entry.timestamp) : "-");
+        setHomeText("errorlog-detail-level", entry.level || "-");
+        setHomeText("errorlog-detail-subsystem", entry.subsystem || "-");
+        setHomeText("errorlog-detail-endpoint", entry.endpoint || entry.tool || "-");
+        setHomeText("errorlog-detail-error", entry.error || "-");
+        setHomeText("errorlog-detail-stack", entry.stack || (entry.context ? JSON.stringify(entry.context, null, 2) : "-"));
+      } catch (e) {
+        showErrorLogError("Error detail fetch failed.");
+      }
+    }
+
+    // --- AI ASSISTANT CONFIG (spec 0058: provider+model save, key stays in env) ---
+    function showAiConfigStatus(message, isError) {
+      const el = document.getElementById("ai-config-status");
+      if (!el) return;
+      el.textContent = message;
+      el.style.display = "block";
+      el.style.color = isError ? "var(--err)" : "var(--ok)";
+    }
+
+    function hideAiConfigStatus() {
+      const el = document.getElementById("ai-config-status");
+      if (!el) return;
+      el.textContent = "";
+      el.style.display = "none";
+    }
+
+    async function loadAiConfig() {
+      hideAiConfigStatus();
+      try {
+        const res = await fetch("/api/config/ai", { credentials: "same-origin" });
+        if (!res.ok) {
+          showAiConfigStatus("AI config unavailable (HTTP " + res.status + ").", true);
+          return;
+        }
+        const d = await res.json();
+        const providerSel = document.getElementById("ai-provider-select");
+        if (providerSel) {
+          providerSel.value = d.provider === "cursor-sdk" ? "cursor-sdk" : "noop";
+        }
+        const modelInput = document.getElementById("ai-model-input");
+        if (modelInput && d.model) modelInput.value = d.model;
+        const keyEnv = document.getElementById("ai-key-env");
+        if (keyEnv) keyEnv.textContent = d.apiKeyEnv || "CURSOR_API_KEY";
+        setHomeText("ai-config-enabled", d.enabled ? "on" : "off");
+        setHomeText("ai-config-provider", d.provider || "noop");
+        setHomeText("ai-config-model", d.model || "composer-2.5");
+        setHomeText("ai-config-haskey", d.hasApiKey ? "yes" : "no");
+      } catch (e) {
+        showAiConfigStatus("AI config fetch failed.", true);
+      }
+    }
+
+    async function saveAiConfig() {
+      hideAiConfigStatus();
+      const providerSel = document.getElementById("ai-provider-select");
+      const modelInput = document.getElementById("ai-model-input");
+      const saveBtn = document.getElementById("btn-ai-config-save");
+      const provider = providerSel ? providerSel.value : "noop";
+      const model = modelInput ? modelInput.value.trim() : "composer-2.5";
+      if (saveBtn) saveBtn.disabled = true;
+      try {
+        const res = await fetch("/api/config/ai", {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: provider, model: model })
+        });
+        let body = null;
+        try {
+          body = await res.json();
+        } catch {}
+        if (!res.ok) {
+          showAiConfigStatus((body && body.error) || ("Save failed (HTTP " + res.status + ")."), true);
+          return;
+        }
+        showAiConfigStatus("Saved.", false);
+        await loadAiConfig();
+      } catch (e) {
+        showAiConfigStatus("Save failed.", true);
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
     // Tab Switching
     document.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2425,6 +3313,37 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         if (targetId) activateTab(targetId);
       });
     });
+
+    const btnErrorlogRefresh = document.getElementById("btn-errorlog-refresh");
+    if (btnErrorlogRefresh) {
+      btnErrorlogRefresh.addEventListener("click", () => loadErrorLogs(true));
+    }
+    const btnErrorlogPrev = document.getElementById("btn-errorlog-prev");
+    if (btnErrorlogPrev) {
+      btnErrorlogPrev.addEventListener("click", () => {
+        errorlogOffset = Math.max(0, errorlogOffset - ERRORLOG_PAGE_SIZE);
+        loadErrorLogs(false);
+      });
+    }
+    const btnErrorlogNext = document.getElementById("btn-errorlog-next");
+    if (btnErrorlogNext) {
+      btnErrorlogNext.addEventListener("click", () => {
+        errorlogOffset += ERRORLOG_PAGE_SIZE;
+        loadErrorLogs(false);
+      });
+    }
+    const btnErrorlogDetailClose = document.getElementById("btn-errorlog-detail-close");
+    if (btnErrorlogDetailClose) {
+      btnErrorlogDetailClose.addEventListener("click", () => hideErrorLogDetail());
+    }
+    const btnAiConfigSave = document.getElementById("btn-ai-config-save");
+    if (btnAiConfigSave) {
+      btnAiConfigSave.addEventListener("click", () => saveAiConfig());
+    }
+    const btnHomeRefresh = document.getElementById("btn-home-refresh");
+    if (btnHomeRefresh) {
+      btnHomeRefresh.addEventListener("click", () => loadDashboard());
+    }
 
     // --- AI OPS TAB LOGIC (spec 0057: durable analysis journal) ---
     let aiopsOffset = 0;
@@ -4190,17 +5109,35 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       const hashTab = (window.location.hash || "").replace("#", "");
       if (tabParam === "backups" || hashTab === "tab-backups") {
         activateTab("tab-backups");
-      }
-      if (tabParam === "wiki" || hashTab === "tab-wiki") {
+      } else if (tabParam === "wiki" || hashTab === "tab-wiki") {
         const wikiSel = document.getElementById("wiki-vault-select");
         const projectParam = urlParams.get("project");
         if (wikiSel && projectParam && vaults.some((v) => v.id === projectParam)) {
           wikiSel.value = projectParam;
         }
         activateTab("tab-wiki");
-      }
-      if (tabParam === "vaults" || hashTab === "tab-vaults") {
+      } else if (tabParam === "vaults" || hashTab === "tab-vaults") {
         activateTab("tab-vaults");
+      } else if (tabParam === "activity" || hashTab === "tab-activity") {
+        activateTab("tab-activity");
+      } else if (tabParam === "memory" || hashTab === "tab-memory") {
+        activateTab("tab-memory");
+      } else if (tabParam === "prompts" || hashTab === "tab-prompts") {
+        activateTab("tab-prompts");
+      } else if (tabParam === "invoicing" || hashTab === "tab-invoicing") {
+        activateTab("tab-invoicing");
+      } else if (tabParam === "rules" || hashTab === "tab-rules") {
+        activateTab("tab-rules");
+      } else if (tabParam === "home" || hashTab === "tab-home") {
+        activateTab("tab-home");
+      } else if (tabParam === "error-logs" || hashTab === "tab-error-logs") {
+        activateTab("tab-error-logs");
+      } else if (tabParam === "ai-config" || hashTab === "tab-ai-config") {
+        activateTab("tab-ai-config");
+      } else if (tabParam === "ai-ops" || hashTab === "tab-ai-ops") {
+        activateTab("tab-ai-ops");
+      } else {
+        activateTab("tab-home");
       }
       reconnectStream(true);
       refreshStatus();
@@ -6062,6 +6999,154 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             host,
             method: req.method,
             endpoint: "/api/ai-ops",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, 500, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      // --- Error logs viewer (spec 0058): newest-first tail window, same auth as /api/* ---
+      if (req.method === "GET" && pathname === "/api/error-logs") {
+        try {
+          const raw: Record<string, string | null> = {};
+          url.searchParams.forEach((value, key) => {
+            if (!(key in raw)) raw[key] = value;
+          });
+          const query = parseErrorLogListQuery(raw);
+          const result = listErrorLogEntries(vaultRoot, query, errorLogPath);
+          writeJson(res, 200, sanitizeToolOutput({ items: result.items, total: result.total, truncated: result.truncated }));
+        } catch (err: unknown) {
+          const statusCode = (err as { statusCode?: number }).statusCode === 400 ? 400 : 500;
+          if (statusCode === 500) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: req.method,
+              endpoint: "/api/error-logs",
+              error: err
+            }, { vaultRoot, logPath: errorLogPath });
+          }
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, statusCode, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/api/error-logs/")) {
+        try {
+          const id = decodeURIComponent(pathname.slice("/api/error-logs/".length));
+          if (!id || id.includes("/") || id.includes("\\")) {
+            writeJson(res, 400, sanitizeToolOutput({ error: "Invalid error-log id" }));
+            return;
+          }
+          const entry = getErrorLogEntry(vaultRoot, id, errorLogPath);
+          if (!entry) {
+            writeJson(res, 404, sanitizeToolOutput({ error: `Error log entry '${id}' not found` }));
+            return;
+          }
+          writeJson(res, 200, sanitizeToolOutput({ ok: true, entry }));
+        } catch (err: unknown) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: req.method,
+            endpoint: "/api/error-logs",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, 500, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      // --- AI assistant config (spec 0058): GET snapshot + PUT provider/model save ---
+      if (req.method === "GET" && pathname === "/api/config/ai") {
+        try {
+          writeJson(res, 200, sanitizeToolOutput(buildAiConfigSnapshot(vaultRoot)));
+        } catch (err: unknown) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: req.method,
+            endpoint: "/api/config/ai",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, 500, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      if (req.method === "PUT" && pathname === "/api/config/ai") {
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: unknown = {};
+          if (rawBody.length > 0) {
+            try {
+              parsed = JSON.parse(rawBody.toString("utf8"));
+            } catch {
+              writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+              return;
+            }
+          }
+          let patch: { enabled: boolean; provider: "noop" | "cursor-sdk"; model: string };
+          try {
+            patch = parseAiConfigPutBody(parsed);
+          } catch (validationErr: unknown) {
+            const msg = validationErr instanceof Error ? validationErr.message : String(validationErr);
+            writeJson(res, 400, sanitizeToolOutput({ error: msg }));
+            return;
+          }
+          // Disk schema only knows cursor-sdk: noop is the UI name for
+          // enabled:false (AC22), so a noop save flips enabled off and keeps
+          // the stored provider untouched.
+          if (patch.provider === "noop") {
+            await updateVaultAiConfig(vaultRoot, { enabled: false, model: patch.model });
+          } else {
+            await updateVaultAiConfig(vaultRoot, { enabled: true, provider: "cursor-sdk", model: patch.model });
+          }
+          writeJson(res, 200, sanitizeToolOutput({ ok: true, ...buildAiConfigSnapshot(vaultRoot) }));
+        } catch (err: unknown) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: req.method,
+            endpoint: "/api/config/ai",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, 500, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
+      // --- Home dashboard (spec 0058): counts and health, no live stream ---
+      if (req.method === "GET" && pathname === "/api/dashboard") {
+        try {
+          const project = url.searchParams.get("project") || undefined;
+          const mcp = options.getMcp?.();
+          const clients = bus.listClients();
+          const payload = buildStatusDashboard(vaultRoot, {
+            projectId: project && project !== "all" ? project : undefined,
+            eventsBuffered: bus.list().length,
+            activeClientsCount: clients.filter((c) => c.active).length,
+            uptimeMs: Date.now() - bus.startedAt,
+            mcpAvailable: mcp?.available === true
+          });
+          writeJson(res, 200, sanitizeToolOutput(payload));
+        } catch (err: unknown) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: req.method,
+            endpoint: "/api/dashboard",
             error: err
           }, { vaultRoot, logPath: errorLogPath });
           const msg = err instanceof Error ? err.message : String(err);

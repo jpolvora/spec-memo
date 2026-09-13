@@ -129,7 +129,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] Vault log sweep bugfix: atomic compiled-view writes, log source values, favicon silence, hybrid-offline severity (`spec: 0054-vault-log-sweep-bugfix.spec.md`)
 - [x] Vault AI assistance: agent interface, Cursor SDK adapter, refine-on-write, semantic retrieve, status (`spec: 0056-vault-ai-assistance.spec.md`)
 - [ ] Status monitor AI ops log UI and durable analysis journal (`spec: 0057-status-ai-ops-logs.spec.md`)
-- [ ] Status monitor left nav, home dashboard, error logs viewer, and AI config save (`spec: 0058-status-monitor-nav-ai-config.spec.md`)
+ - [x] Status monitor left nav, home dashboard, error logs viewer, and AI config save (`spec: 0058-status-monitor-nav-ai-config.spec.md`)
+- [ ] MCP I/O guard: untrusted vault data, prompt-intent refuse, always-on skill harness (`spec: 0059-mcp-io-guard.spec.md`)
+
 
 
 
@@ -209,7 +211,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 55 | `status-ai-ops-logs` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Status monitor AI ops log UI and durable analysis journal |
 
-| 56 | `status-monitor-nav-ai-config` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Status monitor left nav, home dashboard, error logs viewer, and AI config save |
+| 56 | `status-monitor-nav-ai-config` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status monitor left nav, home dashboard, error logs viewer, and AI config save |
+
+| 57 | `mcp-io-guard` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | MCP I/O guard: untrusted vault data, prompt-intent refuse, always-on skill harness |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -290,6 +294,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-13 | vault-log-sweep-bugfix | Vault log sweep bugfix: atomic compiled-view writes, open log `source` values, silent favicon/robots, hybrid unreachable WARN vs data-risk ERROR; v0.28.5 | npm test 697 pass |
 | 2026-09-13 | retrieval-lens-resume | Intent-aware search/bootstrap lenses, `budgetReport.omittedIds`, CLI `memo resume` / MCP `continuation`; v0.29.0 | npm test 726 pass |
 | 2026-09-13 | vault-ai-assistance | Vault AI assistance: agent interface, Noop + Cursor SDK adapter, background refine-on-write, post-FTS top-K rank, doctor/status ai; v0.30.0 | npm test 742 pass + 1 environmental (operator daemon holds :3123) |
+| 2026-09-13 | status-monitor-nav-ai-config | Status monitor left sidebar nav, Home dashboard, error-logs viewer, AI config save (`/api/error-logs`, `/api/config/ai`, `/api/dashboard`); v0.32.0 | npm test 769 pass + 2 environmental (operator daemon holds :3123) |
 
 ## Archive
 

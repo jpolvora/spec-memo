@@ -566,6 +566,99 @@ export function ensureVaultStructure(vaultRoot: string = getVaultRoot()): VaultC
 }
 
 /**
+ * Atomic JSON write for vault config (tmp + fsync + rename).
+ * Falls back to direct write+fsync when tmp rename is unavailable.
+ */
+export function writeVaultConfigAtomic(vaultRoot: string, config: VaultConfig): void {
+  const root = path.resolve(vaultRoot);
+  if (!fs.existsSync(root)) {
+    fs.mkdirSync(root, { recursive: true });
+  }
+  const configPath = path.join(root, 'config.json');
+  const payload = JSON.stringify(config, null, 2);
+  const tmpPath = `${configPath}.tmp.${process.pid}.${Date.now()}`;
+  try {
+    fs.writeFileSync(tmpPath, payload, 'utf8');
+    try {
+      const fd = fs.openSync(tmpPath, 'r');
+      try {
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+    } catch {
+      // fsync best-effort (Windows / virtual FS)
+    }
+    fs.renameSync(tmpPath, configPath);
+  } catch {
+    // Fallback: direct write + fsync equivalent.
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      // ignore
+    }
+    fs.writeFileSync(configPath, payload, 'utf8');
+    try {
+      const fd = fs.openSync(configPath, 'r');
+      try {
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export interface VaultAiConfigPatch {
+  enabled?: boolean;
+  provider?: string;
+  model?: string;
+}
+
+/**
+ * Scoped `config.ai` merge under the vault lock (spec 0058, AC25).
+ * Preserves all other top-level sections (ttl, vaultGit, embeddings,
+ * bootstrap, wiki, ports, ...) and unknown future `ai` fields such as
+ * `opsLogEnabled`. Returns the merged in-memory config (no restart needed).
+ */
+export async function updateVaultAiConfig(
+  vaultRoot: string,
+  patch: VaultAiConfigPatch
+): Promise<VaultConfig> {
+  const root = path.resolve(vaultRoot);
+  return withVaultLock(root, () => {
+    const configPath = path.join(root, 'config.json');
+    let raw: Record<string, unknown> = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+      } catch {
+        raw = {};
+      }
+    }
+    const existingAi =
+      raw.ai && typeof raw.ai === 'object' && !Array.isArray(raw.ai)
+        ? { ...(raw.ai as Record<string, unknown>) }
+        : {};
+    const nextAi: Record<string, unknown> = { ...existingAi };
+    if (patch.enabled !== undefined) nextAi.enabled = patch.enabled;
+    if (patch.provider !== undefined) nextAi.provider = patch.provider;
+    if (patch.model !== undefined) nextAi.model = patch.model;
+    raw.ai = nextAi;
+    // Validate the merged ai section before persisting.
+    const parsedAi = parseAiConfig(nextAi);
+    if (!parsedAi) {
+      throw new Error('Invalid config.json: ai section is invalid (empty merge)');
+    }
+    const merged = mergeParsedVaultConfig(raw as Record<string, any>);
+    writeVaultConfigAtomic(root, merged);
+    return merged;
+  });
+}
+
+/**
  * Scaffolds project-specific directories inside the vault and updates project.json.
  */
 export function ensureProjectVault(
