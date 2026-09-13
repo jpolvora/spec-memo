@@ -128,6 +128,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] memo shutdown command for stopping orphaned MCP servers (`spec: 0053-memo-shutdown.spec.md`)
 - [x] Vault log sweep bugfix: atomic compiled-view writes, log source values, favicon silence, hybrid-offline severity (`spec: 0054-vault-log-sweep-bugfix.spec.md`)
 - [ ] Vault AI assistance: agent interface, Cursor SDK adapter, refine-on-write, semantic retrieve, status (`spec: 0056-vault-ai-assistance.spec.md`)
+- [ ] Status monitor AI ops log UI and durable analysis journal (`spec: 0057-status-ai-ops-logs.spec.md`)
+
 
 
 
@@ -202,6 +204,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 52 | [`vault-log-sweep-bugfix`](0054-vault-log-sweep-bugfix.spec.md) | `[x]` done | Phase 8 | Vault log sweep bugfix: atomic compiled-view writes, log source values, favicon silence, hybrid-offline severity |
 | 53 | [`retrieval-lens-resume`](0055-retrieval-lens-resume.spec.md) | `[x] done` | Phase 8 | Intent-aware search/bootstrap lenses, omittedIds, `memo resume` / `continuation`; v0.29.0 |
 | 54 | `vault-ai-assistance` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Vault AI assistance: agent interface, Cursor SDK adapter, refine-on-write, semantic retrieve, status |
+
+| 55 | `status-ai-ops-logs` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Status monitor AI ops log UI and durable analysis journal |
 
 ## 9. Inbox (unscheduled ideas)
 
