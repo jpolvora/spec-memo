@@ -1,0 +1,467 @@
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { TOOL_NAMES, type MemoRecord } from './types.js';
+import { upsertRecord, getRecord } from './store.js';
+import { closeIndex, searchIndex } from './indexer.js';
+import { runDoctor } from './doctor.js';
+import { ensureVaultStructure } from './vault.js';
+import { compileBootstrapBrief } from './bootstrap.js';
+import { NoopVaultAiAgent } from './ai/noop.js';
+import { CursorSdkVaultAiAgent, buildCursorSdkPromptOptions } from './ai/cursor-sdk.js';
+import { defaultAiConfig, parseAiConfig, resolveAiConfig } from './ai/config.js';
+import { resolveVaultAiAgent } from './ai/index.js';
+import { assertAiConfigValid } from './ai/index.js';
+import {
+  clearAiStateForTests,
+  dropPendingRefineForRecord,
+  getAiLastError,
+  getAiQueueDepth
+} from './ai/refine-queue.js';
+import { searchIndexRanked } from './ai/search.js';
+import type {
+  VaultAiAgent,
+  VaultAiRankInput,
+  VaultAiRankResult,
+  VaultAiRefineInput,
+  VaultAiRefineResult
+} from './ai/types.js';
+
+class FakeVaultAiAgent implements VaultAiAgent {
+  refineCalls: VaultAiRefineInput[] = [];
+  rankCalls: VaultAiRankInput[] = [];
+  refineDelayMs = 0;
+  refineResult: VaultAiRefineResult = {
+    ok: true,
+    searchTerms: ['retrieval-aid-term'],
+    summary: 'Fake retrieval summary.'
+  };
+  rankBehavior: 'identity' | 'reverse' | 'throw' | 'empty' = 'identity';
+  available = true;
+
+  isAvailable(): boolean {
+    return this.available;
+  }
+
+  async refineForSearch(input: VaultAiRefineInput): Promise<VaultAiRefineResult> {
+    this.refineCalls.push(input);
+    if (this.refineDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.refineDelayMs));
+    }
+    return this.refineResult;
+  }
+
+  async rankCandidates(input: VaultAiRankInput): Promise<VaultAiRankResult> {
+    this.rankCalls.push(input);
+    if (this.rankBehavior === 'throw') {
+      throw new Error('fake rank failure');
+    }
+    if (this.rankBehavior === 'empty') {
+      return { orderedIds: [] };
+    }
+    const ids = input.candidates.map((c) => c.id);
+    if (this.rankBehavior === 'reverse') {
+      return { orderedIds: [...ids].reverse() };
+    }
+    return { orderedIds: ids };
+  }
+}
+
+async function waitForAids(
+  vaultRoot: string,
+  cwd: string,
+  id: string,
+  timeoutMs = 8000
+): Promise<MemoRecord | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const rec = await getRecord({ cwd, vaultRoot, id });
+    if (rec && Array.isArray(rec.frontmatter.aiSearchTerms)) {
+      return rec;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return getRecord({ cwd, vaultRoot, id });
+}
+
+describe('Vault AI assistance (spec 0056)', () => {
+  let tempVault: string;
+  let tempProject: string;
+  let savedCursorKey: string | undefined;
+
+  beforeEach(() => {
+    tempVault = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ai-vault-'));
+    tempProject = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ai-proj-'));
+    savedCursorKey = process.env.CURSOR_API_KEY;
+    delete process.env.CURSOR_API_KEY;
+    clearAiStateForTests();
+  });
+
+  afterEach(() => {
+    if (savedCursorKey === undefined) delete process.env.CURSOR_API_KEY;
+    else process.env.CURSOR_API_KEY = savedCursorKey;
+    clearAiStateForTests();
+    closeIndex();
+    fs.rmSync(tempVault, { recursive: true, force: true });
+    fs.rmSync(tempProject, { recursive: true, force: true });
+  });
+
+  it('AC6: MCP tool surface stays at 11 tools with no ai/refine/embed tool', () => {
+    assert.equal(TOOL_NAMES.length, 11);
+    assert.ok(!TOOL_NAMES.includes('ai' as never));
+    assert.ok(!TOOL_NAMES.includes('refine' as never));
+    assert.ok(!TOOL_NAMES.includes('embed' as never));
+  });
+
+  it('AC1/AC4: Noop agent is unavailable; startup resolves Noop when ai is omitted', () => {
+    const noop = new NoopVaultAiAgent();
+    assert.equal(noop.isAvailable(), false);
+    const { agent, config } = resolveVaultAiAgent(tempVault);
+    assert.ok(agent instanceof NoopVaultAiAgent);
+    assert.equal(config.enabled, false);
+  });
+
+  it('AC4: enabled cursor-sdk resolves the Cursor adapter; unknown provider throws', () => {
+    const { agent } = resolveVaultAiAgent(tempVault, {
+      ...defaultAiConfig(),
+      enabled: true,
+      provider: 'cursor-sdk'
+    });
+    assert.ok(agent instanceof CursorSdkVaultAiAgent);
+    assert.throws(() =>
+      resolveVaultAiAgent(tempVault, {
+        ...defaultAiConfig(),
+        enabled: true,
+        provider: 'openai' as never
+      })
+    );
+  });
+
+  it('AC4: startup validation fails closed on unknown ai.provider in raw config.json', () => {
+    ensureVaultStructure(tempVault);
+    const configPath = path.join(tempVault, 'config.json');
+    const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    raw.ai = { enabled: true, provider: 'openai' };
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf8');
+    assert.throws(() => assertAiConfigValid(tempVault), /ai/);
+    raw.ai = { enabled: true, provider: 'cursor-sdk' };
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf8');
+    const valid = assertAiConfigValid(tempVault);
+    assert.equal(valid.enabled, true);
+    assert.equal(valid.provider, 'cursor-sdk');
+  });
+
+  it('AC27: Zod ai defaults and unknown-provider rejection', () => {
+    assert.equal(parseAiConfig(undefined), null);
+    assert.equal(parseAiConfig(null), null);
+    const defaults = resolveAiConfig({});
+    assert.equal(defaults.enabled, false);
+    assert.equal(defaults.model, 'composer-2.5');
+    assert.equal(defaults.apiKeyEnv, 'CURSOR_API_KEY');
+    assert.equal(defaults.timeoutMs, 15000);
+    assert.equal(defaults.rankTopK, 20);
+    assert.throws(() => parseAiConfig({ enabled: true, provider: 'openai' }), /ai/);
+    assert.throws(() => parseAiConfig('yes'), /ai/);
+  });
+
+  it('AC7/AC8: adapter option shape uses cloud no-repo runtime and never a vault cwd', () => {
+    const config = { ...defaultAiConfig(), enabled: true };
+    const opts = buildCursorSdkPromptOptions(config, 'test-key');
+    assert.equal(opts.model.id, 'composer-2.5');
+    assert.deepEqual(opts.cloud, { repos: [] });
+    assert.ok(!('local' in opts));
+    assert.ok(!('cwd' in opts));
+    assert.ok(!JSON.stringify(opts).includes(tempVault));
+    const custom = buildCursorSdkPromptOptions({ ...config, model: 'custom-model' }, 'k');
+    assert.equal(custom.model.id, 'custom-model');
+    const blank = buildCursorSdkPromptOptions({ ...config, model: '   ' }, 'k');
+    assert.equal(blank.model.id, 'composer-2.5');
+  });
+
+  it('AC9/AC12: missing CURSOR_API_KEY means unavailable; upsert behaves as Noop', async () => {
+    const agent = new CursorSdkVaultAiAgent({ ...defaultAiConfig(), enabled: true });
+    assert.equal(agent.isAvailable(), false);
+    const res = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-no-key',
+      frontmatter: { id: 'ai-no-key', title: 'No key trap' },
+      body: '## DO NOT\nSkip.\n\n## INSTEAD DO\nWait.',
+      aiAgent: agent
+    });
+    assert.equal(res.id, 'ai-no-key');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(getAiQueueDepth(), 0);
+    const rec = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-no-key' });
+    assert.ok(rec);
+    assert.equal(rec.frontmatter.aiSearchTerms, undefined);
+  });
+
+  it('AC10/AC11: adapter timeout and non-JSON output fail open without network', async () => {
+    const hanging = new CursorSdkVaultAiAgent(
+      { ...defaultAiConfig(), enabled: true, timeoutMs: 40 },
+      {
+        promptFn: () => new Promise<{ result?: string }>(() => undefined)
+      }
+    );
+    process.env.CURSOR_API_KEY = 'test-key';
+    const timed = await hanging.refineForSearch({
+      id: 'x',
+      kind: 'trap',
+      title: 't',
+      body: 'b',
+      tags: [],
+      pathPatterns: []
+    });
+    assert.equal(timed.ok, false);
+
+    const garbage = new CursorSdkVaultAiAgent(
+      { ...defaultAiConfig(), enabled: true },
+      { promptFn: () => Promise.resolve({ result: 'not json at all {{{' }) }
+    );
+    const bad = await garbage.refineForSearch({
+      id: 'x',
+      kind: 'trap',
+      title: 't',
+      body: 'b',
+      tags: [],
+      pathPatterns: []
+    });
+    assert.equal(bad.ok, false);
+
+    const rankBad = await garbage.rankCandidates({
+      query: 'q',
+      candidates: [{ id: 'a', kind: 'trap', title: 't', snippet: 's' }]
+    });
+    assert.deepEqual(rankBad.orderedIds, ['a']);
+  });
+
+  it('AC13/AC15/AC17: fake agent DI writes retrieval aids only, body untouched', async () => {
+    const fake = new FakeVaultAiAgent();
+    const body = '## DO NOT\nDelete prod.\n\n## INSTEAD DO\nSnapshot first.';
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-refine-trap',
+      frontmatter: { id: 'ai-refine-trap', title: 'Refine me' },
+      body,
+      aiAgent: fake
+    });
+    const refined = await waitForAids(tempVault, tempProject, 'ai-refine-trap');
+    assert.ok(refined, 'expected background refine to persist aids');
+    assert.deepEqual(refined.frontmatter.aiSearchTerms, ['retrieval-aid-term']);
+    assert.equal(refined.frontmatter.summary, undefined);
+    assert.equal(refined.frontmatter.aiSummary, 'Fake retrieval summary.');
+    assert.equal(refined.body, body);
+    assert.ok(typeof refined.frontmatter.aiRefineHash === 'string');
+
+    // FTS document text includes the aids (Notes sidecar contract).
+    const ftsHits = searchIndex({ vaultRoot: tempVault, cwd: tempProject, query: 'retrieval-aid-term' });
+    assert.ok(ftsHits.some((h) => h.id === 'ai-refine-trap'));
+  });
+
+  it('AC13/AC14: upsert never awaits a slow agent and never floats a rejection', async () => {
+    const fake = new FakeVaultAiAgent();
+    fake.refineDelayMs = 400;
+    let refineDone = false;
+    const original = fake.refineForSearch.bind(fake);
+    fake.refineForSearch = async (input) => {
+      const out = await original(input);
+      refineDone = true;
+      return out;
+    };
+    const started = Date.now();
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'ai-slow-decision',
+      frontmatter: { id: 'ai-slow-decision', title: 'Slow refine' },
+      body: 'Decision body with enough text to index.',
+      aiAgent: fake
+    });
+    const elapsed = Date.now() - started;
+    assert.equal(refineDone, false, 'upsert must resolve before the slow agent finishes');
+    assert.ok(elapsed < 400, `upsert blocked on agent (${elapsed}ms)`);
+    const refined = await waitForAids(tempVault, tempProject, 'ai-slow-decision');
+    assert.ok(refined);
+    assert.ok(refineDone);
+  });
+
+  it('AC18: ineligible kinds never enqueue refine', async () => {
+    const fake = new FakeVaultAiAgent();
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'scratch',
+      slug: 'ai-scratch',
+      frontmatter: { id: 'ai-scratch', title: 'Scratch note' },
+      body: 'Temporary scratch content.',
+      aiAgent: fake
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(fake.refineCalls.length, 0);
+    assert.equal(getAiQueueDepth(), 0);
+  });
+
+  it('AC19: forget drops the pending job for the record', async () => {
+    const fake = new FakeVaultAiAgent();
+    fake.refineDelayMs = 500;
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-drop-trap',
+      frontmatter: { id: 'ai-drop-trap', title: 'Drop me' },
+      body: '## DO NOT\nX.\n\n## INSTEAD DO\nY.',
+      aiAgent: fake
+    });
+    dropPendingRefineForRecord('ai-drop-trap');
+    assert.equal(getAiQueueDepth(), 0);
+    assert.equal(getAiLastError(), null);
+  });
+
+  it('AC20/AC22: rank throw keeps lexical order and marks explain skipped', async () => {
+    for (const [slug, title, body, pattern] of [
+      ['ai-rank-alpha', 'Alpha adapter', 'alpha wibble quark', 'src/alpha.ts'],
+      ['ai-rank-beta', 'Beta adapter', 'beta wibble quark', 'src/beta.ts'],
+      ['ai-rank-gamma', 'Gamma adapter', 'gamma wibble quark', 'src/gamma.ts']
+    ] as const) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug,
+        frontmatter: { id: slug, title, pathPatterns: [pattern] },
+        body: `Record about ${body}.`
+      });
+    }
+    const lexical = searchIndex({
+      vaultRoot: tempVault,
+      cwd: tempProject,
+      query: 'wibble quark',
+      explain: true
+    });
+    assert.ok(lexical.length >= 3);
+    const lexicalIds = lexical.map((h) => h.id);
+
+    const throwing = new FakeVaultAiAgent();
+    throwing.rankBehavior = 'throw';
+    const failed = await searchIndexRanked(
+      { vaultRoot: tempVault, cwd: tempProject, query: 'wibble quark', explain: true },
+      { agent: throwing, rankTopK: 20 }
+    );
+    assert.deepEqual(failed.hits.map((h) => h.id), lexicalIds);
+    assert.equal(failed.aiRank, 'skipped');
+    for (const hit of failed.hits) {
+      assert.equal(hit.explain?.aiRank, 'skipped');
+    }
+
+    const reverser = new FakeVaultAiAgent();
+    reverser.rankBehavior = 'reverse';
+    const ranked = await searchIndexRanked(
+      { vaultRoot: tempVault, cwd: tempProject, query: 'wibble quark', explain: true },
+      { agent: reverser, rankTopK: 3 }
+    );
+    assert.equal(ranked.aiRank, 'applied');
+    assert.deepEqual(
+      ranked.hits.slice(0, 3).map((h) => h.id),
+      [...lexicalIds.slice(0, 3)].reverse()
+    );
+    assert.equal(ranked.hits[0].explain?.aiRank, 'applied');
+  });
+
+  it('AC23: bootstrap skips rank on empty query, ranks on query', async () => {
+    const fake = new FakeVaultAiAgent();
+    fake.rankBehavior = 'reverse';
+    for (const [slug, title] of [
+      ['ai-boot-one', 'Bootstrapping adapters'],
+      ['ai-boot-two', 'Adapter bootstrap guide']
+    ] as const) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug,
+        frontmatter: { id: slug, title, severity: 'high' },
+        body: `Bootstrap record about ${title.toLowerCase()} patterns.`
+      });
+    }
+    await compileBootstrapBrief({ cwd: tempProject, vaultRoot: tempVault }, { agent: fake });
+    assert.equal(fake.rankCalls.length, 0);
+    await compileBootstrapBrief(
+      { cwd: tempProject, vaultRoot: tempVault, query: 'adapter bootstrap' },
+      { agent: fake, rankTopK: 20 }
+    );
+    assert.ok(fake.rankCalls.length >= 1);
+  });
+
+  it('AC25: get by id never calls the agent', async () => {
+    const fake = new FakeVaultAiAgent();
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-get-trap',
+      frontmatter: { id: 'ai-get-trap', title: 'Get trap' },
+      body: '## DO NOT\nZ.\n\n## INSTEAD DO\nW.'
+    });
+    const rec = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-get-trap' });
+    assert.ok(rec);
+    assert.equal(fake.refineCalls.length, 0);
+    assert.equal(fake.rankCalls.length, 0);
+  });
+
+  it('AC28/AC32: doctor ai field present; setup merge preserves ai', async () => {
+    const doctor = await runDoctor({ vaultRoot: tempVault, cwd: tempProject });
+    assert.ok(doctor.ai);
+    assert.equal(doctor.ai.enabled, false);
+    assert.equal(doctor.ai.provider, 'cursor-sdk');
+    assert.equal(doctor.ai.available, false);
+    assert.equal(doctor.ai.queueDepth, 0);
+    assert.equal(doctor.ai.lastError, null);
+
+    const configPath = path.join(tempVault, 'config.json');
+    ensureVaultStructure(tempVault);
+    const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    raw.ai = { enabled: true, provider: 'cursor-sdk', model: 'composer-2.5' };
+    (raw.ttl as Record<string, number>).scratchDays = 9;
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf8');
+    const merged = ensureVaultStructure(tempVault);
+    assert.equal(merged.ai?.enabled, true);
+    assert.equal(merged.ai?.provider, 'cursor-sdk');
+    assert.equal(merged.ttl?.scratchDays, 9);
+    const seeded = ensureVaultStructure(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-ai-seed-'))
+    );
+    assert.equal(seeded.ai?.enabled, false);
+  });
+
+  it('AC31: secret-looking text is redacted before the SDK call', async () => {
+    let seenPrompt = '';
+    const agent = new CursorSdkVaultAiAgent(
+      { ...defaultAiConfig(), enabled: true },
+      {
+        promptFn: (message) => {
+          seenPrompt = message;
+          return Promise.resolve({ result: '{"searchTerms": ["ok"], "summary": "s"}' });
+        }
+      }
+    );
+    process.env.CURSOR_API_KEY = 'test-key';
+    const out = await agent.refineForSearch({
+      id: 'sec',
+      kind: 'trap',
+      title: 't',
+      body: 'note with Bearer abcdefghijklmnopqrstuvwxyz123456 trailing',
+      tags: [],
+      pathPatterns: []
+    });
+    assert.equal(out.ok, true);
+    assert.ok(!seenPrompt.includes('Bearer abcdefghijklmnopqrstuvwxyz123456'));
+  });
+});

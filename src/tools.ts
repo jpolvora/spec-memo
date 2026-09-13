@@ -17,7 +17,9 @@ import {
 } from './types.js';
 import { RecordKindSchema, RecordStatusSchema } from './schema.js';
 import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
-import { searchIndex } from './indexer.js';
+import { searchIndexRanked } from './ai/search.js';
+import { resolveVaultAiAgent } from './ai/index.js';
+import type { VaultAiAgent } from './ai/types.js';
 import { wrapSqliteOpenError } from './sqlite.js';
 import { compileBootstrapBrief } from './bootstrap.js';
 import {
@@ -62,6 +64,28 @@ function resolveHybridPushProjectId(opts: {
   return resolveProjectIdentity(opts.cwd || process.cwd(), {
     vaultRoot: getVaultRoot(opts.vaultRoot)
   }).projectId;
+}
+
+/**
+ * Resolve the vault AI agent for a tool call (spec 0056).
+ * Fail-open: unknown providers or config errors yield a null agent here;
+ * process startup (`mcp.ts`/`server.ts`/CLI serve) validates fail-closed.
+ */
+function resolveToolAi(vaultRoot: string | undefined): {
+  agent: VaultAiAgent | null;
+  rankTopK: number;
+  timeoutMs: number;
+} {
+  try {
+    const root = vaultRoot || getVaultRoot();
+    const { agent, config } = resolveVaultAiAgent(root);
+    if (!agent.isAvailable()) {
+      return { agent: null, rankTopK: config.rankTopK, timeoutMs: config.timeoutMs };
+    }
+    return { agent, rankTopK: config.rankTopK, timeoutMs: config.timeoutMs };
+  } catch {
+    return { agent: null, rankTopK: 20, timeoutMs: 15000 };
+  }
 }
 
 export interface ToolDefinition {
@@ -700,7 +724,12 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
     try {
       const bootstrapOpts = parseResult.data as BootstrapOptions & { resume?: boolean };
       delete bootstrapOpts.resume;
-      const result = await compileBootstrapBrief(bootstrapOpts);
+      const toolAi = resolveToolAi(bootstrapOpts.vaultRoot);
+      const result = await compileBootstrapBrief(bootstrapOpts, {
+        agent: toolAi.agent,
+        rankTopK: toolAi.rankTopK,
+        timeoutMs: toolAi.timeoutMs
+      });
       const hitIds = collectBootstrapHitIds(result);
       if (hitIds.length > 0) {
         await recordMemoryHits({
@@ -722,7 +751,13 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
     try {
       const searchOpts = parseResult.data as SearchOptions;
       const { hitIds, sessionId, ...indexOpts } = searchOpts;
-      const results = searchIndex(indexOpts);
+      const toolAi = resolveToolAi(searchOpts.vaultRoot);
+      const { hits: results } = await searchIndexRanked(indexOpts, {
+        agent: toolAi.agent,
+        rankTopK: toolAi.rankTopK,
+        timeoutMs: toolAi.timeoutMs,
+        projectId: searchOpts.projectId
+      });
       if (Array.isArray(hitIds) && hitIds.length > 0) {
         const hitIdSet = new Set(hitIds);
         const idProjectHints: Record<string, string> = {};

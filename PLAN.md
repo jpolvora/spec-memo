@@ -253,3 +253,4 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 | 2026-09-12 | project-wiki-site | Living feature wiki published on the docs website: ported `ws-wiki` site generator, `docs/wiki/**`, homepage Wiki section, `check:site` CI drift gate; v0.28.4; npm test pass |
 | 2026-09-13 | vault-log-sweep-bugfix | Vault log sweep bugfix: atomic compiled-view writes (temp+rename, transient retry), open log `source` values, silent favicon/robots `204`, hybrid unreachable WARN vs data-risk ERROR; v0.28.5; npm test 697 pass |
 | 2026-09-13 | retrieval-lens-resume | Intent-aware search/bootstrap retrieval lenses, omittedIds explain receipt, `memo resume` / `continuation`; v0.29.0; npm test 726 pass |
+| 2026-09-13 | vault-ai-assistance | Vault AI assistance: agent interface, Noop + Cursor SDK adapter, background refine-on-write, post-FTS top-K rank, doctor/status ai; v0.30.0; npm test 742 pass + 1 environmental (operator daemon holds :3123) |

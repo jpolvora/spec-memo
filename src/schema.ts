@@ -96,6 +96,11 @@ export const RecordFrontmatterSchema = z.object({
       })
     )
     .optional(),
+  // Vault AI retrieval aids (spec 0056): reserved frontmatter keys written
+  // only by the background refine job. Never replace body.
+  aiSearchTerms: z.array(z.string()).optional(),
+  aiSummary: z.string().max(500).optional(),
+  aiRefineHash: z.string().optional(),
   // Prompt & Session extended fields
   ide: z.string().optional(),
   model: z.string().optional(),

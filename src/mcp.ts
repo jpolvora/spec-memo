@@ -10,6 +10,7 @@ import { startRemoteMcpProxyServer } from './mcp-proxy.js';
 import { logErrorReport } from './error-logger.js';
 import { getPackageVersion } from './version.js';
 import { startStatusServer, StatusServerInstance } from './status.js';
+import { assertAiConfigValid, setAiActivityBus } from './ai/index.js';
 
 const READ_TOOLS = new Set<ToolName>(['bootstrap', 'search', 'get', 'check_version']);
 const WRITE_TOOLS = new Set<ToolName>(['upsert', 'append', 'forget', 'gc', 'promote', 'install_skills', 'prompt']);
@@ -234,11 +235,17 @@ export async function startMcpServer(
   const vaultRoot = getVaultRoot(options.vaultRoot);
   const config = ensureVaultStructure(vaultRoot);
 
+  // Spec 0056 AC4: fail closed on unknown ai.provider — never start MCP
+  // with a half-wired agent.
+  assertAiConfigValid(vaultRoot);
+
   if (config.mode === 'remote') {
     return await startRemoteMcpProxyServer(options);
   }
 
   const bus = createActivityBus();
+  // AI refine/rank activity events (ai.refine.*/ai.rank.*) flow here.
+  setAiActivityBus(bus);
   let statusServer: StatusServerInstance | undefined;
 
   if (options.enableStatus === true) {

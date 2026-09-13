@@ -28,6 +28,8 @@ import {
 } from './handoff.js';
 import { HandoffRecord, SessionObjective } from './types.js';
 import { hitCountOf } from './recurrence.js';
+import type { VaultAiAgent } from './ai/types.js';
+import { rankRecordsWithAgent } from './ai/rank.js';
 import {
   inferTaskLens,
   releaseDecisionScore,
@@ -340,9 +342,22 @@ export function formatBootstrapBudgetTable(report: BootstrapBudgetReport): strin
 }
 
 /**
+ * Optional AI rerank inputs for bootstrap (spec 0056, AC5/AC23).
+ * When `agent` is provided it overrides config construction for this call.
+ */
+export interface BootstrapAi {
+  agent?: VaultAiAgent | null;
+  rankTopK?: number;
+  timeoutMs?: number;
+}
+
+/**
  * Compile a token-budgeted session brief for AI agents at session bootstrap.
  */
-export async function compileBootstrapBrief(options: BootstrapOptions = {}): Promise<BootstrapBrief> {
+export async function compileBootstrapBrief(
+  options: BootstrapOptions = {},
+  ai: BootstrapAi = {}
+): Promise<BootstrapBrief> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
   const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
   ensureProjectVault(identity, vaultRoot);
@@ -425,7 +440,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
   // 2. Gather decisions (all for explain report; active/shipped for brief)
   const allDecisionsForReport = allRecords.filter((r) => r.frontmatter.kind === 'decision');
-  const activeDecisions = allDecisionsForReport
+  let activeDecisions = allDecisionsForReport
     .filter(
       (r) =>
         (r.frontmatter.status === 'active' || r.frontmatter.status === 'shipped') &&
@@ -447,6 +462,43 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     .map((entry) => entry.record);
 
   const sessionResume = continuation ? findLatestSessionResume(allRecords) : undefined;
+
+  // Spec 0056 AC23: same post-lexical rank helper on trap/decision candidates
+  // when the query is non-empty and AI is available. Empty query skips rank
+  // (no extra LLM call). Rank only reorders — it cannot expand past budget.
+  if (ai.agent && ai.agent.isAvailable() && (options.query || '').trim().length > 0) {
+    const rankTopK = ai.rankTopK && ai.rankTopK > 0 ? ai.rankTopK : 20;
+    const toCandidate = (r: MemoRecord): { id: string; kind: string; title: string; snippet: string } => ({
+      id: String(r.frontmatter.id),
+      kind: String(r.frontmatter.kind),
+      title: String(r.frontmatter.title || r.frontmatter.id),
+      snippet: String(r.body || '').slice(0, 300)
+    });
+    try {
+      const rankedTraps = await rankRecordsWithAgent({
+        agent: ai.agent,
+        query: options.query,
+        items: activeTraps,
+        toCandidate,
+        rankTopK,
+        timeoutMs: ai.timeoutMs,
+        projectId
+      });
+      activeTraps = rankedTraps.items;
+      const rankedDecisions = await rankRecordsWithAgent({
+        agent: ai.agent,
+        query: options.query,
+        items: activeDecisions,
+        toCandidate,
+        rankTopK,
+        timeoutMs: ai.timeoutMs,
+        projectId
+      });
+      activeDecisions = rankedDecisions.items;
+    } catch {
+      // Fail-open: keep the lexical order.
+    }
+  }
 
   // 3. Resolve active slice spec / plan / state if slug provided
   let activeSlice: BootstrapBrief['activeSlice'] = undefined;

@@ -17,6 +17,7 @@ import { listBackups } from './backup.js';
 import { getLocalConfigOverrideKeys, resolveProjectIdentity } from './identity.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
 import { openIndex } from './indexer.js';
+import { getVaultAiStatus } from './ai/index.js';
 
 export const DEFAULT_PROBE_TIMEOUT_MS = 1500;
 export const DEFAULT_REMOTE_PROBE_TIMEOUT_MS = 3000;
@@ -357,6 +358,8 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
       remote: remoteStatus
     },
     operational,
+    // Spec 0056 AC29: same read-only `ai` object as doctor --json.
+    ai: getVaultAiStatus(root),
     issues
   };
 }
@@ -445,6 +448,12 @@ export function formatStatusDashboard(result: StatusResult, options: StatusOptio
   lines.push(
     `  Sync Conflicts:     strategy=${sync.conflictStrategy}, sidecars=${sync.conflictSidecars}, hybridDirty=${sync.hybridDirty ? 'yes' : 'no'}${dirtyList.length > 0 ? ` [${dirtyList.join(', ')}]` : ''}${sync.autoSyncIntervalMinutes ? `, autoSync=${sync.autoSyncIntervalMinutes}m` : ''}`
   );
+  if (result.ai) {
+    const aiState = result.ai.enabled
+      ? `Enabled (${result.ai.provider}, ${result.ai.available ? 'available' : 'unavailable (no key)'}, queue=${result.ai.queueDepth})`
+      : 'Disabled (vault works offline; Cursor not required)';
+    lines.push(`  AI Assistance:      ${aiState}`);
+  }
 
   // Issues & Warnings
   if (result.issues.length > 0) {

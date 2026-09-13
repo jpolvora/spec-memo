@@ -11,6 +11,10 @@ import { assertNoSecrets, assertNotInProductRoot } from './safety.js';
 import { recordTombstone } from './sync.js';
 import { applyTrapClassification, occurrenceOf, lastSeenOf } from './recurrence.js';
 import { computeExpiresAt, validateTtlInput, annotateExpiredFrontmatter } from './expiration.js';
+import { dropPendingRefineForRecord, enqueueRefineJob } from './ai/refine-queue.js';
+import type { EnqueueRefineArgs } from './ai/refine-queue.js';
+import { resolveVaultAiAgent } from './ai/index.js';
+import type { VaultAiAgent } from './ai/types.js';
 
 export interface UpsertOptions {
   cwd?: string;
@@ -22,6 +26,12 @@ export interface UpsertOptions {
   body: string;
   source?: RecordSource;
   allowDuplicate?: boolean;
+  /**
+   * Explicit agent injection (spec 0056, AC5). When provided it overrides
+   * config construction for this call; `null` forces the Noop path.
+   * When omitted, the agent is constructed from vault `config.json` `ai`.
+   */
+  aiAgent?: VaultAiAgent | null;
 }
 
 export interface UpsertResult {
@@ -229,7 +239,8 @@ export function findMatchingNonTrapRecord(
  */
 export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult> {
   const vaultRoot = options.vaultRoot || getVaultRoot();
-  return withVaultLock(vaultRoot, async () => {
+  let refineEnqueue: Omit<EnqueueRefineArgs, 'agent' | 'timeoutMs'> | undefined;
+  const result = await withVaultLock(vaultRoot, async () => {
     const identity = resolveProjectIdentity(options.cwd || process.cwd(), { vaultRoot });
     const projectId = options.projectId || identity.projectId;
 
@@ -498,6 +509,24 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     path.join('projects', projectId)
   ]);
 
+  // Captured for the post-lock background refine enqueue below (AC13).
+  refineEnqueue = {
+    vaultRoot,
+    projectId,
+    filePath,
+    id: recordId,
+    kind: options.kind,
+    title:
+      typeof validation.data.title === 'string' && validation.data.title.trim().length > 0
+        ? validation.data.title
+        : recordId,
+    body: options.body,
+    tags: Array.isArray(validation.data.tags) ? validation.data.tags.map(String) : [],
+    pathPatterns: Array.isArray(validation.data.pathPatterns)
+      ? validation.data.pathPatterns.map(String)
+      : []
+  };
+
   return {
     id: recordId,
     kind: options.kind,
@@ -506,6 +535,42 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
     superseded
   };
   });
+
+  // Background refine-on-write (spec 0056, AC13): the MCP/CLI response already
+  // resolved above; the agent job never blocks it and never throws here.
+  try {
+    if (refineEnqueue) {
+      const agent = resolveUpsertAiAgent(vaultRoot, options.aiAgent);
+      if (agent) {
+        const { timeoutMs } = resolveUpsertAiTimeout(vaultRoot);
+        enqueueRefineJob({ ...refineEnqueue, agent, timeoutMs });
+      }
+    }
+  } catch {
+    // Fail-open: refine must never break upsert.
+  }
+
+  return result;
+}
+
+function resolveUpsertAiAgent(
+  vaultRoot: string,
+  explicit: VaultAiAgent | null | undefined
+): VaultAiAgent | null {
+  try {
+    if (explicit !== undefined) return explicit;
+    return resolveVaultAiAgent(vaultRoot).agent;
+  } catch {
+    return null;
+  }
+}
+
+function resolveUpsertAiTimeout(vaultRoot: string): { timeoutMs: number } {
+  try {
+    return { timeoutMs: resolveVaultAiAgent(vaultRoot).config.timeoutMs };
+  } catch {
+    return { timeoutMs: 15000 };
+  }
 }
 
 /**
@@ -798,6 +863,11 @@ export async function forgetRecord(options: ForgetOptions): Promise<ForgetResult
 
   const id = record.frontmatter.id;
   const kind = record.frontmatter.kind;
+
+  // Spec 0056 AC19: forgetting a record drops its pending refine job so a
+  // late background write can never resurrect retrieval aids for it.
+  // Purging also deletes the file, which carries the frontmatter sidecar.
+  dropPendingRefineForRecord(String(id));
 
   if (options.purge) {
     // Permanent physical delete

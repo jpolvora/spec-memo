@@ -8,6 +8,7 @@ import { openIndex, indexRecord, removeRecord, rebuildIndex } from './indexer.js
 import { rebuildCompiledViews } from './compiler.js';
 import { recordTombstone } from './sync.js';
 import { recordTelemetry } from './telemetry.js';
+import { dropPendingRefineForRecord } from './ai/refine-queue.js';
 import {
   isRecordExpiredAt,
   defaultTtlDaysForKind,
@@ -113,6 +114,9 @@ function sweepExpiredRecords(
           else if (fm.kind === 'review') purgedReviewCount++;
           purgedFiles.push(filePath);
           if (!options.dryRun) {
+            // Spec 0056 AC19: GC purges never call the agent; drop any
+            // pending refine job for the removed record.
+            dropPendingRefineForRecord(String(fm.id));
             recordTombstone(
               vaultRoot,
               projectId,

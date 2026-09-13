@@ -491,6 +491,29 @@ HTTP routes:
 | `GET` | `/api/wiki/section?project=&id=` | One `h2` section by slug |
 | `POST` | `/api/wiki/regenerate` | Collect, render, persist `WIKI.md` |
 
+### Vault AI assistance (optional, off by default)
+
+The vault can use a pluggable AI agent as a backend for `upsert` / `search` / `bootstrap` without adding a 12th MCP tool (the MCP tool list stays **11**). Markdown remains the source of truth and SQLite FTS remains the disposable candidate source. Cursor is one runtime adapter — **Cursor is not required to run the vault**; omit the `ai` section (or keep `enabled: false`) to run fully offline.
+
+```json
+{
+  "ai": {
+    "enabled": false,
+    "provider": "cursor-sdk",
+    "model": "composer-2.5",
+    "apiKeyEnv": "CURSOR_API_KEY",
+    "timeoutMs": 15000,
+    "rankTopK": 20
+  }
+}
+```
+
+- `enabled` default `false`; `model` default `composer-2.5`; key via env `CURSOR_API_KEY` (named by `apiKeyEnv`). Never paste the key into `config.json` — it is read from `process.env` and never written to markdown, telemetry, activity payloads, doctor JSON, or `config.json`.
+- Write path: after a successful `upsert` of a `trap`, `decision`, `spec`, or `plan`, a background refine job (single-flight per record id, default concurrency 1) asks the agent for retrieval aids. The upsert response never waits. Refine never rewrites `body` — it stores `aiSearchTerms` / `aiSummary` (max 500 chars) frontmatter plus an `aiRefineHash` idempotency hash, then rebuilds FTS for that record under the vault lock.
+- Read path: `search` and `bootstrap` still rank FTS candidates first; when AI is available the agent may reorder the top `rankTopK` (default 20). Timeouts, bad JSON, or a missing key keep the lexical order (fail-open). `get` by id never calls the agent. The existing local `embeddings` TF-cosine filter is independent and unchanged.
+- Status: `memo doctor --json` and `GET /api/status` include read-only `ai: { enabled, provider, available, queueDepth, lastError }` (secrets stripped). Activity emits `ai.refine.ok|fail` / `ai.rank.ok|fail` with record id and duration only — no prompt bodies. `search --explain` reports `aiRank: applied|skipped`.
+- The adapter calls `@cursor/sdk` `Agent.prompt` one-shot on a cloud no-repo runtime (`cloud: { repos: [] }`) — no vault or product `cwd` is ever handed filesystem tools. Unknown `ai.provider` values fail closed at startup (config parse error; MCP/SSE refuse to start half-wired).
+
 ### How to diagnose
 
 ```bash

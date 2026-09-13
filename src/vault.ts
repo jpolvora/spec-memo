@@ -9,6 +9,7 @@ import { getPackageVersion } from './version.js';
 import { logErrorReport } from './error-logger.js';
 import { writeVaultGitState } from './vault-git-state.js';
 import { safeVaultGitError } from './vault-git-redact.js';
+import { defaultAiConfig, parseAiConfig } from './ai/config.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -30,6 +31,17 @@ export const DEFAULT_VAULT_CONFIG: VaultConfig = {
   bootstrap: {
     maxBytes: 8192,
     maxTraps: 10
+  },
+  // Optional vault AI assistance (spec 0056). Default off: the vault works
+  // fully offline. Operators opt in with enabled:true + CURSOR_API_KEY env.
+  ai: {
+    enabled: false,
+    provider: 'cursor-sdk',
+    model: 'composer-2.5',
+    apiKeyEnv: 'CURSOR_API_KEY',
+    timeoutMs: 15000,
+    rankTopK: 20,
+    maxConcurrent: 1
   },
   ports: {
     sse: 3123,
@@ -405,6 +417,21 @@ function mergeParsedVaultConfig(parsed: Record<string, any>): VaultConfig {
   const parsedStatus = rawPorts.status ?? rawPorts.ui;
   const parsedCanvas = rawPorts.canvas;
 
+  // Dedicated `ai` section (spec 0056, AC27/AC32): invalid values fall back
+  // to defaults here; readVaultConfig reports the parse error separately
+  // so unknown providers still fail closed at startup (AC4).
+  let parsedAi: VaultConfig['ai'];
+  if (parsed.ai !== undefined) {
+    try {
+      parsedAi = parseAiConfig(parsed.ai) || undefined;
+    } catch {
+      parsedAi = undefined;
+    }
+    if (parsedAi === undefined) {
+      parsedAi = { ...defaultAiConfig() };
+    }
+  }
+
   return {
     ...DEFAULT_VAULT_CONFIG,
     ...parsed,
@@ -421,6 +448,7 @@ function mergeParsedVaultConfig(parsed: Record<string, any>): VaultConfig {
       parsed.wiki && typeof parsed.wiki === 'object' && !Array.isArray(parsed.wiki)
         ? { ...parsed.wiki }
         : DEFAULT_VAULT_CONFIG.wiki,
+    ai: parsedAi ? { ...parsedAi } : { ...defaultAiConfig() },
     ports: {
       sse: parsedSse ?? DEFAULT_VAULT_CONFIG.ports?.sse ?? 3123,
       status: parsedStatus ?? DEFAULT_VAULT_CONFIG.ports?.status ?? 3124,
@@ -453,6 +481,14 @@ function validateParsedVaultConfig(parsed: Record<string, any>): string | null {
       return 'Invalid config.json: vaultRoot must be a non-empty string path';
     }
   }
+  if (parsed.ai !== undefined) {
+    try {
+      parseAiConfig(parsed.ai);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return msg;
+    }
+  }
   return null;
 }
 
@@ -468,7 +504,8 @@ export function readVaultConfig(vaultRoot: string = getVaultRoot()): {
   const configPath = path.join(root, 'config.json');
   const issues: string[] = [];
   let configValid = true;
-  let config: VaultConfig = { ...DEFAULT_VAULT_CONFIG };
+  // Clone: DEFAULT_VAULT_CONFIG.ai is a shared template, never hand it out.
+  let config: VaultConfig = { ...DEFAULT_VAULT_CONFIG, ai: { ...defaultAiConfig() } };
 
   if (fs.existsSync(configPath)) {
     try {
@@ -505,7 +542,7 @@ export function ensureVaultStructure(vaultRoot: string = getVaultRoot()): VaultC
     fs.mkdirSync(projectsDir, { recursive: true });
   }
 
-  let config: VaultConfig = { ...DEFAULT_VAULT_CONFIG };
+  let config: VaultConfig = { ...DEFAULT_VAULT_CONFIG, ai: { ...defaultAiConfig() } };
 
   if (fs.existsSync(configPath)) {
     try {

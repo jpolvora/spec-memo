@@ -24,3 +24,4 @@ export * from './vault-git-state.js';
 export * from './server.js';
 export * from './error-logger.js';
 export * from './telemetry.js';
+export * from './ai/index.js';

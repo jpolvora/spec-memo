@@ -1,6 +1,6 @@
 {
   "name": "spec-memo",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "description": "Local working memory for coding agents outside the product repository",
   "type": "module",
   "main": "dist/index.js",
@@ -51,6 +51,9 @@
     "better-sqlite3": "^13.0.3",
     "gray-matter": "^4.0.3",
     "zod": "^3.24.2"
+  },
+  "optionalDependencies": {
+    "@cursor/sdk": "^1.0.31"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
