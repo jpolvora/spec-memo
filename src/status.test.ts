@@ -14,7 +14,7 @@ import { executeTool } from "./tools.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { exportVault } from "./backup.js";
 import { upsertRecord } from "./store.js";
-import { readErrorLogs, logErrorReport } from "./error-logger.js";
+import { readErrorLogs, logErrorReport, clearErrorLogs } from "./error-logger.js";
 import { readVaultConfig } from "./vault.js";
 
 function countTrapFiles(vaultRoot: string, projectId: string): number {
@@ -1908,8 +1908,52 @@ test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t
     assert.strictEqual(scopedBody.errorLogCount, body.errorLogCount, "errorLogCount stays global");
   });
 
-  await t.test("new routes require auth when token configured", async () => {
-    const authBus = createActivityBus();
+  await t.test("filtered error-log list ids resolve to the same entry in detail", async () => {
+    clearErrorLogs(vaultRoot);
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("older warn entry"),
+      level: "WARN"
+    }, { vaultRoot });
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("newer error entry"),
+      level: "ERROR"
+    }, { vaultRoot });
+    const filtered = await fetch(`${baseUrl}/api/error-logs?level=WARN`);
+    assert.strictEqual(filtered.status, 200);
+    const list = await filtered.json() as { items: Array<{ id: string; level: string; error: string }>; total: number };
+    assert.strictEqual(list.total, 1);
+    assert.strictEqual(list.items.length, 1);
+    assert.strictEqual(list.items[0].level, "WARN");
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(list.items[0].id)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { ok: boolean; entry: { id: string; level: string; error: string } };
+    assert.strictEqual(detail.entry.id, list.items[0].id);
+    assert.strictEqual(detail.entry.level, "WARN");
+    assert.ok(detail.entry.error.includes("older warn entry"));
+  });
+
+  await t.test("PUT /api/config/ai without provider and enabled yields 400 without writing", async () => {
+    const diskBefore = fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8");
+    const empty = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    assert.strictEqual(empty.status, 400);
+    const modelOnly = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "composer-2.5" })
+    });
+    assert.strictEqual(modelOnly.status, 400);
+    assert.strictEqual(fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8"), diskBefore);
+  });
+
+  await t.test("new routes require auth when token configured", async () => {    const authBus = createActivityBus();
     const authServer = await startStatusServer({
       vaultRoot,
       port: 0,

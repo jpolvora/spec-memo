@@ -327,6 +327,13 @@ export function parseAiConfigPutBody(raw: unknown): { enabled: boolean; provider
     throw err;
   }
   const providerRaw = rec.provider;
+  // A body with neither provider nor enabled carries no enable/disable
+  // intent: fail closed instead of silently disabling the assistant.
+  if (providerRaw === undefined && rec.enabled === undefined) {
+    const err = new Error("Invalid AI config body (provider required when enabled is not specified)");
+    (err as { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
   if (providerRaw !== undefined && providerRaw !== "noop" && providerRaw !== "cursor-sdk") {
     const err = new Error("Invalid AI config provider (only noop and cursor-sdk are implemented)");
     (err as { statusCode?: number }).statusCode = 400;

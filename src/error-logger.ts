@@ -507,7 +507,10 @@ export function listErrorLogEntries(
   }
   // Newest-first: file order is oldest-first, so reverse.
   parsed.reverse();
-  const filtered = parsed.filter((e) => {
+  // Global newest-first indices assigned BEFORE filtering so that list ids
+  // resolve identically in getErrorLogEntry (filtered clicks open the right row).
+  const indexed = parsed.map((e, globalIdx) => ({ e, globalIdx }));
+  const filtered = indexed.filter(({ e }) => {
     if (query.level && e.level !== query.level) return false;
     if (query.subsystem && e.subsystem !== query.subsystem) return false;
     return true;
@@ -516,9 +519,9 @@ export function listErrorLogEntries(
   const limit = query.limit ?? 50;
   const offset = query.offset ?? 0;
   const window = filtered.slice(offset, offset + limit);
-  const items: ErrorLogListItem[] = window.map((e, idx) => {
+  const items: ErrorLogListItem[] = window.map(({ e, globalIdx }) => {
     const item: ErrorLogListItem = {
-      id: `elog-${offset + idx}`,
+      id: `elog-${globalIdx}`,
       timestamp: e.timestamp,
       level: e.level,
       subsystem: e.subsystem,
