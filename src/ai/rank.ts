@@ -1,6 +1,6 @@
 import type { SearchHit, AiRankDisposition } from '../types.js';
 import type { VaultAiAgent } from './types.js';
-import { emitAiRankActivity, recordAiLastError } from './refine-queue.js';
+import { emitAiRankActivity, recordAiLastError, withAiTimeout } from './refine-queue.js';
 
 export interface RankRecordsArgs<T> {
   agent: VaultAiAgent | null | undefined;
@@ -36,14 +36,13 @@ export async function rankRecordsWithAgent<T>(args: RankRecordsArgs<T>): Promise
   const timeoutMs = args.timeoutMs && args.timeoutMs > 0 ? args.timeoutMs : 15000;
 
   try {
-    const result = await Promise.race([
+    const result = await withAiTimeout(
       Promise.resolve(
         agent.rankCandidates({ query: q, candidates: head.map(toCandidate) })
       ),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('ai rank timed out')), timeoutMs + 1000);
-      })
-    ]);
+      timeoutMs + 1000,
+      'ai rank'
+    );
 
     const orderedIds = Array.isArray(result?.orderedIds) ? result.orderedIds : [];
     if (orderedIds.length === 0) {

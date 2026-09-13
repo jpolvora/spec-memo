@@ -456,12 +456,130 @@ describe('Vault AI assistance (spec 0056)', () => {
     const out = await agent.refineForSearch({
       id: 'sec',
       kind: 'trap',
-      title: 't',
+      title: 'Bearer abcdefghijklmnopqrstuvwxyz123456 in title',
       body: 'note with Bearer abcdefghijklmnopqrstuvwxyz123456 trailing',
-      tags: [],
-      pathPatterns: []
+      tags: ['Bearer abcdefghijklmnopqrstuvwxyz123456'],
+      pathPatterns: ['src/sec.ts']
     });
     assert.equal(out.ok, true);
     assert.ok(!seenPrompt.includes('Bearer abcdefghijklmnopqrstuvwxyz123456'));
+    assert.ok(seenPrompt.includes('src/sec.ts'));
+  });
+
+  it('Review: forged caller aids are stripped; aids carry over only on unchanged body', async () => {
+    // Forged aids with no agent running must not persist.
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-forged',
+      frontmatter: {
+        id: 'ai-forged',
+        title: 'Forged aids',
+        aiSearchTerms: ['forged-term'],
+        aiSummary: 'Forged summary.',
+        aiRefineHash: 'deadbeef'
+      } as Record<string, unknown> as never,
+      body: '## DO NOT\nForge.\n\n## INSTEAD DO\nEarn.',
+      aiAgent: null
+    });
+    const forged = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-forged' });
+    assert.ok(forged);
+    assert.equal(forged.frontmatter.aiSearchTerms, undefined);
+    assert.equal(forged.frontmatter.aiSummary, undefined);
+    assert.equal(forged.frontmatter.aiRefineHash, undefined);
+
+    // Genuine aids from the job carry over on a metadata-only upsert…
+    const fake = new FakeVaultAiAgent();
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-carry',
+      frontmatter: { id: 'ai-carry', title: 'Carry aids' },
+      body: '## DO NOT\nLose.\n\n## INSTEAD DO\nKeep.',
+      aiAgent: fake
+    });
+    const refined = await waitForAids(tempVault, tempProject, 'ai-carry');
+    assert.ok(refined);
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-carry',
+      frontmatter: { id: 'ai-carry', title: 'Carry aids (retitled)' },
+      body: '## DO NOT\nLose.\n\n## INSTEAD DO\nKeep.',
+      aiAgent: null
+    });
+    const carried = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-carry' });
+    assert.ok(carried);
+    assert.deepEqual(carried.frontmatter.aiSearchTerms, ['retrieval-aid-term']);
+
+    // …but a body edit clears them for regeneration.
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-carry',
+      frontmatter: { id: 'ai-carry', title: 'Carry aids (retitled)' },
+      body: '## DO NOT\nLose ever.\n\n## INSTEAD DO\nKeep always.',
+      aiAgent: null
+    });
+    const cleared = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-carry' });
+    assert.ok(cleared);
+    assert.equal(cleared.frontmatter.aiSearchTerms, undefined);
+    assert.equal(cleared.frontmatter.aiRefineHash, undefined);
+  });
+
+  it('Review: model-echoed secrets are never persisted as retrieval aids', async () => {
+    const leaky = new FakeVaultAiAgent();
+    leaky.refineResult = {
+      ok: true,
+      searchTerms: ['ghp_abcdefghijklmnopqrstuvwxyz1234567890ABCD'],
+      summary: 'leaked sk_test_abcdefghijklmnopqrstuvwxyz1234 key'
+    };
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-leaky',
+      frontmatter: { id: 'ai-leaky', title: 'Leaky model' },
+      body: '## DO NOT\nLeak.\n\n## INSTEAD DO\nRedact.',
+      aiAgent: leaky
+    });
+    const start = Date.now();
+    let rec: MemoRecord | null = null;
+    while (Date.now() - start < 5000) {
+      rec = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-leaky' });
+      if (getAiLastError() !== null || rec?.frontmatter.aiSearchTerms) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(rec);
+    assert.equal(rec.frontmatter.aiSearchTerms, undefined);
+    assert.ok(getAiLastError() !== null);
+  });
+
+  it('Review: maxConcurrent serializes bursts and the queue still drains', async () => {
+    const fake = new FakeVaultAiAgent();
+    fake.refineDelayMs = 120;
+    const slugs = ['ai-burst-one', 'ai-burst-two', 'ai-burst-three'];
+    for (const slug of slugs) {
+      const res = await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug,
+        frontmatter: { id: slug, title: `Burst ${slug}`, pathPatterns: [`src/${slug}.ts`] },
+        body: `## DO NOT\nBurst ${slug}.\n\n## INSTEAD DO\nSerialize ${slug}.`,
+        aiAgent: fake
+      });
+      // Guard against trap-dedup collapsing the burst into a recurrence bump.
+      assert.equal(res.recurrence, undefined);
+    }
+    for (const slug of slugs) {
+      const refined = await waitForAids(tempVault, tempProject, slug);
+      assert.ok(refined, `expected ${slug} to drain through the refine queue`);
+    }
+    assert.equal(getAiQueueDepth(), 0);
   });
 });

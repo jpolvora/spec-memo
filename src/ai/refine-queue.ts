@@ -4,9 +4,9 @@ import { createHash } from 'node:crypto';
 import { commitVaultChange, withVaultLock } from '../vault.js';
 import { indexRecord, openIndex } from '../indexer.js';
 import { parseRecord, serializeRecord } from '../schema.js';
-import { sanitizeToolOutput } from '../safety.js';
+import { sanitizeToolOutput, scanPayloadForSecrets } from '../safety.js';
 import type { ActivityBus } from '../activity.js';
-import type { RecordKind } from '../types.js';
+import type { RecordKind, RecordFrontmatter } from '../types.js';
 import type { VaultAiAgent, VaultAiRefineInput } from './types.js';
 
 /**
@@ -40,6 +40,8 @@ export interface EnqueueRefineArgs {
   pathPatterns: string[];
   agent: VaultAiAgent;
   timeoutMs?: number;
+  /** Global background parallelism cap (`config.ai.maxConcurrent`, default 1). */
+  maxConcurrent?: number;
 }
 
 // --- module-global queue state (single-flight per record id, AC13) ---
@@ -48,6 +50,45 @@ const pendingJobs = new Map<string, { promise: Promise<void>; generation: number
 const droppedGenerations = new Map<string, number>();
 let aiLastError: string | null = null;
 let aiActivityBus: ActivityBus | null = null;
+let activeRefineCount = 0;
+interface WaitingRefine {
+  args: EnqueueRefineArgs;
+  generation: number;
+  limit: number;
+  begin: () => void;
+}
+const waitingRefines: WaitingRefine[] = [];
+
+function pumpRefineQueue(): void {
+  while (waitingRefines.length > 0) {
+    const head = waitingRefines[0];
+    if (!head || activeRefineCount >= head.limit) break;
+    waitingRefines.shift();
+    activeRefineCount += 1;
+    head.begin();
+  }
+}
+
+/**
+ * Clearable timeout race shared by refine and rank. The timer is always
+ * cleared on settle so background AI calls never hold the event loop open
+ * (and never delay CLI exit) after success.
+ */
+export function withAiTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
 
 export function setAiActivityBus(bus: ActivityBus | null): void {
   aiActivityBus = bus;
@@ -80,6 +121,8 @@ export function recordAiLastError(err: unknown): void {
 export function clearAiStateForTests(): void {
   pendingJobs.clear();
   droppedGenerations.clear();
+  waitingRefines.length = 0;
+  activeRefineCount = 0;
   aiLastError = null;
   aiActivityBus = null;
 }
@@ -137,6 +180,16 @@ function isDropped(id: string, generation: number): boolean {
   return droppedGenerations.get(id) === generation;
 }
 
+function finishGeneration(id: string, generation: number): void {
+  const pending = pendingJobs.get(id);
+  if (pending && pending.generation === generation) {
+    pendingJobs.delete(id);
+  }
+  if (droppedGenerations.get(id) === generation) {
+    droppedGenerations.delete(id);
+  }
+}
+
 function sanitizeTerms(terms: unknown): string[] {
   if (!Array.isArray(terms)) return [];
   return terms
@@ -188,12 +241,11 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
       pathPatterns: currentPatterns
     };
     const timeoutMs = args.timeoutMs && args.timeoutMs > 0 ? args.timeoutMs : 15000;
-    const result = await Promise.race([
+    const result = await withAiTimeout(
       Promise.resolve(agent.refineForSearch(input)),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('ai refine timed out')), timeoutMs + 1000);
-      })
-    ]);
+      timeoutMs + 1000,
+      'ai refine'
+    );
 
     if (isDropped(id, generation)) return;
     if (!result || result.ok !== true) {
@@ -209,6 +261,16 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
         : undefined;
     if (searchTerms.length === 0 && !summary) {
       emitAiActivity('ai.refine.ok', true, Date.now() - started, id, projectId);
+      return;
+    }
+    // Defense in depth: a model echo of a redacted credential must never be
+    // persisted as retrieval aids. Fail open — no sidecar write.
+    const secretScan = scanPayloadForSecrets({ searchTerms, summary });
+    if (secretScan.hasSecret) {
+      recordAiLastError(
+        `ai refine output contained a redacted secret (${secretScan.matches.join(', ')})`
+      );
+      emitAiActivity('ai.refine.fail', false, Date.now() - started, id, projectId);
       return;
     }
 
@@ -227,9 +289,11 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
       }
       // Idempotent skip: aids already match this body hash (AC16).
       if (diskFm['aiRefineHash'] === inputHash) return;
-      // Body moved while the agent worked: re-enqueue for the fresh text
-      // instead of attaching stale aids.
+      // Body moved while the agent worked: finish this generation first so
+      // the re-enqueue is not swallowed by our own single-flight entry,
+      // then refine the fresh text instead of attaching stale aids.
       if (hashRecordBody(diskBody) !== inputHash) {
+        finishGeneration(id, generation);
         enqueueRefineJob({ ...args, body: diskBody });
         return;
       }
@@ -239,7 +303,7 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
       diskFm['aiRefineHash'] = inputHash;
       const record = parseRecord(
         serializeRecord({
-          frontmatter: diskFm as unknown as import('../types.js').RecordFrontmatter,
+          frontmatter: diskFm as unknown as RecordFrontmatter,
           body: diskBody
         }),
         filePath
@@ -265,18 +329,17 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
     recordAiLastError(err);
     emitAiActivity('ai.refine.fail', false, Date.now() - started, id, projectId);
   } finally {
-    const pending = pendingJobs.get(id);
-    if (pending && pending.generation === generation) {
-      pendingJobs.delete(id);
-    }
-    if (droppedGenerations.get(id) === generation) {
-      droppedGenerations.delete(id);
-    }
+    finishGeneration(id, generation);
+    activeRefineCount = Math.max(0, activeRefineCount - 1);
+    pumpRefineQueue();
   }
 }
 
 /**
  * Enqueue at most one background refine job per record id (AC13).
+ * Global parallelism is capped by `maxConcurrent` (default 1) so bursts of
+ * upserts cannot stampede the agent or the vault lock. Overflow waits in a
+ * FIFO and still counts toward queue depth.
  * The caller never awaits the agent. Floating promises are forbidden:
  * every path is handled via `void job.catch(...)` (AC14).
  * Returns true when a job is (or already is) queued.
@@ -286,12 +349,56 @@ export function enqueueRefineJob(args: EnqueueRefineArgs): boolean {
   if (!args.agent || !args.agent.isAvailable()) return false;
   if (pendingJobs.has(args.id)) return true;
 
+  const limit = args.maxConcurrent && args.maxConcurrent > 0 ? Math.floor(args.maxConcurrent) : 1;
   const generation = (droppedGenerations.get(args.id) ?? 0) + 1;
   droppedGenerations.delete(args.id);
-  const job = runRefineJob(args, generation);
-  pendingJobs.set(args.id, { promise: job, generation });
-  void job.catch((err: unknown) => {
-    recordAiLastError(err);
-  });
+
+  let job: Promise<void>;
+  const begin = (): void => {
+    // Reserve the single-flight slot BEFORE starting the job: a fast path
+    // (missing file, unavailable agent, idempotent skip) settles entirely in
+    // runRefineJob's synchronous prefix, and its finally must observe — and
+    // clean up — our entry exactly once. Setting the slot after the call
+    // would orphan a stale entry that never clears.
+    const slot: { promise: Promise<void>; generation: number } = {
+      promise: Promise.resolve(),
+      generation
+    };
+    pendingJobs.set(args.id, slot);
+    const real = runRefineJob(args, generation);
+    slot.promise = real;
+    job = real;
+    void real.catch((err: unknown) => {
+      recordAiLastError(err);
+    });
+  };
+
+  if (activeRefineCount >= limit) {
+    // Deferred start: reserve the single-flight slot now so duplicates
+    // coalesce while waiting, and pump the FIFO when a slot frees.
+    job = new Promise<void>((resolve, reject) => {
+      waitingRefines.push({
+        args,
+        generation,
+        limit,
+        begin: () => {
+          try {
+            begin();
+            pendingJobs.get(args.id)?.promise.then(resolve, reject);
+          } catch (err) {
+            reject(err);
+          }
+        }
+      });
+    });
+    pendingJobs.set(args.id, { promise: job, generation });
+    void job.catch((err: unknown) => {
+      recordAiLastError(err);
+    });
+    return true;
+  }
+
+  activeRefineCount += 1;
+  begin();
   return true;
 }

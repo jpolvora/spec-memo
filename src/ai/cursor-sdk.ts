@@ -174,11 +174,13 @@ export class CursorSdkVaultAiAgent implements VaultAiAgent {
     if (!apiKey) return { ok: false, error: 'missing api key' };
     let prompt: string;
     try {
+      // AC31: every free-text field is redacted, not just the body — a
+      // credential pasted in a title or tag must never leave the vault.
       prompt =
         `${REFINE_INSTRUCTION}\n` +
-        `RECORD id=${input.id} kind=${input.kind} title=${input.title}\n` +
-        `tags: ${input.tags.join(', ')}\n` +
-        `pathPatterns: ${input.pathPatterns.join(', ')}\n` +
+        `RECORD id=${redactPromptText(input.id)} kind=${redactPromptText(input.kind)} title=${redactPromptText(input.title)}\n` +
+        `tags: ${redactPromptText(input.tags.join(', '))}\n` +
+        `pathPatterns: ${redactPromptText(input.pathPatterns.join(', '))}\n` +
         `BODY:\n${redactPromptText(input.body)}`;
     } catch (err) {
       return { ok: false, error: shortError(err) };

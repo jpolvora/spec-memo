@@ -22,6 +22,7 @@ export {
   setAiActivityBus,
   getAiActivityBus,
   emitAiRankActivity,
+  withAiTimeout,
   isAiRefineEligibleKind,
   hashRecordBody,
   AI_REFINE_ELIGIBLE_KINDS
