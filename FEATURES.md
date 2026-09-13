@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.14.3** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.29.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -41,6 +41,7 @@ Package version: **0.14.3** (`develop`). Status marks: `[ ]` planned · `[~]` in
 - [x] **Retrieval hit count.** Orthogonal `hits` / `lastHit` frontmatter (not `occurrences`). Auto-increment on bootstrap brief inclusion and successful `get` of trap/decision/spec/plan; bare `search` does not count — pass `hitIds` (+ optional `sessionId` de-dupe). Status Memory tab list + details drawer show Hits; canvas detail meta + `/api/records` expose counts. No 12th MCP tool.
 - [x] **Memory feedback & salience.** `helpfulCount` / `staleCount` / typed `links` frontmatter; `prompt action:feedback` and `memo feedback`; search salience dampening + `flaggedStale`; bootstrap `⚠️ [POSSIBLY STALE]` badge; doctor semantic contradiction + obsolete scans; status Memory drawer Mark Helpful / Flag Stale buttons and link graph; zero new MCP tools.
 - [x] **Search & bootstrap explainability.** Optional `explain` on `search` and `bootstrap` MCP tools / CLI (`--explain`): per-hit scoring breakdown (FTS BM25, path affinity, severity, recurrence, hits, feedback) and bootstrap `budgetReport` with candidate byte weights and truncation status; status Memory tab search drawer with Explain Scoring toggle and visual score bars; zero overhead when omitted.
+- [x] **Retrieval lens & memo resume.** Closed-token search intent boost (`decision`/`trap`/`log`) and bootstrap task lens; `budgetReport.omittedIds` / `taskLens` on `--explain`; CLI extra `memo resume` plus MCP `bootstrap.continuation` (alias `resume`) for dump-free default with opt-in session + 3-trap cap. Still 11 MCP tools. No embeddings.
 - [x] **Disposable DB.** Delete `memo.sqlite` and rebuild from the vault. The DB is never the source of truth.
 - [x] **Default search filter.** Exclude `scratch`, `state`, `log`, `review` unless the caller sets `kinds`.
 
