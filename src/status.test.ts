@@ -1936,8 +1936,28 @@ test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t
     assert.ok(detail.entry.error.includes("older warn entry"));
   });
 
-  await t.test("PUT /api/config/ai without provider and enabled yields 400 without writing", async () => {
-    const diskBefore = fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8");
+  await t.test("error-log detail truncates large context like stack", async () => {
+    clearErrorLogs(vaultRoot);
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("big context entry"),
+      level: "ERROR",
+      context: { blob: `x`.repeat(10000) }
+    }, { vaultRoot });
+    const listRes = await fetch(`${baseUrl}/api/error-logs`);
+    assert.strictEqual(listRes.status, 200);
+    const list = await listRes.json() as { items: Array<{ id: string }>; total: number };
+    assert.strictEqual(list.total, 1);
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(list.items[0].id)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { ok: boolean; entry: { context?: unknown; stack?: string } };
+    const serialized = JSON.stringify(detail.entry.context);
+    assert.ok(serialized.length <= 4200, `context must be capped (got ${serialized.length})`);
+    assert.ok(serialized.includes("[truncated]"));
+  });
+
+  await t.test("PUT /api/config/ai without provider and enabled yields 400 without writing", async () => {    const diskBefore = fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8");
     const empty = await fetch(`${baseUrl}/api/config/ai`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

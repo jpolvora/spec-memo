@@ -580,6 +580,13 @@ export function getErrorLogEntry(
         ? entry.stack.slice(0, ERROR_LOG_DETAIL_STACK_MAX)
         : entry.stack;
   }
-  if (entry.context !== undefined) detail.context = entry.context;
+  if (entry.context !== undefined) {
+    // AC15 promises truncated stack AND context: cap serialized context like stack.
+    const raw = typeof entry.context === 'string' ? entry.context : JSON.stringify(entry.context);
+    detail.context =
+      raw.length > ERROR_LOG_DETAIL_STACK_MAX
+        ? `${raw.slice(0, ERROR_LOG_DETAIL_STACK_MAX)}…[truncated]`
+        : entry.context;
+  }
   return detail;
 }
