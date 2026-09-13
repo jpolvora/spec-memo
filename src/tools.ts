@@ -95,20 +95,39 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
         explain: {
           type: 'boolean',
           description: 'When true, include budget allocation diagnostics in the response'
+        },
+        continuation: {
+          type: 'boolean',
+          description:
+            'When true, include latest session summary, eligible handoff, and at most 3 durable traps (default false)'
+        },
+        resume: {
+          type: 'boolean',
+          description: 'Alias for continuation; continuation wins when both are set'
         }
       }
     },
-    zodSchema: z.object({
-      cwd: z.string().optional(),
-      query: z.string().optional(),
-      slug: z.string().optional(),
-      path: z.string().optional(),
-      maxBytes: z.number().int().positive().optional(),
-      vaultRoot: z.string().optional(),
-      projectId: z.string().optional(),
-      sessionId: z.string().optional(),
-      explain: z.boolean().optional()
-    })
+    zodSchema: z
+      .object({
+        cwd: z.string().optional(),
+        query: z.string().optional(),
+        slug: z.string().optional(),
+        path: z.string().optional(),
+        maxBytes: z.number().int().positive().optional(),
+        vaultRoot: z.string().optional(),
+        projectId: z.string().optional(),
+        sessionId: z.string().optional(),
+        explain: z.boolean().optional(),
+        continuation: z.boolean().optional(),
+        resume: z.boolean().optional()
+      })
+      .transform((data) => {
+        const { resume, ...rest } = data;
+        return {
+          ...rest,
+          continuation: data.continuation ?? resume ?? false
+        };
+      })
   },
   search: {
     name: 'search',
@@ -679,7 +698,8 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
 
   if (name === 'bootstrap') {
     try {
-      const bootstrapOpts = parseResult.data as BootstrapOptions;
+      const bootstrapOpts = parseResult.data as BootstrapOptions & { resume?: boolean };
+      delete bootstrapOpts.resume;
       const result = await compileBootstrapBrief(bootstrapOpts);
       const hitIds = collectBootstrapHitIds(result);
       if (hitIds.length > 0) {

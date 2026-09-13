@@ -364,6 +364,8 @@ export interface SearchScoreExplain {
   occurrencesBoost: number;
   feedbackMultiplier: number;
   finalScore: number;
+  intentLens?: 'decision' | 'trap' | 'log' | 'none';
+  intentKindBoost?: number;
 }
 
 export interface SearchHit {
@@ -463,6 +465,32 @@ export interface BootstrapOptions {
   sessionId?: string;
   /** When true, attach budget allocation diagnostics (stderr in CLI). */
   explain?: boolean;
+  /** Opt-in continuation: last session summary + capped traps (default false). */
+  continuation?: boolean;
+}
+
+export interface SessionResume {
+  id: string;
+  sessionId?: string;
+  summary?: string;
+  body?: string;
+  updated?: string;
+}
+
+export type BootstrapTaskLens =
+  | 'bugfix'
+  | 'feature'
+  | 'release'
+  | 'onboarding'
+  | 'refactor'
+  | 'docs'
+  | 'test'
+  | 'general';
+
+export interface OmittedIdReceipt {
+  id: string;
+  kind: string;
+  reason: 'truncated_budget_exhausted';
 }
 
 export type BudgetSelectionStatus = 'included' | 'excluded_expired' | 'truncated_budget_exhausted';
@@ -482,6 +510,8 @@ export interface BootstrapBudgetReport {
   remainingBytes: number;
   includedCount: number;
   candidates: BudgetCandidateReport[];
+  taskLens?: BootstrapTaskLens;
+  omittedIds?: OmittedIdReceipt[];
 }
 
 export interface MemoryRecordListItem {
@@ -525,6 +555,7 @@ export interface BootstrapBrief {
   truncated: boolean;
   drift?: Array<{ specSlug: string; modifiedPaths: string[] }>;
   notices: string[];
+  sessionResume?: SessionResume;
   budgetReport?: BootstrapBudgetReport;
 }
 

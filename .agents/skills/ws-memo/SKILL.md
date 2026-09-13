@@ -126,6 +126,8 @@ All 11 MCP tools are available over MCP stdio (`memo serve`) or MCP SSE (`memo s
 - `maxBytes` (number, optional): UTF-8 byte budget. Defaults to vault config (`bootstrap.maxBytes`, 8192).
 - `projectId` (string, optional): Explicit project ID override.
 - `sessionId` (string, optional): Hit de-dupe key (at most one bump per included record per session).
+- `continuation` (boolean, optional, default `false`): Opt-in resume continuation — injects latest `kind=session` summary (`sessionResume`), eligible handoff, and at most 3 durable traps. Ordinary bootstrap omits `sessionResume` (dump-free default). MCP alias: `resume` (`continuation` wins when both are set).
+- `explain` (boolean, optional): When true, attach `budgetReport` with `taskLens` and `omittedIds` diagnostics outside `byteLength`.
 
 **Hit contract:** Hit-eligible records (`trap`/`decision`/`spec`/`plan`) that appear in the returned brief auto-increment `hits`. Records dropped by the token budget do not. Pass the same `sessionId` used for `prompt` session tracking when available.
 
@@ -565,6 +567,7 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 | `memo setup` | **Host/deployment only:** mode (`local`, `hybrid`, `remote`) & host MCP wiring (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). Does **not** write workflow-skills `{sharedDir}/config.json` / `specMemo.*` — use `ws-spec-memo` for that. Flags: `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo doctor` | Vault health, project identity, FTS5 integrity, and in-repo pollution scan. Flags: `--rebuild` (re-index FTS), `--fix` (delete forbidden in-repo files), `--json`. |
 | `memo rank` | Recurrence-ranked traps report by occurrence count. Flags: `--layer <name>`, `--limit <n>`, `--backfill`, `--json`. |
+| `memo resume` | Opt-in continuation brief (CLI extra; not an MCP tool). Equals `bootstrap` with `continuation: true`. Injects optional `sessionResume`, handoff, and ≤3 traps. Flags: `[query]`, `--cwd`, `--path`, `--slug`, `--max-bytes`, `--session-id`, `--explain`, `--json`. |
 | `memo wiki` | Print or regenerate per-project vault wiki (`projects/{id}/WIKI.md`). Flags: `--project`, `--regenerate`, `--json`. Not available in remote mode. |
 | `memo canvas` | Launch graph visualizer dashboard (default port `3125`, configurable via `config.json` `ports.canvas`). Flags: `--port`, `--host`, `--project`. |
 | `memo serve` | Start MCP transport. Stdio (default) or HTTP/SSE (`--sse` port `3123`, status companion `:3124`, configurable via `config.json` `ports.sse` / `ports.status`). Off-loopback requires `--auth-token` or `SPEC_MEMO_AUTH_TOKEN`. |

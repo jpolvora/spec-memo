@@ -428,6 +428,221 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
     assert.ok(row!.explain!.ftsBm25 > 0);
     assert.ok(row!.explain!.finalScore > 0);
   });
+
+  it('AC1: infers intent case-insensitive with hyphen and apostrophe equivalents', async () => {
+    const { inferSearchIntent, hyphenApostropheIntentProbe } = await import('./retrieval-lens.js');
+    assert.equal(inferSearchIntent('trade-off rationale'), 'decision');
+    assert.equal(inferSearchIntent("don't fail"), 'trap');
+    assert.ok(hyphenApostropheIntentProbe("trade-off don't"));
+  });
+
+  it('AC2: decision intent boosts kind=decision by 1.5 vs no-lens baseline', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'lens-trap-a',
+      frontmatter: { id: 'trap-lens-a', title: 'Lens neutral alpha', severity: 'medium', status: 'active' },
+      body: 'neutral alpha shared keyword'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'lens-decision-a',
+      frontmatter: { id: 'decision-lens-a', title: 'Lens neutral alpha', status: 'active' },
+      body: 'neutral alpha shared keyword'
+    });
+
+    const baseline = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'neutral alpha shared',
+      kinds: ['trap', 'decision']
+    }).map((h) => h.id);
+
+    const boosted = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'decision neutral alpha shared',
+      kinds: ['trap', 'decision']
+    }).map((h) => h.id);
+
+    assert.notDeepEqual(boosted, baseline);
+    assert.equal(boosted[0], 'decision-lens-a');
+  });
+
+  it('AC3: trap intent boosts kind=trap by 1.5', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'lens-trap-b-dec',
+      frontmatter: { id: 'decision-lens-b', title: 'Shared beta', status: 'active' },
+      body: 'shared beta keyword unique decision body'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'lens-trap-b',
+      frontmatter: { id: 'trap-lens-b', title: 'Shared beta', severity: 'medium', status: 'active' },
+      body: 'shared beta keyword unique trap failure body'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'failure shared beta',
+      kinds: ['trap', 'decision']
+    });
+    assert.equal(hits[0]?.id, 'trap-lens-b');
+    assert.equal(hits[0]?.explain?.intentLens, undefined);
+  });
+
+  it('AC4: log intent boosts kind=log and does not spawn git', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'log',
+      slug: 'lens-log-a',
+      frontmatter: { id: 'log-lens-a', title: 'Changed gamma', status: 'active' },
+      body: 'changed gamma keyword'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'lens-log-trap',
+      frontmatter: { id: 'trap-lens-gamma', title: 'Changed gamma', severity: 'low', status: 'active' },
+      body: 'changed gamma keyword'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'changed gamma',
+      kinds: ['log', 'trap'],
+      includeScratch: true
+    });
+    assert.equal(hits[0]?.id, 'log-lens-a');
+  });
+
+  it('AC5: why did this fail infers trap not decision', async () => {
+    const { inferSearchIntent } = await import('./retrieval-lens.js');
+    assert.equal(inferSearchIntent('why did this fail'), 'trap');
+  });
+
+  it('NS1: empty or unknown query keeps frozen relevance id sequence', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'frozen-trap-1',
+      frontmatter: { id: 'trap-frozen-1', title: 'Zulu neutral fixture', severity: 'low', status: 'active' },
+      body: 'zulu neutral fixture token'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'frozen-decision-1',
+      frontmatter: { id: 'decision-frozen-1', title: 'Zulu neutral fixture', status: 'active' },
+      body: 'zulu neutral fixture token'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'frozen-trap-2',
+      frontmatter: { id: 'trap-frozen-2', title: 'Zulu neutral fixture', severity: 'high', status: 'active' },
+      body: 'zulu neutral fixture token'
+    });
+
+    const first = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'zulu neutral fixture token',
+      kinds: ['trap', 'decision']
+    }).map((h) => h.id);
+    const second = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'zulu neutral fixture token',
+      kinds: ['trap', 'decision']
+    }).map((h) => h.id);
+    assert.deepEqual(second, first);
+  });
+
+  it('AC7: explain true includes intentLens intentKindBoost and boosted finalScore', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'explain-lens-decision',
+      frontmatter: { id: 'decision-explain-lens', title: 'Explain lens delta', status: 'active' },
+      body: 'decision explain lens delta keyword body'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'decision explain lens delta keyword',
+      explain: true,
+      kinds: ['decision']
+    });
+    assert.ok(hits.length >= 1, 'expected at least one decision hit');
+    const explain = hits[0].explain!;
+    assert.equal(explain.intentLens, 'decision');
+    assert.equal(explain.intentKindBoost, 1.5);
+    assert.ok(typeof explain.ftsBm25 === 'number');
+    assert.ok(typeof explain.finalScore === 'number');
+    assert.ok(explain.pathPatternBoost > 0);
+  });
+
+  it('AC8: explain omitted omits lens fields and matches AC6 ranking', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'no-explain-trap',
+      frontmatter: { id: 'trap-no-explain', title: 'Plain omega', severity: 'medium', status: 'active' },
+      body: 'plain omega keyword'
+    });
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'plain omega keyword',
+      kinds: ['trap']
+    });
+    assert.equal(hits[0].explain, undefined);
+    assert.equal(hits[0].id, 'trap-no-explain');
+  });
+
+  it('NS5: what changed infers log and does not run git log', async () => {
+    const { inferSearchIntent, tokenizeQuery } = await import('./retrieval-lens.js');
+    assert.equal(inferSearchIntent('what changed'), 'log');
+    assert.ok(tokenizeQuery('what changed').includes('what'));
+    assert.ok(tokenizeQuery('what changed').includes('changed'));
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'log',
+      slug: 'ns5-log',
+      frontmatter: { id: 'log-ns5', title: 'What changed entry', status: 'active' },
+      body: 'what changed entry body'
+    });
+
+    const hits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'what changed',
+      kinds: ['log'],
+      includeScratch: true
+    });
+    assert.equal(hits[0]?.id, 'log-ns5');
+  });
 });
 
 

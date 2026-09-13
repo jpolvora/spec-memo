@@ -2,6 +2,7 @@ import { RecordFrontmatter, SearchHit, SearchSort, SearchScoreExplain } from './
 import { hitCountOf, occurrenceOf } from './recurrence.js';
 import { salienceMultiplier } from './salience.js';
 import { matchesAnyPattern } from './indexer.js';
+import { inferSearchIntent, intentKindBoost, SearchIntent } from './retrieval-lens.js';
 
 export type { SearchScoreExplain };
 
@@ -50,7 +51,10 @@ export function computeSearchExplain(
     pathFilter?: string;
     pathPatterns?: string[];
     sort?: SearchSort;
-    hit?: Pick<SearchHit, 'hits' | 'occurrences'>;
+    hit?: Pick<SearchHit, 'hits' | 'occurrences' | 'kind'>;
+    query?: string;
+    intentLens?: SearchIntent;
+    includeLensFields?: boolean;
   } = {}
 ): SearchScoreExplain {
   let rawRank = safeExplainNum(options.ftsRank, 0);
@@ -72,8 +76,12 @@ export function computeSearchExplain(
   );
   const hitsBoost = hitsBoostOf(fm);
   const occurrencesBoost = occurrencesBoostOf(fm);
-  const finalScore = roundExplain(Math.abs(effectiveRank));
-  return {
+  const intentLens =
+    options.intentLens ?? (options.query ? inferSearchIntent(options.query) : 'none');
+  const kind = typeof fm.kind === 'string' ? fm.kind : options.hit?.kind || '';
+  const kindBoost = intentKindBoost(intentLens, kind);
+  const finalScore = roundExplain(Math.abs(effectiveRank) * kindBoost);
+  const explain: SearchScoreExplain = {
     ftsBm25,
     pathPatternBoost,
     severityMultiplier,
@@ -82,6 +90,11 @@ export function computeSearchExplain(
     feedbackMultiplier,
     finalScore
   };
+  if (options.includeLensFields) {
+    explain.intentLens = intentLens;
+    explain.intentKindBoost = kindBoost;
+  }
+  return explain;
 }
 
 export function formatSearchExplainTree(explain: SearchScoreExplain, indent = '  '): string {
@@ -91,8 +104,11 @@ export function formatSearchExplainTree(explain: SearchScoreExplain, indent = ' 
     `${indent}├─ Severity: ×${explain.severityMultiplier}`,
     `${indent}├─ Recurrence (occurrences): ×${explain.occurrencesBoost}`,
     `${indent}├─ Hit frequency: ×${explain.hitsBoost}`,
-    `${indent}├─ Feedback salience: ×${explain.feedbackMultiplier}`,
-    `${indent}└─ Final score: ${explain.finalScore}`
+    `${indent}├─ Feedback salience: ×${explain.feedbackMultiplier}`
   ];
+  if (explain.intentLens !== undefined) {
+    lines.push(`${indent}├─ Intent lens: ${explain.intentLens} (×${explain.intentKindBoost ?? 1})`);
+  }
+  lines.push(`${indent}└─ Final score: ${explain.finalScore}`);
   return lines.join('\n');
 }

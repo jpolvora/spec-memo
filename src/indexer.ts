@@ -25,8 +25,58 @@ import {
 } from './salience.js';
 import { computeSearchExplain } from './ranking-explain.js';
 import { applySearchExpirationFilter } from './expiration.js';
+import { inferSearchIntent, intentKindBoost, SearchIntent } from './retrieval-lens.js';
 
 const dbPool = new Map<string, Database.Database>();
+
+function searchIntentForQuery(query: string): SearchIntent {
+  return inferSearchIntent(query);
+}
+
+function boostedSortRank(
+  rank: number,
+  kind: string,
+  intent: SearchIntent,
+  feedbackMultiplier: number,
+  sort: SearchOptions['sort']
+): number {
+  const applyFeedback = !sort || sort === 'relevance';
+  const effective =
+    rank * (applyFeedback && feedbackMultiplier < 1 ? feedbackMultiplier : 1);
+  return effective * intentKindBoost(intent, kind);
+}
+
+function compareHitsWithIntent(
+  a: SearchHit,
+  b: SearchHit,
+  intent: SearchIntent
+): number {
+  const cmp = compareHitsSearch(a, b);
+  if (cmp !== 0) return cmp;
+  const boostA = intentKindBoost(intent, a.kind);
+  const boostB = intentKindBoost(intent, b.kind);
+  if (boostB !== boostA) return boostB > boostA ? 1 : -1;
+  return String(a.id).localeCompare(String(b.id));
+}
+
+function attachSearchExplain(
+  hit: SearchHit,
+  fm: RecordFrontmatter | Record<string, unknown>,
+  options: SearchOptions,
+  intent: SearchIntent
+): void {
+  if (!options.explain) return;
+  hit.explain = computeSearchExplain(fm, {
+    ftsRank: hit.rank,
+    pathFilter: options.path,
+    pathPatterns: hit.pathPatterns,
+    sort: options.sort,
+    hit,
+    query: options.query,
+    intentLens: intent,
+    includeLensFields: true
+  });
+}
 
 /**
  * Open or initialize the SQLite FTS5 database in the vault root.
@@ -395,6 +445,7 @@ function searchIndexByFullScanRank(
   const statusFilter = options.status;
   const kinds = options.kinds;
   const query = (options.query || '').trim().toLowerCase();
+  const searchIntent = searchIntentForQuery(options.query || '');
   const hits: SearchHit[] = [];
   const expCtx = resolveExpirationContext(options, vaultRoot);
 
@@ -443,22 +494,17 @@ function searchIndexByFullScanRank(
       };
       if (exp.expired) hit.expired = true;
       enrichHitSalience(hit, fm);
-      if (options.explain) {
-        const rawRank = hit.rank;
-        hit.explain = computeSearchExplain(fm, {
-          ftsRank: rawRank,
-          pathFilter: options.path,
-          pathPatterns: patterns,
-          sort: options.sort,
-          hit
-        });
-      }
+      attachSearchExplain(hit, fm, options, searchIntent);
       hits.push(hit);
     }
   }
 
   if (mode === 'hits') {
-    hits.sort(compareHitsSearch);
+    if (searchIntent !== 'none') {
+      hits.sort((a, b) => compareHitsWithIntent(a, b, searchIntent));
+    } else {
+      hits.sort(compareHitsSearch);
+    }
   } else {
     hits.sort(compareSearchHits);
   }
@@ -570,6 +616,7 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
   }
 
   const rawQuery = (options.query || '').trim();
+  const searchIntent = searchIntentForQuery(rawQuery);
   const hasFtsQuery = rawQuery.length > 0;
   let ftsQuery = '';
 
@@ -752,46 +799,49 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
         hit.lastSeen = lastSeenOf(record.frontmatter) || undefined;
         const exp = passesExpirationForRecord(record.frontmatter, expCtx);
         if (exp.expired) hit.expired = true;
-        const rawRank = hit.rank;
         enrichHitSalience(hit, record.frontmatter);
-        if (options.explain) {
-          hit.explain = computeSearchExplain(record.frontmatter, {
-            ftsRank: rawRank,
-            pathFilter: options.path,
-            pathPatterns: hit.pathPatterns,
-            sort: options.sort,
-            hit
-          });
-        }
+        attachSearchExplain(hit, record.frontmatter, options, searchIntent);
       } else {
         hit.hits = 0;
         hit.lastHit = null;
-        if (options.explain) {
-          hit.explain = computeSearchExplain({}, {
-            ftsRank: hit.rank,
-            pathFilter: options.path,
-            pathPatterns: hit.pathPatterns,
-            sort: options.sort,
-            hit
-          });
-        }
+        attachSearchExplain(hit, {}, options, searchIntent);
       }
     } catch {
       hit.hits = hit.hits ?? 0;
       hit.lastHit = hit.lastHit ?? null;
-      if (options.explain) {
-        hit.explain = computeSearchExplain({}, {
-          ftsRank: hit.rank,
-          pathFilter: options.path,
-          pathPatterns: hit.pathPatterns,
-          sort: options.sort,
-          hit
-        });
-      }
+      attachSearchExplain(hit, {}, options, searchIntent);
     }
   }
 
-  if (sort === 'updated') {
+  if (searchIntent !== 'none') {
+    if (sort === 'updated') {
+      results.sort((a, b) => {
+        const upd = String(b.updated || '').localeCompare(String(a.updated || ''));
+        if (upd !== 0) return upd;
+        const boostA = intentKindBoost(searchIntent, a.kind);
+        const boostB = intentKindBoost(searchIntent, b.kind);
+        if (boostB !== boostA) return boostB > boostA ? 1 : -1;
+        return String(a.id).localeCompare(String(b.id));
+      });
+    } else if (hasFtsQuery && ftsQuery) {
+      results.sort((a, b) => {
+        const feedbackA = salienceMultiplier(
+          a.filepath && fs.existsSync(a.filepath)
+            ? parseRecord(fs.readFileSync(a.filepath, 'utf8'), a.filepath).frontmatter
+            : {}
+        );
+        const feedbackB = salienceMultiplier(
+          b.filepath && fs.existsSync(b.filepath)
+            ? parseRecord(fs.readFileSync(b.filepath, 'utf8'), b.filepath).frontmatter
+            : {}
+        );
+        const rankA = boostedSortRank(a.rank ?? 0, a.kind, searchIntent, feedbackA, sort);
+        const rankB = boostedSortRank(b.rank ?? 0, b.kind, searchIntent, feedbackB, sort);
+        if (rankA !== rankB) return rankA - rankB;
+        return String(a.id).localeCompare(String(b.id));
+      });
+    }
+  } else if (sort === 'updated') {
     results.sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
   } else if (hasFtsQuery && ftsQuery) {
     results.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));

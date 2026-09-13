@@ -1,7 +1,15 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { BootstrapBrief, BootstrapOptions, MemoRecord, BootstrapBudgetReport, BudgetCandidateReport } from './types.js';
+import {
+  BootstrapBrief,
+  BootstrapOptions,
+  BootstrapTaskLens,
+  MemoRecord,
+  BootstrapBudgetReport,
+  BudgetCandidateReport,
+  SessionResume
+} from './types.js';
 import { getProjectMetadata, getVaultRoot, ensureVaultStructure, ensureProjectVault, withVaultLockSync } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { scanProjectRecords } from './compiler.js';
@@ -19,6 +27,14 @@ import {
   renderHandoffMarkdown
 } from './handoff.js';
 import { HandoffRecord, SessionObjective } from './types.js';
+import { hitCountOf } from './recurrence.js';
+import {
+  inferTaskLens,
+  releaseDecisionScore,
+  releaseLensNotice,
+  taskLensDecisionMultiplier,
+  taskLensTrapMultiplier
+} from './retrieval-lens.js';
 
 const SEVERITY_WEIGHT: Record<string, number> = {
   critical: 400,
@@ -101,7 +117,12 @@ export function calculatePayloadSize(payload: unknown): number {
 /**
  * Score a trap based on severity, path relevance, and query matching.
  */
-export function scoreTrap(trap: MemoRecord, query?: string, pathFilter?: string): number {
+export function scoreTrap(
+  trap: MemoRecord,
+  query?: string,
+  pathFilter?: string,
+  taskLens: BootstrapTaskLens = 'general'
+): number {
   const sev = trap.frontmatter.severity || 'medium';
   let score = SEVERITY_WEIGHT[sev] || 200;
 
@@ -128,7 +149,63 @@ export function scoreTrap(trap: MemoRecord, query?: string, pathFilter?: string)
     }
   }
 
+  if (query && taskLens !== 'general') {
+    score *= taskLensTrapMultiplier(taskLens);
+  }
+
   return score;
+}
+
+function scoreDecisionForBootstrap(
+  decision: MemoRecord,
+  index: number,
+  total: number,
+  query?: string,
+  taskLens: BootstrapTaskLens = 'general'
+): number {
+  let score =
+    taskLens === 'release'
+      ? releaseDecisionScore(decision)
+      : decisionBootstrapScore(decision, index, total);
+  if (query && taskLens !== 'general') {
+    score *= taskLensDecisionMultiplier(taskLens);
+  }
+  return score;
+}
+
+function compareContinuationTraps(
+  a: MemoRecord,
+  b: MemoRecord,
+  query?: string,
+  pathFilter?: string
+): number {
+  const hitsDiff = hitCountOf(b.frontmatter) - hitCountOf(a.frontmatter);
+  if (hitsDiff !== 0) return hitsDiff;
+  const sevA = SEVERITY_WEIGHT[String(a.frontmatter.severity || 'medium')] || 200;
+  const sevB = SEVERITY_WEIGHT[String(b.frontmatter.severity || 'medium')] || 200;
+  if (sevB !== sevA) return sevB - sevA;
+  return scoreTrap(b, query, pathFilter) - scoreTrap(a, query, pathFilter);
+}
+
+function findLatestSessionResume(records: MemoRecord[]): SessionResume | undefined {
+  const sessions = records
+    .filter((r) => r.frontmatter.kind === 'session')
+    .sort((a, b) => String(b.frontmatter.updated || '').localeCompare(String(a.frontmatter.updated || '')));
+
+  for (const session of sessions) {
+    const summary = typeof session.frontmatter.summary === 'string' ? session.frontmatter.summary.trim() : '';
+    const body = String(session.body || '').trim();
+    if (!summary && !body) continue;
+    return {
+      id: String(session.frontmatter.id),
+      sessionId:
+        typeof session.frontmatter.sessionId === 'string' ? session.frontmatter.sessionId : undefined,
+      summary: summary || undefined,
+      body: body || undefined,
+      updated: typeof session.frontmatter.updated === 'string' ? session.frontmatter.updated : undefined
+    };
+  }
+  return undefined;
 }
 
 function recordByteWeight(record: MemoRecord): number {
@@ -150,7 +227,9 @@ function buildBudgetReport(
   options: BootstrapOptions,
   pathFilter?: string,
   scratchTtlDays = 7,
-  reviewTtlDays = 14
+  reviewTtlDays = 14,
+  taskLens: BootstrapTaskLens = 'general',
+  includeExplainFields = false
 ): BootstrapBudgetReport {
   const includedIds = new Set([
     ...includedTraps.map((r) => String(r.frontmatter.id)),
@@ -176,7 +255,7 @@ function buildBudgetReport(
       id,
       kind: 'trap',
       title: typeof trap.frontmatter.title === 'string' ? trap.frontmatter.title : undefined,
-      score: roundExplain(scoreTrap(trap, options.query, pathFilter)),
+      score: roundExplain(scoreTrap(trap, options.query, pathFilter, taskLens)),
       byteWeight: recordByteWeight(trap),
       status
     });
@@ -207,13 +286,26 @@ function buildBudgetReport(
     });
   }
 
-  return {
+  const report: BootstrapBudgetReport = {
     budgetBytes,
     consumedBytes,
     remainingBytes: Math.max(0, budgetBytes - consumedBytes),
     includedCount: includedIds.size,
     candidates
   };
+
+  if (includeExplainFields) {
+    report.taskLens = taskLens;
+    report.omittedIds = candidates
+      .filter((c) => c.status === 'truncated_budget_exhausted')
+      .map((c) => ({
+        id: c.id,
+        kind: c.kind,
+        reason: 'truncated_budget_exhausted' as const
+      }));
+  }
+
+  return report;
 }
 
 export function formatBootstrapBudgetTable(report: BootstrapBudgetReport): string {
@@ -224,6 +316,15 @@ export function formatBootstrapBudgetTable(report: BootstrapBudgetReport): strin
     'ID'.padEnd(28) + 'Kind'.padEnd(10) + 'Score'.padStart(8) + 'Bytes'.padStart(8) + '  Status',
     '-'.repeat(72)
   ];
+  const omittedRows =
+    report.omittedIds && report.omittedIds.length > 0
+      ? [
+          '',
+          'Omitted (truncated_budget_exhausted):',
+          ...report.omittedIds.map((o) => `  ${o.id} (${o.kind})`)
+        ]
+      : [];
+
   const rows = report.candidates.map((c) => {
     const title = c.title ? ` (${c.title.slice(0, 24)})` : '';
     return (
@@ -235,7 +336,7 @@ export function formatBootstrapBudgetTable(report: BootstrapBudgetReport): strin
       c.status
     );
   });
-  return [...header, ...rows].join('\n');
+  return [...header, ...rows, ...omittedRows].join('\n');
 }
 
 /**
@@ -288,10 +389,16 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
 
   const scratchTtlDays = config.ttl?.scratchDays ?? 7;
   const reviewTtlDays = config.ttl?.reviewDays ?? 14;
+  const taskLens = inferTaskLens(options.query);
+  const continuation = options.continuation === true;
+
+  if (taskLens === 'release') {
+    notices.push(releaseLensNotice());
+  }
 
   // 1. Gather & rank traps (all for explain report; active non-expired for brief)
   const allTrapsForReport = allRecords.filter((r) => r.frontmatter.kind === 'trap');
-  const activeTraps = allTrapsForReport
+  let activeTraps = allTrapsForReport
     .filter(
       (r) =>
         r.frontmatter.status === 'active' &&
@@ -302,13 +409,19 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
         )
     )
     .sort((a, b) => {
-      const scoreA = scoreTrap(a, options.query, pathFilter);
-      const scoreB = scoreTrap(b, options.query, pathFilter);
+      const scoreA = scoreTrap(a, options.query, pathFilter, taskLens);
+      const scoreB = scoreTrap(b, options.query, pathFilter, taskLens);
       if (scoreB !== scoreA) {
         return scoreB - scoreA;
       }
       return (b.frontmatter.updated || '').localeCompare(a.frontmatter.updated || '');
     });
+
+  if (continuation) {
+    activeTraps = [...activeTraps]
+      .sort((a, b) => compareContinuationTraps(a, b, options.query, pathFilter))
+      .slice(0, 3);
+  }
 
   // 2. Gather decisions (all for explain report; active/shipped for brief)
   const allDecisionsForReport = allRecords.filter((r) => r.frontmatter.kind === 'decision');
@@ -322,7 +435,18 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
           defaultTtlDaysForKind('decision', scratchTtlDays, reviewTtlDays)
         )
     )
-    .sort((a, b) => (b.frontmatter.updated || '').localeCompare(a.frontmatter.updated || ''));
+    .map((record, index, arr) => ({ record, index, total: arr.length }))
+    .sort((a, b) => {
+      const scoreA = scoreDecisionForBootstrap(a.record, a.index, a.total, options.query, taskLens);
+      const scoreB = scoreDecisionForBootstrap(b.record, b.index, b.total, options.query, taskLens);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return String(b.record.frontmatter.updated || '').localeCompare(
+        String(a.record.frontmatter.updated || '')
+      );
+    })
+    .map((entry) => entry.record);
+
+  const sessionResume = continuation ? findLatestSessionResume(allRecords) : undefined;
 
   // 3. Resolve active slice spec / plan / state if slug provided
   let activeSlice: BootstrapBrief['activeSlice'] = undefined;
@@ -402,7 +526,8 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     budgetBytes,
     truncated: false,
     drift: driftList.length > 0 ? driftList : undefined,
-    notices
+    notices,
+    ...(sessionResume ? { sessionResume } : {})
   };
 
   initialBrief.byteLength = calculatePayloadSize(initialBrief);
@@ -453,6 +578,16 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     64;
   const effectiveBudget = Math.max(512, budgetBytes - immutableReserve);
 
+  const dropContinuationOverflow = (): void => {
+    if (!continuation) return;
+    while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
+      currentTraps.pop();
+    }
+    if (initialBrief.sessionResume && calculatePayloadSize(initialBrief) > effectiveBudget) {
+      delete initialBrief.sessionResume;
+    }
+  };
+
   if (initialBrief.byteLength > effectiveBudget) {
     while (currentTraps.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentTraps.pop();
@@ -460,6 +595,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentDecisions.pop();
     }
+    dropContinuationOverflow();
   }
 
   if (initialBrief.byteLength > budgetBytes) {
@@ -477,6 +613,7 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
     while (currentDecisions.length > 0 && calculatePayloadSize(initialBrief) > effectiveBudget) {
       currentDecisions.pop();
     }
+    dropContinuationOverflow();
 
     // Then trim activeSlice (state → plan → spec) so the byte cap is fail-closed
     while (calculatePayloadSize(initialBrief) > effectiveBudget && initialBrief.activeSlice) {
@@ -570,7 +707,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
           options,
           pathFilter,
           scratchTtlDays,
-          reviewTtlDays
+          reviewTtlDays,
+          taskLens,
+          true
         );
       }
       return finalizeBrief(minimal);
@@ -592,7 +731,9 @@ export async function compileBootstrapBrief(options: BootstrapOptions = {}): Pro
       options,
       pathFilter,
       scratchTtlDays,
-      reviewTtlDays
+      reviewTtlDays,
+      taskLens,
+      true
     );
   }
 
