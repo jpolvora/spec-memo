@@ -141,6 +141,29 @@ export function closeIndex(vaultRoot?: string): void {
 }
 
 /**
+ * FTS document text (spec 0056 Notes): title + tags + body + AI searchTerms
+ * + AI summary. Markdown stays SoT; aids only widen lexical recall.
+ */
+export function ftsBodyForRecord(record: {
+  frontmatter: RecordFrontmatter;
+  body: string;
+}): string {
+  const parts: string[] = [record.body || ''];
+  const fm = record.frontmatter as RecordFrontmatter & {
+    aiSearchTerms?: unknown;
+    aiSummary?: unknown;
+  };
+  if (Array.isArray(fm.aiSearchTerms)) {
+    const terms = fm.aiSearchTerms.filter((t): t is string => typeof t === 'string').join(' ');
+    if (terms.trim().length > 0) parts.push(terms);
+  }
+  if (typeof fm.aiSummary === 'string' && fm.aiSummary.trim().length > 0) {
+    parts.push(fm.aiSummary);
+  }
+  return parts.join('\n');
+}
+
+/**
  * Index or update a single record in the FTS table.
  */
 export function indexRecord(
@@ -156,7 +179,7 @@ export function indexRecord(
   const title = fm.title || '';
   const tags = (fm.tags || []).join(' ');
   const pathPatterns = (fm.pathPatterns || []).join(' ');
-  const body = record.body || '';
+  const body = ftsBodyForRecord(record);
   const updated = fm.updated || new Date().toISOString();
 
   const del = db.prepare('DELETE FROM records_fts WHERE id = ? AND projectId = ?');
@@ -907,7 +930,7 @@ export async function rebuildIndex(vaultRoot: string = getVaultRoot()): Promise<
         fm.title || '',
         tags,
         pathPatterns,
-        item.record.body || '',
+        ftsBodyForRecord(item.record),
         item.filepath,
         fm.updated || new Date().toISOString()
       );

@@ -9,6 +9,7 @@ import { exportChangeset, applyChangeset } from "./sync.js";
 import { ClientType } from "./types.js";
 import { logErrorReport } from "./error-logger.js";
 import { recordTelemetry, flushTelemetrySync, closeTelemetry } from "./telemetry.js";
+import { assertAiConfigValid, setAiActivityBus } from "./ai/index.js";
 
 function readJsonBody(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -184,12 +185,17 @@ function setCorsHeaders(res: http.ServerResponse): void {
 export function startSseServer(options: SseServerOptions = {}): Promise<SseServerInstance> {
   const vaultRoot = getVaultRoot(options.vaultRoot);
   const config = ensureVaultStructure(vaultRoot);
+  // Spec 0056 AC4: fail closed on unknown ai.provider — never serve with a
+  // half-wired agent.
+  assertAiConfigValid(vaultRoot);
   const configuredPorts = resolveConfiguredPorts(vaultRoot, config);
   const port = options.port ?? configuredPorts.sse;
   const host = options.host || "127.0.0.1";
   const authToken = options.authToken || process.env.SPEC_MEMO_AUTH_TOKEN || process.env.SPEC_MEMO_SSE_TOKEN;
   const enableStatus = options.enableStatus !== false;
   const bus = options.activityBus ?? createActivityBus({ capacity: 200 });
+  // AI refine/rank activity events (ai.refine.*/ai.rank.*) flow here.
+  setAiActivityBus(bus);
   const errorLogPath = options.errorLogPath;
 
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !authToken) {

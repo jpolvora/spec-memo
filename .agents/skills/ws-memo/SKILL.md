@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.29.0
+version: 0.30.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -590,6 +590,21 @@ Optional private git remote backup of the vault root. Independent of hybrid HTTP
 | `remoteUrl` / `branch` | — | Standard git remote; credentials via git helper (never in config). |
 
 CLI one-shot `memo upsert` in batched mode does **not** flush git on process exit. End the agent session (`session_end`) or run `memo sync`. Errors log to `error.logs` (`subsystem: vault-git`); check `memo status --json` → `operational.vaultGit`.
+
+### Vault AI assistance (`config.json` → `ai`)
+
+Optional intelligence layer on `upsert` / `search` / `bootstrap`. No 12th MCP tool — the tool list stays **11**. Markdown stays SoT; FTS stays the disposable candidate source. Cursor is one runtime adapter; **Cursor is not required** — omit `ai` (or `enabled: false`) to run fully offline.
+
+| Key | Default | Behavior |
+|---|---|---|
+| `enabled` | `false` | Opt-in. `false`/omitted = `NoopVaultAiAgent`, zero network. |
+| `provider` | `"cursor-sdk"` | First adapter. Unknown values fail closed at startup (MCP/SSE refuse to start half-wired). |
+| `model` | `"composer-2.5"` | Passed as `model: { id }` to `Agent.prompt` one-shot. |
+| `apiKeyEnv` | `"CURSOR_API_KEY"` | Env var naming the key. The raw key is never stored in `config.json`, markdown, telemetry, activity, or doctor JSON. |
+| `timeoutMs` | `15000` | Prompt/completion timeout; expiry fail-opens. |
+| `rankTopK` | `20` | Max candidates the agent may reorder after FTS. |
+
+Write path: eligible kinds (`trap`, `decision`, `spec`, `plan`) enqueue one background refine job per record id (coalesced, concurrency 1). `upsert` never awaits it. Refine writes only `aiSearchTerms` / `aiSummary` (≤500 chars) frontmatter + `aiRefineHash`, then re-indexes under the vault lock. Read path: `search` / `bootstrap` rerank FTS top-K only when a query is present and the agent is available; failures keep lexical order (`explain.aiRank: skipped`). `get` never calls the agent. Check `memo doctor --json` → `ai` (`enabled`, `provider`, `available`, `queueDepth`, `lastError`).
 
 ---
 

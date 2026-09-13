@@ -21,6 +21,7 @@ import {
 import { parseRecord } from './schema.js';
 import { RECORD_SUBDIRS } from './vault.js';
 import { helpfulCountOf, staleCountOf, isFlaggedStale } from './salience.js';
+import { getVaultAiStatus } from './ai/index.js';
 
 export const DEFAULT_HEALTH_TIMEOUT_MS = 10000;
 
@@ -601,6 +602,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       lastError: readVaultGitState(vaultRoot).lastError,
       lastSyncAt: readVaultGitState(vaultRoot).lastSyncAt
     },
+    // Spec 0056 AC28: AI provider, enabled flag, queue depth, redacted error.
+    ai: getVaultAiStatus(vaultRoot),
     remoteHealth,
     project: {
       projectId: identity.projectId,

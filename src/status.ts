@@ -51,6 +51,7 @@ import {
   generateActivityReport,
   deriveRulesFromPrompts
 } from "./prompt.js";
+import { getVaultAiStatus } from "./ai/index.js";
 
 /** Zero-dep markdown → safe HTML for prompt drawer (interview Q4). */
 export function renderPromptMarkdownHtml(body: string): string {
@@ -4218,6 +4219,8 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           mode,
           role,
           topology,
+          // Spec 0056 AC29: read-only AI assistance status (no 12th MCP tool).
+          ai: getVaultAiStatus(vaultRoot),
           mcp: mcp?.available
             ? {
                 host: mcp.host,
