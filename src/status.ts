@@ -313,8 +313,10 @@ export function buildAiConfigSnapshot(vaultRoot: string): {
 /**
  * Validate PUT /api/config/ai body (AC23–AC24, AC26).
  * Returns a normalized patch or throws a 400-flavoured Error (no write on throw).
+ * An omitted model stays undefined so the handler preserves the stored value
+ * (a fresh vault already defaults to composer-2.5, matching AC24).
  */
-export function parseAiConfigPutBody(raw: unknown): { enabled: boolean; provider: "noop" | "cursor-sdk"; model: string } {
+export function parseAiConfigPutBody(raw: unknown): { enabled: boolean; provider: "noop" | "cursor-sdk"; model?: string } {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     const err = new Error("Invalid AI config body (object required)");
     (err as { statusCode?: number }).statusCode = 400;
@@ -353,14 +355,13 @@ export function parseAiConfigPutBody(raw: unknown): { enabled: boolean; provider
   }
   const provider: "noop" | "cursor-sdk" =
     providerRaw === "cursor-sdk" ? "cursor-sdk" : providerRaw === "noop" ? "noop" : rec.enabled === true ? "cursor-sdk" : "noop";
+  const model = typeof rec.model === "string" && rec.model.trim() ? rec.model.trim() : undefined;
   if (provider === "noop") {
-    return { enabled: false, provider: "noop", model: typeof rec.model === "string" && rec.model.trim() ? rec.model.trim() : "composer-2.5" };
+    return model === undefined ? { enabled: false, provider: "noop" } : { enabled: false, provider: "noop", model };
   }
-  return {
-    enabled: true,
-    provider: "cursor-sdk",
-    model: typeof rec.model === "string" && rec.model.trim() ? rec.model.trim() : "composer-2.5"
-  };
+  return model === undefined
+    ? { enabled: true, provider: "cursor-sdk" }
+    : { enabled: true, provider: "cursor-sdk", model };
 }
 
 
@@ -7101,7 +7102,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
               return;
             }
           }
-          let patch: { enabled: boolean; provider: "noop" | "cursor-sdk"; model: string };
+          let patch: { enabled: boolean; provider: "noop" | "cursor-sdk"; model?: string };
           try {
             patch = parseAiConfigPutBody(parsed);
           } catch (validationErr: unknown) {
@@ -7111,11 +7112,20 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           }
           // Disk schema only knows cursor-sdk: noop is the UI name for
           // enabled:false (AC22), so a noop save flips enabled off and keeps
-          // the stored provider untouched.
+          // the stored provider untouched. An omitted model preserves the
+          // stored value (updateVaultAiConfig skips undefined fields).
           if (patch.provider === "noop") {
-            await updateVaultAiConfig(vaultRoot, { enabled: false, model: patch.model });
+            await updateVaultAiConfig(
+              vaultRoot,
+              patch.model === undefined ? { enabled: false } : { enabled: false, model: patch.model }
+            );
           } else {
-            await updateVaultAiConfig(vaultRoot, { enabled: true, provider: "cursor-sdk", model: patch.model });
+            await updateVaultAiConfig(
+              vaultRoot,
+              patch.model === undefined
+                ? { enabled: true, provider: "cursor-sdk" }
+                : { enabled: true, provider: "cursor-sdk", model: patch.model }
+            );
           }
           writeJson(res, 200, sanitizeToolOutput({ ok: true, ...buildAiConfigSnapshot(vaultRoot) }));
         } catch (err: unknown) {

@@ -1953,6 +1953,36 @@ test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t
     assert.strictEqual(fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8"), diskBefore);
   });
 
+  await t.test("PUT /api/config/ai omitting model preserves the stored custom model", async () => {
+    const saveCustom = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "cursor-sdk", model: "my-custom-1.0" })
+    });
+    assert.strictEqual(saveCustom.status, 200);
+
+    const disableOnly = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: false })
+    });
+    assert.strictEqual(disableOnly.status, 200);
+    const disabled = await disableOnly.json() as { enabled: boolean; provider: string; model: string };
+    assert.strictEqual(disabled.enabled, false);
+    assert.strictEqual(disabled.model, "my-custom-1.0", "disable-only update must not reset the model");
+
+    const providerOnly = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "cursor-sdk" })
+    });
+    assert.strictEqual(providerOnly.status, 200);
+    const reenabled = await providerOnly.json() as { enabled: boolean; provider: string; model: string };
+    assert.strictEqual(reenabled.enabled, true);
+    assert.strictEqual(reenabled.provider, "cursor-sdk");
+    assert.strictEqual(reenabled.model, "my-custom-1.0", "provider-only update must not reset the model");
+  });
+
   await t.test("new routes require auth when token configured", async () => {    const authBus = createActivityBus();
     const authServer = await startStatusServer({
       vaultRoot,
