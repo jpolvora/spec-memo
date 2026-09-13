@@ -35,7 +35,7 @@ Load **every** skill listed in [`.agents/skills/ws-shared/autoload.md`](.agents/
 | `ws-session-tracking` | `{skillsRoot}/ws-session-tracking/SKILL.md` | Every session | Prompt turns, task boundaries, deliverables |
 | `ws-spec-memo` | `{skillsRoot}/ws-spec-memo/SKILL.md` | Config preflight | Wire `config.json` memory backends and hybrid fallback |
 
-`ws-patterns-backend` / `ws-patterns-frontend` and `ws-task-lifecycle` are **not** Always-applied here. Consult pattern files only on matching backend/frontend work; load `ws-task-lifecycle` only for prompt-driven product work that is not Spec-to-PR (see autoload router).
+`ws-task-lifecycle` is **not** Always-applied here. Load `ws-task-lifecycle` only for prompt-driven product work that is not Spec-to-PR (see autoload router).
 
 ---
 

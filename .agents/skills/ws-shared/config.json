@@ -147,8 +147,6 @@
     "_comment_scoreAndRefine": "Optional extra polish when Step 5 score is already >= 9. Score < 9 always runs scoreAndRefine until >= 9 (max 3 rounds, then Pause).",
     "autoload": true,
     "_comment_autoload": "When true, consumer intends repo-root AGENTS.md to autoload Always-applied skills from {sharedDir}/autoload.md. Omitted/missing/false → effective false; harness fails closed only when true.",
-    "enableAuditing": false,
-    "_comment_enableAuditing": "When true, ws-spec-to-pr* orch runs under ws-audit runtime observer; writes {us-dir}/audit-*.log.md; logs anomalies/performance/correctness/disposable scripts; end-of-run may propose upstream GitHub issues or reusable tooling. Default false.",
     "enableDag": false,
     "_comment_enableDag": "When true, break execution plan into multiple parallel tasks. When false (default), execute tasks sequentially one by one in serial order.",
     "contextBudget": 32000,
@@ -164,9 +162,6 @@
       "backoff": 1.5,
       "maxIterations": 20
     },
-    "patternsBackend": true,
-    "patternsFrontend": true,
-    "_comment_patterns": "When true, ws-patterns-backend and ws-patterns-frontend are active for consulting backend.md and frontend.md during development.",
     "_comment_deliveryCommitArtifacts": "Step 8 delivery commit includes under {us-dir}. Defaults: refined plan on; delivery result off (behavior change vs legacy always plan+result); opt-ins false. Omitted object/keys at read time merge to these AC1 defaults — never silently revert to always staging plan+result.",
     "deliveryCommitArtifacts": {
       "includeRefinedPlan": true,
@@ -181,7 +176,90 @@
     "executionModel": "",
     "reviewerModel": "",
     "testingModel": "",
-    "autoloadTaskLifecycle": true
+    "autoloadTaskLifecycle": true,
+    "minVerifyScore": 9,
+    "_comment_minVerifyScore": "Integer 1-10. Advance / scoreAndRefine / post-review requiresFix bar. Omitted or invalid → 9. Score below this always runs scoreAndRefine until met (max 3 rounds, then Pause).",
+    "_comment_autoloadTaskLifecycle": "When true, --write-autoload includes ws-task-lifecycle in the Always-applied table. Omitted/false → on-demand only. Does not set defaults.autoload.",
+    "verboseMode": true,
+    "_comment_verboseMode": "Seeded true by ws-configure-project / config.json.example. Runtime: explicit true prints a reasoned start-of-step preview; omitted or false → silent. Preview text is not canned in skills.",
+    "providerCompat": {
+      "stabilizeStaticPrefix": true,
+      "thinkingToolCompat": false
+    },
+    "_comment_providerCompat": "Optional host hints only. Skill bodies never hardcode vendor HTTP flags. thinkingToolCompat default false; stabilizeStaticPrefix default true.",
+    "contextHygiene": {
+      "pruneAfterStep": true,
+      "backgroundVerboseSteps": false
+    },
+    "_comment_contextHygiene": "pruneAfterStep default true: next step reads the prior state.handoffs entry. backgroundVerboseSteps default false; unsupported hosts log background-unsupported and block.",
+    "reviewJury": {
+      "size": 1
+    },
+    "_comment_reviewJury": "Integer 1-3. Default 1 (single reviewer). Size 2-3 is standard Step 6 only; lite ignores and records juryIgnored: lite-inline.",
+    "hostAdapter": {
+      "mode": "auto",
+      "cliTemplate": "",
+      "browserTool": "browser-mcp"
+    },
+    "_comment_hostAdapter": "Optional. Skills call portable dispatch-agent / browser-mcp. mode auto|native-tool|cli-command|inline-isolated or a named host mapping from host-dispatch.md.",
+    "specializedSubagents": {
+      "enabled": false,
+      "targetHost": "auto",
+      "agentPrefix": "ws",
+      "directory": "projectLevel"
+    },
+    "_comment_specializedSubagents": "Optional opt-in. When enabled: true, compile_host_subagents.cjs materializes host-native projections (one directory per dialect; neutral generic fallback) with pre-baked skill prompts. directory may be 'projectLevel' (dynamically resolved relative to project) or 'userLevel' ($HOME/.cursor/agents, etc). Compiled files carry @generated signatures: commit per team policy or gitignore; recompile after skill updates (--check in CI).",
+    "modelsPreset": "cursor",
+    "modelPresets": {
+      "default": {
+        "plannerModel": "current",
+        "executionModel": "current",
+        "testingModel": "current",
+        "reviewerModel": "current"
+      },
+      "cursor": {
+        "plannerModel": "cursor-grok-4.6-high",
+        "executionModel": "composer-2.5",
+        "testingModel": "composer-2.5",
+        "reviewerModel": "cursor-grok-4.6-medium"
+      },
+      "deepseek": {
+        "plannerModel": "opencode-go/deepseek-v4-pro",
+        "executionModel": "opencode-go/deepseek-v4-flash",
+        "testingModel": "composer-2.5",
+        "reviewerModel": "cursor-grok-4.6-medium"
+      },
+      "opencode": {
+        "plannerModel": "opencode-go/deepseek-v4-pro",
+        "executionModel": "opencode-go/deepseek-v4-flash",
+        "testingModel": "opencode-go/deepseek-v4-flash",
+        "reviewerModel": "opencode-go/deepseek-v4-pro"
+      },
+      "cheap": {
+        "plannerModel": "composer-2.5",
+        "executionModel": "composer-2.5",
+        "testingModel": "composer-2.5",
+        "reviewerModel": "composer-2.5"
+      }
+    },
+    "_comment_stepModels": "Optional project-wide overrides (win over the active preset). Empty string = fall through. Keys 0-9 are standard steps; lite uses 0-5. Roles: dag, scoreAndRefine, reviewFix, fixPrPlan, fixPrExec. Fix-PR roles never inherit numeric 9.",
+    "stepModels": {
+      "0": "",
+      "1": "",
+      "2": "",
+      "3": "",
+      "4": "",
+      "5": "",
+      "6": "",
+      "7": "",
+      "8": "",
+      "9": "",
+      "dag": "",
+      "scoreAndRefine": "",
+      "reviewFix": "",
+      "fixPrPlan": "",
+      "fixPrExec": ""
+    }
   },
   "plans": {
     "dir": ".agents/plans",
@@ -200,7 +278,11 @@
   "preview": {
     "_comment": "Optional ws-preview dry-run overrides. preview.backend is not required for v1 (defaults to cursor-reviewer).",
     "stack": "",
-    "backend": "cursor-reviewer"
+    "backend": "cursor-reviewer",
+    "_comment_dryRunCommand": "Examples: npm run review:dry | bash scripts/pipeline-review-dry-run.sh | node tools/local-review-dry-run.cjs",
+    "dryRunCommand": "",
+    "_comment_localReviewCommand": "Examples: cursor-reviewer --dry-run | python scripts/cursor-reviewer/cli.py --dry-run",
+    "localReviewCommand": ""
   },
   "rules": {
     "_comment": "Guardrails paths. Resolve per ws-shared/AGENTS.md External dependencies (first match). seniorDeveloper = Code review proof checklist source (default packaged ws-senior-developer); set \"\" to disable or point at another guardrail; karpathyGuidelines = surgical-change skill; stackFile = stack companion; changelogFile = append-only history (default under ws-shared/); other keys optional consumer rule paths — leave empty when unused.",
@@ -237,5 +319,10 @@
     "writeBlockHook": false,
     "importOnEnable": true,
     "mcpServerName": "spec-memo"
+  },
+  "tracking": {
+    "_comment": "ws-task-lifecycle Completion walk. featuresMdEnabled default true when omitted; set false to disable the features file entirely. Absent or empty canonicalFiles → auto-detected features file (repo-root FEATURES.md when it exists, else {specsDir}/index.PRD), PLAN.md, PRODUCT.PRD.",
+    "featuresMdEnabled": true,
+    "canonicalFiles": []
   }
 }
