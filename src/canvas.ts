@@ -7,6 +7,7 @@ import { getRecord } from "./store.js";
 import { parseRecord } from "./schema.js";
 import { searchIndex } from "./indexer.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
+import { fenceStatusPayload } from "./io-guard.js";
 import { MemoRecord, RecordKind, RecordStatus } from "./types.js";
 import { hitCountOf, occurrenceOf } from "./recurrence.js";
 
@@ -608,7 +609,7 @@ export function startCanvasServer(options: CanvasServerOptions = {}): Promise<Ca
         const id = decodeURIComponent(recordMatch[3]);
         const record = await getRecord({ vaultRoot, projectId: projId, kind, id });
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(sanitizeToolOutput({ record })));
+        res.end(JSON.stringify(fenceStatusPayload(sanitizeToolOutput({ record }))));
         return;
       }
 
@@ -617,7 +618,7 @@ export function startCanvasServer(options: CanvasServerOptions = {}): Promise<Ca
         const projId = url.searchParams.get("project") || options.project;
         const results = searchIndex({ query, projectId: projId || undefined, vaultRoot });
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(sanitizeToolOutput(results)));
+        res.end(JSON.stringify(fenceStatusPayload(sanitizeToolOutput(results))));
         return;
       }
 

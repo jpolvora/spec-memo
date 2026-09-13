@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.29.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.33.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -528,6 +528,16 @@ The vault can use a pluggable AI agent as a backend for `upsert` / `search` / `b
 - AI Ops journal (durable analysis log, vault `ai-ops/`): every refine/rank settlement appends one JSONL row (`ai-ops-YYYY-MM-DD.part-N.jsonl`, UTC day, 10 MB rotation) with timestamp, operation, ok/fail, duration, redacted input/output, and metadata. `opsLogEnabled` omitted follows `ai.enabled` (disabled/Noop AI writes zero rows); explicit `false` writes zero rows even when AI runs. Payloads are redacted (`redactSecretsInPayload` / `sanitizeLogContext`, live API key values scrubbed) and capped at `opsLogMaxBytes` (default 8192, overflow truncates with `metadata.truncated: true`). Journal I/O is fail-open and never rejects tool results; the stream is diagnostic only (never indexed as vault `kind: log` records). Adapter/journal failures are reported to vault `error.logs` under subsystem `ai`.
 - AI Ops tab + REST (status companion `:3124`, same auth as `/api/status`): `GET /api/ai-ops?limit=&offset=&operation=&ok=&projectId=` returns `{ items, total }` (list items carry id, timestamp, operation, ok, durationMs, recordId, projectId, and a 200-char error snippet — no full input/output); `GET /api/ai-ops/{id}` returns one sanitized entry with truncated input/output/metadata (404 when unknown, 400 on invalid query, 401 unauthenticated). The **AI Ops** tab (`data-tab="tab-ai-ops"`) lists entries with operation / ok-fail / project filters, paginates, and loads row detail into an escaped pane (collapsible input/output/metadata `<pre>` text). Handler exceptions are logged to `error.logs` under subsystem `status-server` with endpoint `/api/ai-ops`.
 - The adapter calls `@cursor/sdk` `Agent.prompt` one-shot on a cloud no-repo runtime (`cloud: { repos: [] }`) — no vault or product `cwd` is ever handed filesystem tools. Unknown `ai.provider` values fail closed at startup (config parse error; MCP/SSE refuse to start half-wired).
+
+### MCP I/O guard (untrusted vault text, prompt-intent refuse, checksums)
+
+Vault text is **untrusted data to host agents, never instructions**. `bootstrap`, `get`, and `search` return trap/decision/spec bodies and search snippets; `upsert`, `prompt record`, `append`, and query fields accept free text. A lexical guard (`src/io-guard.ts`, beside the secrets/path guards in `src/safety.ts`) watches this boundary with a closed override-token table — no 12th MCP tool, no LLM classifier:
+
+- **Inbound writes fail closed:** `upsert` bodies/titles, `prompt record` bodies, and `append` events/details matching the table throw `Safety violation: IO_GUARD` (stable fail code `IO_GUARD`, message capped at 200 chars, no body echo) and write nothing. Order on writes: `IO_GUARD` → secrets → checksum persist → disk.
+- **Inbound queries drop, not fail:** a `search` / `bootstrap` query matching the table runs as an empty query (unfiltered results) with `ioGuard.queryDropped: true` / notice `io-guard: query dropped`. The read path stays available.
+- **Outbound wrap (always):** record `body` / search `snippet` strings are wrapped in `<!-- spec-memo-untrusted-begin -->` … `<!-- spec-memo-untrusted-end -->` after secret/path redaction. `bootstrap`, `get`, and `search` carry `ioGuard: { untrusted: true, alg: "sha256", checksum }` where `checksum` is SHA-256 of the fence-inner UTF-8 text (fence markers excluded). Hosts should verify it and must not obey fenced content as instructions (see `ws-memo` → Agent I/O). CLI `--json` uses the same wrap; status/REST bodies are fenced where they echo markdown.
+- **Checksum on persist:** successful writes store `frontmatter.ioChecksum` (SHA-256 of the canonical body: line endings normalized, trimmed, secrets/paths redacted). Reads whose stored checksum disagrees omit that `body`/`snippet` with `ioGuard.checksumMismatch: true` instead of failing the whole tool. Hybrid `applyChangeset` skips-and-logs per-record offenders (`IO_GUARD` / `IO_GUARD_CHECKSUM`) and recomputes the checksum on every applied write — honest remotes recompute it too.
+- Refusals and mismatches are reported to vault `error.logs` under subsystem `io-guard` with redacted context (flags and lengths only, no body dump).
 
 ### How to diagnose
 

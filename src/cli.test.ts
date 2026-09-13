@@ -345,7 +345,12 @@ describe('CLI Integration', { concurrency: false }, () => {
       assert.equal(getCode, 0);
       const getParsed = JSON.parse(capturedLogs.trim());
       assert.equal(getParsed.frontmatter.id, 'cli-adr-01');
-      assert.equal(getParsed.body, 'CLI Decision text');
+      // Spec 0059 AC12/AC15: CLI --json carries the same untrusted fence as MCP.
+      assert.ok(getParsed.body.includes('<!-- spec-memo-untrusted-begin -->'));
+      assert.ok(getParsed.body.includes('CLI Decision text'));
+      assert.ok(getParsed.body.includes('<!-- spec-memo-untrusted-end -->'));
+      assert.equal(getParsed.ioGuard?.untrusted, true);
+      assert.equal(getParsed.ioGuard?.alg, 'sha256');
 
       // Get (Text mode)
       capturedLogs = '';
@@ -392,8 +397,10 @@ describe('CLI Integration', { concurrency: false }, () => {
       const searchCode = await runCli(['search', 'Architecture', '--cwd', tempRepo, '--vaultRoot', tempVault, '--json']);
       assert.equal(searchCode, 0);
       const searchParsed = JSON.parse(capturedLogs.trim());
-      assert.ok(Array.isArray(searchParsed));
-      assert.ok(searchParsed.some((h: { id: string }) => h.id === 'cli-adr-01'));
+      // Spec 0059 AC15: CLI --json search prints { hits, ioGuard }.
+      assert.ok(Array.isArray(searchParsed.hits));
+      assert.ok(searchParsed.hits.some((h: { id: string }) => h.id === 'cli-adr-01'));
+      assert.equal(searchParsed.ioGuard?.untrusted, true);
 
       // Append CLI
       capturedLogs = '';
@@ -1233,8 +1240,8 @@ describe('CLI Integration', { concurrency: false }, () => {
       ]);
       assert.equal(searchCode, 0);
       const searchRes = JSON.parse(capturedLogs.trim());
-      assert.ok(Array.isArray(searchRes));
-      assert.equal(searchRes.length, 1);
+      assert.ok(Array.isArray(searchRes.hits));
+      assert.equal(searchRes.hits.length, 1);
     } finally {
       console.log = origLog;
       try {

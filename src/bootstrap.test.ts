@@ -151,7 +151,8 @@ describe('Bootstrap Brief Engine', () => {
     assert.ok(calculatePayloadSize(brief) <= budgetBytes);
     assert.ok(brief.traps.length < 30);
     assert.ok(brief.notices.length > 0);
-    assert.ok(brief.notices[0].includes('truncated'));
+    // The io-guard untrusted-data notice precedes the truncation receipt.
+    assert.ok(brief.notices.some((n) => n.includes('truncated')));
 
     // Critical/High severity traps should be retained before low severity
     const severities = brief.traps.map((t) => t.frontmatter.severity);

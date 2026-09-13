@@ -17,6 +17,7 @@ export type ErrorLogSubsystem =
   | 'sync-reconcile'
   | 'vault-git'
   | 'vault'
+  | 'io-guard'
   | 'canvas'
   | 'cli'
   | 'ai'

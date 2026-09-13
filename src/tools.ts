@@ -1,18 +1,23 @@
 import { z } from 'zod';
+import * as fs from 'node:fs';
 import {
   TOOL_NAMES,
   ToolName,
   ToolResponse,
   AppendOptions,
   BootstrapOptions,
+  BootstrapBrief,
   ForgetOptions,
   GcOptions,
+  IoGuardEnvelope,
+  MemoRecord,
   PromoteOptions,
   CheckVersionOptions,
   InstallSkillsOptions,
   PromptOptions,
   RecordKind,
   RecordStatus,
+  SearchHit,
   SearchOptions
 } from './types.js';
 import { RecordKindSchema, RecordStatusSchema } from './schema.js';
@@ -47,6 +52,17 @@ import {
 } from './prompt.js';
 import { submitMemoryFeedback } from './feedback.js';
 import { sanitizeToolOutput } from './safety.js';
+import {
+  canonicalBodyForChecksum,
+  inspectAgentIo,
+  ioChecksumHex,
+  isIoGuardError,
+  logIoGuardRefusal,
+  verifyIoChecksum,
+  verifyStoredChecksum,
+  wrapUntrustedText
+} from './io-guard.js';
+import { parseRecord } from './schema.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot, getProjectMetadata } from './vault.js';
@@ -636,6 +652,89 @@ function ok(data: unknown): { data: unknown } {
   return { data: sanitizeToolOutput(data) };
 }
 
+/**
+ * Spec 0059 outbound (AC12-AC14, AC21): sanitize first (secrets/paths),
+ * then verify stored checksums (mismatch omits body, never whole-tool
+ * fail), then fence bodies/snippets as untrusted data with a SHA-256
+ * envelope over the fence-inner text.
+ */
+function buildIoGuardEnvelope(args: {
+  inners: string[];
+  queryDropped?: boolean;
+  checksumMismatch?: boolean;
+}): IoGuardEnvelope {
+  const envelope: IoGuardEnvelope = { untrusted: true, alg: 'sha256' };
+  if (args.inners.length > 0) {
+    const candidate = ioChecksumHex(args.inners.join('\n'));
+    // AC22: the checksum field is present only when it equals
+    // ioChecksumHex(inner); recomputed here, so it always does — the
+    // explicit re-verify keeps the invariant fail-closed by construction.
+    if (verifyIoChecksum(args.inners.join('\n'), candidate)) {
+      envelope.checksum = candidate;
+    }
+  }
+  if (args.queryDropped === true) {
+    envelope.queryDropped = true;
+  }
+  if (args.checksumMismatch === true) {
+    envelope.checksumMismatch = true;
+  }
+  return envelope;
+}
+
+/** Verify one sanitized record body; omit + flag on mismatch (AC21). */
+function verifyAndCollectRecordBody(
+  record: MemoRecord,
+  inners: string[],
+  ctx: { vaultRoot?: string; projectId?: string; tool: string; recordId: string }
+): boolean {
+  const stored = (record.frontmatter as Record<string, unknown> | undefined)?.ioChecksum;
+  if (
+    stored !== undefined &&
+    stored !== null &&
+    !verifyIoChecksum(canonicalBodyForChecksum(record.body || ''), stored)
+  ) {
+    record.body = '';
+    logIoGuardRefusal(
+      {
+        reason: 'read omitted: checksum mismatch',
+        flags: [],
+        bodyChars: 0,
+        projectId: ctx.projectId,
+        tool: ctx.tool,
+        recordId: ctx.recordId
+      },
+      { vaultRoot: ctx.vaultRoot }
+    );
+    return true;
+  }
+  if (typeof record.body === 'string' && record.body.length > 0) {
+    inners.push(record.body);
+    record.body = wrapUntrustedText(record.body);
+  }
+  return false;
+}
+
+/** Spec 0059 outbound for `get` (AC12-AC14, AC21): sanitize, verify, fence. */
+function guardGetRecord(
+  record: MemoRecord,
+  ctx: { vaultRoot?: string; projectId?: string }
+): { data: unknown; ioGuard: IoGuardEnvelope } {
+  const sanitized = sanitizeToolOutput(record) as MemoRecord;
+  const inners: string[] = [];
+  const mismatch = verifyAndCollectRecordBody(sanitized, inners, {
+    vaultRoot: ctx.vaultRoot,
+    projectId: ctx.projectId || String(sanitized.frontmatter?.project || ''),
+    tool: 'get',
+    recordId: String(sanitized.frontmatter?.id || sanitized.frontmatter?.slug || 'unknown')
+  });
+  const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch: mismatch });
+  return {
+    data: { ...sanitized, ioGuard },
+    ioGuard
+  };
+}
+
 function fail(code: string, err: unknown, details?: unknown): ToolResponse {
   const message = wrapSqliteOpenError(err).message;
   return {
@@ -741,7 +840,44 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           cwd: bootstrapOpts.cwd
         });
       }
-      return ok(result);
+      // Spec 0059 outbound: sanitize, checksum-verify, fence, envelope.
+      const brief = sanitizeToolOutput(result) as BootstrapBrief;
+      const inners: string[] = [];
+      let checksumMismatch = false;
+      const guardCtx = {
+        vaultRoot: bootstrapOpts.vaultRoot,
+        projectId: bootstrapOpts.projectId || brief.projectId,
+        tool: 'bootstrap'
+      };
+      for (const rec of [...(brief.traps || []), ...(brief.decisions || [])]) {
+        if (
+          verifyAndCollectRecordBody(rec, inners, {
+            ...guardCtx,
+            recordId: String(rec.frontmatter?.id || rec.frontmatter?.slug || 'unknown')
+          })
+        ) {
+          checksumMismatch = true;
+        }
+      }
+      for (const sliceRec of [
+        brief.activeSlice?.spec,
+        brief.activeSlice?.plan,
+        brief.activeSlice?.state
+      ]) {
+        if (sliceRec) {
+          if (
+            verifyAndCollectRecordBody(sliceRec, inners, {
+              ...guardCtx,
+              recordId: String(sliceRec.frontmatter?.id || sliceRec.frontmatter?.slug || 'unknown')
+            })
+          ) {
+            checksumMismatch = true;
+          }
+        }
+      }
+      const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch });
+      brief.ioGuard = ioGuard;
+      return { data: brief, ioGuard };
     } catch (err: unknown) {
       return fail('BOOTSTRAP_FAILED', err);
     }
@@ -751,8 +887,20 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
     try {
       const searchOpts = parseResult.data as SearchOptions;
       const { hitIds, sessionId, ...indexOpts } = searchOpts;
+      // Spec 0059 inbound queries (AC10): drop-not-fail. A query matching
+      // the override table runs as empty query (unfiltered sort path).
+      let queryDropped = false;
+      const effectiveIndexOpts: SearchOptions = { ...indexOpts };
+      if (
+        typeof searchOpts.query === 'string' &&
+        searchOpts.query.trim().length > 0 &&
+        !inspectAgentIo(searchOpts.query).ok
+      ) {
+        effectiveIndexOpts.query = '';
+        queryDropped = true;
+      }
       const toolAi = resolveToolAi(searchOpts.vaultRoot);
-      const { hits: results } = await searchIndexRanked(indexOpts, {
+      const { hits: results } = await searchIndexRanked(effectiveIndexOpts, {
         agent: toolAi.agent,
         rankTopK: toolAi.rankTopK,
         timeoutMs: toolAi.timeoutMs,
@@ -783,7 +931,52 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           cwd: searchOpts.cwd
         });
       }
-      return ok(results);
+      // Spec 0059 outbound (AC12-AC14, AC21): verify stored checksums
+      // against the on-disk body (mismatch omits the snippet, never fails
+      // the tool), then sanitize and fence snippets as untrusted data.
+      const mismatchByIndex = new Set<number>();
+      results.forEach((hit, idx) => {
+        const filePath = typeof hit.filepath === 'string' ? hit.filepath : '';
+        if (!filePath) return;
+        try {
+          const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
+          const stored = (parsed.frontmatter as Record<string, unknown>).ioChecksum;
+          if (stored !== undefined && stored !== null && !verifyStoredChecksum(parsed.body, stored)) {
+            mismatchByIndex.add(idx);
+            logIoGuardRefusal(
+              {
+                reason: 'search snippet omitted: checksum mismatch',
+                flags: [],
+                bodyChars: 0,
+                projectId: searchOpts.projectId || hit.projectId,
+                tool: 'search',
+                recordId: String(hit.id)
+              },
+              { vaultRoot: searchOpts.vaultRoot }
+            );
+          }
+        } catch {
+          // Fail-open: unreadable files keep their snippet.
+        }
+      });
+      const hits = sanitizeToolOutput(results) as SearchHit[];
+      const inners: string[] = [];
+      hits.forEach((hit, idx) => {
+        if (mismatchByIndex.has(idx)) {
+          delete hit.snippet;
+          return;
+        }
+        if (typeof hit.snippet === 'string' && hit.snippet.length > 0) {
+          inners.push(hit.snippet);
+          hit.snippet = wrapUntrustedText(hit.snippet);
+        }
+      });
+      const ioGuard = buildIoGuardEnvelope({
+        inners,
+        queryDropped,
+        checksumMismatch: mismatchByIndex.size > 0
+      });
+      return { data: hits, ioGuard };
     } catch (err: unknown) {
       return fail('SEARCH_FAILED', err);
     }
@@ -826,6 +1019,10 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
       return ok(result);
     } catch (err: unknown) {
+      // Spec 0059 AC8: IO_GUARD refusals map to a stable fail payload.
+      if (isIoGuardError(err)) {
+        return fail('IO_GUARD', err);
+      }
       return fail('UPSERT_FAILED', err);
     }
   }
@@ -863,23 +1060,25 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         const refreshed = await getRecord({ id: String(record.frontmatter.id), kind: record.frontmatter.kind, cwd, vaultRoot, projectId });
         if (refreshed) {
           // AC5: missing hits → 0 in payload without requiring a file rewrite
-          if (refreshed.frontmatter.hits == null) {
-            return ok({
-              ...refreshed,
-              frontmatter: { ...refreshed.frontmatter, hits: 0 }
-            });
-          }
-          return ok(refreshed);
+          const payload =
+            refreshed.frontmatter.hits == null
+              ? {
+                  ...refreshed,
+                  frontmatter: { ...refreshed.frontmatter, hits: 0 }
+                }
+              : refreshed;
+          return guardGetRecord(payload, { vaultRoot, projectId });
         }
       }
       // AC5: treat missing hits as 0 in payload without rewriting the file
-      if (record.frontmatter.hits == null) {
-        return ok({
-          ...record,
-          frontmatter: { ...record.frontmatter, hits: 0 }
-        });
-      }
-      return ok(record);
+      const payload =
+        record.frontmatter.hits == null
+          ? {
+              ...record,
+              frontmatter: { ...record.frontmatter, hits: 0 }
+            }
+          : record;
+      return guardGetRecord(payload, { vaultRoot, projectId });
     } catch (err: unknown) {
       return fail('GET_FAILED', err);
     }
@@ -898,6 +1097,10 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       );
       return ok(result);
     } catch (err: unknown) {
+      // Spec 0059 AC8: IO_GUARD refusals map to a stable fail payload.
+      if (isIoGuardError(err)) {
+        return fail('IO_GUARD', err);
+      }
       return fail('APPEND_FAILED', err);
     }
   }
@@ -1170,6 +1373,10 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
 
       return fail('INVALID_ARGUMENTS', `Unsupported prompt action: ${action}`);
     } catch (err: unknown) {
+      // Spec 0059 AC8: IO_GUARD refusals map to a stable fail payload.
+      if (isIoGuardError(err)) {
+        return fail('IO_GUARD', err);
+      }
       return fail('PROMPT_TOOL_FAILED', err);
     }
   }

@@ -20,6 +20,7 @@ import { logErrorReport, listErrorLogEntries, getErrorLogEntry, parseErrorLogLis
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
+import { fenceStatusPayload } from "./io-guard.js";
 import { scheduleHybridPush, pullHybridProject, pushHybridProject } from "./hybrid-sync.js";
 import { syncDual } from "./dual-sync.js";
 import { TopologyInfo, TopologyRole, BackupFileInfo, BackupListFilters } from "./types.js";
@@ -525,6 +526,16 @@ function writeJson(res: http.ServerResponse, statusCode: number, body: unknown):
   setCorsHeaders(res);
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
+}
+
+/**
+ * Spec 0059 outbound for browser surfaces: sanitize (secrets/paths) first,
+ * then fence markdown-echoing fields (`body`, `snippet`, `markdown`) as
+ * untrusted data. Record-list/detail endpoints use this; counters and
+ * error envelopes stay on plain writeJson.
+ */
+function writeGuardedJson(res: http.ServerResponse, statusCode: number, body: unknown): void {
+  writeJson(res, statusCode, fenceStatusPayload(sanitizeToolOutput(body)));
 }
 
 function filterEventsForSnapshot(events: ActivityEvent[], projectId?: string, afterSeq = 0): ActivityEvent[] {
@@ -5895,7 +5906,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           includeExpired,
           asOf
         });
-        writeJson(res, 200, sanitizeToolOutput({ hits }));
+        writeGuardedJson(res, 200, { hits });
         return;
       }
 
@@ -5921,7 +5932,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           hideExpired,
           asOf
         });
-        writeJson(res, 200, sanitizeToolOutput({ records }));
+        writeGuardedJson(res, 200, { records });
         return;
       }
 
@@ -5978,7 +5989,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           const renderedHtml = payload.exists
             ? wrapWikiH2Html(renderPromptMarkdownHtml(payload.markdown))
             : "";
-          writeJson(res, 200, sanitizeToolOutput({ ...payload, renderedHtml }));
+          writeGuardedJson(res, 200, { ...payload, renderedHtml });
         } catch (err: unknown) {
           if (err instanceof WikiError) {
             writeJson(res, err.httpStatus, sanitizeToolOutput({ error: err.message }));
@@ -5994,7 +6005,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           const project = url.searchParams.get("project");
           const sectionId = url.searchParams.get("id");
           const payload = readWikiSection(project, sectionId, vaultRoot);
-          writeJson(res, 200, sanitizeToolOutput(payload));
+          writeGuardedJson(res, 200, payload);
         } catch (err: unknown) {
           if (err instanceof WikiError) {
             writeJson(res, err.httpStatus, sanitizeToolOutput({ error: err.message }));
@@ -6814,7 +6825,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           sort
         };
         const result = query && query.trim() ? searchPrompts(listOpts) : listPrompts(listOpts);
-        writeJson(res, 200, sanitizeToolOutput(result));
+        writeGuardedJson(res, 200, result);
         return;
       }
 
@@ -6852,7 +6863,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           vaultRoot,
           projectId: project
         });
-        writeJson(res, 200, sanitizeToolOutput({ sessionId, turns }));
+        writeGuardedJson(res, 200, { sessionId, turns });
         return;
       }
 
@@ -6878,7 +6889,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const redacted = typeof record.body === "string" && record.body.includes("[REDACTED");
         writeJson(res, 200, {
           ok: true,
-          record: sanitizeToolOutput(record),
+          record: fenceStatusPayload(sanitizeToolOutput(record)),
           renderedHtml: renderPromptMarkdownHtml(record.body || ""),
           secretsRedacted: redacted
         });
@@ -6906,7 +6917,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           limit,
           offset
         });
-        writeJson(res, 200, sanitizeToolOutput(result));
+        writeGuardedJson(res, 200, result);
         return;
       }
 
@@ -6963,7 +6974,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         if (result.savedTraps?.length) {
           scheduleHybridPush(vaultRoot, parsed.projectId);
         }
-        writeJson(res, 200, { ok: true, result: sanitizeToolOutput(result) });
+        writeJson(res, 200, { ok: true, result: fenceStatusPayload(sanitizeToolOutput(result)) });
         return;
       }
 

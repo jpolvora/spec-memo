@@ -17,6 +17,7 @@ import {
 import { syncDual } from "./dual-sync.js";
 import { runDoctor } from "./doctor.js";
 import { serializeRecord } from "./schema.js";
+import { canonicalBodyForChecksum, ioChecksumHex } from "./io-guard.js";
 import { RecordFrontmatter } from "./types.js";
 
 test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
@@ -191,7 +192,9 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
           project: projectId,
           frontmatter: {
             ...item.frontmatter,
-            updated: "2026-09-04T12:00:00.000Z"
+            updated: "2026-09-04T12:00:00.000Z",
+            // Honest remote recomputes ioChecksum when the body changes (spec 0059 AC24).
+            ioChecksum: ioChecksumHex(canonicalBodyForChecksum("# Overwritten by Remote\nRemote version."))
           },
           body: "# Overwritten by Remote\nRemote version."
         }
@@ -228,7 +231,9 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
           project: projectId,
           frontmatter: {
             ...item.frontmatter,
-            updated: "2026-09-04T12:00:00.000Z"
+            updated: "2026-09-04T12:00:00.000Z",
+            // Honest remote recomputes ioChecksum when the body changes (spec 0059 AC24).
+            ioChecksum: ioChecksumHex(canonicalBodyForChecksum("# Remote Divergence\nDifferent remote text."))
           },
           body: "# Remote Divergence\nDifferent remote text."
         }
@@ -497,7 +502,12 @@ test("Conflict Reconciliation & Auto-Merge Engine", async (t) => {
       records: [
         {
           project: logProj,
-          frontmatter: { ...item.frontmatter, updated: item.frontmatter.updated },
+          frontmatter: {
+            ...item.frontmatter,
+            updated: item.frontmatter.updated,
+            // Honest remote recomputes ioChecksum when the body changes (spec 0059 AC24).
+            ioChecksum: ioChecksumHex(canonicalBodyForChecksum("# AC20 Remote Divergent Body"))
+          },
           body: "# AC20 Remote Divergent Body"
         }
       ]

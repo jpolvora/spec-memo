@@ -328,6 +328,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-09-13 | vault-log-sweep-bugfix | Vault log sweep bugfix: atomic compiled-view writes (temp+rename, transient retry), open log `source` values, silent favicon/robots `204`, hybrid unreachable WARN vs data-risk ERROR; v0.28.5 | npm test 697 pass |
 | 2026-09-13 | retrieval-lens-resume | Intent-aware search/bootstrap lenses, omittedIds on budgetReport, `memo resume` / bootstrap `continuation`; v0.29.0 | npm test 726 pass |
 | 2026-09-13 | vault-ai-assistance | Vault AI assistance: agent interface, Noop + Cursor SDK adapter, background refine-on-write, post-FTS top-K rank, doctor/status ai; v0.30.0 | npm test 742 pass + 1 environmental (operator daemon holds :3123) |
+| 2026-09-13 | mcp-io-guard | MCP I/O guard: closed-table prompt-intent scan, IO_GUARD inbound refuse, query drop-not-fail, outbound untrusted fences + SHA-256 ioGuard/ioChecksum, hybrid skip-and-log, ws-memo Agent I/O, bootstrap over-budget handoff claim fix; v0.33.0 | npm test 809 pass |
 
 
 ## 12. Related docs

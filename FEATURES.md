@@ -2,7 +2,7 @@
 
 **Audience: humans and agents** — capability inventory for spec-memo.
 
-Package version: **0.29.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
+Package version: **0.33.0** (`develop`). Status marks: `[ ]` planned · `[~]` in progress · `[x]` shipped (proof in [`PLAN.md`](PLAN.md)).
 
 | Doc | Purpose |
 |-----|---------|
@@ -96,6 +96,7 @@ Do not add an eleventh tool without a [`PRODUCT.PRD`](PRODUCT.PRD) change.
 - [x] **Log compact.** Monthly roll-up files; events remain searchable via FTS.
 - [x] **ADR promotion templates.** Format decisions into standard Nygard ADR or MADR Markdown on promotion. `format: skill` compiles ranked traps into one owner `SKILL.md`.
 - [x] **Redaction.** `upsert` / `append` reject bodies that look like secrets (PEM headers, `api_key=` assignments, known env-file patterns). Caller must omit the secret; spec-memo does not store a redacted copy of the secret value.
+- [x] **MCP I/O guard.** Vault text is untrusted data to host agents: inbound `upsert` / `prompt record` / `append` payloads matching the closed override-token table fail closed (`IO_GUARD`, capped message, no write); hostile `search` / `bootstrap` queries drop to unfiltered results with `ioGuard.queryDropped` / `io-guard: query dropped` notice; outbound bodies/snippets are fenced (`spec-memo-untrusted` markers, post-redaction) with `ioGuard` SHA-256 checksums; `frontmatter.ioChecksum` is recomputed on every write and verified on read (mismatch omits the body, hybrid apply skips-and-logs). `ws-memo` gains an Agent I/O section; 11 tools and `ALLOWED_SKILLS` unchanged.
 - [x] **Project-local capture exclusions.** Optional consumer-owned `.spec-memo-ignore` (gitignore syntax) plus `config.json` `projects.<id>.ignorePaths`; built-in baseline ignores (`node_modules/`, `.env*`, keys, binaries). Enforced in `upsert` pathPatterns, prompt record redaction, bootstrap focus paths, and search `--path`. Diagnostic: `memo doctor --check-capture <path>` and Exclusion Boundary card.
 - [x] **Refuse product-tree write.** If `cwd` or `productRoot` is a git work tree, API/CLI refuse to write record files *under that tree*. Vault writes stay under `$SPEC_MEMO_ROOT`.
 - [x] **Trap dedup (Phase 3).** Same `pathPatterns` + similar DO NOT → bump `occurrences` on the surviving trap (explicit `supersedes` still creates a new file).

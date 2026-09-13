@@ -8,6 +8,13 @@ import { parseRecord, serializeRecord, validateFrontmatter } from './schema.js';
 import { rebuildCompiledViews } from './compiler.js';
 import { openIndex, indexRecord, removeRecord } from './indexer.js';
 import { assertNoSecrets, assertNotInProductRoot } from './safety.js';
+import {
+  canonicalBodyForChecksum,
+  createIoGuardError,
+  inspectAgentIo,
+  ioChecksumHex,
+  logIoGuardRefusal
+} from './io-guard.js';
 import { recordTombstone } from './sync.js';
 import { applyTrapClassification, occurrenceOf, lastSeenOf } from './recurrence.js';
 import { computeExpiresAt, validateTtlInput, annotateExpiredFrontmatter } from './expiration.js';
@@ -295,6 +302,31 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
 
   const now = new Date().toISOString();
 
+  // Spec 0059 inbound (fail closed): IO_GUARD precedes secrets, then write.
+  // Prompt-injection tokens refuse before persist; nothing is written.
+  {
+    const titleText =
+      options.frontmatter && typeof options.frontmatter.title === 'string'
+        ? options.frontmatter.title
+        : undefined;
+    const bodyHit = inspectAgentIo(options.body);
+    const titleHit = inspectAgentIo(titleText);
+    if (!bodyHit.ok || !titleHit.ok) {
+      logIoGuardRefusal(
+        {
+          reason: 'upsert refused: prompt-injection tokens',
+          flags: [...bodyHit.flags, ...titleHit.flags],
+          bodyChars: typeof options.body === 'string' ? options.body.length : 0,
+          projectId,
+          tool: 'upsert',
+          recordId: String(recordId)
+        },
+        { vaultRoot }
+      );
+      throw createIoGuardError('prompt-injection tokens in upsert payload');
+    }
+  }
+
   assertNoSecrets(options.body, 'record body');
   if (options.frontmatter) {
     assertNoSecrets(options.frontmatter, 'record frontmatter');
@@ -476,6 +508,15 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
         fm.aiRefineHash = prev.aiRefineHash;
       }
     }
+  }
+
+  // Spec 0059 checksum on persist (AC20): every successful write stores
+  // frontmatter.ioChecksum = sha256 of the canonical body (after redact,
+  // before fence). Recomputed unconditionally so hybrid-apply and metadata
+  // merges can never persist a stale remote checksum.
+  {
+    const fm = validation.data as unknown as Record<string, unknown>;
+    fm.ioChecksum = ioChecksumHex(canonicalBodyForChecksum(options.body));
   }
 
   // Safety checks: protect product tree (secrets already scanned above)
@@ -824,9 +865,36 @@ export async function appendEvent(options: AppendOptions): Promise<AppendResult>
     ...(options.details || {})
   };
 
+  // Spec 0059 checksum on persist (AC20): append stores the hex on
+  // frontmatter when a body exists (the event string is the body).
+  frontmatter.ioChecksum = ioChecksumHex(canonicalBodyForChecksum(options.event));
+
   const validation = validateFrontmatter(frontmatter);
   if (!validation.success) {
     throw new Error(`Invalid log frontmatter: ${validation.errors.join(', ')}`);
+  }
+
+  // Spec 0059 inbound (fail closed): scan event + stringified details
+  // before any log file is written (AC7).
+  {
+    const detailsText =
+      options.details !== undefined ? JSON.stringify(options.details) : undefined;
+    const eventHit = inspectAgentIo(options.event);
+    const detailsHit = inspectAgentIo(detailsText);
+    if (!eventHit.ok || !detailsHit.ok) {
+      logIoGuardRefusal(
+        {
+          reason: 'append refused: prompt-injection tokens',
+          flags: [...eventHit.flags, ...detailsHit.flags],
+          bodyChars: options.event.length,
+          projectId,
+          tool: 'append',
+          recordId: logId
+        },
+        { vaultRoot }
+      );
+      throw createIoGuardError('prompt-injection tokens in append payload');
+    }
   }
 
   // Safety checks: assert no secrets and protect product tree

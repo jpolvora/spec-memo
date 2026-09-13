@@ -31,7 +31,7 @@ Load **every** skill listed in [`.agents/skills/ws-shared/autoload.md`](.agents/
 | `ws-fable-method` | `{skillsRoot}/ws-fable-method/SKILL.md` | Every prompt | Investigate/act/verify when non-trivial; defer when orch owns the session |
 | `ws-tdah` | `{skillsRoot}/ws-tdah/SKILL.md` | Every prompt | Action-first shape + judgment |
 | `ws-megabrain` | `{skillsRoot}/ws-megabrain/SKILL.md` | Every prompt | Vibe-coding implementer (no spec); defer when orch owns the session |
-| `ws-memo` | `{skillsRoot}/ws-memo/SKILL.md` | Session start / working memory | Vault runtime (11 MCP tools + CLI) |
+| `ws-memo` | `{skillsRoot}/ws-memo/SKILL.md` | Session start / working memory | Vault runtime (11 MCP tools + CLI) with MCP I/O guard (untrusted-data fences + SHA-256 checksums; `IO_GUARD` refuse) |
 | `ws-session-tracking` | `{skillsRoot}/ws-session-tracking/SKILL.md` | Every session | Prompt turns, task boundaries, deliverables |
 | `ws-spec-memo` | `{skillsRoot}/ws-spec-memo/SKILL.md` | Config preflight | Wire `config.json` memory backends and hybrid fallback |
 

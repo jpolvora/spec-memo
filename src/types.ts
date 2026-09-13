@@ -112,6 +112,12 @@ export interface RecordFrontmatter {
   aiSummary?: string;
   /** SHA-256 of the body the AI aids were generated from (idempotent skip, AC16). */
   aiRefineHash?: string;
+  /**
+   * MCP I/O guard checksum (spec 0059): SHA-256 hex of the canonical body
+   * (after secret/path redact, before fence wrap). Recomputed on every
+   * write; reads compare and omit the body on mismatch.
+   */
+  ioChecksum?: string;
   // Prompt & Session extended fields
   ide?: string;
   model?: string;
@@ -158,6 +164,20 @@ export interface ToolErrorResponse {
 export interface ToolSuccessResponse<T = unknown> {
   isError?: false;
   data: T;
+  /**
+   * MCP I/O guard envelope (spec 0059) on bootstrap/get/search: marks
+   * fenced vault text as untrusted data with a SHA-256 checksum of the
+   * fence-inner text. Shapes of `data` are unchanged (11 tools unchanged).
+   */
+  ioGuard?: IoGuardEnvelope;
+}
+
+export interface IoGuardEnvelope {
+  untrusted: true;
+  alg: 'sha256';
+  checksum?: string;
+  queryDropped?: true;
+  checksumMismatch?: true;
 }
 
 export type ToolResponse<T = unknown> = ToolSuccessResponse<T> | ToolErrorResponse;
@@ -608,6 +628,12 @@ export interface BootstrapBrief {
   notices: string[];
   sessionResume?: SessionResume;
   budgetReport?: BootstrapBudgetReport;
+  /**
+   * MCP I/O guard envelope mirror (spec 0059): same object as the
+   * top-level ToolResponse `ioGuard` so CLI `--json` (which prints
+   * `data`) carries the checksum without a shape break.
+   */
+  ioGuard?: IoGuardEnvelope;
 }
 
 export interface GcOptions {
