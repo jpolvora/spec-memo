@@ -482,7 +482,8 @@ export async function compileBootstrapBrief(
         toCandidate,
         rankTopK,
         timeoutMs: ai.timeoutMs,
-        projectId
+        projectId,
+        vaultRoot
       });
       activeTraps = rankedTraps.items;
       const rankedDecisions = await rankRecordsWithAgent({
@@ -492,7 +493,8 @@ export async function compileBootstrapBrief(
         toCandidate,
         rankTopK,
         timeoutMs: ai.timeoutMs,
-        projectId
+        projectId,
+        vaultRoot
       });
       activeDecisions = rankedDecisions.items;
     } catch {

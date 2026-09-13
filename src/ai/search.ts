@@ -8,6 +8,8 @@ export interface RankedSearchAi {
   rankTopK?: number;
   timeoutMs?: number;
   projectId?: string;
+  /** Vault root for the durable AI ops journal (spec 0057). Defaults to options.vaultRoot. */
+  vaultRoot?: string;
 }
 
 export interface RankedSearchResult {
@@ -37,7 +39,8 @@ export async function searchIndexRanked(
       hits,
       rankTopK: ai.rankTopK && ai.rankTopK > 0 ? ai.rankTopK : 20,
       timeoutMs: ai.timeoutMs,
-      projectId: ai.projectId || options.projectId
+      projectId: ai.projectId || options.projectId,
+      vaultRoot: ai.vaultRoot || options.vaultRoot
     });
     ranked = res.hits;
     aiRank = res.aiRank;
