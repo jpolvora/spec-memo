@@ -134,9 +134,9 @@ export function mergeRecordMetadata(
  * never a full changeset rollback.
  */
 export function checkIncomingIoGuard(item: ChangesetRecord): { code: string; reason: string } | null {
-  const title =
-    typeof item.frontmatter.title === 'string' ? item.frontmatter.title : undefined;
-  if (!inspectAgentIo(item.body).ok || !inspectAgentIo(title).ok) {
+  // AC6 names body + title; the scan covers the whole frontmatter JSON so
+  // sibling free-text fields cannot be used as an injection bypass.
+  if (!inspectAgentIo(item.body).ok || !inspectAgentIo(JSON.stringify(item.frontmatter)).ok) {
     return { code: IO_GUARD_CODE, reason: 'prompt-injection tokens in synced record' };
   }
   const stored = (item.frontmatter as Record<string, unknown>).ioChecksum;

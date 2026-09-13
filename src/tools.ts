@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   TOOL_NAMES,
   ToolName,
@@ -66,6 +67,7 @@ import {
 } from './io-guard.js';
 import { parseRecord } from './schema.js';
 import { calculatePayloadSize } from './bootstrap.js';
+import { rollbackHandoffClaim } from './handoff.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot, getProjectMetadata } from './vault.js';
@@ -924,6 +926,30 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         }
         while (brief.activeSlice?.spec && overBudget()) {
           delete brief.activeSlice.spec;
+        }
+        // Round-2 review: shed the handoff block last (highest value).
+        // Partition is airtight: an object present at refit start was
+        // claimed this session (rollback on markdown shed); markdown-only
+        // briefs were delivered unclaimed pre-fence (no rollback needed).
+        const refitClaimedId =
+          brief.handoff && typeof brief.handoff.id === 'string' ? brief.handoff.id : undefined;
+        if (brief.handoff && overBudget()) {
+          delete brief.handoff;
+        }
+        if (brief.handoffMarkdown && overBudget()) {
+          if (refitClaimedId) {
+            try {
+              const handoffProjectDir = path.join(
+                getVaultRoot(bootstrapOpts.vaultRoot),
+                'projects',
+                String(bootstrapOpts.projectId || brief.projectId)
+              );
+              rollbackHandoffClaim(handoffProjectDir, refitClaimedId);
+            } catch {
+              // Best-effort rollback; the shed below still holds the budget.
+            }
+          }
+          delete brief.handoffMarkdown;
         }
         brief.truncated = true;
         if (!brief.notices.some((n) => n.includes('truncated'))) {

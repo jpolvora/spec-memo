@@ -266,6 +266,49 @@ export function claimHandoff(options: {
   return claimed;
 }
 
+function readHandoffFileObject(filePath: string): HandoffRecord | null {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw) as HandoffRecord;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Roll a handoff claim back to pending (spec 0059, PR#65 round 2).
+ * Used when an over-budget shed must drop already-claimed handoff content
+ * from a brief: without the rollback the handoff would be marked consumed
+ * but never delivered (lost to future sessions). Best-effort: returns false
+ * when the file is missing, foreign, or unwritable — callers still shed.
+ */
+export function rollbackHandoffClaim(projectDir: string, recordId: string): boolean {
+  try {
+    const dir = path.join(projectDir, HANDOFFS_SUBDIR);
+    if (!fs.existsSync(dir)) return false;
+    let filePath: string | null = null;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.json')) continue;
+      const candidate = path.join(dir, name);
+      const parsed = readHandoffFileObject(candidate);
+      if (parsed && parsed.id === recordId) {
+        filePath = candidate;
+        break;
+      }
+    }
+    if (!filePath) return false;
+    const raw = readHandoffFileObject(filePath);
+    if (!raw || raw.id !== recordId || !raw.claimed) return false;
+    const restored: HandoffRecord = { ...raw, claimed: false };
+    delete restored.claimedAt;
+    delete restored.claimedBySession;
+    fs.writeFileSync(filePath, JSON.stringify(restored, null, 2), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function cancelHandoffForContext(options: {
   projectDir: string;
   cwd: string;

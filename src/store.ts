@@ -304,18 +304,18 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
 
   // Spec 0059 inbound (fail closed): IO_GUARD precedes secrets, then write.
   // Prompt-injection tokens refuse before persist; nothing is written.
+  // AC6 names body + title; the scan covers the whole frontmatter JSON so
+  // sibling free-text fields (summary, rationale, tags, module) cannot be
+  // used as an injection bypass (PR#65 round 2).
   {
-    const titleText =
-      options.frontmatter && typeof options.frontmatter.title === 'string'
-        ? options.frontmatter.title
-        : undefined;
+    const fmJson = options.frontmatter ? JSON.stringify(options.frontmatter) : undefined;
     const bodyHit = inspectAgentIo(options.body);
-    const titleHit = inspectAgentIo(titleText);
-    if (!bodyHit.ok || !titleHit.ok) {
+    const fmHit = inspectAgentIo(fmJson);
+    if (!bodyHit.ok || !fmHit.ok) {
       logIoGuardRefusal(
         {
           reason: 'upsert refused: prompt-injection tokens',
-          flags: [...bodyHit.flags, ...titleHit.flags],
+          flags: [...bodyHit.flags, ...fmHit.flags],
           bodyChars: typeof options.body === 'string' ? options.body.length : 0,
           projectId,
           tool: 'upsert',
