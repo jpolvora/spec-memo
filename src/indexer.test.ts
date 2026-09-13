@@ -533,6 +533,67 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
     assert.equal(inferSearchIntent('why did this fail'), 'trap');
   });
 
+  it('intent FTS sort applies stale feedback once (not twice)', async () => {
+    const sharedBody = 'failure shared stale intent keyword body text';
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'stale-intent-trap',
+      frontmatter: {
+        id: 'trap-stale-intent',
+        title: 'Stale intent trap',
+        severity: 'medium',
+        status: 'active',
+        staleCount: 3,
+        helpfulCount: 0,
+        pathPatterns: ['src/stale-intent-a.ts']
+      },
+      body: sharedBody
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'fresh-intent-trap',
+      frontmatter: {
+        id: 'trap-fresh-intent',
+        title: 'Fresh intent trap',
+        severity: 'medium',
+        status: 'active',
+        pathPatterns: ['src/fresh-intent-b.ts']
+      },
+      body: sharedBody
+    });
+
+    const intentHits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'failure shared stale intent keyword body',
+      kinds: ['trap']
+    });
+    assert.equal(intentHits.length, 2);
+    assert.equal(intentHits[0]?.id, 'trap-fresh-intent');
+    assert.equal(intentHits[1]?.id, 'trap-stale-intent');
+
+    const freshRank = intentHits[0]?.rank ?? 0;
+    const staleRank = intentHits[1]?.rank ?? 0;
+    const trapIntentBoost = 1.5;
+    const staleFeedback = 0.25;
+    const correctStaleSortKey = staleRank * trapIntentBoost;
+    const doublePenaltySortKey = staleRank * staleFeedback * trapIntentBoost;
+    assert.ok(freshRank * trapIntentBoost < correctStaleSortKey);
+    assert.ok(doublePenaltySortKey > correctStaleSortKey);
+
+    const noIntentHits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'shared stale intent keyword body',
+      kinds: ['trap']
+    }).map((h) => h.id);
+    assert.deepEqual(noIntentHits, ['trap-fresh-intent', 'trap-stale-intent']);
+  });
+
   it('NS1: empty or unknown query keeps frozen relevance id sequence', async () => {
     await upsertRecord({
       cwd: tempProject,

@@ -33,17 +33,8 @@ function searchIntentForQuery(query: string): SearchIntent {
   return inferSearchIntent(query);
 }
 
-function boostedSortRank(
-  rank: number,
-  kind: string,
-  intent: SearchIntent,
-  feedbackMultiplier: number,
-  sort: SearchOptions['sort']
-): number {
-  const applyFeedback = !sort || sort === 'relevance';
-  const effective =
-    rank * (applyFeedback && feedbackMultiplier < 1 ? feedbackMultiplier : 1);
-  return effective * intentKindBoost(intent, kind);
+function boostedSortRank(rank: number, kind: string, intent: SearchIntent): number {
+  return rank * intentKindBoost(intent, kind);
 }
 
 function compareHitsWithIntent(
@@ -825,18 +816,8 @@ export function searchIndex(options: SearchOptions): SearchHit[] {
       });
     } else if (hasFtsQuery && ftsQuery) {
       results.sort((a, b) => {
-        const feedbackA = salienceMultiplier(
-          a.filepath && fs.existsSync(a.filepath)
-            ? parseRecord(fs.readFileSync(a.filepath, 'utf8'), a.filepath).frontmatter
-            : {}
-        );
-        const feedbackB = salienceMultiplier(
-          b.filepath && fs.existsSync(b.filepath)
-            ? parseRecord(fs.readFileSync(b.filepath, 'utf8'), b.filepath).frontmatter
-            : {}
-        );
-        const rankA = boostedSortRank(a.rank ?? 0, a.kind, searchIntent, feedbackA, sort);
-        const rankB = boostedSortRank(b.rank ?? 0, b.kind, searchIntent, feedbackB, sort);
+        const rankA = boostedSortRank(a.rank ?? 0, a.kind, searchIntent);
+        const rankB = boostedSortRank(b.rank ?? 0, b.kind, searchIntent);
         if (rankA !== rankB) return rankA - rankB;
         return String(a.id).localeCompare(String(b.id));
       });
