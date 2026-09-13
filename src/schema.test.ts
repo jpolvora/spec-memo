@@ -84,4 +84,36 @@ Do not use raw eval.
     assert.ok(serialized.includes('id: trap-test-sample'));
     assert.ok(serialized.includes('Do not use raw eval'));
   });
+
+  it('should accept skill-slug log sources and preserve them verbatim (AC4)', () => {
+    const base = {
+      id: 'log-1',
+      kind: 'log',
+      project: 'proj-1',
+      status: 'active',
+      created: new Date().toISOString(),
+      updated: new Date().toISOString()
+    };
+    const custom = validateFrontmatter({ ...base, source: 'ws-configure-project' });
+    assert.equal(custom.success, true);
+    if (custom.success) assert.equal(custom.data.source, 'ws-configure-project');
+
+    const normalized = validateFrontmatter({ ...base, source: ' Agent ' });
+    assert.equal(normalized.success, true);
+    if (normalized.success) assert.equal(normalized.data.source, 'agent');
+  });
+
+  it('should still reject empty or non-string sources (AC4)', () => {
+    const base = {
+      id: 'log-1',
+      kind: 'log',
+      project: 'proj-1',
+      status: 'active',
+      created: new Date().toISOString(),
+      updated: new Date().toISOString()
+    };
+    assert.equal(validateFrontmatter({ ...base, source: '' }).success, false);
+    assert.equal(validateFrontmatter({ ...base, source: '   ' }).success, false);
+    assert.equal(validateFrontmatter({ ...base, source: 42 }).success, false);
+  });
 });

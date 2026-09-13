@@ -5,7 +5,7 @@ import {
   getShutdownFlushMs,
   type VaultGitChannelResult
 } from './vault.js';
-import { flushDebouncedPushes, syncHybrid, type HybridSyncReport } from './hybrid-sync.js';
+import { flushDebouncedPushes, syncHybrid, isHybridUnreachable, type HybridSyncReport } from './hybrid-sync.js';
 import { readHybridState } from './hybrid-state.js';
 import { logErrorReport } from './error-logger.js';
 import { recordTelemetry } from './telemetry.js';
@@ -137,6 +137,7 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
           mode: config.mode,
           projectId: options.projectId,
           error: err,
+          level: isHybridUnreachable(err) ? 'WARN' : 'ERROR',
           context: { phase: 'orchestrate', trigger }
         },
         { vaultRoot }

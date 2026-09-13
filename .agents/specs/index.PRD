@@ -126,6 +126,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] Interactive install-hooks and install-skills with explicit host permission (`spec: 0048-install-hooks-skills-interactive.context.md`)
 - [x] Status Vaults tab: modal forms and per-project sync (`spec: 0049-status-vaults-tab-ui.spec.md`)
 - [x] memo shutdown command for stopping orphaned MCP servers (`spec: 0053-memo-shutdown.spec.md`)
+- [x] Vault log sweep bugfix: atomic compiled-view writes, log source values, favicon silence, hybrid-offline severity (`spec: 0054-vault-log-sweep-bugfix.spec.md`)
 
 
 
@@ -195,6 +196,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 50 | `memo-shutdown` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | memo shutdown command for stopping orphaned MCP servers |
 
 | 51 | [`us-55`](0051-us-55.spec.md) | `[x]` done | Phase 8 | Sync partial-failure hardening + follow-up: sequential dual-sync, autostash recovery, view-rebuild resilience |
+
+| 52 | [`vault-log-sweep-bugfix`](0054-vault-log-sweep-bugfix.spec.md) | `[x]` done | Phase 8 | Vault log sweep bugfix: atomic compiled-view writes, log source values, favicon silence, hybrid-offline severity |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -272,6 +275,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-12 | us-55-followup | Sequential dual-sync (hybrid→vaultGit), autostash abort+pop recovery, transient view-rebuild skip-and-log with retry, dirty-state error surfacing; v0.28.3 | PR #58 (merged `2acf002`); npm test 688 pass |
 | 2026-09-12 | memo-shutdown-56 | `memo shutdown` (alias `stop`) graceful stop for orphaned serve processes: discovery, SIGTERM-then-force, scoping, dry-run, JSON; v0.28.3 | PR #58 (merged `2acf002`); npm test 688 pass |
 | 2026-09-12 | project-wiki-site | Living feature wiki published on the docs website: ported `ws-wiki` site generator, `docs/wiki/**`, homepage Wiki section, `check:site` CI drift gate; v0.28.4 | develop `dd96f13` + ship commit |
+| 2026-09-13 | vault-log-sweep-bugfix | Vault log sweep bugfix: atomic compiled-view writes, open log `source` values, silent favicon/robots, hybrid unreachable WARN vs data-risk ERROR; v0.28.5 | npm test 697 pass |
 
 ## Archive
 

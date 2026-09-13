@@ -16,7 +16,8 @@ import {
   pushHybridProject,
   scheduleHybridPush,
   clearDebouncedPushes,
-  flushDebouncedPushes
+  flushDebouncedPushes,
+  isHybridUnreachable
 } from './hybrid-sync.js';
 import { callRemoteTool, createRemoteClient } from './mcp-proxy.js';
 import { runCli } from './cli.js';
@@ -1440,6 +1441,37 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
     assert.ok(errorLogs.includes('Remote URL is not configured'));
     assert.ok(errorLogs.includes('Remote daemon communication failed'));
     assert.ok(errorLogs.includes('[hybrid-sync]'));
+  });
+
+  await t.test('AC6/AC7: unreachable hybrid failures log WARN, live-daemon failures log ERROR', async () => {
+    assert.equal(isHybridUnreachable(new Error('fetch failed')), true);
+    assert.equal(isHybridUnreachable(new Error('Hybrid sync pull timed out after 30000ms connecting to http://127.0.0.1:59999')), true);
+    const refused = new Error('connect ECONNREFUSED 127.0.0.1:59999') as NodeJS.ErrnoException;
+    refused.code = 'ECONNREFUSED';
+    assert.equal(isHybridUnreachable(refused), true);
+    assert.equal(isHybridUnreachable(new Error('Remote sync pull failed with HTTP 500: Internal Server Error')), false);
+    assert.equal(isHybridUnreachable(new Error('rollback journal restore failed')), false);
+
+    const unreachableVault = trackVault(path.join(tempDir, 'unreachable-severity-vault'));
+    const pid = 'unreachable-severity-proj';
+    ensureProjectVault(
+      {
+        projectId: pid,
+        normalizedRemote: null,
+        rootPath: tempDir,
+        isGit: false,
+        isFallback: true,
+        vaultProjectPath: path.join(unreachableVault, 'projects', pid)
+      },
+      unreachableVault
+    );
+    await assert.rejects(
+      () => pullHybridProject(unreachableVault, pid, 'http://127.0.0.1:59999', 'tok'),
+      /fetch failed|ECONNREFUSED/i
+    );
+    const severityLogs = readErrorLogs(unreachableVault);
+    assert.ok(severityLogs.includes('[WARN] [hybrid-sync]'));
+    assert.ok(!severityLogs.includes('[ERROR] [hybrid-sync]'));
   });
 
   await t.test('AC25/AC26: prompt tool hybrid changeset + remote proxy parity', async () => {

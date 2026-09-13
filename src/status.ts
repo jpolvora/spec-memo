@@ -3993,6 +3993,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       const pathname = url.pathname;
       const method = req.method || "GET";
 
+      // Browser well-known noise: answer before telemetry/logging so
+      // favicon and robots probes never pollute error.logs or telemetry.
+      if (method === "GET" && (pathname === "/favicon.ico" || pathname === "/robots.txt")) {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
       setCorsHeaders(res);
 
       res.on("finish", () => {

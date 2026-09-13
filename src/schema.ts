@@ -20,7 +20,23 @@ export const RecordStatusSchema = z.preprocess(
   z.enum(['active', 'paused', 'shipped', 'superseded', 'archived', 'completed'])
 );
 
-export const RecordSourceSchema = z.enum(['agent', 'human', 'imported']);
+/**
+ * Record provenance. The known trio (`agent`, `human`, `imported`) is
+ * normalized to lowercase; any other non-empty origin slug (e.g. a
+ * workflow-skills skill name like `ws-configure-project`) is preserved
+ * verbatim (trimmed) so skill-emitted logs ingest without frontmatter
+ * rejection. Empty or non-string values still fail validation.
+ */
+export const RecordSourceSchema = z.preprocess(
+  (val) => (typeof val === 'string' ? val.trim() : val),
+  z
+    .string()
+    .min(1, 'Record source must be a non-empty string')
+    .transform((s) => {
+      const lower = s.toLowerCase();
+      return lower === 'agent' || lower === 'human' || lower === 'imported' ? lower : s;
+    })
+);
 
 export const SeveritySchema = z.preprocess(
   (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
