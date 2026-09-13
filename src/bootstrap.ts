@@ -22,6 +22,7 @@ import { roundExplain } from './ranking-explain.js';
 import { isRecordExpiredAt, defaultTtlDaysForKind } from './expiration.js';
 import {
   claimHandoff,
+  findHandoffFile,
   getSessionObjective,
   peekEligibleHandoff,
   renderHandoffMarkdown
@@ -625,6 +626,15 @@ export async function compileBootstrapBrief(
       handoff: handoffCandidate
     };
     const mustShedObject = calculatePayloadSize(preClaim) > budgetBytes;
+    // When even the markdown alone cannot fit, deliver nothing and leave
+    // the handoff pending (no claim) for a larger-budget session — a
+    // claimed-but-undelivered handoff would be lost (never redelivered).
+    if (calculatePayloadSize(deliverable) > budgetBytes) {
+      delete brief.handoff;
+      delete brief.handoffMarkdown;
+      brief.byteLength = calculatePayloadSize(brief);
+      return brief;
+    }
     try {
       deliverable.handoff = withVaultLockSync(vaultRoot, () =>
         claimHandoff({
@@ -638,13 +648,28 @@ export async function compileBootstrapBrief(
       deliverable.byteLength = calculatePayloadSize(deliverable);
       // The claim stamps claimedAt/claimedBySession bytes; shed the object
       // first (keeping the markdown content), then the markdown, so a
-      // fitted brief never returns over budget. The vault claim is kept:
-      // the markdown was delivered this session (at-most-once preserved).
+      // fitted brief never returns over budget.
       if (mustShedObject || deliverable.byteLength > budgetBytes) {
         delete deliverable.handoff;
         deliverable.byteLength = calculatePayloadSize(deliverable);
       }
       if (deliverable.byteLength > budgetBytes) {
+        // Full shed after a claim: roll the claim back so the handoff
+        // stays pending instead of being marked consumed but undelivered.
+        try {
+          const filePath = findHandoffFile(projectDir, handoffCandidate);
+          if (filePath) {
+            const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as HandoffRecord;
+            if (raw && raw.id === handoffCandidate.id) {
+              const restored: HandoffRecord = { ...raw, claimed: false };
+              delete restored.claimedAt;
+              delete restored.claimedBySession;
+              fs.writeFileSync(filePath, JSON.stringify(restored, null, 2), 'utf8');
+            }
+          }
+        } catch {
+          // Best-effort rollback; the shed below still holds the budget.
+        }
         delete deliverable.handoffMarkdown;
         deliverable.byteLength = calculatePayloadSize(deliverable);
       }

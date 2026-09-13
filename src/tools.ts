@@ -58,11 +58,14 @@ import {
   ioChecksumHex,
   isIoGuardError,
   logIoGuardRefusal,
+  UNTRUSTED_BEGIN,
+  UNTRUSTED_END,
   verifyIoChecksum,
   verifyStoredChecksum,
   wrapUntrustedText
 } from './io-guard.js';
 import { parseRecord } from './schema.js';
+import { calculatePayloadSize } from './bootstrap.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot, getProjectMetadata } from './vault.js';
@@ -877,6 +880,77 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       }
       const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch });
       brief.ioGuard = ioGuard;
+      // Spec 0059 review (PR#65): fences grow bodies after the byte-budget
+      // pass, so re-account and shed lowest-ranked fenced records first.
+      // The stale-budget payload must never exceed what byteLength claims.
+      const collectFenceInners = (target: string[]): void => {
+        const collectOne = (rec: MemoRecord | undefined): void => {
+          if (!rec || typeof rec.body !== 'string' || !rec.body.includes(UNTRUSTED_BEGIN)) {
+            return;
+          }
+          target.push(
+            rec.body
+              .split('\n')
+              .filter((line) => line !== UNTRUSTED_BEGIN && line !== UNTRUSTED_END)
+              .join('\n')
+          );
+        };
+        for (const rec of [...brief.traps, ...brief.decisions]) {
+          collectOne(rec);
+        }
+        collectOne(brief.activeSlice?.spec);
+        collectOne(brief.activeSlice?.plan);
+        collectOne(brief.activeSlice?.state);
+      };
+      const refitEnvelope = (): IoGuardEnvelope => {
+        const refitInners: string[] = [];
+        collectFenceInners(refitInners);
+        return buildIoGuardEnvelope({ inners: refitInners, checksumMismatch });
+      };
+      brief.byteLength = calculatePayloadSize(brief);
+      if (brief.byteLength > brief.budgetBytes) {
+        const overBudget = (): boolean => calculatePayloadSize(brief) > brief.budgetBytes;
+        while (brief.traps.length > 0 && overBudget()) {
+          brief.traps.pop();
+        }
+        while (brief.decisions.length > 0 && overBudget()) {
+          brief.decisions.pop();
+        }
+        while (brief.activeSlice?.state && overBudget()) {
+          delete brief.activeSlice.state;
+        }
+        while (brief.activeSlice?.plan && overBudget()) {
+          delete brief.activeSlice.plan;
+        }
+        while (brief.activeSlice?.spec && overBudget()) {
+          delete brief.activeSlice.spec;
+        }
+        brief.truncated = true;
+        if (!brief.notices.some((n) => n.includes('truncated'))) {
+          brief.notices.push(
+            `Context brief truncated to fit ${brief.budgetBytes} byte budget (post-fence refit).`
+          );
+        }
+        // Rebuild the envelope from the survivors so the checksum covers
+        // exactly the delivered fence-inner text (AC22).
+        const refit = refitEnvelope();
+        brief.ioGuard = refit;
+        brief.byteLength = calculatePayloadSize(brief);
+        // The refit notice itself costs bytes: shed whole records (no
+        // further notice edits) until the budget holds, then re-sync the
+        // envelope to the final delivered set.
+        while ((brief.traps.length > 0 || brief.decisions.length > 0) && overBudget()) {
+          if (brief.traps.length > 0) {
+            brief.traps.pop();
+          } else {
+            brief.decisions.pop();
+          }
+        }
+        const finalGuard = refitEnvelope();
+        brief.ioGuard = finalGuard;
+        brief.byteLength = calculatePayloadSize(brief);
+        return { data: brief, ioGuard: finalGuard };
+      }
       return { data: brief, ioGuard };
     } catch (err: unknown) {
       return fail('BOOTSTRAP_FAILED', err);

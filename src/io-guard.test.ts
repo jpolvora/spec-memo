@@ -596,8 +596,119 @@ describe('io-guard hybrid apply (AC9, AC24)', () => {
   });
 });
 
-describe('io-guard harness invariants (AC18)', () => {
-  it('ALLOWED_SKILLS stays ws-memo + ws-session-tracking (no third skill id)', () => {
+describe('io-guard review hardening (PR#65)', () => {
+  let ctx: ReturnType<typeof setupEnv>;
+
+  beforeEach(async () => {
+    ctx = setupEnv();
+    for (let i = 1; i <= 4; i++) {
+      await upsertRecord({
+        cwd: ctx.tempProject,
+        vaultRoot: ctx.tempVault,
+        kind: 'trap',
+        slug: `refit-${i}`,
+        allowDuplicate: true,
+        frontmatter: { id: `trap-refit-${i}`, title: `Refit trap ${i}`, severity: 'high', pathPatterns: ['src/**'] },
+        body: `Refit body ${i} ${'z'.repeat(230)}`
+      });
+    }
+  });
+
+  afterEach(() => {
+    teardownEnv(ctx);
+  });
+
+  function fenceInnersOf(brief: {
+    traps: Array<{ body: string }>;
+    decisions: Array<{ body: string }>;
+  }): string[] {
+    const inners: string[] = [];
+    for (const rec of [...brief.traps, ...brief.decisions]) {
+      if (typeof rec.body === 'string' && rec.body.includes(UNTRUSTED_BEGIN)) {
+        inners.push(
+          rec.body
+            .split('\n')
+            .filter((line) => line !== UNTRUSTED_BEGIN && line !== UNTRUSTED_END)
+            .join('\n')
+        );
+      }
+    }
+    return inners;
+  }
+
+  it('post-fence briefs never exceed the byte budget and checksums match survivors', async () => {
+    for (const maxBytes of [700, 1000, 1500, 2500]) {
+      const res = await executeTool('bootstrap', {
+        cwd: ctx.tempProject,
+        vaultRoot: ctx.tempVault,
+        maxBytes
+      });
+      assert.equal(res.isError, undefined);
+      const brief = res.data as {
+        traps: Array<{ body: string }>;
+        decisions: Array<{ body: string }>;
+        byteLength: number;
+        budgetBytes: number;
+        truncated: boolean;
+        ioGuard?: IoGuardEnvelope;
+      };
+      assert.ok(
+        brief.byteLength <= brief.budgetBytes,
+        `post-fence byteLength ${brief.byteLength} must fit budget ${brief.budgetBytes}`
+      );
+      const inners = fenceInnersOf(brief);
+      const expected = inners.length > 0 ? ioChecksumHex(inners.join('\n')) : undefined;
+      assert.equal(brief.ioGuard?.checksum, expected, 'envelope covers exactly the survivors');
+      const envelope = (res as unknown as { ioGuard?: IoGuardEnvelope }).ioGuard;
+      assert.deepEqual(brief.ioGuard, envelope);
+    }
+  });
+
+  it('over-budget handoff is left pending (no claim) and delivered later with room', async () => {
+    const { startSessionRecord, endSessionRecord } = await import('./prompt.js');
+    const { resolveOwner, resolveGitBranch } = await import('./handoff.js');
+    await startSessionRecord({ vaultRoot: ctx.tempVault, cwd: ctx.tempProject, sessionId: 'refit-s1' });
+    await endSessionRecord({
+      vaultRoot: ctx.tempVault,
+      cwd: ctx.tempProject,
+      sessionId: 'refit-s1',
+      body: 'refit handoff',
+      handoff: {
+        nextSteps: ['Deferred handoff step'],
+        owner: resolveOwner(ctx.tempProject),
+        branch: resolveGitBranch(ctx.tempProject)
+      }
+    });
+
+    const tight = await executeTool('bootstrap', {
+      cwd: ctx.tempProject,
+      vaultRoot: ctx.tempVault,
+      maxBytes: 250,
+      sessionId: 'refit-tight'
+    });
+    assert.equal(tight.isError, undefined);
+    const tightBrief = tight.data as {
+      handoff?: unknown;
+      handoffMarkdown?: string;
+    };
+    assert.equal(tightBrief.handoff, undefined);
+    assert.equal(tightBrief.handoffMarkdown, undefined);
+
+    const roomy = await executeTool('bootstrap', {
+      cwd: ctx.tempProject,
+      vaultRoot: ctx.tempVault,
+      sessionId: 'refit-roomy'
+    });
+    assert.equal(roomy.isError, undefined);
+    const roomyBrief = roomy.data as { handoffMarkdown?: string };
+    assert.ok(
+      roomyBrief.handoffMarkdown?.includes('Deferred handoff step'),
+      'shed handoff stays pending and delivers with room'
+    );
+  });
+});
+
+describe('io-guard harness invariants (AC18)', () => {  it('ALLOWED_SKILLS stays ws-memo + ws-session-tracking (no third skill id)', () => {
     assert.deepEqual([...ALLOWED_SKILLS], ['ws-memo', 'ws-session-tracking']);
   });
 
