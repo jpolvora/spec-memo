@@ -8,6 +8,7 @@ import { upsertRecord, getRecord } from './store.js';
 import { closeIndex } from './indexer.js';
 import { ensureVaultStructure } from './vault.js';
 import { createActivityBus } from './activity.js';
+import { REQUIRED_VAULT_GITIGNORE } from './vault.js';
 import { generateStatusHtml, startStatusServer } from './status.js';
 import { getPackageVersion } from './version.js';
 import { NoopVaultAiAgent } from './ai/noop.js';
@@ -20,6 +21,7 @@ import {
   getAiOpsDir,
   resetAiOpsConfigCacheForTests,
   withAiOpsJournal,
+  truncateOpsPayloadToBudget,
   defaultAiConfig
 } from './ai/index.js';
 import type {
@@ -428,5 +430,52 @@ describe('Status monitor AI ops log (spec 0057)', () => {
     assert.ok(!aiopsBlock.includes('innerHTML'), 'AI Ops detail must not use innerHTML');
     // AC18: default landing tab stays Activity & Status.
     assert.ok(html.includes('<button class="tab-btn active" data-tab="tab-activity">'));
+  });
+
+  it('Review: many-field payloads still fit the byte cap (hard guarantee)', () => {
+    // 50 medium fields x ~400 bytes each with a 1024 cap: single-field
+    // rounds cannot converge, so the multi-field pass + hard fallback apply.
+    const input: Record<string, unknown> = {};
+    for (let i = 0; i < 50; i++) input[`field-${i}`] = `v${i}-`.padEnd(400, 'x');
+    const capped = truncateOpsPayloadToBudget(input, { note: 'tiny' }, {}, 1024);
+    assert.equal(capped.metadata?.['truncated'], true);
+    const bytes = Buffer.byteLength(JSON.stringify(capped.input ?? null), 'utf8') +
+      Buffer.byteLength(JSON.stringify(capped.output ?? null), 'utf8');
+    assert.ok(bytes <= 1024, `capped payload ${bytes} exceeds 1024`);
+  });
+
+  it('Review: journal scans newest-first and ai-ops is vault-git ignored', async () => {
+    assert.ok(REQUIRED_VAULT_GITIGNORE.includes('ai-ops/'));
+    const config = { ...defaultAiConfig(), enabled: true };
+    const first = recordAiOpsEvent({
+      vaultRoot: tempVault,
+      config,
+      operation: 'refine',
+      ok: true,
+      durationMs: 1,
+      recordId: 'oldest-row',
+      input: { n: 1 }
+    });
+    assert.ok(first);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    const newest = recordAiOpsEvent({
+      vaultRoot: tempVault,
+      config,
+      operation: 'rank',
+      ok: true,
+      durationMs: 2,
+      recordId: 'newest-row',
+      input: { n: 2 }
+    });
+    assert.ok(newest);
+    // Newest-first list: latest row leads with exact total intact.
+    const listed = listAiOpsEntries(tempVault, { limit: 50, offset: 0 });
+    assert.equal(listed.total, 2);
+    assert.equal(listed.items[0]?.id, newest);
+    assert.equal(listed.items[1]?.id, first);
+    // Early-exit detail lookup resolves both rows.
+    assert.equal(getAiOpsEntry(tempVault, newest!)?.recordId, 'newest-row');
+    assert.equal(getAiOpsEntry(tempVault, first!)?.recordId, 'oldest-row');
+    assert.equal(getAiOpsEntry(tempVault, 'missing'), null);
   });
 });

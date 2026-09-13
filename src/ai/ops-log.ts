@@ -243,9 +243,22 @@ function collectStringRefs(
   visit(root);
 }
 
+const TRUNC_MARKER = '…[truncated]';
+
+function setStringRef(target: StringRef, next: string): void {
+  if (Array.isArray(target.parent)) {
+    (target.parent as unknown[])[target.key as number] = next;
+  } else {
+    (target.parent as Record<string, unknown>)[target.key as string] = next;
+  }
+}
+
 /**
- * Enforce the per-row input+output byte cap (AC3). Longest string fields are
- * truncated first; overflow always sets `metadata.truncated: true`.
+ * Enforce the per-row input+output byte cap (AC3). Every pass truncates all
+ * over-long string fields (longest first); overflow always sets
+ * `metadata.truncated: true`. A hard fallback drops the larger side (then
+ * both) to a marker, so the cap holds even for pathological many-field or
+ * non-string payloads where per-field truncation cannot converge.
  */
 export function truncateOpsPayloadToBudget(
   input: Record<string, unknown> | undefined,
@@ -257,25 +270,38 @@ export function truncateOpsPayloadToBudget(
   let current = utf8Bytes(input ?? null) + utf8Bytes(output ?? null);
   if (current <= maxBytes) return { input, output, metadata: meta };
   meta['truncated'] = true;
-  // Iteratively halve the longest remaining string field until the budget fits.
-  for (let round = 0; round < 25 && current > maxBytes; round++) {
+  for (let round = 0; round < 200 && current > maxBytes; round++) {
     const refs: StringRef[] = [];
     collectStringRefs(input, refs);
     collectStringRefs(output, refs);
     if (refs.length === 0) break;
     refs.sort((a, b) => b.value.length - a.value.length);
-    const target = refs[0];
-    if (!target || target.value.length === 0) break;
-    const budget = Math.max(0, maxBytes - (current - Buffer.byteLength(target.value, 'utf8')));
-    // Keep a head excerpt plus a marker; never grow the payload.
-    const keep = Math.min(target.value.length - 1, Math.max(32, Math.floor(budget / 2)));
-    const next = `${target.value.slice(0, keep)}…[truncated]`;
-    if (Array.isArray(target.parent)) {
-      (target.parent as unknown[])[target.key as number] = next;
+    let progressed = false;
+    for (const target of refs) {
+      if (current <= maxBytes) break;
+      // Tiny fields stay: appending the marker would grow them.
+      if (target.value.length <= 32) continue;
+      const budget = Math.max(0, maxBytes - (current - Buffer.byteLength(target.value, 'utf8')));
+      // `keep` is always below the current length, so every pass shrinks.
+      const keep = Math.min(target.value.length - 1, Math.max(32, Math.floor(budget / 2)));
+      setStringRef(target, `${target.value.slice(0, keep)}${TRUNC_MARKER}`);
+      progressed = true;
+      current = utf8Bytes(input ?? null) + utf8Bytes(output ?? null);
+    }
+    if (!progressed) break;
+  }
+  // Hard guarantee: drop the larger side to a marker, then both if needed.
+  if (current > maxBytes) {
+    if (utf8Bytes(output ?? null) >= utf8Bytes(input ?? null)) {
+      output = { truncated: true };
     } else {
-      (target.parent as Record<string, unknown>)[target.key as string] = next;
+      input = { truncated: true };
     }
     current = utf8Bytes(input ?? null) + utf8Bytes(output ?? null);
+  }
+  if (current > maxBytes) {
+    input = { truncated: true };
+    output = { truncated: true };
   }
   return { input, output, metadata: meta };
 }
@@ -421,71 +447,102 @@ function toListItem(entry: AiOpsEntry): AiOpsListItem {
   };
 }
 
-function readAllEntries(dir: string): AiOpsEntry[] {
-  if (!fs.existsSync(dir)) return [];
-  let files: string[] = [];
+/** Part files newest-first (filenames sort chronologically, so reverse = newest). */
+function listAiOpsFilesNewestFirst(dir: string): string[] {
   try {
-    files = fs
+    return fs
       .readdirSync(dir)
       .filter((f) => f.startsWith(AI_OPS_FILE_PREFIX) && f.endsWith('.jsonl'))
-      .sort();
+      .sort()
+      .reverse();
   } catch {
     return [];
   }
-  const out: AiOpsEntry[] = [];
-  for (const file of files) {
+}
+
+function parseAiOpsLine(line: string): AiOpsEntry | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as AiOpsEntry;
+    if (
+      parsed &&
+      typeof parsed.id === 'string' &&
+      typeof parsed.timestamp === 'string' &&
+      (parsed.operation === 'refine' || parsed.operation === 'rank') &&
+      typeof parsed.ok === 'boolean' &&
+      typeof parsed.durationMs === 'number'
+    ) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    // ignore corrupted lines
+    return null;
+  }
+}
+
+function aiOpsMatchesQuery(entry: AiOpsEntry, query: AiOpsListQuery): boolean {
+  if (query.operation && entry.operation !== query.operation) return false;
+  if (query.ok !== undefined && entry.ok !== query.ok) return false;
+  if (query.projectId && entry.projectId !== query.projectId) return false;
+  return true;
+}
+
+/**
+ * List journal rows newest-first with filters + pagination (REST backing).
+ * Exact filtered `total` requires scanning all parts (same tradeoff as the
+ * telemetry readers), but only the requested page window is materialized,
+ * so memory stays O(page) instead of O(history) as the journal grows.
+ */
+export function listAiOpsEntries(vaultRoot: string | undefined, query: AiOpsListQuery): AiOpsListResult {
+  const dir = getAiOpsDir(getVaultRoot(vaultRoot));
+  if (!fs.existsSync(dir)) return { items: [], total: 0 };
+  const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
+  const limit = query.limit && query.limit > 0 ? Math.floor(query.limit) : 50;
+  let total = 0;
+  const window: AiOpsEntry[] = [];
+  for (const file of listAiOpsFilesNewestFirst(dir)) {
     let content = '';
     try {
       content = fs.readFileSync(path.join(dir, file), 'utf8');
     } catch {
       continue;
     }
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const parsed = JSON.parse(trimmed) as AiOpsEntry;
-        if (
-          parsed &&
-          typeof parsed.id === 'string' &&
-          typeof parsed.timestamp === 'string' &&
-          (parsed.operation === 'refine' || parsed.operation === 'rank') &&
-          typeof parsed.ok === 'boolean' &&
-          typeof parsed.durationMs === 'number'
-        ) {
-          out.push(parsed);
-        }
-      } catch {
-        // ignore corrupted lines
-      }
+    const lines = content.split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const entry = parseAiOpsLine(lines[i] ?? '');
+      if (!entry || !aiOpsMatchesQuery(entry, query)) continue;
+      const idx = total++;
+      if (idx >= offset && window.length < limit) window.push(entry);
     }
   }
-  return out;
+  // Stable newest-first order inside the page (timestamp ties across parts).
+  window.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
+  return { items: window.map(toListItem), total };
 }
 
-/** List journal rows newest-first with filters + pagination (REST backing). */
-export function listAiOpsEntries(vaultRoot: string | undefined, query: AiOpsListQuery): AiOpsListResult {
-  const root = getVaultRoot(vaultRoot);
-  const all = readAllEntries(getAiOpsDir(root));
-  const filtered = all.filter((e) => {
-    if (query.operation && e.operation !== query.operation) return false;
-    if (query.ok !== undefined && e.ok !== query.ok) return false;
-    if (query.projectId && e.projectId !== query.projectId) return false;
-    return true;
-  });
-  filtered.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
-  const total = filtered.length;
-  const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
-  const limit = query.limit && query.limit > 0 ? Math.floor(query.limit) : 50;
-  const items = filtered.slice(offset, offset + limit).map(toListItem);
-  return { items, total };
-}
-
-/** Fetch one journal row by id (sanitized at the REST layer). */
+/**
+ * Fetch one journal row by id (sanitized at the REST layer). Scans
+ * newest-first and returns on the first id hit instead of loading history.
+ */
 export function getAiOpsEntry(vaultRoot: string | undefined, id: string): AiOpsEntry | null {
-  const root = getVaultRoot(vaultRoot);
-  const all = readAllEntries(getAiOpsDir(root));
-  return all.find((e) => e.id === id) || null;
+  const dir = getAiOpsDir(getVaultRoot(vaultRoot));
+  if (!fs.existsSync(dir)) return null;
+  for (const file of listAiOpsFilesNewestFirst(dir)) {
+    let content = '';
+    try {
+      content = fs.readFileSync(path.join(dir, file), 'utf8');
+    } catch {
+      continue;
+    }
+    const lines = content.split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const entry = parseAiOpsLine(lines[i] ?? '');
+      if (entry && entry.id === id) return entry;
+    }
+  }
+  return null;
 }
 
 export function sanitizeAiOpsEntry(entry: AiOpsEntry): AiOpsEntry {

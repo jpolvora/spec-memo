@@ -682,6 +682,7 @@ export const REQUIRED_VAULT_GITIGNORE = [
   '.sync/',
   'error.logs',
   'telemetry/',
+  'ai-ops/',
   'backups/'
 ];
 
