@@ -233,6 +233,7 @@ Utility Commands:
   sync          Synchronize vault records (hybrid mode or vault-git)
   shutdown      Gracefully stop orphaned memo serve processes (alias: stop)
   rank          List traps by recurrence (occurrences)
+  resume        Opt-in session continuation brief (CLI extra; not an MCP tool)
   feedback      Submit helpful/stale/wrong feedback on a memory record
   init          Create .spec-memo.json in the project root with an auto-detected project id
   import        Import legacy .agents tree into external vault
@@ -475,6 +476,25 @@ Options:
   --limit         Maximum traps to list (default 10)
   --backfill      Write layer, module, occurrences, lastSeen onto existing traps
   --cwd           Product repository working directory
+  --vaultRoot     Override vault root directory
+  --json          Output result as JSON
+  -h, --help      Show this help message`);
+    return;
+  }
+
+  if (cmd === 'resume') {
+    console.log(`Usage: memo resume [query] [options]
+
+Opt-in continuation brief: latest session summary, eligible handoff, and at most 3 durable traps.
+Ordinary memo bootstrap remains dump-free (no sessionResume unless continuation is requested).
+
+Options:
+  --cwd           Product repository working directory
+  --slug          Active feature spec/plan slug identifier
+  --path          Focus file path to prioritize matching traps
+  --max-bytes     Maximum UTF-8 payload byte budget
+  --session-id    Optional session id for hit de-dupe
+  --explain       Include budget allocation diagnostics on stderr
   --vaultRoot     Override vault root directory
   --json          Output result as JSON
   -h, --help      Show this help message`);
@@ -1912,6 +1932,74 @@ async function runCliInner(
         printJson({ isError: true, error: msg, code: 'RANK_ERROR' });
       } else {
         console.error(`Rank failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // Handle memo resume command (CLI-only; not an MCP tool)
+  if (parsed.command === 'resume') {
+    try {
+      const payload: Record<string, unknown> = { ...parsed.options, continuation: true };
+      delete payload.help;
+      delete payload.json;
+      if (parsed.positionals.length > 0 && !payload.query) {
+        payload.query = parsed.positionals.join(' ');
+      }
+      if (payload['max-bytes']) {
+        payload.maxBytes = parseInt(String(payload['max-bytes']), 10);
+        delete payload['max-bytes'];
+      }
+      if (typeof payload.maxBytes === 'string') {
+        payload.maxBytes = parseInt(payload.maxBytes, 10);
+      }
+      if (payload['session-id'] && !payload.sessionId) {
+        payload.sessionId = String(payload['session-id']);
+        delete payload['session-id'];
+      }
+      if (payload.explain === 'true') payload.explain = true;
+      if (payload.explain === 'false') payload.explain = false;
+
+      const response = await executeTool('bootstrap', payload);
+      if (response.isError) {
+        throw new Error(response.error);
+      }
+
+      if (parsed.isJson) {
+        printJson(response.data);
+      } else {
+        const b = response.data as import('./types.js').BootstrapBrief;
+        if (b.budgetReport && parsed.options.explain) {
+          const { formatBootstrapBudgetTable } = await import('./bootstrap.js');
+          console.error(formatBootstrapBudgetTable(b.budgetReport));
+        }
+        console.log(`spec-memo — Resume Context Brief (${b.byteLength} / ${b.budgetBytes} bytes)\n`);
+        console.log(`Project: ${b.projectId} (remote: ${b.gitRemote || 'local-only'})`);
+        if (b.sessionResume) {
+          console.log(`\nSession resume: ${b.sessionResume.summary || b.sessionResume.body || b.sessionResume.id}`);
+        }
+        if (b.handoffMarkdown) {
+          console.log(`\n${b.handoffMarkdown}`);
+        }
+        console.log(`\nTraps (${b.traps.length}/${b.totalTrapsCount}):`);
+        for (const trap of b.traps) {
+          console.log(`  - [${trap.frontmatter.severity || 'medium'}] ${trap.frontmatter.title || trap.frontmatter.id}`);
+        }
+        console.log(`\nDecisions (${b.decisions.length}/${b.totalDecisionsCount}):`);
+        for (const decision of b.decisions) {
+          console.log(`  - ${decision.frontmatter.title || decision.frontmatter.id}`);
+        }
+        if (b.truncated) {
+          console.log(`\n(truncated to fit ${b.budgetBytes} byte budget)`);
+        }
+      }
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'RESUME_ERROR' });
+      } else {
+        console.error(`Resume failed: ${msg}`);
       }
       return 1;
     }

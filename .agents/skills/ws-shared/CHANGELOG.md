@@ -1,4 +1,7 @@
-# Changelog
+### [2026-09-13 15:50] Agent: Cursor Grok 4.6
+- **Prompt**: Inspect Memorix; spec-to-PR retrieval lens + memo resume; full auto ship
+- **Done**: Shared `src/retrieval-lens.ts`; search intent boost + bootstrap task lens; `budgetReport.omittedIds`; CLI `memo resume` / MCP `continuation` (11 tools); tests + tracking; v0.29.0
+- **Result**: `npm test` 726 pass; G2-code `4041223`; ship commit + PR to master
 
 ### [2026-09-12 14:14] Agent: opencode
 - **Prompt**: Publish the living feature wiki on the docs website (port the `ws-wiki` site generator, homepage link/section/dedicated skill page, CI drift gate); commit, push, ship PR

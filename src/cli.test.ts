@@ -1439,6 +1439,88 @@ describe('CLI wiki extra', () => {
   });
 });
 
+describe('retrieval-lens-resume CLI extras (AC17-AC20)', () => {
+  it('AC17: TOOL_NAMES length is 11 and does not include resume', () => {
+    assert.equal(TOOL_NAMES.length, 11);
+    assert.ok(!TOOL_NAMES.includes('resume' as never));
+  });
+
+  it('AC18: memo resume query invokes bootstrap with continuation true', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-resume-cli-'));
+    const tempVault = path.join(tempDir, 'vault');
+    const tempRepo = path.join(tempDir, 'product');
+    fs.mkdirSync(tempRepo, { recursive: true });
+    fs.mkdirSync(path.join(tempRepo, '.git'), { recursive: true });
+    let out = '';
+    const orig = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli([
+        'resume',
+        'bugfix',
+        '--cwd',
+        tempRepo,
+        '--vaultRoot',
+        tempVault,
+        '--json'
+      ]);
+      assert.equal(code, 0);
+      const parsed = JSON.parse(out.trim());
+      assert.equal(parsed.truncated, false);
+      assert.equal(parsed.sessionResume, undefined);
+    } finally {
+      console.log = orig;
+      closeIndex(tempVault);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('AC19: continuation defaults false; resume alias; continuation wins when both set', async () => {
+    const { executeTool } = await import('./tools.js');
+    const tempVault = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-resume-tools-'));
+    const tempProject = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-resume-proj-'));
+    process.env.SPEC_MEMO_ROOT = tempVault;
+    try {
+      const defaultRes = await executeTool('bootstrap', { cwd: tempProject });
+      assert.equal(defaultRes.isError, undefined);
+      assert.equal((defaultRes.data as { sessionResume?: unknown }).sessionResume, undefined);
+
+      const aliasRes = await executeTool('bootstrap', { cwd: tempProject, resume: true });
+      assert.equal(aliasRes.isError, undefined);
+
+      const winsRes = await executeTool('bootstrap', {
+        cwd: tempProject,
+        continuation: false,
+        resume: true
+      });
+      assert.equal(winsRes.isError, undefined);
+      assert.equal((winsRes.data as { sessionResume?: unknown }).sessionResume, undefined);
+    } finally {
+      delete process.env.SPEC_MEMO_ROOT;
+      closeIndex(tempVault);
+      fs.rmSync(tempVault, { recursive: true, force: true });
+      fs.rmSync(tempProject, { recursive: true, force: true });
+    }
+  });
+
+  it('NS4: continuation string yes returns INVALID_ARGUMENTS and does not compile brief', async () => {
+    const { executeTool } = await import('./tools.js');
+    const tempVault = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-resume-invalid-'));
+    const tempProject = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-resume-invalid-proj-'));
+    process.env.SPEC_MEMO_ROOT = tempVault;
+    try {
+      const res = await executeTool('bootstrap', { cwd: tempProject, continuation: 'yes' as unknown as boolean });
+      assert.equal(res.isError, true);
+      if (res.isError) assert.equal(res.code, 'INVALID_ARGUMENTS');
+    } finally {
+      delete process.env.SPEC_MEMO_ROOT;
+      closeIndex(tempVault);
+      fs.rmSync(tempVault, { recursive: true, force: true });
+      fs.rmSync(tempProject, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('CLI init and vault rename/merge (AC6-AC10, AC20, AC28, NS1)', () => {
   it('AC6-AC7: init writes .spec-memo.json with inferred id from basename', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-init-'));

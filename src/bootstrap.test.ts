@@ -501,5 +501,379 @@ describe('Bootstrap Brief Engine', () => {
     assert.ok(truncated.length > 0);
     assert.ok(brief.budgetReport!.includedCount < brief.budgetReport!.candidates.length);
   });
+
+  it('AC9: task lens table classifies query; unmatched is general', async () => {
+    const { inferTaskLens, taskLensMatchesToken } = await import('./retrieval-lens.js');
+    assert.equal(inferTaskLens('fix the bug'), 'bugfix');
+    assert.equal(inferTaskLens('spec-memo docs'), 'docs');
+    assert.equal(inferTaskLens('spec-memo'), 'general');
+    assert.equal(inferTaskLens('write spec tests'), 'test');
+    assert.ok(taskLensMatchesToken('write spec tests', 'spec'));
+    assert.equal(inferTaskLens('unrelated tokens only'), 'general');
+  });
+
+  it('AC10: brief JSON has no suggestedFiles or codeGraph', async () => {
+    const brief = await compileBootstrapBrief({ cwd: tempProject, vaultRoot: tempVault, query: 'feature add' });
+    const json = JSON.parse(JSON.stringify(brief));
+    assert.equal(json.suggestedFiles, undefined);
+    assert.equal(json.codeGraph, undefined);
+  });
+
+  it('AC11: bugfix vs feature relative scores; release notice; no logs in traps or decisions', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'task-trap',
+      frontmatter: { id: 'trap-task', title: 'Task trap', severity: 'medium', status: 'active' },
+      body: 'task trap body'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'task-decision',
+      frontmatter: { id: 'decision-task', title: 'Task decision', status: 'active' },
+      body: 'task decision body'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'log',
+      slug: 'task-log',
+      frontmatter: { id: 'log-task', title: 'Task log', status: 'active' },
+      body: 'task log body'
+    });
+
+    const bugfix = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'bugfix failure'
+    });
+    assert.equal(bugfix.traps[0]?.frontmatter.id, 'trap-task');
+    assert.ok(!bugfix.traps.some((t) => t.frontmatter.kind === 'log'));
+    assert.ok(!bugfix.decisions.some((d) => d.frontmatter.kind === 'log'));
+
+    const feature = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'feature implement'
+    });
+    assert.equal(feature.decisions[0]?.frontmatter.id, 'decision-task');
+
+    const release = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'release ship'
+    });
+    assert.ok(release.notices.some((n) => n.includes('kind=log')));
+  });
+
+  it('AC12: no query and continuation false keeps current scoreTrap trap id order', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'trap-ac12-low',
+      frontmatter: { id: 'trap-ac12-low', title: 'AC12 low', severity: 'low', status: 'active' },
+      body: 'zebra entirely unique low trap ac12'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'trap-ac12-high',
+      frontmatter: { id: 'trap-ac12-high', title: 'AC12 high', severity: 'high', status: 'active' },
+      body: 'octopus entirely unique high trap ac12'
+    });
+
+    const brief = await compileBootstrapBrief({ cwd: tempProject, vaultRoot: tempVault, continuation: false });
+    assert.deepEqual(
+      brief.traps.map((t) => t.frontmatter.id),
+      ['trap-ac12-high', 'trap-ac12-low']
+    );
+  });
+
+  it('AC13: explain true sets budgetReport.taskLens; false omits; not in byteLength', async () => {
+    const explained = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'bugfix',
+      explain: true
+    });
+    assert.equal(explained.budgetReport?.taskLens, 'bugfix');
+    const withoutReport = { ...explained, budgetReport: undefined };
+    assert.ok(calculatePayloadSize(withoutReport) <= explained.budgetBytes);
+
+    const plain = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'bugfix',
+      explain: false
+    });
+    assert.equal(plain.budgetReport, undefined);
+  });
+
+  it('AC14: omittedIds lists every truncated_budget_exhausted trap or decision', async () => {
+    for (let i = 1; i <= 8; i++) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: `omit-trap-${i}`,
+        frontmatter: { id: `trap-omit-${i}`, title: `Omit ${i}`, severity: 'high', status: 'active' },
+        body: 'x'.repeat(500)
+      });
+    }
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      explain: true,
+      maxBytes: 1500
+    });
+    const truncated = brief.budgetReport!.candidates.filter((c) => c.status === 'truncated_budget_exhausted');
+    assert.equal(brief.budgetReport!.omittedIds?.length, truncated.length);
+    for (const row of brief.budgetReport!.omittedIds || []) {
+      assert.equal(row.reason, 'truncated_budget_exhausted');
+    }
+  });
+
+  it('AC15: omittedIds excludes included and excluded_expired', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'omit-included',
+      frontmatter: { id: 'trap-omit-included', title: 'Included', severity: 'high', status: 'active' },
+      body: 'small'
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'omit-expired',
+      frontmatter: {
+        id: 'trap-omit-expired',
+        title: 'Expired',
+        severity: 'high',
+        status: 'archived'
+      },
+      body: 'small'
+    });
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      explain: true,
+      maxBytes: 8192
+    });
+    const omittedIds = brief.budgetReport?.omittedIds?.map((o) => o.id) || [];
+    assert.ok(!omittedIds.includes('trap-omit-included'));
+    assert.ok(!omittedIds.includes('trap-omit-expired'));
+  });
+
+  it('AC16: byteLength excludes budgetReport; maxBytes overrides config then 8192', async () => {
+    fs.writeFileSync(
+      path.join(tempVault, 'config.json'),
+      JSON.stringify({ version: '1.0', bootstrap: { maxBytes: 4096 } }),
+      'utf8'
+    );
+    const fromConfig = await compileBootstrapBrief({ cwd: tempProject, vaultRoot: tempVault, explain: true });
+    assert.equal(fromConfig.budgetBytes, 4096);
+    assert.ok(calculatePayloadSize({ ...fromConfig, budgetReport: undefined }) <= fromConfig.budgetBytes);
+
+    const override = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      maxBytes: 2048,
+      explain: true
+    });
+    assert.equal(override.budgetBytes, 2048);
+  });
+
+  it('AC21: continuation true injects sessionResume or omits when none', async () => {
+    const without = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: true
+    });
+    assert.equal(without.sessionResume, undefined);
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'session',
+      slug: 'session-resume-1',
+      frontmatter: {
+        id: 'session-resume-1',
+        kind: 'session',
+        sessionId: 'sess-r1',
+        summary: 'Prior session summary',
+        status: 'completed',
+        updated: '2026-09-13T12:00:00.000Z'
+      },
+      body: 'Prior session body'
+    });
+
+    const withSession = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: true
+    });
+    assert.equal(withSession.sessionResume?.id, 'session-resume-1');
+    assert.equal(withSession.sessionResume?.summary, 'Prior session summary');
+  });
+
+  it('AC22: claimed handoff is not re-delivered on continuation', async () => {
+    const { startSessionRecord, endSessionRecord } = await import('./prompt.js');
+    const { resolveOwner, resolveGitBranch } = await import('./handoff.js');
+    await startSessionRecord({ vaultRoot: tempVault, cwd: tempProject, sessionId: 'resume-handoff-s1' });
+    await endSessionRecord({
+      vaultRoot: tempVault,
+      cwd: tempProject,
+      sessionId: 'resume-handoff-s1',
+      body: 'done',
+      handoff: {
+        nextSteps: ['Resume step'],
+        owner: resolveOwner(tempProject),
+        branch: resolveGitBranch(tempProject)
+      }
+    });
+
+    const first = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: true,
+      sessionId: 'claim-1'
+    });
+    assert.ok(first.handoff);
+
+    const second = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: true,
+      sessionId: 'claim-2'
+    });
+    assert.equal(second.handoff, undefined);
+  });
+
+  it('AC23: continuation true caps traps at 3 by hits then severity then scoreTrap', async () => {
+    for (let i = 1; i <= 5; i++) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: `cap-trap-${i}`,
+        frontmatter: {
+          id: `trap-cap-${i}`,
+          title: `Cap trap ${i}`,
+          severity: i <= 2 ? 'critical' : 'low',
+          hits: i,
+          status: 'active'
+        },
+        body: `cap trap unique body ${i} ${'y'.repeat(i * 15)}`
+      });
+    }
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: true,
+      maxBytes: 8192
+    });
+    assert.ok(brief.traps.length <= 3);
+    assert.equal(brief.traps[0]?.frontmatter.id, 'trap-cap-5');
+  });
+
+  it('NS2: continuation false omits sessionResume and does not force trap cap', async () => {
+    for (let i = 1; i <= 4; i++) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: `trap-dumpfree-${i}`,
+        frontmatter: { id: `trap-dumpfree-${i}`, title: `Trap ${i}`, severity: 'medium', status: 'active' },
+        body: `${['alpha','bravo','charlie','delta'][i - 1]} dumpfree trap unique ${i} only`
+      });
+    }
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'session',
+      slug: 'dumpfree-session',
+      frontmatter: {
+        id: 'session-dumpfree',
+        kind: 'session',
+        summary: 'Should not appear',
+        status: 'completed'
+      },
+      body: 'session body'
+    });
+
+    const brief = await compileBootstrapBrief({ cwd: tempProject, vaultRoot: tempVault, continuation: false });
+    assert.equal(brief.sessionResume, undefined);
+    assert.ok(brief.traps.length > 3);
+  });
+
+  it('NS3: tight maxBytes truncates; drops extra traps then sessionResume; keeps fitted handoff', async () => {
+    const { startSessionRecord, endSessionRecord } = await import('./prompt.js');
+    const { resolveOwner, resolveGitBranch } = await import('./handoff.js');
+    await startSessionRecord({ vaultRoot: tempVault, cwd: tempProject, sessionId: 'ns3-s1' });
+    await endSessionRecord({
+      vaultRoot: tempVault,
+      cwd: tempProject,
+      sessionId: 'ns3-s1',
+      body: 'ns3',
+      handoff: {
+        nextSteps: ['Keep handoff'],
+        owner: resolveOwner(tempProject),
+        branch: resolveGitBranch(tempProject)
+      }
+    });
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'session',
+      slug: 'ns3-session',
+      frontmatter: {
+        id: 'session-ns3',
+        kind: 'session',
+        summary: 'x'.repeat(400),
+        status: 'completed'
+      },
+      body: 'x'.repeat(400)
+    });
+    for (let i = 1; i <= 3; i++) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug: `ns3-trap-${i}`,
+        frontmatter: { id: `trap-ns3-${i}`, title: `NS3 ${i}`, severity: 'high', hits: i, status: 'active' },
+        body: 'x'.repeat(300)
+      });
+    }
+
+    const brief = await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: true,
+      maxBytes: 900,
+      sessionId: 'ns3-claim'
+    });
+    assert.equal(brief.truncated, true);
+    assert.ok(brief.byteLength <= brief.budgetBytes);
+    assert.ok(brief.handoff || brief.handoffMarkdown);
+  });
+
+  it('AC26: continuation does not write consumer product cwd files', async () => {
+    const before = fs.readdirSync(tempProject);
+    await compileBootstrapBrief({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: true,
+      query: 'resume'
+    });
+    const after = fs.readdirSync(tempProject);
+    assert.deepEqual(after, before);
+  });
 });
 

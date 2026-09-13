@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.28.5**.
+**Local working memory for coding agents outside the product repository.** Version **0.29.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -502,7 +502,7 @@ memo doctor --check-capture <path>  # verify CAPTURED vs IGNORED exclusion bound
 memo import --from <repo>  # idempotent per-record legacy tree import (safe to re-run)
 ```
 
-Also useful: `memo rank` (trap recurrence), `memo wiki --regenerate` (vault project page), `memo gc --dry-run`, and the status page live log while the SSE daemon is up.
+Also useful: `memo rank` (trap recurrence), `memo resume` (opt-in session continuation brief — ordinary `memo bootstrap` stays dump-free), `memo wiki --regenerate` (vault project page), `memo gc --dry-run`, and the status page live log while the SSE daemon is up.
 
 ### Autoboot: run `memo serve --sse` as a service
 
@@ -829,7 +829,7 @@ memo reconcile --clean-sidecars
 |---|---|---|
 | `status` | Query read-only operational dashboard, daemon reachability, configuration, and storage statistics (aliases: `info`, `state`, `setup --check`) | `--check`, `--cwd`, `--vaultRoot`, `--json` |
 | `setup` | Configure deployment mode & agent host MCP wiring | `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json` |
-| `bootstrap` | Compile token-budgeted session brief | `--maxBytes` (overrides `config.json` `bootstrap.maxBytes`, default 8192), `--query`, `--path`, `--slug`, `--session-id`, `--explain` |
+| `bootstrap` | Compile token-budgeted session brief (dump-free by default; no session history unless `continuation`) | `--maxBytes` (overrides `config.json` `bootstrap.maxBytes`, default 8192), `--query`, `--path`, `--slug`, `--session-id`, `--explain`, MCP `continuation` (alias `resume`, default `false`) |
 | `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` (`relevance`\|`occurrences`\|`updated`\|`hits`), `--hit-ids`, `--session-id`, `--explain`, `--include-expired`, `--as-of` |
 | `get` | Read one record by id or kind+slug (eligible kinds bump `hits`) | `--id` or `--kind`+`--slug`, `--session-id` |
 | `upsert` | Create or update typed memory record | `--kind`, `--title`, `--severity`, `--path-patterns`, `--body` |
@@ -845,6 +845,7 @@ memo reconcile --clean-sidecars
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
 | `feedback` | Submit helpful/stale/wrong feedback on a memory record (CLI extra) | `<id>`, `--helpful`/`--stale`/`--wrong`, `--comment` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
+| `resume` | Opt-in continuation brief: latest session summary, eligible handoff, ≤3 durable traps (CLI-only; equals `bootstrap` with `continuation: true`) | `[query]`, `--cwd`, `--path`, `--slug`, `--max-bytes`, `--session-id`, `--explain`, `--json` |
 | `doctor` | Diagnose health, mode, conflict sidecars, semantic contradictions, stale traps, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
 | `sync` | Synchronize vault records (hybrid HTTP, vault-git, or both in parallel) | `--all`, `--dry-run`, `--prefer` (`local`\|`remote`), `--strategy`, `--clean-sidecars`, `--force`, `--json` |
 | `reconcile` | Reconcile sync conflicts, apply smart semantic auto-merge, and clean conflict sidecars | `--prefer` (`local`\|`remote`), `--strategy` (`smart-merge`\|`local-wins`\|`remote-wins`\|`sidecar`), `--clean-sidecars`, `--dry-run`, `--all`, `--json` |

@@ -235,6 +235,34 @@ describe('Tool Definitions and Execution', () => {
     assert.ok(content.includes('Tool:        get'), 'error log should mention Tool: get');
   });
 
+  it('AC19: bootstrap continuation defaults false; resume alias; continuation wins when both set', async () => {
+    const defaultRes = await executeTool('bootstrap', { cwd: tempProject, vaultRoot: tempVault });
+    assert.equal(defaultRes.isError, undefined);
+    assert.equal((defaultRes.data as { sessionResume?: unknown }).sessionResume, undefined);
+
+    const aliasRes = await executeTool('bootstrap', { cwd: tempProject, vaultRoot: tempVault, resume: true });
+    assert.equal(aliasRes.isError, undefined);
+
+    const winsRes = await executeTool('bootstrap', {
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: false,
+      resume: true
+    });
+    assert.equal(winsRes.isError, undefined);
+    assert.equal((winsRes.data as { sessionResume?: unknown }).sessionResume, undefined);
+  });
+
+  it('NS4: continuation string yes returns INVALID_ARGUMENTS and does not compile brief', async () => {
+    const res = await executeTool('bootstrap', {
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      continuation: 'yes' as unknown as boolean
+    });
+    assert.equal(res.isError, true);
+    if (res.isError) assert.equal(res.code, 'INVALID_ARGUMENTS');
+  });
+
   it('should support path argument in upsert tool and map to pathPatterns and linkedPaths', async () => {
     const upsertRes = await executeTool('upsert', {
       kind: 'trap',
