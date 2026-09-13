@@ -55,12 +55,12 @@ import { submitMemoryFeedback } from './feedback.js';
 import { sanitizeToolOutput } from './safety.js';
 import {
   canonicalBodyForChecksum,
+  fenceInnerOf,
   inspectAgentIo,
   ioChecksumHex,
   isIoGuardError,
   logIoGuardRefusal,
   UNTRUSTED_BEGIN,
-  UNTRUSTED_END,
   verifyIoChecksum,
   verifyStoredChecksum,
   wrapUntrustedText
@@ -714,8 +714,9 @@ function verifyAndCollectRecordBody(
     return true;
   }
   if (typeof record.body === 'string' && record.body.length > 0) {
-    inners.push(record.body);
-    record.body = wrapUntrustedText(record.body);
+    const fenced = wrapUntrustedText(record.body);
+    inners.push(fenceInnerOf(fenced));
+    record.body = fenced;
   }
   return false;
 }
@@ -847,6 +848,12 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       }
       // Spec 0059 outbound: sanitize, checksum-verify, fence, envelope.
       const brief = sanitizeToolOutput(result) as BootstrapBrief;
+      // Round-3 review: thread the hostile-query signal into the envelope
+      // directly (not via notices, which budget pressure can evict).
+      const queryDropped =
+        typeof bootstrapOpts.query === 'string' &&
+        bootstrapOpts.query.trim().length > 0 &&
+        !inspectAgentIo(bootstrapOpts.query).ok;
       const inners: string[] = [];
       let checksumMismatch = false;
       const guardCtx = {
@@ -880,7 +887,7 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           }
         }
       }
-      const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch });
+      const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch, queryDropped });
       brief.ioGuard = ioGuard;
       // Spec 0059 review (PR#65): fences grow bodies after the byte-budget
       // pass, so re-account and shed lowest-ranked fenced records first.
@@ -890,12 +897,7 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           if (!rec || typeof rec.body !== 'string' || !rec.body.includes(UNTRUSTED_BEGIN)) {
             return;
           }
-          target.push(
-            rec.body
-              .split('\n')
-              .filter((line) => line !== UNTRUSTED_BEGIN && line !== UNTRUSTED_END)
-              .join('\n')
-          );
+          target.push(fenceInnerOf(rec.body));
         };
         for (const rec of [...brief.traps, ...brief.decisions]) {
           collectOne(rec);
@@ -907,7 +909,7 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       const refitEnvelope = (): IoGuardEnvelope => {
         const refitInners: string[] = [];
         collectFenceInners(refitInners);
-        return buildIoGuardEnvelope({ inners: refitInners, checksumMismatch });
+        return buildIoGuardEnvelope({ inners: refitInners, checksumMismatch, queryDropped });
       };
       brief.byteLength = calculatePayloadSize(brief);
       if (brief.byteLength > brief.budgetBytes) {
@@ -950,6 +952,24 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
             }
           }
           delete brief.handoffMarkdown;
+        }
+        // Round-3 review: shed the same low-value fields bootstrap sheds
+        // pre-fence (drift, sessionResume, explain report), then notices
+        // oldest-first keeping the final receipt.
+        while (brief.drift && brief.drift.length > 0 && overBudget()) {
+          brief.drift.pop();
+        }
+        if (brief.drift && brief.drift.length === 0) {
+          brief.drift = undefined;
+        }
+        if (brief.sessionResume && overBudget()) {
+          delete brief.sessionResume;
+        }
+        if (brief.budgetReport && overBudget()) {
+          delete brief.budgetReport;
+        }
+        while (brief.notices.length > 1 && overBudget()) {
+          brief.notices.shift();
         }
         brief.truncated = true;
         if (!brief.notices.some((n) => n.includes('truncated'))) {
@@ -1067,8 +1087,9 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           return;
         }
         if (typeof hit.snippet === 'string' && hit.snippet.length > 0) {
-          inners.push(hit.snippet);
-          hit.snippet = wrapUntrustedText(hit.snippet);
+          const fencedSnippet = wrapUntrustedText(hit.snippet);
+          inners.push(fenceInnerOf(fencedSnippet));
+          hit.snippet = fencedSnippet;
         }
       });
       const ioGuard = buildIoGuardEnvelope({

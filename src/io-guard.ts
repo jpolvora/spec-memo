@@ -119,15 +119,32 @@ export function canonicalBodyForChecksum(text: string): string {
 }
 
 /**
- * Wrap markdown as untrusted data (AC12). Idempotent: already-fenced
- * text is returned unchanged so only fence markers never shift content.
+ * Wrap markdown as untrusted data (AC12). Inner fence markers are
+ * neutralized first so a stored body containing a fake end marker cannot
+ * break out of the fence and spoof trusted content (PR#65 round 3).
+ * Call once per outbound pass: the escape makes re-wrapping non-idempotent
+ * by design; use isUntrustedWrapped as the skip guard.
  */
 export function wrapUntrustedText(text: string): string {
-  const inner = String(text);
-  if (inner.includes(UNTRUSTED_BEGIN) && inner.includes(UNTRUSTED_END)) {
-    return inner;
-  }
+  const inner = String(text)
+    .replaceAll(UNTRUSTED_BEGIN, '[fence-marker]')
+    .replaceAll(UNTRUSTED_END, '[fence-marker]');
   return `${UNTRUSTED_BEGIN}\n${inner}\n${UNTRUSTED_END}`;
+}
+
+/**
+ * Fence-inner text of a wrapped payload (outer markers stripped).
+ * Inverse of wrapUntrustedText for checksum accounting (AC22/AC23).
+ */
+export function fenceInnerOf(fenced: string): string {
+  const lines = String(fenced).split('\n');
+  if (lines.length > 0 && lines[0] === UNTRUSTED_BEGIN) {
+    lines.shift();
+  }
+  if (lines.length > 0 && lines[lines.length - 1] === UNTRUSTED_END) {
+    lines.pop();
+  }
+  return lines.join('\n');
 }
 
 /** True when the value already carries the untrusted fence. */

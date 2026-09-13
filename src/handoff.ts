@@ -281,8 +281,21 @@ function readHandoffFileObject(filePath: string): HandoffRecord | null {
  * from a brief: without the rollback the handoff would be marked consumed
  * but never delivered (lost to future sessions). Best-effort: returns false
  * when the file is missing, foreign, or unwritable — callers still shed.
+ *
+ * Runs under the vault lock (PR#65 round 3): claim and rollback are
+ * read-modify-write cycles, and SSE serve plus CLI run as separate
+ * processes, so an unlocked rollback could clobber a concurrent claim.
  */
 export function rollbackHandoffClaim(projectDir: string, recordId: string): boolean {
+  const vaultRoot = path.resolve(projectDir, '..', '..');
+  try {
+    return withVaultLockSync(vaultRoot, () => doRollbackHandoffClaim(projectDir, recordId));
+  } catch {
+    return false;
+  }
+}
+
+function doRollbackHandoffClaim(projectDir: string, recordId: string): boolean {
   try {
     const dir = path.join(projectDir, HANDOFFS_SUBDIR);
     if (!fs.existsSync(dir)) return false;
