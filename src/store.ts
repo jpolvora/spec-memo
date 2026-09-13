@@ -466,6 +466,7 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
       if (Array.isArray(prev.aiSearchTerms)) {
         fm.aiSearchTerms = (prev.aiSearchTerms as unknown[])
           .filter((t): t is string => typeof t === 'string')
+          .map((t) => t.slice(0, 80))
           .slice(0, 20);
       }
       if (typeof prev.aiSummary === 'string' && prev.aiSummary.length > 0) {

@@ -17,6 +17,7 @@ import { assertAiConfigValid } from './ai/index.js';
 import {
   clearAiStateForTests,
   dropPendingRefineForRecord,
+  enqueueRefineJob,
   getAiLastError,
   getAiQueueDepth
 } from './ai/refine-queue.js';
@@ -559,8 +560,7 @@ describe('Vault AI assistance (spec 0056)', () => {
     assert.ok(getAiLastError() !== null);
   });
 
-  it('Review: maxConcurrent serializes bursts and the queue still drains', async () => {
-    const fake = new FakeVaultAiAgent();
+  it('Review: maxConcurrent serializes bursts and the queue still drains', async () => {    const fake = new FakeVaultAiAgent();
     fake.refineDelayMs = 120;
     const slugs = ['ai-burst-one', 'ai-burst-two', 'ai-burst-three'];
     for (const slug of slugs) {
@@ -581,5 +581,155 @@ describe('Vault AI assistance (spec 0056)', () => {
       assert.ok(refined, `expected ${slug} to drain through the refine queue`);
     }
     assert.equal(getAiQueueDepth(), 0);
+  });
+
+  it('Review: a dropped generation never writes, even when a fresh job follows', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-drop-re',
+      frontmatter: { id: 'ai-drop-re', title: 'Drop then re-enqueue' },
+      body: '## DO NOT\nDrop.\n\n## INSTEAD DO\nRequeue.',
+      aiAgent: null
+    });
+    const seed = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-drop-re' });
+    assert.ok(seed?.path);
+    const projectId = String(seed.frontmatter.project);
+
+    let releaseG1!: () => void;
+    const g1gate = new Promise<void>((resolve) => {
+      releaseG1 = resolve;
+    });
+    const g1 = new FakeVaultAiAgent();
+    g1.refineForSearch = async (input) => {
+      g1.refineCalls.push(input);
+      await g1gate;
+      return { ok: true, searchTerms: ['g1-stale-terms'], summary: 'g1' };
+    };
+    const base = {
+      vaultRoot: tempVault,
+      projectId,
+      filePath: seed.path,
+      id: 'ai-drop-re',
+      kind: 'trap' as const,
+      title: 'Drop then re-enqueue',
+      body: '## DO NOT\nDrop.\n\n## INSTEAD DO\nRequeue.',
+      tags: [] as string[],
+      pathPatterns: [] as string[],
+      timeoutMs: 5000,
+      maxConcurrent: 1
+    };
+    assert.equal(enqueueRefineJob({ ...base, agent: g1 }), true);
+    // Forget while G1 awaits the slow agent, then re-enqueue a fresh job
+    // that fails fast. G1 must observe the cancellation and write nothing.
+    dropPendingRefineForRecord('ai-drop-re');
+    const g2 = new FakeVaultAiAgent();
+    g2.refineResult = { ok: false, error: 'g2 boom' };
+    assert.equal(enqueueRefineJob({ ...base, agent: g2 }), true);
+    releaseG1();
+
+    const start = Date.now();
+    while (getAiQueueDepth() > 0 && Date.now() - start < 8000) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(getAiQueueDepth(), 0);
+    assert.equal(g1.refineCalls.length, 1);
+    assert.equal(g2.refineCalls.length, 1);
+    const rec = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-drop-re' });
+    assert.ok(rec);
+    assert.equal(rec.frontmatter.aiSearchTerms, undefined);
+  });
+
+  it('Review: dropping a waiting job evicts it before it ever runs', async () => {
+    for (const slug of ['ai-slot-a', 'ai-slot-b']) {
+      await upsertRecord({
+        cwd: tempProject,
+        vaultRoot: tempVault,
+        kind: 'trap',
+        slug,
+        frontmatter: { id: slug, title: `Slot ${slug}`, pathPatterns: [`src/${slug}.ts`] },
+        body: `## DO NOT\nSlot ${slug}.\n\n## INSTEAD DO\nWait ${slug}.`,
+        aiAgent: null
+      });
+    }
+    const recA = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-slot-a' });
+    const recB = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-slot-b' });
+    assert.ok(recA?.path && recB?.path);
+    const projectId = String(recA.frontmatter.project);
+
+    let releaseA!: () => void;
+    const gateA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    const slowA = new FakeVaultAiAgent();
+    slowA.refineForSearch = async (input) => {
+      slowA.refineCalls.push(input);
+      await gateA;
+      return { ok: true, searchTerms: ['slot-a-term'] };
+    };
+    const waiterB = new FakeVaultAiAgent();
+    const mkArgs = (id: string, filePath: string) => ({
+      vaultRoot: tempVault,
+      projectId,
+      filePath,
+      id,
+      kind: 'trap' as const,
+      title: id,
+      body: 'b',
+      tags: [] as string[],
+      pathPatterns: [] as string[],
+      timeoutMs: 5000,
+      maxConcurrent: 1
+    });
+    assert.equal(enqueueRefineJob({ ...mkArgs('ai-slot-a', recA.path), agent: slowA }), true);
+    assert.equal(enqueueRefineJob({ ...mkArgs('ai-slot-b', recB.path), agent: waiterB }), true);
+    dropPendingRefineForRecord('ai-slot-b');
+    releaseA();
+
+    const start = Date.now();
+    while (getAiQueueDepth() > 0 && Date.now() - start < 8000) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(getAiQueueDepth(), 0);
+    assert.equal(waiterB.refineCalls.length, 0);
+    const doneA = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: 'ai-slot-a' });
+    assert.deepEqual(doneA?.frontmatter.aiSearchTerms, ['slot-a-term']);
+  });
+
+  it('Review: oversized and duplicated terms are capped before persisting', async () => {
+    const big = new FakeVaultAiAgent();
+    big.refineResult = {
+      ok: true,
+      searchTerms: ['x'.repeat(3000), 'dup', 'dup', '  ok-term  '],
+      summary: 's'
+    };
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'ai-big-terms',
+      frontmatter: { id: 'ai-big-terms', title: 'Big terms' },
+      body: '## DO NOT\nBloat.\n\n## INSTEAD DO\nCap.',
+      aiAgent: big
+    });
+    const refined = await waitForAids(tempVault, tempProject, 'ai-big-terms');
+    assert.ok(refined);
+    const terms = refined.frontmatter.aiSearchTerms;
+    assert.ok(Array.isArray(terms));
+    assert.ok(terms.length <= 20);
+    for (const term of terms) {
+      assert.ok(term.length <= 80, `term exceeds 80 chars (${term.length})`);
+    }
+    assert.equal(terms.filter((t) => t === 'dup').length, 1);
+    assert.ok(terms.includes('ok-term'));
+  });
+
+  it('Review: timeoutMs is bounded (1000..120000)', () => {
+    assert.throws(() => parseAiConfig({ timeoutMs: 500 }), /ai/);
+    assert.throws(() => parseAiConfig({ timeoutMs: 200000 }), /ai/);
+    assert.equal(parseAiConfig({ timeoutMs: 1000 })?.timeoutMs, 1000);
+    assert.equal(parseAiConfig({ timeoutMs: 120000 })?.timeoutMs, 120000);
+    assert.equal(parseAiConfig({}) === null, false);
   });
 });

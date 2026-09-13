@@ -47,7 +47,18 @@ export interface EnqueueRefineArgs {
 // --- module-global queue state (single-flight per record id, AC13) ---
 
 const pendingJobs = new Map<string, { promise: Promise<void>; generation: number }>();
-const droppedGenerations = new Map<string, number>();
+/**
+ * Cancelled `${id}:${generation}` keys. Self-cleaning: each job deletes its
+ * own key in `finally`, so the set stays bounded by the in-flight count and
+ * a re-enqueue can never resurrect a dropped generation.
+ */
+const cancelledJobs = new Set<string>();
+/**
+ * Monotonic per-record generation counters. Generations only move forward:
+ * enqueueing a fresh job must never erase a live cancellation, so a
+ * dropped (forgotten) generation can never be resurrected by a re-upsert.
+ */
+const generationCounters = new Map<string, number>();
 let aiLastError: string | null = null;
 let aiActivityBus: ActivityBus | null = null;
 let activeRefineCount = 0;
@@ -56,6 +67,8 @@ interface WaitingRefine {
   generation: number;
   limit: number;
   begin: () => void;
+  /** Settle the deferred promise when the entry is evicted before starting. */
+  settle: () => void;
 }
 const waitingRefines: WaitingRefine[] = [];
 
@@ -71,8 +84,15 @@ function pumpRefineQueue(): void {
 
 /**
  * Clearable timeout race shared by refine and rank. The timer is always
- * cleared on settle so background AI calls never hold the event loop open
- * (and never delay CLI exit) after success.
+ * cleared on settle so a successful call never holds the event loop open
+ * past its own completion.
+ *
+ * The timer is intentionally NOT unref'd: rank (search/bootstrap) and the
+ * adapter are awaited on foreground paths, and an unref'd timer lets the
+ * event loop drain while a hanging agent is still awaited (demonstrated by
+ * test: "Promise resolution is still pending but the event loop has already
+ * resolved"). A hanging provider therefore bounds CLI linger to
+ * timeoutMs+1000 instead of exiting silently with no tool result.
  */
 export function withAiTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -120,7 +140,8 @@ export function recordAiLastError(err: unknown): void {
 
 export function clearAiStateForTests(): void {
   pendingJobs.clear();
-  droppedGenerations.clear();
+  cancelledJobs.clear();
+  generationCounters.clear();
   waitingRefines.length = 0;
   activeRefineCount = 0;
   aiLastError = null;
@@ -163,21 +184,35 @@ export function emitAiRankActivity(
 /**
  * Drop a pending refine job and its retrieval aids when a record is
  * forgotten/purged (AC19). In-flight jobs observe the drop and abort
- * before writing. Only the matching generation is cancelled, so a
- * re-upserted record keeps its fresh job.
+ * before writing. Also evicts not-yet-started FIFO entries for the id so a
+ * forgotten record never refines after forget. Only the matching generation
+ * is cancelled, so a re-upserted record keeps its fresh job.
  */
 export function dropPendingRefineForRecord(id: string): void {
   const pending = pendingJobs.get(id);
   if (pending) {
-    droppedGenerations.set(id, pending.generation);
+    cancelledJobs.add(`${id}:${pending.generation}`);
     pendingJobs.delete(id);
-  } else {
-    droppedGenerations.delete(id);
+  }
+  for (let i = waitingRefines.length - 1; i >= 0; i--) {
+    const entry = waitingRefines[i];
+    if (entry?.args.id === id) {
+      waitingRefines.splice(i, 1);
+      try {
+        entry.settle();
+      } catch {
+        // Eviction must never throw into forget/GC.
+      }
+    }
   }
 }
 
+function jobKey(id: string, generation: number): string {
+  return `${id}:${generation}`;
+}
+
 function isDropped(id: string, generation: number): boolean {
-  return droppedGenerations.get(id) === generation;
+  return cancelledJobs.has(jobKey(id, generation));
 }
 
 function finishGeneration(id: string, generation: number): void {
@@ -185,18 +220,26 @@ function finishGeneration(id: string, generation: number): void {
   if (pending && pending.generation === generation) {
     pendingJobs.delete(id);
   }
-  if (droppedGenerations.get(id) === generation) {
-    droppedGenerations.delete(id);
-  }
+  cancelledJobs.delete(jobKey(id, generation));
 }
 
 function sanitizeTerms(terms: unknown): string[] {
   if (!Array.isArray(terms)) return [];
-  return terms
-    .filter((t): t is string => typeof t === 'string')
-    .map((t) => t.trim().toLowerCase())
-    .filter(Boolean)
-    .slice(0, 20);
+  // Count cap (20) AND per-term length cap (80 chars) plus dedup: the agent
+  // interface is public, so any VaultAiAgent — not just the Cursor adapter
+  // with its Zod cap — could otherwise persist unbounded frontmatter that
+  // bloats markdown, FTS, and the bootstrap byte budget.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const term of terms) {
+    if (typeof term !== 'string') continue;
+    const norm = term.trim().toLowerCase().slice(0, 80);
+    if (!norm || seen.has(norm)) continue;
+    seen.add(norm);
+    out.push(norm);
+    if (out.length >= 20) break;
+  }
+  return out;
 }
 
 async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promise<void> {
@@ -350,8 +393,12 @@ export function enqueueRefineJob(args: EnqueueRefineArgs): boolean {
   if (pendingJobs.has(args.id)) return true;
 
   const limit = args.maxConcurrent && args.maxConcurrent > 0 ? Math.floor(args.maxConcurrent) : 1;
-  const generation = (droppedGenerations.get(args.id) ?? 0) + 1;
-  droppedGenerations.delete(args.id);
+  // Monotonic generations: never consult or clear cancellation state here.
+  // A dropped generation's key must survive re-enqueue so the in-flight
+  // cancelled job still observes it; the fresh job proceeds because its
+  // generation differs.
+  const generation = (generationCounters.get(args.id) ?? 0) + 1;
+  generationCounters.set(args.id, generation);
 
   let job: Promise<void>;
   const begin = (): void => {
@@ -377,10 +424,11 @@ export function enqueueRefineJob(args: EnqueueRefineArgs): boolean {
     // Deferred start: reserve the single-flight slot now so duplicates
     // coalesce while waiting, and pump the FIFO when a slot frees.
     job = new Promise<void>((resolve, reject) => {
-      waitingRefines.push({
+      const entry: WaitingRefine = {
         args,
         generation,
         limit,
+        settle: () => resolve(),
         begin: () => {
           try {
             begin();
@@ -389,7 +437,8 @@ export function enqueueRefineJob(args: EnqueueRefineArgs): boolean {
             reject(err);
           }
         }
-      });
+      };
+      waitingRefines.push(entry);
     });
     pendingJobs.set(args.id, { promise: job, generation });
     void job.catch((err: unknown) => {

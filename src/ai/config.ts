@@ -25,7 +25,9 @@ export const VaultAiConfigSchema = z.object({
   apiKeyEnv: nonEmptyStringWithDefault(VAULT_AI_DEFAULT_API_KEY_ENV).default(
     VAULT_AI_DEFAULT_API_KEY_ENV
   ),
-  timeoutMs: z.number().int().positive().default(VAULT_AI_DEFAULT_TIMEOUT_MS),
+  // Bounded: sub-second timeouts silently disable ranking, and unbounded
+  // values overflow the timer while bootstrap blocks on rank.
+  timeoutMs: z.number().int().min(1000).max(120000).default(VAULT_AI_DEFAULT_TIMEOUT_MS),
   rankTopK: z.number().int().min(1).max(50).default(VAULT_AI_DEFAULT_RANK_TOP_K),
   maxConcurrent: z.number().int().min(1).max(4).default(VAULT_AI_DEFAULT_MAX_CONCURRENT)
 });

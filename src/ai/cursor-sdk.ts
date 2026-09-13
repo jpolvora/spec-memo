@@ -53,6 +53,9 @@ export function buildCursorSdkPromptOptions(
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    // Cleared on settle (no leak) but intentionally not unref'd: callers
+    // await this on foreground paths, and an unref'd timer lets the event
+    // loop drain while a hanging agent is still awaited. See withAiTimeout.
     const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
     promise.then(
       (value) => {
