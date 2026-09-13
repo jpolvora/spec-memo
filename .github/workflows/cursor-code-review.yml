@@ -56,6 +56,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           # Default 600000 (10m) is tight for Custom-stack / large md+json diffs.
           AGENTIC_CODE_REVIEWERS_TIMEOUT_MS: "1200000"
+          # Default 100000 (~100 KB) truncates large Custom-stack diffs; raise for md+json-heavy PRs.
+          AGENTIC_CODE_REVIEWERS_DIFF_MAX_BYTES: "200000"
           # No --exclude-patterns CLI; extra globs merge into BASE_EXCLUDE (release dist/config.js).
           # Paths = config.json plans.dir / plans.specsDir ({plansDir} / {specsDir}).
           AGENTIC_CODE_REVIEWERS_EXTRA_EXCLUDE_PATTERNS: ".agents/plans/**,.agents/specs/**"
