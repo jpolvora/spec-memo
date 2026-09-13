@@ -28,6 +28,28 @@ export interface HybridSyncReport {
 
 export const DEFAULT_SYNC_TIMEOUT_MS = 30000;
 
+const HYBRID_UNREACHABLE_PATTERNS = [
+  'fetch failed',
+  'timed out after',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EHOSTUNREACH',
+  'EAI_AGAIN',
+  'AbortError'
+];
+
+/**
+ * True when a hybrid sync failure means the remote daemon is simply
+ * unreachable (daemon down, stale URL, timeout). Unreachable is fail-open by
+ * design and logs at WARN with structured `lastError` in hybrid-state;
+ * every other outcome (live-daemon HTTP failures, apply/journal failures)
+ * keeps ERROR severity.
+ */
+export function isHybridUnreachable(err: unknown): boolean {
+  const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  return HYBRID_UNREACHABLE_PATTERNS.some((p) => msg.includes(p));
+}
+
 export function getSyncTimeoutMs(): number {
   const envVal = Number(process.env.SPEC_MEMO_SYNC_TIMEOUT_MS);
   return envVal > 0 ? envVal : DEFAULT_SYNC_TIMEOUT_MS;
@@ -142,6 +164,7 @@ export async function pullHybridProject(
       mode: 'hybrid',
       projectId,
       error: effectiveErr,
+      level: isHybridUnreachable(effectiveErr) ? 'WARN' : 'ERROR',
       context: { phase: 'pull', remoteOrigin }
     }, { vaultRoot });
     if (projectId) {
@@ -320,6 +343,7 @@ export async function pushHybridProject(
       mode: 'hybrid',
       projectId,
       error: effectiveErr,
+      level: isHybridUnreachable(effectiveErr) ? 'WARN' : 'ERROR',
       context: { phase: 'push', remoteOrigin }
     }, { vaultRoot });
     if (projectId) {

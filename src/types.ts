@@ -18,7 +18,7 @@ export type RecordStatus =
   | 'archived'
   | 'completed';
 
-export type RecordSource = 'agent' | 'human' | 'imported';
+export type RecordSource = 'agent' | 'human' | 'imported' | (string & {});
 
 export interface HandoffPayload {
   nextSteps: string[];

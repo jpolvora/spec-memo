@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.28.4**.
+**Local working memory for coding agents outside the product repository.** Version **0.28.5**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -879,6 +879,14 @@ memo install-skills --scope global --host cursor,antigravity \
 ```
 
 Use `force` only when intentionally overwriting a diverged destination. MCP hosts must pass `scope`, explicit `hosts`, `conflictPolicy`, and `confirm: true`; `install-hooks` remains CLI-only.
+
+**What values can a record `source` carry?**
+
+`agent`, `human`, or `imported` (normalized to lowercase), plus any non-empty origin slug such as a workflow skill name (e.g. `ws-configure-project`). Custom values are preserved verbatim so skill-emitted logs ingest without frontmatter rejection; empty values still fail validation.
+
+**Why is there no `/favicon.ico` noise in the logs?**
+
+The status monitor answers `GET /favicon.ico` and `GET /robots.txt` with an empty `204` before routing, so browser probes write nothing to `error.logs` and record no telemetry. Unknown `/api/*` routes still return `404` with logging intact.
 
 **How do I make the `memo` command available on my PATH (Windows / Linux / macOS)?**
 

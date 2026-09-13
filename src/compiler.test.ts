@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { upsertRecord } from './store.js';
-import { rebuildCompiledViews } from './compiler.js';
+import { rebuildCompiledViews, writeFileAtomicSync } from './compiler.js';
 import { resolveProjectIdentity } from './identity.js';
 import { closeIndex } from './indexer.js';
 
@@ -151,6 +151,84 @@ describe('Compiled Views (TRAPS.md, DECISIONS.md, INDEX.md)', () => {
 
     assert.ok(decisionsContent.includes(fixedIso), 'DECISIONS.md summary table should contain full datetime');
     assert.ok(indexContent.includes(fixedIso), 'INDEX.md table should contain full datetime');
+  });
+});
+
+describe('Atomic compiled-view writes (vault-log-sweep-bugfix AC1-AC3)', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-atomic-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('writes full content atomically with no temp litter', () => {
+    const target = path.join(tempDir, 'TRAPS.md');
+    writeFileAtomicSync(target, '# traps\nbody');
+    assert.equal(fs.readFileSync(target, 'utf8'), '# traps\nbody');
+    const leftovers = fs.readdirSync(tempDir).filter((f) => f.includes('.tmp-'));
+    assert.equal(leftovers.length, 0);
+  });
+
+  it('retries transient EBUSY then succeeds without caller-visible error', () => {
+    const target = path.join(tempDir, 'TRAPS.md');
+    let calls = 0;
+    writeFileAtomicSync(target, 'recovered', {
+      writeFileSync: (p, c, enc) => {
+        calls++;
+        if (calls < 3) {
+          const err = new Error(`EBUSY: resource busy, open '${target}'`) as NodeJS.ErrnoException;
+          err.code = 'EBUSY';
+          throw err;
+        }
+        fs.writeFileSync(p, c, enc);
+      },
+      renameSync: (src, dst) => fs.renameSync(src, dst)
+    });
+    assert.equal(calls, 3);
+    assert.equal(fs.readFileSync(target, 'utf8'), 'recovered');
+  });
+
+  it('persistent transient failure throws with the view path in scope and no tmp litter', () => {
+    const target = path.join(tempDir, 'TRAPS.md');
+    let calls = 0;
+    assert.throws(
+      () =>
+        writeFileAtomicSync(target, 'doomed', {
+          writeFileSync: () => {
+            calls++;
+            const err = new Error(`UNKNOWN: unknown error, open '${target}'`) as NodeJS.ErrnoException;
+            err.code = 'UNKNOWN';
+            throw err;
+          }
+        }),
+      /TRAPS\.md/
+    );
+    assert.equal(calls, 3);
+    assert.equal(fs.existsSync(target), false);
+    const leftovers = fs.readdirSync(tempDir).filter((f) => f.includes('.tmp-'));
+    assert.equal(leftovers.length, 0);
+  });
+
+  it('non-transient failure throws immediately without retry', () => {
+    const target = path.join(tempDir, 'TRAPS.md');
+    let calls = 0;
+    assert.throws(
+      () =>
+        writeFileAtomicSync(target, 'doomed', {
+          writeFileSync: () => {
+            calls++;
+            const err = new Error(`ENOSPC: no space left on device, write`) as NodeJS.ErrnoException;
+            err.code = 'ENOSPC';
+            throw err;
+          }
+        }),
+      /ENOSPC/
+    );
+    assert.equal(calls, 1);
   });
 });
 

@@ -723,6 +723,16 @@ test("MCP status monitor", async (t) => {
     assert.strictEqual(body.error, "Not found");
   });
 
+  await t.test("GET /favicon.ico and /robots.txt return silent 204 (AC5)", async () => {
+    const errBefore = readErrorLogs(vaultRoot);
+    for (const p of ["/favicon.ico", "/robots.txt"]) {
+      const res = await fetch(`${baseUrl}${p}`);
+      assert.strictEqual(res.status, 204);
+      assert.strictEqual(await res.text(), "");
+    }
+    assert.strictEqual(readErrorLogs(vaultRoot), errBefore);
+  });
+
   await t.test("GET /api/records returns memory list with hits and is read-only", async () => {
     const proj = fs.mkdtempSync(path.join(os.tmpdir(), "spec-memo-status-hit-proj-"));
     fs.mkdirSync(path.join(proj, ".git"), { recursive: true });

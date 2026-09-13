@@ -13,6 +13,73 @@ const SEVERITY_WEIGHT: Record<string, number> = {
 };
 
 /**
+ * Transient Windows file-lock errnos that justify a bounded retry of
+ * compiled-view persistence (AV holds, concurrent sync/upsert writers).
+ * `UNKNOWN` covers `UNKNOWN: unknown error, open '...TRAPS.md'` seen when a
+ * hybrid-sync pull raced a local upsert on the same project vault.
+ */
+const VIEW_WRITE_RETRY_CODES = new Set(['EPERM', 'EBUSY', 'UNKNOWN', 'EACCES']);
+const VIEW_WRITE_MAX_ATTEMPTS = 3;
+const VIEW_WRITE_RETRY_BASE_MS = 30;
+
+function sleepSync(ms: number): void {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    // Timer-free contexts must never fail the write path on sleep.
+  }
+}
+
+/**
+ * Write `content` to `targetPath` atomically: content lands in a sibling temp
+ * file in the same directory, then `renameSync` swaps it over the target, so
+ * a crash or lock mid-write never leaves a truncated compiled view behind.
+ *
+ * Transient lock failures are retried (bounded); the final error propagates
+ * with the target path in scope so `isViewRebuildSkip` (sync.ts) can degrade
+ * persistent view failures to skip-and-log instead of aborting the batch.
+ * `ops` is a test seam for fault injection; callers omit it.
+ */
+export function writeFileAtomicSync(
+  targetPath: string,
+  content: string,
+  ops: {
+    writeFileSync?: (p: string, c: string, enc: BufferEncoding) => void;
+    renameSync?: (src: string, dst: string) => void;
+    existsSync?: (p: string) => boolean;
+    unlinkSync?: (p: string) => void;
+  } = {}
+): void {
+  const write = ops.writeFileSync ?? fs.writeFileSync;
+  const rename = ops.renameSync ?? fs.renameSync;
+  const exists = ops.existsSync ?? fs.existsSync;
+  const unlink = ops.unlinkSync ?? fs.unlinkSync;
+  const tmpPath = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= VIEW_WRITE_MAX_ATTEMPTS; attempt++) {
+    try {
+      write(tmpPath, content, 'utf8');
+      rename(tmpPath, targetPath);
+      return;
+    } catch (err) {
+      lastErr = err;
+      try {
+        if (exists(tmpPath)) unlink(tmpPath);
+      } catch {
+        // Best-effort temp cleanup; the armed error below carries the signal.
+      }
+      const code = String((err as NodeJS.ErrnoException)?.code || '');
+      const transient = VIEW_WRITE_RETRY_CODES.has(code);
+      if (!transient || attempt === VIEW_WRITE_MAX_ATTEMPTS) {
+        throw err;
+      }
+      sleepSync(VIEW_WRITE_RETRY_BASE_MS * attempt);
+    }
+  }
+  throw lastErr;
+}
+
+/**
  * Scan all records inside a project vault directory.
  */
 export function scanProjectRecords(
@@ -347,11 +414,11 @@ export function rebuildCompiledViews(
   const sessionsMd = generateSessionsView(metadata, sessions);
   const indexMd = generateIndexView(metadata, allRecords);
 
-  fs.writeFileSync(path.join(projectDir, 'TRAPS.md'), trapsMd, 'utf8');
-  fs.writeFileSync(path.join(projectDir, 'DECISIONS.md'), decisionsMd, 'utf8');
-  fs.writeFileSync(path.join(projectDir, 'PROMPTS.md'), promptsMd, 'utf8');
-  fs.writeFileSync(path.join(projectDir, 'SESSIONS.md'), sessionsMd, 'utf8');
-  fs.writeFileSync(path.join(projectDir, 'INDEX.md'), indexMd, 'utf8');
+  writeFileAtomicSync(path.join(projectDir, 'TRAPS.md'), trapsMd);
+  writeFileAtomicSync(path.join(projectDir, 'DECISIONS.md'), decisionsMd);
+  writeFileAtomicSync(path.join(projectDir, 'PROMPTS.md'), promptsMd);
+  writeFileAtomicSync(path.join(projectDir, 'SESSIONS.md'), sessionsMd);
+  writeFileAtomicSync(path.join(projectDir, 'INDEX.md'), indexMd);
 
   return {
     trapsCount: traps.length,
