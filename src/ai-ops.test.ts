@@ -413,7 +413,10 @@ describe('Status monitor AI ops log (spec 0057)', () => {
     const html = generateStatusHtml(getPackageVersion());
     assert.ok(html.includes('data-tab="tab-ai-ops"'));
     assert.ok(html.includes('id="tab-ai-ops"'));
-    assert.ok(html.includes('>AI Ops</button>'));
+    // Spec 0058 relocated the AI Ops leaf into the left sidebar: the label
+    // now renders inside a span, not directly before </button>.
+    assert.ok(html.includes('id="status-sidebar"'));
+    assert.ok(html.includes('>AI Ops</span></button>'));
     assert.ok(html.includes('id="aiops-operation-select"'));
     assert.ok(html.includes('id="aiops-ok-select"'));
     assert.ok(html.includes('id="aiops-tbody"'));
@@ -428,8 +431,8 @@ describe('Status monitor AI ops log (spec 0057)', () => {
     const aiopsBlock = html.slice(opsStart, memStart);
     assert.ok(aiopsBlock.includes('aiops-detail-input'));
     assert.ok(!aiopsBlock.includes('innerHTML'), 'AI Ops detail must not use innerHTML');
-    // AC18: default landing tab stays Activity & Status.
-    assert.ok(html.includes('<button class="tab-btn active" data-tab="tab-activity">'));
+    // AC18: default landing tab is Home since spec 0058 (sidebar nav).
+    assert.ok(html.includes('<button class="tab-btn active" data-tab="tab-home">'));
   });
 
   it('Review: many-field payloads still fit the byte cap (hard guarantee)', () => {

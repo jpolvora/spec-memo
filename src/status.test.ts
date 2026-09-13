@@ -14,7 +14,8 @@ import { executeTool } from "./tools.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { exportVault } from "./backup.js";
 import { upsertRecord } from "./store.js";
-import { readErrorLogs } from "./error-logger.js";
+import { readErrorLogs, logErrorReport, clearErrorLogs } from "./error-logger.js";
+import { readVaultConfig } from "./vault.js";
 
 function countTrapFiles(vaultRoot: string, projectId: string): number {
   const dir = path.join(vaultRoot, "projects", projectId, "traps");
@@ -1663,6 +1664,451 @@ test("Status Monitor 3-Mode Architecture Topology and Reset/Restore Endpoints", 
       assert.ok(inst.url.includes(`:${customStatusPort}`));
     } finally {
       await inst.close();
+    }
+  });
+});
+
+test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-0058-test-"));
+  const vaultRoot = path.join(tempDir, "vault");
+  const projectId = "nav-ai-config-proj";
+
+  const savedEnv = {
+    auth: process.env.SPEC_MEMO_AUTH_TOKEN,
+    sse: process.env.SPEC_MEMO_SSE_TOKEN,
+    status: process.env.SPEC_MEMO_STATUS_TOKEN,
+    root: process.env.SPEC_MEMO_ROOT,
+    errorLog: process.env.SPEC_MEMO_ERROR_LOG
+  };
+  delete process.env.SPEC_MEMO_AUTH_TOKEN;
+  delete process.env.SPEC_MEMO_SSE_TOKEN;
+  delete process.env.SPEC_MEMO_STATUS_TOKEN;
+  delete process.env.SPEC_MEMO_ROOT;
+  delete process.env.SPEC_MEMO_ERROR_LOG;
+
+  t.after(() => {
+    if (savedEnv.auth !== undefined) process.env.SPEC_MEMO_AUTH_TOKEN = savedEnv.auth;
+    else delete process.env.SPEC_MEMO_AUTH_TOKEN;
+    if (savedEnv.sse !== undefined) process.env.SPEC_MEMO_SSE_TOKEN = savedEnv.sse;
+    else delete process.env.SPEC_MEMO_SSE_TOKEN;
+    if (savedEnv.status !== undefined) process.env.SPEC_MEMO_STATUS_TOKEN = savedEnv.status;
+    else delete process.env.SPEC_MEMO_STATUS_TOKEN;
+    if (savedEnv.root !== undefined) process.env.SPEC_MEMO_ROOT = savedEnv.root;
+    else delete process.env.SPEC_MEMO_ROOT;
+    if (savedEnv.errorLog !== undefined) process.env.SPEC_MEMO_ERROR_LOG = savedEnv.errorLog;
+    else delete process.env.SPEC_MEMO_ERROR_LOG;
+    closeIndex(vaultRoot);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  ensureProjectVault({
+    projectId,
+    normalizedRemote: null,
+    rootPath: tempDir,
+    isGit: false,
+    isFallback: true,
+    vaultProjectPath: path.join(vaultRoot, "projects", projectId)
+  }, vaultRoot);
+
+  await t.test("sidebar shell: status-sidebar, tab-home default, no nav-tabs", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('id="status-sidebar"'), "sidebar nav required");
+    assert.ok(!html.includes('<nav class="nav-tabs"'), "top tab strip removed");
+    assert.ok(!html.includes("nav-tabs"), "no nav-tabs residue");
+    assert.ok(html.includes('id="tab-home"'), "home panel required");
+    assert.ok(html.includes('id="tab-error-logs"'), "error logs panel required");
+    assert.ok(html.includes('id="tab-ai-config"'), "ai config panel required");
+    assert.ok(html.includes('id="tab-home" class="tab-content active"'), "home is default active");
+    assert.ok(!html.includes('id="tab-activity" class="tab-content active"'), "activity no longer default");
+    for (const label of ["Overview", "Memory", "Sessions", "Vault", "AI", "Diagnostics"]) {
+      assert.ok(html.includes(`data-category="${label}"`), `category ${label} required`);
+    }
+    const overviewIdx = html.indexOf('data-category="Overview"');
+    const diagIdx = html.indexOf('data-category="Diagnostics"');
+    assert.ok(overviewIdx >= 0 && diagIdx > overviewIdx);
+    assert.ok(html.indexOf('data-tab="tab-home"') < html.indexOf('data-tab="tab-activity"'));
+    assert.ok(html.includes('.tab-btn[data-tab="tab-rules"]'), "rules deep-click contract preserved");
+    assert.ok(html.includes("statusNavOpen"), "category persistence key required");
+    assert.ok(html.includes("statusNavCollapsed"), "collapse persistence key required");
+    assert.ok(html.includes("max-width: 900px"), "collapse breakpoint required");
+    assert.ok(html.includes("history.replaceState"), "URL tab sync without reload required");
+    assert.ok(!html.includes("cdn.jsdelivr"), "zero CDN deps");
+    assertStatusInlineScriptsParse(html);
+  });
+
+  await t.test("?tab= mapping covers home, error-logs, ai-config, ai-ops", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('tabParam === "home"'));
+    assert.ok(html.includes('activateTab("tab-home")'));
+    assert.ok(html.includes('tabParam === "error-logs"'));
+    assert.ok(html.includes('activateTab("tab-error-logs")'));
+    assert.ok(html.includes('tabParam === "ai-config"'));
+    assert.ok(html.includes('activateTab("tab-ai-config")'));
+    assert.ok(html.includes('tabParam === "ai-ops"'));
+    assert.ok(html.includes('activateTab("tab-ai-ops")'));
+    assert.ok(html.includes('id="errorlog-detail-error"'));
+    assert.ok(!html.match(/errorlog-detail-error['"]?\)\.innerHTML/), "error detail must not use innerHTML");
+  });
+
+  const bus = createActivityBus({ capacity: 200 });
+  const server = await startStatusServer({
+    vaultRoot,
+    port: 0,
+    host: "127.0.0.1",
+    activityBus: bus,
+    getMcp: () => ({ host: "127.0.0.1", port: 3000, activeTransports: 0, available: false })
+  });
+  t.after(async () => {
+    bus.close();
+    await server.close();
+  });
+  const baseUrl = server.url;
+
+  await t.test("GET /api/error-logs empty vault returns 200 empty list", async () => {
+    const res = await fetch(`${baseUrl}/api/error-logs`);
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as { items: unknown[]; total: number; truncated: boolean };
+    assert.deepStrictEqual(body.items, []);
+    assert.strictEqual(body.total, 0);
+  });
+
+  await t.test("error-logs list/detail round-trip with sanitize and 400/404", async () => {
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error(`boom at ${vaultRoot} with label`),
+      level: "ERROR",
+      tool: "bootstrap",
+      projectId
+    }, { vaultRoot });
+    const listRes = await fetch(`${baseUrl}/api/error-logs`);
+    assert.strictEqual(listRes.status, 200);
+    const list = await listRes.json() as {
+      items: Array<{ id: string; timestamp: string; level: string; subsystem: string; error: string; tool?: string; projectId?: string; stack?: string }>;
+      total: number;
+      truncated: boolean;
+    };
+    assert.strictEqual(list.total, 1);
+    assert.strictEqual(list.items.length, 1);
+    const item = list.items[0];
+    assert.ok(item.id);
+    assert.ok(item.timestamp);
+    assert.strictEqual(item.level, "ERROR");
+    assert.strictEqual(item.subsystem, "status-server");
+    assert.ok(item.error.length <= 300);
+    assert.strictEqual(item.tool, "bootstrap");
+    assert.strictEqual(item.projectId, projectId);
+    assert.strictEqual((item as { stack?: string }).stack, undefined, "list must not include raw stack");
+    assert.ok(!JSON.stringify(list).includes(vaultRoot), "absolute vault paths sanitized");
+
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(item.id)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { ok: boolean; entry: { id: string; stack?: string; error: string } };
+    assert.strictEqual(detail.ok, true);
+    assert.strictEqual(detail.entry.id, item.id);
+    assert.ok(!JSON.stringify(detail).includes(vaultRoot), "detail paths sanitized");
+
+    const missing = await fetch(`${baseUrl}/api/error-logs/elog-9999`);
+    assert.strictEqual(missing.status, 404);
+
+    const badLimit = await fetch(`${baseUrl}/api/error-logs?limit=999`);
+    assert.strictEqual(badLimit.status, 400);
+
+    const badLevel = await fetch(`${baseUrl}/api/error-logs?level=DEBUG`);
+    assert.strictEqual(badLevel.status, 400);
+  });
+
+  await t.test("GET /api/config/ai defaults to noop with boolean hasApiKey and no secrets", async () => {
+    const res = await fetch(`${baseUrl}/api/config/ai`);
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as Record<string, unknown>;
+    assert.strictEqual(body.enabled, false);
+    assert.strictEqual(body.provider, "noop");
+    assert.ok(typeof body.model === "string");
+    assert.ok(typeof body.apiKeyEnv === "string");
+    assert.strictEqual(typeof body.hasApiKey, "boolean");
+    assert.ok(!("apiKey" in body) && !("token" in body));
+  });
+
+  await t.test("PUT /api/config/ai merges provider/model and rejects apiKey/unknown provider", async () => {
+    const before = readVaultConfig(vaultRoot).config;
+    const beforeTtl = { ...(before.ttl as object) };
+    const beforePorts = { ...(before.ports as object) };
+
+    const rejected = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "cursor-sdk", model: "composer-2.5", apiKey: "secret" })
+    });
+    assert.strictEqual(rejected.status, 400);
+
+    const badProvider = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "opencode" })
+    });
+    assert.strictEqual(badProvider.status, 400);
+    const badBody = await badProvider.json() as { error?: string };
+    assert.match(String(badBody.error || ""), /only.*noop.*cursor-sdk|noop.*cursor-sdk.*implemented/i);
+
+    const diskBefore = JSON.parse(fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8")) as { ai?: { enabled?: boolean } };
+    assert.strictEqual(diskBefore.ai?.enabled, false, "rejected writes must not persist");
+
+    const ok = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "cursor-sdk", model: "composer-2.5" })
+    });
+    assert.strictEqual(ok.status, 200);
+    const saved = await ok.json() as { ok: boolean; enabled: boolean; provider: string; model: string };
+    assert.strictEqual(saved.ok, true);
+    assert.strictEqual(saved.enabled, true);
+    assert.strictEqual(saved.provider, "cursor-sdk");
+    assert.strictEqual(saved.model, "composer-2.5");
+
+    const after = readVaultConfig(vaultRoot).config;
+    assert.strictEqual(after.ai?.enabled, true);
+    assert.strictEqual(after.ai?.provider, "cursor-sdk");
+    assert.deepStrictEqual(after.ttl, beforeTtl);
+    assert.deepStrictEqual(after.ports, beforePorts);
+
+    const getAfter = await fetch(`${baseUrl}/api/config/ai`);
+    assert.strictEqual(getAfter.status, 200);
+    const getBody = await getAfter.json() as { enabled: boolean; provider: string };
+    assert.strictEqual(getBody.enabled, true);
+    assert.strictEqual(getBody.provider, "cursor-sdk");
+
+    const backToNoop = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "noop" })
+    });
+    assert.strictEqual(backToNoop.status, 200);
+    const noopBody = await backToNoop.json() as { enabled: boolean; provider: string };
+    assert.strictEqual(noopBody.enabled, false);
+    assert.strictEqual(noopBody.provider, "noop");
+  });
+
+  await t.test("GET /api/dashboard returns fixture counts and project scoping", async () => {
+    const res = await fetch(`${baseUrl}/api/dashboard`);
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as Record<string, unknown>;
+    for (const field of ["projectsCount", "eventsBuffered", "activeClientsCount", "uptimeMs", "mcpAvailable", "memoryRecords", "promptRecords", "backupCount", "errorLogCount", "aiEnabled", "wikiPresent", "aiOpsCount"]) {
+      assert.ok(field in body, `dashboard field ${field} required`);
+    }
+    assert.ok(typeof body.projectsCount === "number" && (body.projectsCount as number) >= 1);
+    assert.strictEqual(body.aiOpsCount, 0, "aiOpsCount is 0 without the 0057 journal");
+    assert.ok(!JSON.stringify(body).includes(vaultRoot), "dashboard payloads sanitized");
+
+    const scoped = await fetch(`${baseUrl}/api/dashboard?project=${encodeURIComponent(projectId)}`);
+    assert.strictEqual(scoped.status, 200);
+    const scopedBody = await scoped.json() as { projectsCount: number; backupCount: number; errorLogCount: number };
+    assert.strictEqual(scopedBody.projectsCount, body.projectsCount, "projectsCount stays global");
+    assert.strictEqual(scopedBody.backupCount, body.backupCount, "backupCount stays global");
+    assert.strictEqual(scopedBody.errorLogCount, body.errorLogCount, "errorLogCount stays global");
+  });
+
+  await t.test("filtered error-log list ids resolve to the same entry in detail", async () => {
+    clearErrorLogs(vaultRoot);
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("older warn entry"),
+      level: "WARN"
+    }, { vaultRoot });
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("newer error entry"),
+      level: "ERROR"
+    }, { vaultRoot });
+    const filtered = await fetch(`${baseUrl}/api/error-logs?level=WARN`);
+    assert.strictEqual(filtered.status, 200);
+    const list = await filtered.json() as { items: Array<{ id: string; level: string; error: string }>; total: number };
+    assert.strictEqual(list.total, 1);
+    assert.strictEqual(list.items.length, 1);
+    assert.strictEqual(list.items[0].level, "WARN");
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(list.items[0].id)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { ok: boolean; entry: { id: string; level: string; error: string } };
+    assert.strictEqual(detail.entry.id, list.items[0].id);
+    assert.strictEqual(detail.entry.level, "WARN");
+    assert.ok(detail.entry.error.includes("older warn entry"));
+  });
+
+  await t.test("error-log detail truncates large context like stack", async () => {
+    clearErrorLogs(vaultRoot);
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("big context entry"),
+      level: "ERROR",
+      context: { blob: `x`.repeat(10000) }
+    }, { vaultRoot });
+    const listRes = await fetch(`${baseUrl}/api/error-logs`);
+    assert.strictEqual(listRes.status, 200);
+    const list = await listRes.json() as { items: Array<{ id: string }>; total: number };
+    assert.strictEqual(list.total, 1);
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(list.items[0].id)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { ok: boolean; entry: { context?: unknown; stack?: string } };
+    const serialized = JSON.stringify(detail.entry.context);
+    assert.ok(serialized.length <= 4200, `context must be capped (got ${serialized.length})`);
+    assert.ok(serialized.includes("[truncated]"));
+  });
+
+  await t.test("PUT /api/config/ai without provider and enabled yields 400 without writing", async () => {    const diskBefore = fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8");
+    const empty = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    assert.strictEqual(empty.status, 400);
+    const modelOnly = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "composer-2.5" })
+    });
+    assert.strictEqual(modelOnly.status, 400);
+    assert.strictEqual(fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8"), diskBefore);
+  });
+
+  await t.test("PUT /api/config/ai omitting model preserves the stored custom model", async () => {
+    const saveCustom = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "cursor-sdk", model: "my-custom-1.0" })
+    });
+    assert.strictEqual(saveCustom.status, 200);
+
+    const disableOnly = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: false })
+    });
+    assert.strictEqual(disableOnly.status, 200);
+    const disabled = await disableOnly.json() as { enabled: boolean; provider: string; model: string };
+    assert.strictEqual(disabled.enabled, false);
+    assert.strictEqual(disabled.model, "my-custom-1.0", "disable-only update must not reset the model");
+
+    const providerOnly = await fetch(`${baseUrl}/api/config/ai`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "cursor-sdk" })
+    });
+    assert.strictEqual(providerOnly.status, 200);
+    const reenabled = await providerOnly.json() as { enabled: boolean; provider: string; model: string };
+    assert.strictEqual(reenabled.enabled, true);
+    assert.strictEqual(reenabled.provider, "cursor-sdk");
+    assert.strictEqual(reenabled.model, "my-custom-1.0", "provider-only update must not reset the model");
+  });
+
+  await t.test("PUT /api/config/ai rejects contradictory provider+enabled", async () => {
+    const diskBefore = fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8");
+    for (const body of [
+      { provider: "cursor-sdk", enabled: false },
+      { provider: "noop", enabled: true }
+    ]) {
+      const res = await fetch(`${baseUrl}/api/config/ai`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.strictEqual(res.status, 400, `${JSON.stringify(body)} must 400`);
+      const data = await res.json() as { error?: string };
+      assert.match(String(data.error || ""), /disagree/i);
+    }
+    assert.strictEqual(fs.readFileSync(path.join(vaultRoot, "config.json"), "utf8"), diskBefore);
+
+    for (const body of [
+      { provider: "cursor-sdk", enabled: true },
+      { provider: "noop", enabled: false }
+    ]) {
+      const res = await fetch(`${baseUrl}/api/config/ai`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.strictEqual(res.status, 200, `${JSON.stringify(body)} must succeed`);
+    }
+  });
+
+  await t.test("error-log list ids stay stable across interleaving appends", async () => {
+    clearErrorLogs(vaultRoot);
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("first stable entry"),
+      level: "ERROR"
+    }, { vaultRoot });
+    const before = await fetch(`${baseUrl}/api/error-logs`);
+    assert.strictEqual(before.status, 200);
+    const beforeList = await before.json() as { items: Array<{ id: string }>; total: number };
+    assert.strictEqual(beforeList.total, 1);
+    const stableId = beforeList.items[0].id;
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: new Error("second newer entry"),
+      level: "ERROR"
+    }, { vaultRoot });
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(stableId)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { ok: boolean; entry: { id: string; error: string } };
+    assert.ok(detail.entry.error.includes("first stable entry"), "append must not shift the detail target");
+  });
+
+  await t.test("error-log detail caps oversized error and stack with markers", async () => {
+    clearErrorLogs(vaultRoot);
+    const bigError = new Error(`e`.repeat(6000));
+    bigError.stack = `trace-line\n`.repeat(2000);
+    logErrorReport({
+      subsystem: "status-server",
+      endpoint: "/api/error-logs",
+      error: bigError,
+      level: "ERROR"
+    }, { vaultRoot });
+    const listRes = await fetch(`${baseUrl}/api/error-logs`);
+    const list = await listRes.json() as { items: Array<{ id: string; error: string }>; total: number };
+    assert.strictEqual(list.total, 1);
+    assert.ok(list.items[0].error.length <= 300);
+    const detailRes = await fetch(`${baseUrl}/api/error-logs/${encodeURIComponent(list.items[0].id)}`);
+    assert.strictEqual(detailRes.status, 200);
+    const detail = await detailRes.json() as { entry: { error: string; stack?: string } };
+    assert.ok(detail.entry.error.length <= 4100, `detail error capped (got ${detail.entry.error.length})`);
+    assert.ok(detail.entry.error.includes("[truncated]"));
+    assert.ok(detail.entry.stack && detail.entry.stack.length <= 4100);
+    assert.ok(detail.entry.stack.includes("[truncated]"));
+  });
+
+  await t.test("new routes require auth when token configured", async () => {    const authBus = createActivityBus();
+    const authServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "nav-0058-secret",
+      activityBus: authBus
+    });
+    try {
+      for (const route of ["/api/error-logs", "/api/config/ai", "/api/dashboard"]) {
+        const unauth = await fetch(`${authServer.url}${route}`);
+        assert.strictEqual(unauth.status, 401, `${route} must 401 without token`);
+      }
+      const detailUnauth = await fetch(`${authServer.url}/api/error-logs/elog-0`);
+      assert.strictEqual(detailUnauth.status, 401);
+      const putUnauth = await fetch(`${authServer.url}/api/config/ai`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "noop" })
+      });
+      assert.strictEqual(putUnauth.status, 401);
+      const ok = await fetch(`${authServer.url}/api/dashboard`, {
+        headers: { Authorization: "Bearer nav-0058-secret" }
+      });
+      assert.strictEqual(ok.status, 200);
+    } finally {
+      authBus.close();
+      await authServer.close();
     }
   });
 });
