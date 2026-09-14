@@ -376,7 +376,11 @@ async function runManagedCloudPrompt(
     }
     return { result: result.result };
   } finally {
-    await cleanup();
+    // Bound cleanup so dispose/archive cannot extend the timeout SLA indefinitely.
+    await Promise.race([
+      cleanup().catch(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, 2000))
+    ]);
   }
 }
 
