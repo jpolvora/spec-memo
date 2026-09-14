@@ -39,7 +39,7 @@ export const DEFAULT_VAULT_CONFIG: VaultConfig = {
     provider: 'cursor-sdk',
     model: 'composer-2.5',
     apiKeyEnv: 'CURSOR_API_KEY',
-    timeoutMs: 15000,
+    timeoutMs: 30000,
     rankTopK: 20,
     maxConcurrent: 1,
     opsLogMaxBytes: 8192,

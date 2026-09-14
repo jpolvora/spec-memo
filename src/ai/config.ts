@@ -3,7 +3,7 @@ import type { VaultAiConfig } from '../types.js';
 
 export const VAULT_AI_DEFAULT_MODEL = 'composer-2.5';
 export const VAULT_AI_DEFAULT_API_KEY_ENV = 'CURSOR_API_KEY';
-export const VAULT_AI_DEFAULT_TIMEOUT_MS = 15000;
+export const VAULT_AI_DEFAULT_TIMEOUT_MS = 30000;
 export const VAULT_AI_DEFAULT_RANK_TOP_K = 20;
 export const VAULT_AI_DEFAULT_MAX_CONCURRENT = 1;
 export const VAULT_AI_DEFAULT_OPS_LOG_MAX_BYTES = 8192;

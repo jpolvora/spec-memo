@@ -9,6 +9,7 @@ import { logErrorReport } from '../error-logger.js';
 import type { ActivityBus } from '../activity.js';
 import type { RecordKind, RecordFrontmatter } from '../types.js';
 import type { VaultAiAgent, VaultAiRefineInput } from './types.js';
+import { VAULT_AI_DEFAULT_TIMEOUT_MS } from './config.js';
 import { recordAiOpsEvent, readAiOpsConfig, isAiOpsLogEnabled } from './ops-log.js';
 
 /**
@@ -366,7 +367,7 @@ async function runRefineJob(args: EnqueueRefineArgs, generation: number): Promis
       tags: currentTags,
       pathPatterns: currentPatterns
     };
-    const timeoutMs = args.timeoutMs && args.timeoutMs > 0 ? args.timeoutMs : 15000;
+    const timeoutMs = args.timeoutMs && args.timeoutMs > 0 ? args.timeoutMs : VAULT_AI_DEFAULT_TIMEOUT_MS;
     const result = await withAiTimeout(
       Promise.resolve(agent.refineForSearch(input)),
       timeoutMs + 1000,

@@ -2,6 +2,7 @@ import type { SearchHit, AiRankDisposition } from '../types.js';
 import type { VaultAiAgent } from './types.js';
 import { emitAiRankActivity, recordAiLastError, reportAiFailure, withAiTimeout } from './refine-queue.js';
 import { recordAiOpsEvent, readAiOpsConfig, isAiOpsLogEnabled } from './ops-log.js';
+import { VAULT_AI_DEFAULT_TIMEOUT_MS } from './config.js';
 
 export interface RankRecordsArgs<T> {
   agent: VaultAiAgent | null | undefined;
@@ -72,7 +73,7 @@ export async function rankRecordsWithAgent<T>(args: RankRecordsArgs<T>): Promise
   const topK = args.rankTopK > 0 ? Math.floor(args.rankTopK) : 20;
   const head = items.slice(0, topK);
   const tail = items.slice(topK);
-  const timeoutMs = args.timeoutMs && args.timeoutMs > 0 ? args.timeoutMs : 15000;
+  const timeoutMs = args.timeoutMs && args.timeoutMs > 0 ? args.timeoutMs : VAULT_AI_DEFAULT_TIMEOUT_MS;
   const candidates = head.map(toCandidate);
   const candidateIds = candidates.map((c) => String(c.id));
 

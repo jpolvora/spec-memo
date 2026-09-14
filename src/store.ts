@@ -20,7 +20,7 @@ import { applyTrapClassification, occurrenceOf, lastSeenOf } from './recurrence.
 import { computeExpiresAt, validateTtlInput, annotateExpiredFrontmatter } from './expiration.js';
 import { dropPendingRefineForRecord, enqueueRefineJob } from './ai/refine-queue.js';
 import type { EnqueueRefineArgs } from './ai/refine-queue.js';
-import { resolveVaultAiAgent } from './ai/index.js';
+import { resolveVaultAiAgent, VAULT_AI_DEFAULT_TIMEOUT_MS, VAULT_AI_DEFAULT_MAX_CONCURRENT } from './ai/index.js';
 import type { VaultAiAgent } from './ai/types.js';
 
 export interface UpsertOptions {
@@ -638,7 +638,7 @@ function resolveUpsertAiLimits(vaultRoot: string): { timeoutMs: number; maxConcu
     const config = resolveVaultAiAgent(vaultRoot).config;
     return { timeoutMs: config.timeoutMs, maxConcurrent: config.maxConcurrent };
   } catch {
-    return { timeoutMs: 15000, maxConcurrent: 1 };
+    return { timeoutMs: VAULT_AI_DEFAULT_TIMEOUT_MS, maxConcurrent: VAULT_AI_DEFAULT_MAX_CONCURRENT };
   }
 }
 

@@ -439,6 +439,79 @@ describe('Status monitor AI ops log (spec 0057)', () => {
     }
   });
 
+  it('Issue #69: POST /api/ai-ops/test probes the provider and journals a test row', async () => {
+    writeVaultAiConfig(tempVault, { enabled: true, provider: 'cursor-sdk' });
+    const bus = createActivityBus();
+    const server = await startStatusServer({
+      vaultRoot: tempVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken: 'aiops-secret',
+      activityBus: bus
+    });
+    try {
+      // Same /api/* auth surface as the read endpoints.
+      const unauth = await fetch(`${server.url}/api/ai-ops/test`, { method: 'POST' });
+      assert.equal(unauth.status, 401);
+
+      const auth = { Authorization: 'Bearer aiops-secret' };
+      // beforeEach deletes CURSOR_API_KEY: the enabled cursor-sdk probe fails
+      // closed with a missing-key error and never touches the network.
+      const res = await fetch(`${server.url}/api/ai-ops/test`, {
+        method: 'POST',
+        headers: auth
+      });
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as Record<string, unknown>;
+      assert.equal(body['ok'], false);
+      assert.equal(body['operation'], 'test');
+      assert.equal(body['recordId'], 'hello');
+      assert.equal(body['provider'], 'cursor-sdk');
+      assert.equal(typeof body['model'], 'string');
+      assert.ok(typeof body['error'] === 'string' && (body['error'] as string).length > 0);
+      assert.equal(typeof body['entryId'], 'string');
+      assert.equal(typeof body['durationMs'], 'number');
+
+      // Journal row is listed and survives the operation=test filter.
+      const listed = await fetch(`${server.url}/api/ai-ops?operation=test`, { headers: auth });
+      assert.equal(listed.status, 200);
+      const lj = (await listed.json()) as { items: Array<Record<string, unknown>>; total: number };
+      assert.equal(lj.total, 1);
+      assert.equal(lj.items[0]?.['operation'], 'test');
+      assert.equal(lj.items[0]?.['recordId'], 'hello');
+    } finally {
+      bus.close();
+      await server.close();
+    }
+  });
+
+  it('Issue #69: Test AI force-logs a row even when AI is disabled', async () => {
+    writeVaultAiConfig(tempVault, { enabled: false, provider: 'cursor-sdk' });
+    const bus = createActivityBus();
+    const server = await startStatusServer({
+      vaultRoot: tempVault,
+      port: 0,
+      host: '127.0.0.1',
+      authToken: 'aiops-secret',
+      activityBus: bus
+    });
+    try {
+      const auth = { Authorization: 'Bearer aiops-secret' };
+      const res = await fetch(`${server.url}/api/ai-ops/test`, { method: 'POST', headers: auth });
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as Record<string, unknown>;
+      assert.equal(body['ok'], false);
+      assert.equal(body['operation'], 'test');
+      assert.match(String(body['error']), /disabled|noop/i);
+      const rows = readJournalLines(tempVault).filter((l) => l['operation'] === 'test');
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]?.['recordId'], 'hello');
+    } finally {
+      bus.close();
+      await server.close();
+    }
+  });
+
   it('AC18–AC22: status HTML has the AI Ops tab, filters, escaped detail pane', () => {
     const html = generateStatusHtml(getPackageVersion());
     assert.ok(html.includes('data-tab="tab-ai-ops"'));
@@ -448,6 +521,9 @@ describe('Status monitor AI ops log (spec 0057)', () => {
     assert.ok(html.includes('id="status-sidebar"'));
     assert.ok(html.includes('>AI Ops</span></button>'));
     assert.ok(html.includes('id="aiops-operation-select"'));
+    assert.ok(html.includes('<option value="test">test</option>'));
+    assert.ok(html.includes('id="btn-aiops-test"'));
+    assert.ok(html.includes('id="btn-aiops-refresh"'));
     assert.ok(html.includes('id="aiops-ok-select"'));
     assert.ok(html.includes('id="aiops-tbody"'));
     assert.ok(html.includes('id="aiops-detail"'));
