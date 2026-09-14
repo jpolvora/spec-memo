@@ -21,8 +21,11 @@ import {
   getAiOpsDir,
   resetAiOpsConfigCacheForTests,
   withAiOpsJournal,
+  AiOpsJournaledAgent,
+  resolveVaultAiAgent,
   truncateOpsPayloadToBudget,
-  defaultAiConfig
+  defaultAiConfig,
+  isAiOpsLogEnabled
 } from './ai/index.js';
 import type {
   VaultAiAgent,
@@ -120,6 +123,33 @@ describe('Status monitor AI ops log (spec 0057)', () => {
   it('AC17: MCP tool surface stays at 11 tools (no AI ops tool)', () => {
     assert.equal(TOOL_NAMES.length, 11);
     assert.ok(!TOOL_NAMES.includes('ai-ops' as never));
+  });
+
+  it('Issue #66: resolveVaultAiAgent wires withAiOpsJournal at the choke point', async () => {
+    // Enabled SDK must return the journaled decorator, not the raw adapter.
+    const enabled = resolveVaultAiAgent(tempVault, {
+      ...defaultAiConfig(),
+      enabled: true,
+      provider: 'cursor-sdk'
+    });
+    assert.ok(enabled.agent instanceof AiOpsJournaledAgent);
+    assert.equal(isAiOpsLogEnabled(enabled.config), true);
+    // Disabled AI still resolves Noop (pass-through writes zero rows).
+    const disabled = resolveVaultAiAgent(tempVault, {
+      ...defaultAiConfig(),
+      enabled: false,
+      provider: 'cursor-sdk'
+    });
+    assert.ok(disabled.agent instanceof NoopVaultAiAgent);
+    // Explicit opt-out keeps the wrapper but disables journal capture.
+    const optedOut = resolveVaultAiAgent(tempVault, {
+      ...defaultAiConfig(),
+      enabled: true,
+      provider: 'cursor-sdk',
+      opsLogEnabled: false
+    });
+    assert.ok(optedOut.agent instanceof AiOpsJournaledAgent);
+    assert.equal(isAiOpsLogEnabled(optedOut.config), false);
   });
 
   it('AC7: fake-agent refine appends one redacted journal row (no full body)', async () => {

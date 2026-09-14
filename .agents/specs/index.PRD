@@ -215,6 +215,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 57 | `mcp-io-guard` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | MCP I/O guard: untrusted vault data, prompt-intent refuse, always-on skill harness; v0.33.0 |
 
+| 58 | `open-github-issues-batch` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Fix open GitHub bugs: AI Ops journal wiring (#66), test vault isolation (#67), silent Chrome probes (#68) |
+
 ## 9. Inbox (unscheduled ideas)
 
 - Mobile companion web dashboard.
@@ -296,6 +298,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-13 | vault-ai-assistance | Vault AI assistance: agent interface, Noop + Cursor SDK adapter, background refine-on-write, post-FTS top-K rank, doctor/status ai; v0.30.0 | npm test 742 pass + 1 environmental (operator daemon holds :3123) |
 | 2026-09-13 | status-monitor-nav-ai-config | Status monitor left sidebar nav, Home dashboard, error-logs viewer, AI config save (`/api/error-logs`, `/api/config/ai`, `/api/dashboard`); v0.32.0 | npm test 769 pass + 2 environmental (operator daemon holds :3123) |
 | 2026-09-13 | mcp-io-guard | MCP I/O guard: closed-table prompt-intent scan, IO_GUARD inbound refuse, query drop-not-fail, outbound untrusted fences + SHA-256 ioGuard/ioChecksum, hybrid skip-and-log, ws-memo Agent I/O, bootstrap over-budget handoff claim fix; v0.33.0 | npm test 809 pass |
+| 2026-09-14 | open-github-issues-batch | Fix open GitHub bugs #66/#67/#68: AI Ops journal wired at resolveVaultAiAgent, version-skills test vault isolation + regression, silent Chrome probes on status + SSE; v0.33.1 | npm test 824 pass + 2 environmental (operator daemon holds :3123) |
 
 ## Archive
 

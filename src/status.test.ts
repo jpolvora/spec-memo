@@ -734,12 +734,30 @@ test("MCP status monitor", async (t) => {
 
   await t.test("GET /favicon.ico and /robots.txt return silent 204 (AC5)", async () => {
     const errBefore = readErrorLogs(vaultRoot);
-    for (const p of ["/favicon.ico", "/robots.txt"]) {
+    for (const p of [
+      "/favicon.ico",
+      "/robots.txt",
+      "/json/version",
+      "/.well-known/appspecific/com.chrome.devtools.json"
+    ]) {
       const res = await fetch(`${baseUrl}${p}`);
       assert.strictEqual(res.status, 204);
       assert.strictEqual(await res.text(), "");
     }
     assert.strictEqual(readErrorLogs(vaultRoot), errBefore);
+  });
+
+  await t.test("silent probes stay silent while real unknown routes stay loud (issue #68)", async () => {
+    const errBefore = readErrorLogs(vaultRoot);
+    for (const p of ["/json/version", "/.well-known/appspecific/com.chrome.devtools.json"]) {
+      const res = await fetch(`${baseUrl}${p}`);
+      assert.strictEqual(res.status, 204);
+    }
+    assert.strictEqual(readErrorLogs(vaultRoot), errBefore);
+    const loud = await fetch(`${baseUrl}/definitely-not-a-probe`);
+    assert.strictEqual(loud.status, 404);
+    assert.ok(readErrorLogs(vaultRoot).length > errBefore.length);
+    assert.ok(readErrorLogs(vaultRoot).includes("Route not found"));
   });
 
   await t.test("GET /api/records returns memory list with hits and is read-only", async () => {

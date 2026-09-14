@@ -13,6 +13,7 @@ import { NoopVaultAiAgent } from './ai/noop.js';
 import { CursorSdkVaultAiAgent, buildCursorSdkPromptOptions } from './ai/cursor-sdk.js';
 import { defaultAiConfig, parseAiConfig, resolveAiConfig } from './ai/config.js';
 import { resolveVaultAiAgent } from './ai/index.js';
+import { AiOpsJournaledAgent } from './ai/ops-log.js';
 import { assertAiConfigValid } from './ai/index.js';
 import {
   clearAiStateForTests,
@@ -130,7 +131,9 @@ describe('Vault AI assistance (spec 0056)', () => {
       enabled: true,
       provider: 'cursor-sdk'
     });
-    assert.ok(agent instanceof CursorSdkVaultAiAgent);
+    // Issue #66: runtime agent must be journal-wrapped at the choke point.
+    assert.ok(agent instanceof AiOpsJournaledAgent);
+    assert.ok(!(agent instanceof NoopVaultAiAgent));
     assert.throws(() =>
       resolveVaultAiAgent(tempVault, {
         ...defaultAiConfig(),

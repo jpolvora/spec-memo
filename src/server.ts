@@ -226,6 +226,21 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
       let targetProjectId: string | undefined =
         url.searchParams.get("project") || (req.headers["x-project-id"] as string) || undefined;
 
+      // Browser/DevTools probe noise: answer before CORS/telemetry/logging so
+      // favicon, robots, and Chrome DevTools probes never pollute error.logs,
+      // telemetry, or the activity bus. Real unknown routes stay loud below.
+      if (
+        method === "GET" &&
+        (pathname === "/favicon.ico" ||
+          pathname === "/robots.txt" ||
+          pathname === "/json/version" ||
+          pathname === "/.well-known/appspecific/com.chrome.devtools.json")
+      ) {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
       setCorsHeaders(res);
 
       if (method === "OPTIONS") {

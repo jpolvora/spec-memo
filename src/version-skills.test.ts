@@ -12,6 +12,8 @@ import { checkVersion, getPackageVersion, isSemverNewer } from './version.js';
 import { installSkills, listRelativeFiles, resolveSkillInstallTargets } from './skills-install.js';
 import { getPackageRoot } from './version.js';
 import { runCli } from './cli.js';
+import { getVaultRoot } from './vault.js';
+import { resolveErrorLogPath } from './error-logger.js';
 
 describe('check_version and install_skills', () => {
   it('registers 11 MCP tools including check_version and install_skills', async () => {
@@ -393,19 +395,26 @@ describe('check_version and install_skills', () => {
   });
 
   it('MCP install_skills requires confirm, scope, hosts, and conflict policy per AC20/AC21', async () => {
-    const response = await executeTool('install_skills', {
-      productRoot: path.join(os.tmpdir(), 'spec-memo-no-write'),
-      confirm: false,
-      scope: 'local',
-      hosts: ['cursor'],
-      conflictPolicy: 'skip'
-    });
-    assert.equal(response.isError, true);
-    assert.match(response.error, /confirm/i);
+    const isolatedVault = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-test-vault-'));
+    try {
+      const response = await executeTool('install_skills', {
+        productRoot: path.join(os.tmpdir(), 'spec-memo-no-write'),
+        confirm: false,
+        scope: 'local',
+        hosts: ['cursor'],
+        conflictPolicy: 'skip',
+        vaultRoot: isolatedVault
+      });
+      assert.equal(response.isError, true);
+      assert.match(response.error, /confirm/i);
+    } finally {
+      fs.rmSync(isolatedVault, { recursive: true, force: true });
+    }
   });
 
   it('MCP install_skills rejects whitespace-only hosts without falling back to defaults', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-empty-host-'));
+    const isolatedVault = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-test-vault-'));
     const productRoot = path.join(tmp, 'consumer');
     fs.mkdirSync(productRoot, { recursive: true });
     try {
@@ -414,13 +423,67 @@ describe('check_version and install_skills', () => {
         confirm: true,
         scope: 'local',
         hosts: [' '],
-        conflictPolicy: 'skip'
+        conflictPolicy: 'skip',
+        vaultRoot: isolatedVault
       });
       assert.equal(response.isError, true);
       assert.match(response.error, /at least one non-empty host/i);
       assert.equal(fs.existsSync(path.join(productRoot, '.agents')), false);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(isolatedVault, { recursive: true, force: true });
+    }
+  });
+
+  it('install_skills expected-fail fixtures never append to the operator vault (issue #67)', async () => {
+    const operatorLogPath = resolveErrorLogPath(undefined);
+    let beforeSize = -1;
+    let beforeMtime = 0;
+    try {
+      const st = fs.statSync(operatorLogPath);
+      beforeSize = st.size;
+      beforeMtime = st.mtimeMs;
+    } catch {
+      beforeSize = -1;
+    }
+    const isolatedVault = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-test-vault-'));
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-skills-isolation-'));
+    try {
+      const first = await executeTool('install_skills', {
+        productRoot: path.join(os.tmpdir(), 'spec-memo-no-write'),
+        confirm: false,
+        scope: 'local',
+        hosts: ['cursor'],
+        conflictPolicy: 'skip',
+        vaultRoot: isolatedVault
+      });
+      assert.equal(first.isError, true);
+      const productRoot = path.join(tmp, 'consumer');
+      fs.mkdirSync(productRoot, { recursive: true });
+      const second = await executeTool('install_skills', {
+        productRoot,
+        confirm: true,
+        scope: 'local',
+        hosts: [' '],
+        conflictPolicy: 'skip',
+        vaultRoot: isolatedVault
+      });
+      assert.equal(second.isError, true);
+      // Isolated vault received the WARN rows.
+      const isolatedLog = resolveErrorLogPath(isolatedVault);
+      assert.ok(fs.existsSync(isolatedLog), 'isolated vault should capture fixture diagnostics');
+      // Operator vault unchanged.
+      if (beforeSize === -1) {
+        assert.ok(!fs.existsSync(operatorLogPath) || fs.statSync(operatorLogPath).size === 0);
+      } else {
+        const after = fs.statSync(operatorLogPath);
+        assert.equal(after.size, beforeSize);
+        assert.equal(after.mtimeMs, beforeMtime);
+      }
+      void getVaultRoot;
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(isolatedVault, { recursive: true, force: true });
     }
   });
 

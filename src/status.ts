@@ -5216,8 +5216,14 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       const method = req.method || "GET";
 
       // Browser well-known noise: answer before telemetry/logging so
-      // favicon and robots probes never pollute error.logs or telemetry.
-      if (method === "GET" && (pathname === "/favicon.ico" || pathname === "/robots.txt")) {
+      // favicon, robots, and Chrome DevTools probes never pollute error.logs or telemetry.
+      if (
+        method === "GET" &&
+        (pathname === "/favicon.ico" ||
+          pathname === "/robots.txt" ||
+          pathname === "/json/version" ||
+          pathname === "/.well-known/appspecific/com.chrome.devtools.json")
+      ) {
         res.writeHead(204);
         res.end();
         return;

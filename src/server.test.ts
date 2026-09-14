@@ -384,6 +384,34 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
     }
   });
 
+  await t.test("SSE silent probes return 204 without WARN 404 telemetry (issue #68)", async () => {
+    const probeServer = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      enableStatus: false
+    });
+    try {
+      const errBefore = readErrorLogs(vaultRoot);
+      for (const p of [
+        "/favicon.ico",
+        "/robots.txt",
+        "/json/version",
+        "/.well-known/appspecific/com.chrome.devtools.json"
+      ]) {
+        const res = await fetch(`${probeServer.url}${p}`);
+        assert.strictEqual(res.status, 204);
+        assert.strictEqual(await res.text(), "");
+      }
+      assert.strictEqual(readErrorLogs(vaultRoot), errBefore);
+      const loud = await fetch(`${probeServer.url}/definitely-not-a-probe`);
+      assert.strictEqual(loud.status, 404);
+      assert.ok(readErrorLogs(vaultRoot).length > errBefore.length);
+    } finally {
+      await probeServer.close();
+    }
+  });
+
   await t.test("should identify and track proxy and direct clients with operations", async () => {
     const trackingServer = await startSseServer({
       vaultRoot,
