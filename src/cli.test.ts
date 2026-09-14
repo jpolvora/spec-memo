@@ -1806,6 +1806,12 @@ describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
       assert.equal(codeCanvas, 0);
       const parsedCanvas = JSON.parse(out.trim());
       assert.equal(parsedCanvas.ok, true);
+
+      out = '';
+      const codeScope = await runCli(['stop', '--scope', 'monitor', '--dry-run', '--json']);
+      assert.equal(codeScope, 0);
+      const parsedScope = JSON.parse(out.trim());
+      assert.equal(parsedScope.ok, true);
     } finally {
       console.log = origLog;
     }
@@ -1832,6 +1838,14 @@ describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
     });
     await new Promise<void>((resolve) => mockServer.listen(mockPort, '127.0.0.1', () => resolve()));
 
+    // Start a foreign mock server returning 404 to verify it is NOT treated as already-running
+    const foreignPort = await allocateLoopbackPort();
+    const foreignServer = http.createServer((req, res) => {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    });
+    await new Promise<void>((resolve) => foreignServer.listen(foreignPort, '127.0.0.1', () => resolve()));
+
     let out = '';
     const origLog = console.log;
     console.log = (...a) => { out += a.join(' ') + '\n'; };
@@ -1844,6 +1858,14 @@ describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
       assert.equal(parsedMonitor.status, 'already-running');
       assert.equal(parsedMonitor.service, 'status-monitor');
       assert.equal(parsedMonitor.port, mockPort);
+
+      // Foreign 404 server must NOT be treated as already-running (fails bind with error)
+      out = '';
+      const codeForeign = await runCli(['start', 'monitor', '--port', String(foreignPort), '--vaultRoot', vault, '--json']);
+      assert.equal(codeForeign, 1);
+      const parsedForeign = JSON.parse(out.trim());
+      assert.equal(parsedForeign.isError, true);
+      assert.equal(parsedForeign.code, 'STATUS_SERVER_ERROR');
 
       // Test canvas idempotent start
       out = '';
@@ -1863,6 +1885,7 @@ describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
     } finally {
       console.log = origLog;
       await new Promise<void>((resolve) => mockServer.close(() => resolve()));
+      await new Promise<void>((resolve) => foreignServer.close(() => resolve()));
       closeIndex(vault);
       fs.rmSync(tmp, { recursive: true, force: true });
     }

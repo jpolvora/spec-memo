@@ -1214,7 +1214,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
 
       // Idempotent check: if already running, inform user and exit 0
       const probe = await probeHttpService(`http://${host}:${port}/api/status`, 500, authToken);
-      if (probe.running || probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
+      if (probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
         const url = `http://${host}:${port}`;
         if (parsed.isJson) {
           printJson({
@@ -1292,7 +1292,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
 
       // Idempotent check: if already running, inform user and exit 0
       const probe = await probeHttpService(`http://${host}:${port}/api/graph`, 500, authToken);
-      if (probe.running || probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
+      if (probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
         const url = `http://${host}:${port}`;
         if (parsed.isJson) {
           printJson({
@@ -1354,7 +1354,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
 
       // Idempotent check: if already running, inform user and exit 0
       const probe = await probeHttpService(`http://${host}:${port}/health`, 500, authToken);
-      if (probe.running || probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
+      if (probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
         const url = `http://${host}:${port}`;
         if (parsed.isJson) {
           printJson({
@@ -1591,7 +1591,9 @@ async function runStopCommand(parsed: ParsedCliArgs): Promise<number> {
       parsed.options['dry-run'] === 'true' ||
       parsed.options.dryRun === true;
 
-    const target = parsed.positionals[0]?.toLowerCase();
+    const target =
+      parsed.positionals[0]?.toLowerCase() ??
+      (parsed.options.scope ? String(parsed.options.scope).toLowerCase() : undefined);
     let explicitScope: ShutdownScope | undefined;
     let includeCanvas =
       parsed.options['include-canvas'] === true ||
