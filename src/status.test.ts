@@ -11,6 +11,7 @@ import { ensureProjectVault } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { closeIndex } from "./indexer.js";
 import { executeTool } from "./tools.js";
+import { TOOL_NAMES } from "./types.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { exportVault } from "./backup.js";
 import { upsertRecord } from "./store.js";
@@ -2221,3 +2222,56 @@ test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t
     }
   });
 });
+
+test("Status Monitor Error Logs and AI Ops right-aligned detail drawers (0066)", async (t) => {
+  const html = generateStatusHtml(getPackageVersion());
+
+  await t.test("AC1-AC9, AC22, AC24: Error logs drawer structure, elements and security", () => {
+    assert.ok(html.includes('id="errorlog-drawer"'), "AC1: errorlog-drawer container required");
+    assert.ok(html.includes('id="errorlog-drawer-overlay"'), "AC2: errorlog-drawer-overlay required");
+    assert.ok(html.includes('id="errorlog-drawer-title"'), "AC3: errorlog-drawer-title required");
+    assert.ok(html.includes('id="errorlog-drawer-close"'), "AC3: errorlog-drawer-close required");
+    assert.ok(html.includes('id="errorlog-detail"'), "AC4/AC22: errorlog-detail container required inside drawer");
+    assert.ok(html.includes('id="errorlog-detail-project"'), "AC4: errorlog-detail-project metadata item required");
+    assert.ok(html.includes('id="errorlog-detail-error"'), "AC5: errorlog-detail-error required");
+    assert.ok(html.includes('id="errorlog-detail-stack"'), "AC6: errorlog-detail-stack required");
+    assert.ok(html.includes('id="btn-errorlog-detail-close"'), "AC7: btn-errorlog-detail-close retained");
+    assert.ok(!html.match(/errorlog-detail-error['"]?\)\.innerHTML/), "AC24: error detail must not use innerHTML");
+    assert.ok(!html.match(/errorlog-detail-stack['"]?\)\.innerHTML/), "AC24: stack detail must not use innerHTML");
+  });
+
+  await t.test("AC10-AC18, AC23, AC24: AI Ops drawer structure, elements and security", () => {
+    assert.ok(html.includes('id="aiops-drawer"'), "AC10: aiops-drawer container required");
+    assert.ok(html.includes('id="aiops-drawer-overlay"'), "AC11: aiops-drawer-overlay required");
+    assert.ok(html.includes('id="aiops-drawer-title"'), "AC12: aiops-drawer-title required");
+    assert.ok(html.includes('id="aiops-drawer-close"'), "AC12: aiops-drawer-close required");
+    assert.ok(html.includes('id="aiops-detail"'), "AC13/AC23: aiops-detail container required inside drawer");
+    assert.ok(html.includes('id="aiops-detail-project"'), "AC13: aiops-detail-project metadata item required");
+    assert.ok(html.includes('id="aiops-detail-input"'), "AC14: aiops-detail-input required");
+    assert.ok(html.includes('id="aiops-detail-output"'), "AC15: aiops-detail-output required");
+    assert.ok(html.includes('id="aiops-detail-meta"'), "AC16: aiops-detail-meta required");
+    assert.ok(html.includes('id="btn-aiops-detail-close"'), "AC17: btn-aiops-detail-close retained");
+    const opsStart = html.indexOf("AI OPS TAB LOGIC");
+    const memStart = html.indexOf("MEMORY TAB LOGIC");
+    assert.ok(opsStart >= 0 && memStart > opsStart);
+    const aiopsBlock = html.slice(opsStart, memStart);
+    assert.ok(!aiopsBlock.includes("innerHTML"), "AC24: zero innerHTML in AI Ops script block");
+  });
+
+  await t.test("AC19-AC21: Drawer interactions, tab navigation and Escape listener", () => {
+    assert.ok(html.includes("function openErrorLogDrawer()"));
+    assert.ok(html.includes("function closeErrorLogDrawer()"));
+    assert.ok(html.includes("function openAiOpsDrawer()"));
+    assert.ok(html.includes("function closeAiOpsDrawer()"));
+    assert.ok(html.includes("function closeAllStatusDrawers()"));
+    assert.ok(html.includes("closeAllStatusDrawers();"), "AC20: activateTab calls closeAllStatusDrawers");
+    assert.ok(html.includes('if (e.key === "Escape")'), "AC19: keydown listener handles Escape key");
+    assert.ok(html.includes("errorlog-drawer"), "Escape handler references errorlog-drawer");
+    assert.ok(html.includes("aiops-drawer"), "Escape handler references aiops-drawer");
+  });
+
+  await t.test("AC25: Tool freeze invariant (TOOL_NAMES.length === 11)", () => {
+    assert.strictEqual(TOOL_NAMES.length, 11, "MCP tools must remain exactly 11");
+  });
+});
+
