@@ -415,13 +415,31 @@ export function setSessionObjective(options: {
   owner?: string;
   branch?: string;
   sessionId?: string;
+  vaultRoot?: string;
+  projectId?: string;
 }): SessionObjective {
   const owner = options.owner || resolveOwner(options.cwd);
   const branch = options.branch || resolveGitBranch(options.cwd);
+  const objective = options.objective.trim();
+  const hit = inspectAgentIo(objective);
+  if (!hit.ok) {
+    logIoGuardRefusal(
+      {
+        reason: 'objective refused: prompt-injection tokens',
+        flags: hit.flags,
+        bodyChars: objective.length,
+        projectId: options.projectId,
+        tool: 'session_start',
+        recordId: options.sessionId
+      },
+      { vaultRoot: options.vaultRoot }
+    );
+    throw createIoGuardError('prompt-injection tokens in session objective');
+  }
   const record: SessionObjective = {
     owner,
     branch,
-    objective: options.objective.trim(),
+    objective,
     sessionId: options.sessionId,
     updatedAt: new Date().toISOString()
   };

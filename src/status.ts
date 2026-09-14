@@ -5986,10 +5986,12 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         try {
           const project = url.searchParams.get("project");
           const payload = readWikiFile(project, vaultRoot);
+          const sanitizedWiki = sanitizeToolOutput({ markdown: payload.markdown }) as { markdown?: string };
+          const safeMarkdown = typeof sanitizedWiki.markdown === "string" ? sanitizedWiki.markdown : "";
           const renderedHtml = payload.exists
-            ? wrapWikiH2Html(renderPromptMarkdownHtml(payload.markdown))
+            ? wrapWikiH2Html(renderPromptMarkdownHtml(safeMarkdown))
             : "";
-          writeGuardedJson(res, 200, { ...payload, renderedHtml });
+          writeGuardedJson(res, 200, { ...payload, markdown: safeMarkdown, renderedHtml });
         } catch (err: unknown) {
           if (err instanceof WikiError) {
             writeJson(res, err.httpStatus, sanitizeToolOutput({ error: err.message }));
@@ -6886,12 +6888,13 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           writeJson(res, 404, { error: `Prompt or session '${id}' not found` });
           return;
         }
-        const redacted = typeof record.body === "string" && record.body.includes("[REDACTED");
+        const redactedRecord = sanitizeToolOutput(record) as { body?: string };
+        const redactedBody = typeof redactedRecord.body === "string" ? redactedRecord.body : "";
         writeJson(res, 200, {
           ok: true,
-          record: fenceStatusPayload(sanitizeToolOutput(record)),
-          renderedHtml: renderPromptMarkdownHtml(record.body || ""),
-          secretsRedacted: redacted
+          record: fenceStatusPayload(redactedRecord),
+          renderedHtml: renderPromptMarkdownHtml(redactedBody),
+          secretsRedacted: redactedBody.includes("[REDACTED")
         });
         return;
       }

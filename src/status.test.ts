@@ -584,6 +584,14 @@ test("MCP status monitor", async (t) => {
       `expected wrapped h2 HTML, got: ${wikiBody.renderedHtml.slice(0, 400)}`
     );
     assert.ok(wikiBody.renderedHtml.includes("Overview"));
+    const wikiFile = path.join(vaultRoot, "projects", projectId, "WIKI.md");
+    const prevWiki = fs.readFileSync(wikiFile, "utf8");
+    fs.writeFileSync(wikiFile, `${prevWiki}\nSee ${vaultRoot} operator-home\n`, "utf8");
+    const leakRes = await fetch(`${baseUrl}/api/wiki?project=${encodeURIComponent(projectId)}`);
+    assert.strictEqual(leakRes.status, 200);
+    const leakBody = await leakRes.json() as { renderedHtml: string };
+    assert.ok(!leakBody.renderedHtml.includes(vaultRoot), "wiki HTML must not echo the vault path");
+    fs.writeFileSync(wikiFile, prevWiki, "utf8");
   });
 
   await t.test("GET /api/wiki/section returns 200 for known h2 slug and 404 Not found for unknown id", async () => {

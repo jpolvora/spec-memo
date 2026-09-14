@@ -895,6 +895,25 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         inners.push(fenceInnerOf(fenced));
         brief.handoffMarkdown = fenced;
       }
+      if (brief.sessionObjective?.objective) {
+        const fenced = isUntrustedWrapped(brief.sessionObjective.objective)
+          ? brief.sessionObjective.objective
+          : wrapUntrustedText(brief.sessionObjective.objective);
+        inners.push(fenceInnerOf(fenced));
+        brief.sessionObjective = { ...brief.sessionObjective, objective: fenced };
+      }
+      if (brief.sessionResume) {
+        const resume = { ...brief.sessionResume };
+        for (const key of ['summary', 'body'] as const) {
+          const val = resume[key];
+          if (typeof val === 'string' && val.length > 0) {
+            const fenced = isUntrustedWrapped(val) ? val : wrapUntrustedText(val);
+            inners.push(fenceInnerOf(fenced));
+            resume[key] = fenced;
+          }
+        }
+        brief.sessionResume = resume;
+      }
       const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch, queryDropped });
       brief.ioGuard = ioGuard;
       // Spec 0059 review (PR#65): fences grow bodies after the byte-budget
@@ -918,6 +937,18 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           brief.handoffMarkdown.includes(UNTRUSTED_BEGIN)
         ) {
           target.push(fenceInnerOf(brief.handoffMarkdown));
+        }
+        if (
+          typeof brief.sessionObjective?.objective === 'string' &&
+          brief.sessionObjective.objective.includes(UNTRUSTED_BEGIN)
+        ) {
+          target.push(fenceInnerOf(brief.sessionObjective.objective));
+        }
+        for (const key of ['summary', 'body'] as const) {
+          const val = brief.sessionResume?.[key];
+          if (typeof val === 'string' && val.includes(UNTRUSTED_BEGIN)) {
+            target.push(fenceInnerOf(val));
+          }
         }
       };
       const refitEnvelope = (): IoGuardEnvelope => {

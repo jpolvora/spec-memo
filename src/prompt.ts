@@ -220,7 +220,9 @@ export async function startSessionRecord(options: PromptOptions): Promise<Sessio
         projectDir,
         cwd,
         objective: options.objective,
-        sessionId
+        sessionId,
+        vaultRoot,
+        projectId
       });
     } else {
       clearSessionObjective({ projectDir, cwd });
