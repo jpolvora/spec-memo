@@ -128,9 +128,8 @@ function readCloudAgentErrorText(err: unknown): string {
 
 export function isCloudAgentLimitError(err: unknown): boolean {
   const text = readCloudAgentErrorText(err);
-  const hasValidationCode = /validation_error/i.test(text);
-  const hasLimitPhrase = /cloud agent|reached the limit|upgrade to ultra/i.test(text);
-  return hasValidationCode || hasLimitPhrase;
+  if (/cloud agent|reached the limit|upgrade to ultra/i.test(text)) return true;
+  return /validation_error/i.test(text) && /\blimit\b/i.test(text);
 }
 
 function attachCloudAgentError(message: string, code?: string): Error {
@@ -384,19 +383,20 @@ async function runManagedCloudPrompt(
   }
 }
 
-async function defaultPromptFn(
-  message: string,
-  options: CursorPromptOptions
-): Promise<{ result?: string }> {
-  const Agent = await loadCursorSdkAgentApi();
-  try {
-    return await runManagedCloudPrompt(message, options, Agent);
-  } catch (err) {
-    if (!isCloudAgentLimitError(err)) throw err;
-    const reclaimed = await archiveStaleSpecMemoCloudAgents(Agent, options.apiKey);
-    if (reclaimed === 0) throw err;
-    return await runManagedCloudPrompt(message, options, Agent);
-  }
+export function createDefaultPromptFn(
+  resolveAgent: () => Promise<CursorSdkAgentApi> = loadCursorSdkAgentApi
+): CursorPromptFn {
+  return async (message, options) => {
+    const Agent = await resolveAgent();
+    try {
+      return await runManagedCloudPrompt(message, options, Agent);
+    } catch (err) {
+      if (!isCloudAgentLimitError(err)) throw err;
+      const reclaimed = await archiveStaleSpecMemoCloudAgents(Agent, options.apiKey);
+      if (reclaimed === 0) throw err;
+      return await runManagedCloudPrompt(message, options, Agent);
+    }
+  };
 }
 
 function redactPromptText(text: string): string {
@@ -422,6 +422,8 @@ const RANK_INSTRUCTION =
 
 export interface CursorSdkAgentDeps {
   promptFn?: CursorPromptFn;
+  /** Test-only override for the managed SDK agent API loader. */
+  agentApi?: CursorSdkAgentApi;
 }
 
 /**
@@ -435,7 +437,9 @@ export class CursorSdkVaultAiAgent implements VaultAiAgent {
 
   constructor(config: VaultAiConfig, deps: CursorSdkAgentDeps = {}) {
     this.config = config;
-    this.promptFn = deps.promptFn || defaultPromptFn;
+    this.promptFn =
+      deps.promptFn ||
+      createDefaultPromptFn(deps.agentApi ? async () => deps.agentApi! : loadCursorSdkAgentApi);
   }
 
   private readApiKey(): string {

@@ -14,9 +14,11 @@ import {
   CursorSdkVaultAiAgent,
   archiveStaleSpecMemoCloudAgents,
   buildCursorSdkPromptOptions,
+  createDefaultPromptFn,
   isCloudAgentLimitError,
   raceWithTimeout,
-  SPEC_MEMO_CLOUD_AGENT_METADATA
+  SPEC_MEMO_CLOUD_AGENT_METADATA,
+  type CursorSdkAgentApi
 } from './ai/cursor-sdk.js';
 import { defaultAiConfig, parseAiConfig, resolveAiConfig } from './ai/config.js';
 import { resolveVaultAiAgent } from './ai/index.js';
@@ -248,6 +250,10 @@ describe('Vault AI assistance (spec 0056)', () => {
       isCloudAgentLimitError({ code: 'validation_error', message: 'plan limit reached' }),
       true
     );
+    assert.equal(
+      isCloudAgentLimitError({ code: 'validation_error', message: 'unknown model foo' }),
+      false
+    );
 
     let archived = 0;
     const fakeAgentApi = {
@@ -303,6 +309,79 @@ describe('Vault AI assistance (spec 0056)', () => {
       /timed out after 30ms/
     );
     assert.equal(cancelled, true);
+  });
+
+  it('default prompt reclaims stale agents once on limit errors only', async () => {
+    let managedCalls = 0;
+    let listCalls = 0;
+    const limitErr = attachTestCode(
+      new Error("You've reached the limit for your current plan."),
+      'validation_error'
+    );
+    const fakeAgentApi: CursorSdkAgentApi = {
+      create() {
+        managedCalls += 1;
+        const attempt = managedCalls;
+        return {
+          async send() {
+            return {
+              id: `run-${attempt}`,
+              agentId: 'bc-test',
+              supports: () => true,
+              async cancel() {},
+              async wait() {
+                if (attempt === 1) throw limitErr;
+                return {
+                  status: 'finished',
+                  result: '{"searchTerms":["ok"],"summary":"s"}'
+                };
+              }
+            };
+          },
+          async [Symbol.asyncDispose]() {}
+        };
+      },
+      async cancelRun() {},
+      async archive() {},
+      async delete() {},
+      async list() {
+        listCalls += 1;
+        return {
+          items: [
+            {
+              agentId: 'bc-stale',
+              status: 'finished',
+              metadata: { source: SPEC_MEMO_CLOUD_AGENT_METADATA.source }
+            }
+          ]
+        };
+      }
+    };
+    const promptFn = createDefaultPromptFn(async () => fakeAgentApi);
+    const out = await promptFn('hello', buildCursorSdkPromptOptions(defaultAiConfig(), 'k'));
+    const text = typeof out === 'string' ? out : String(out.result || '');
+    assert.equal(text, '{"searchTerms":["ok"],"summary":"s"}');
+    assert.equal(managedCalls, 2);
+    assert.equal(listCalls, 1);
+
+    let nonLimitLists = 0;
+    const nonLimitAgent: CursorSdkAgentApi = {
+      create() {
+        throw attachTestCode(new Error('unknown model foo'), 'validation_error');
+      },
+      async cancelRun() {},
+      async archive() {},
+      async delete() {},
+      async list() {
+        nonLimitLists += 1;
+        return { items: [] };
+      }
+    };
+    await assert.rejects(
+      createDefaultPromptFn(async () => nonLimitAgent)('hello', buildCursorSdkPromptOptions(defaultAiConfig(), 'k')),
+      /unknown model foo/
+    );
+    assert.equal(nonLimitLists, 0);
   });
 
   it('raceWithTimeout rejects even when the cancel hook hangs', async () => {
