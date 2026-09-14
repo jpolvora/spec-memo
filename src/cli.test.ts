@@ -7,7 +7,7 @@ import * as net from 'node:net';
 import * as http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { isCliMainEntry, runCli, stdioServeEnablesStatus } from './cli.js';
+import { isCliMainEntry, parseServicePort, runCli, stdioServeEnablesStatus } from './cli.js';
 import { TOOL_NAMES } from './types.js';
 import { probeHttpService } from './status-cmd.js';
 import { closeIndex } from './indexer.js';
@@ -1866,6 +1866,94 @@ describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
       closeIndex(vault);
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  });
+
+  describe('parseServicePort & port validation (PR #74 review)', () => {
+    it('parseServicePort parses valid port integers and falls back when undefined', () => {
+      assert.equal(parseServicePort(3124), 3124);
+      assert.equal(parseServicePort('3124'), 3124);
+      assert.equal(parseServicePort('  8080  '), 8080);
+      assert.equal(parseServicePort(undefined, 3123), 3123);
+      assert.equal(parseServicePort(null, 3123), 3123);
+    });
+
+    it('parseServicePort throws on non-numeric, booleans, or out-of-range ports', () => {
+      assert.throws(() => parseServicePort('abc', undefined, 'port'), /Invalid --port value: abc/);
+      assert.throws(() => parseServicePort(true, undefined, 'port'), /Invalid --port value: true/);
+      assert.throws(() => parseServicePort('0', undefined, 'port'), /Invalid --port value: 0/);
+      assert.throws(() => parseServicePort('65536', undefined, 'port'), /Invalid --port value: 65536/);
+      assert.throws(() => parseServicePort('-1', undefined, 'status-port'), /Invalid --status-port value: -1/);
+      assert.throws(() => parseServicePort('12.34', undefined, 'port'), /Invalid --port value: 12.34/);
+    });
+
+    it('memo start rejects invalid --port with exit code 1', async () => {
+      let err = '';
+      const origErr = console.error;
+      console.error = (...a) => { err += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['start', 'monitor', '--port', 'abc']);
+        assert.equal(code, 1);
+        assert.match(err, /Invalid --port value: abc/);
+      } finally {
+        console.error = origErr;
+      }
+
+      let jsonOut = '';
+      const origLog = console.log;
+      console.log = (...a) => { jsonOut += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['start', 'canvas', '--port', '99999', '--json']);
+        assert.equal(code, 1);
+        const parsed = JSON.parse(jsonOut.trim());
+        assert.equal(parsed.isError, true);
+        assert.equal(parsed.code, 'CANVAS_ERROR');
+        assert.match(parsed.error, /Invalid --port value: 99999/);
+      } finally {
+        console.log = origLog;
+      }
+    });
+
+    it('memo start server rejects invalid --status-port with exit code 1', async () => {
+      let jsonOut = '';
+      const origLog = console.log;
+      console.log = (...a) => { jsonOut += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['start', 'server', '--status-port', 'not-a-port', '--json']);
+        assert.equal(code, 1);
+        const parsed = JSON.parse(jsonOut.trim());
+        assert.equal(parsed.isError, true);
+        assert.equal(parsed.code, 'SSE_ERROR');
+        assert.match(parsed.error, /Invalid --status-port value: not-a-port/);
+      } finally {
+        console.log = origLog;
+      }
+    });
+
+    it('memo restart rejects invalid --port with exit code 1', async () => {
+      let err = '';
+      const origErr = console.error;
+      console.error = (...a) => { err += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['restart', 'monitor', '--port', '-5']);
+        assert.equal(code, 1);
+        assert.match(err, /Invalid --port value: -5/);
+      } finally {
+        console.error = origErr;
+      }
+    });
+
+    it('memo stop rejects invalid --port with exit code 1', async () => {
+      let err = '';
+      const origErr = console.error;
+      console.error = (...a) => { err += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['stop', '--port', 'invalid']);
+        assert.equal(code, 1);
+        assert.match(err, /Invalid --port value: invalid/);
+      } finally {
+        console.error = origErr;
+      }
+    });
   });
 });
 

@@ -163,7 +163,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
         setParsedOption(result.options, k, v);
       } else {
         const next = args[i + 1];
-        if (next && !next.startsWith('-')) {
+        if (next && (!next.startsWith('-') || /^-\d+(\.\d+)?$/.test(next))) {
           setParsedOption(result.options, key, next);
           i++;
         } else {
@@ -1159,6 +1159,22 @@ async function runInstallSkillsCommand(parsed: ParsedCliArgs): Promise<number> {
   }
 }
 
+export function parseServicePort(raw: unknown, fallback?: number, flagName = 'port'): number | undefined {
+  if (raw === undefined || raw === null) return fallback;
+  if (typeof raw === 'boolean' || typeof raw === 'object') {
+    throw new Error(`Invalid --${flagName} value: ${String(raw)}. Expected an integer 1-65535.`);
+  }
+  const str = String(raw).trim();
+  if (!/^\d+$/.test(str)) {
+    throw new Error(`Invalid --${flagName} value: ${String(raw)}. Expected an integer 1-65535.`);
+  }
+  const n = Number(str);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    throw new Error(`Invalid --${flagName} value: ${String(raw)}. Expected an integer 1-65535.`);
+  }
+  return n;
+}
+
 async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
   const target = parsed.positionals[0]?.toLowerCase();
 
@@ -1188,7 +1204,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
   // 1. MONITOR
   if (target === 'monitor' || target === 'status' || target === 'status-monitor') {
     try {
-      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.status;
+      const port = parseServicePort(parsed.options.port, configuredPorts.status, 'port')!;
       const authToken =
         (parsed.options['auth-token'] as string | undefined) ||
         (parsed.options.authToken as string | undefined) ||
@@ -1268,7 +1284,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
   // 2. CANVAS
   if (target === 'canvas') {
     try {
-      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.canvas;
+      const port = parseServicePort(parsed.options.port, configuredPorts.canvas, 'port')!;
       const project = (parsed.options.project as string) || undefined;
       const authToken =
         (parsed.options['auth-token'] as string | undefined) ||
@@ -1326,16 +1342,15 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
   // 3. SERVER (SSE)
   if (target === 'server' || target === 'sse') {
     try {
-      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.sse;
+      const port = parseServicePort(parsed.options.port, configuredPorts.sse, 'port')!;
       const authToken =
         (parsed.options['auth-token'] as string | undefined) ||
         (parsed.options.authToken as string | undefined);
       const noStatus = isNoStatusOption(parsed.options);
-      const statusPort = parsed.options['status-port']
-        ? parseInt(String(parsed.options['status-port']), 10)
-        : parsed.options.statusPort
-          ? parseInt(String(parsed.options.statusPort), 10)
-          : undefined;
+      const rawStatusPort =
+        (parsed.options['status-port'] as string | number | undefined) ??
+        (parsed.options.statusPort as string | number | undefined);
+      const statusPort = parseServicePort(rawStatusPort, undefined, 'status-port');
 
       // Idempotent check: if already running, inform user and exit 0
       const probe = await probeHttpService(`http://${host}:${port}/health`, 500, authToken);
@@ -1420,24 +1435,33 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
       return runStartCommand(parsed);
     }
 
-    const statusPort = parsed.options['status-port']
-      ? parseInt(String(parsed.options['status-port']), 10)
-      : parsed.options.statusPort
-        ? parseInt(String(parsed.options.statusPort), 10)
-        : undefined;
-    const statusHost = (parsed.options['status-host'] as string) || (parsed.options.host as string) || '127.0.0.1';
-    const statusAuthToken =
-      (parsed.options['auth-token'] as string | undefined) ||
-      (parsed.options.authToken as string | undefined);
+    try {
+      const rawStatusPort =
+        (parsed.options['status-port'] as string | number | undefined) ??
+        (parsed.options.statusPort as string | number | undefined);
+      const statusPort = parseServicePort(rawStatusPort, undefined, 'status-port');
+      const statusHost = (parsed.options['status-host'] as string) || (parsed.options.host as string) || '127.0.0.1';
+      const statusAuthToken =
+        (parsed.options['auth-token'] as string | undefined) ||
+        (parsed.options.authToken as string | undefined);
 
-    await startMcpServer({
-      vaultRoot: resolvedVaultRoot,
-      enableStatus: stdioServeEnablesStatus(parsed.options),
-      statusPort,
-      statusHost,
-      statusAuthToken
-    });
-    return 0;
+      await startMcpServer({
+        vaultRoot: resolvedVaultRoot,
+        enableStatus: stdioServeEnablesStatus(parsed.options),
+        statusPort,
+        statusHost,
+        statusAuthToken
+      });
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'MCP_ERROR' });
+      } else {
+        console.error(`MCP server failed: ${msg}`);
+      }
+      return 1;
+    }
   }
 
   return 1;
@@ -1462,55 +1486,65 @@ async function runRestartCommand(parsed: ParsedCliArgs): Promise<number> {
     return 1;
   }
 
-  const vaultRootArg = (parsed.options.vaultRoot as string) || undefined;
-  const resolvedVaultRoot = getVaultRoot(vaultRootArg);
-  const config = ensureVaultStructure(resolvedVaultRoot);
-  const configuredPorts = resolveConfiguredPorts(resolvedVaultRoot, config);
-  const host = (parsed.options.host as string) || '127.0.0.1';
+  try {
+    const vaultRootArg = (parsed.options.vaultRoot as string) || undefined;
+    const resolvedVaultRoot = getVaultRoot(vaultRootArg);
+    const config = ensureVaultStructure(resolvedVaultRoot);
+    const configuredPorts = resolveConfiguredPorts(resolvedVaultRoot, config);
+    const host = (parsed.options.host as string) || '127.0.0.1';
 
-  let scope: ShutdownScope = 'serve';
-  let port = configuredPorts.sse;
-  let probePath = '/health';
+    let scope: ShutdownScope = 'serve';
+    let port = configuredPorts.sse;
+    let probePath = '/health';
 
-  if (target === 'monitor' || target === 'status' || target === 'status-monitor') {
-    scope = 'monitor';
-    port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.status;
-    probePath = '/api/status';
-  } else if (target === 'canvas') {
-    scope = 'canvas';
-    port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.canvas;
-    probePath = '/api/graph';
-  } else if (target === 'server' || target === 'sse') {
-    scope = 'serve';
-    port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.sse;
-    probePath = '/health';
-  } else if (target === 'mcp') {
-    scope = 'serve';
-  }
-
-  // 1. Stop existing instances of that service
-  await runShutdown({
-    scope,
-    port,
-    vaultRoot: resolvedVaultRoot,
-    force: true,
-    includeCanvas: true,
-    includeMonitor: true
-  });
-
-  // 2. Poll until port is released (up to 2000 ms)
-  if (target !== 'mcp' || parsed.options.sse) {
-    const probeUrl = `http://${host}:${port}${probePath}`;
-    for (let i = 0; i < 20; i++) {
-      const p = await probeHttpService(probeUrl, 100);
-      if (!p.running && p.statusCode === undefined) break;
-      await new Promise((r) => setTimeout(r, 100));
+    if (target === 'monitor' || target === 'status' || target === 'status-monitor') {
+      scope = 'monitor';
+      port = parseServicePort(parsed.options.port, configuredPorts.status, 'port')!;
+      probePath = '/api/status';
+    } else if (target === 'canvas') {
+      scope = 'canvas';
+      port = parseServicePort(parsed.options.port, configuredPorts.canvas, 'port')!;
+      probePath = '/api/graph';
+    } else if (target === 'server' || target === 'sse') {
+      scope = 'serve';
+      port = parseServicePort(parsed.options.port, configuredPorts.sse, 'port')!;
+      probePath = '/health';
+    } else if (target === 'mcp') {
+      scope = 'serve';
     }
-  }
 
-  // 3. Delegate to start
-  parsed.command = 'start';
-  return runStartCommand(parsed);
+    // 1. Stop existing instances of that service
+    await runShutdown({
+      scope,
+      port,
+      vaultRoot: resolvedVaultRoot,
+      force: true,
+      includeCanvas: true,
+      includeMonitor: true
+    });
+
+    // 2. Poll until port is released (up to 2000 ms)
+    if (target !== 'mcp' || parsed.options.sse) {
+      const probeUrl = `http://${host}:${port}${probePath}`;
+      for (let i = 0; i < 20; i++) {
+        const p = await probeHttpService(probeUrl, 100);
+        if (!p.running && p.statusCode === undefined) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+
+    // 3. Delegate to start
+    parsed.command = 'start';
+    return runStartCommand(parsed);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (parsed.isJson) {
+      printJson({ isError: true, error: msg, code: 'RESTART_ERROR' });
+    } else {
+      console.error(`Restart failed: ${msg}`);
+    }
+    return 1;
+  }
 }
 
 async function runStopCommand(parsed: ParsedCliArgs): Promise<number> {
@@ -1587,7 +1621,7 @@ async function runStopCommand(parsed: ParsedCliArgs): Promise<number> {
       return 1;
     }
 
-    const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : undefined;
+    const port = parseServicePort(parsed.options.port, undefined, 'port');
 
     const { report, exitCode } = await runShutdown({
       vaultRoot: scopeRoot,
@@ -2106,62 +2140,61 @@ async function runCliInner(
   if (parsed.command === 'serve') {
     if (parsed.options.sse) {
       try {
-      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : undefined;
-      const host = (parsed.options.host as string) || '127.0.0.1';
-      const vaultRoot = parsed.options.vaultRoot as string | undefined;
-      const authToken =
-        (parsed.options['auth-token'] as string | undefined) ||
-        (parsed.options.authToken as string | undefined);
-      const noStatus = isNoStatusOption(parsed.options);
-      const statusPort = parsed.options['status-port']
-        ? parseInt(String(parsed.options['status-port']), 10)
-        : parsed.options.statusPort
-          ? parseInt(String(parsed.options.statusPort), 10)
-          : undefined;
+        const port = parseServicePort(parsed.options.port, undefined, 'port');
+        const host = (parsed.options.host as string) || '127.0.0.1';
+        const vaultRoot = parsed.options.vaultRoot as string | undefined;
+        const authToken =
+          (parsed.options['auth-token'] as string | undefined) ||
+          (parsed.options.authToken as string | undefined);
+        const noStatus = isNoStatusOption(parsed.options);
+        const rawStatusPort =
+          (parsed.options['status-port'] as string | number | undefined) ??
+          (parsed.options.statusPort as string | number | undefined);
+        const statusPort = parseServicePort(rawStatusPort, undefined, 'status-port');
 
-      const instance = await startSseServer({
-        port,
-        host,
-        vaultRoot,
-        authToken,
-        enableStatus: !noStatus,
-        statusPort
-      });
-      if (parsed.isJson) {
-        const payload: Record<string, unknown> = {
-          status: 'running',
-          service: 'mcp-sse',
-          url: instance.url,
-          port: instance.port,
-          host: instance.host
+        const instance = await startSseServer({
+          port,
+          host,
+          vaultRoot,
+          authToken,
+          enableStatus: !noStatus,
+          statusPort
+        });
+        if (parsed.isJson) {
+          const payload: Record<string, unknown> = {
+            status: 'running',
+            service: 'mcp-sse',
+            url: instance.url,
+            port: instance.port,
+            host: instance.host
+          };
+          if (instance.statusUrl) {
+            payload.statusUrl = instance.statusUrl;
+            payload.statusPort = instance.statusPort;
+          }
+          printJson(payload);
+        } else {
+          console.log(`spec-memo — MCP SSE Server running at: ${instance.url}`);
+          console.log(`  SSE endpoint:     ${instance.url}/sse`);
+          console.log(`  Message endpoint: ${instance.url}/message`);
+          console.log(`  Health check:     ${instance.url}/health`);
+          if (instance.statusUrl) {
+            console.log(`  Status monitor:   ${instance.statusUrl}`);
+          }
+        }
+
+        const shutdown = async (signal: NodeJS.Signals) => {
+          try {
+            await instance.close();
+          } finally {
+            flushTelemetrySync(vaultRoot);
+            process.exit(signal === 'SIGTERM' ? 0 : 130);
+          }
         };
-        if (instance.statusUrl) {
-          payload.statusUrl = instance.statusUrl;
-          payload.statusPort = instance.statusPort;
-        }
-        printJson(payload);
-      } else {
-        console.log(`spec-memo — MCP SSE Server running at: ${instance.url}`);
-        console.log(`  SSE endpoint:     ${instance.url}/sse`);
-        console.log(`  Message endpoint: ${instance.url}/message`);
-        console.log(`  Health check:     ${instance.url}/health`);
-        if (instance.statusUrl) {
-          console.log(`  Status monitor:   ${instance.statusUrl}`);
-        }
-      }
+        process.once('SIGINT', () => void shutdown('SIGINT'));
+        process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
-      const shutdown = async (signal: NodeJS.Signals) => {
-        try {
-          await instance.close();
-        } finally {
-          flushTelemetrySync(vaultRoot);
-          process.exit(signal === 'SIGTERM' ? 0 : 130);
-        }
-      };
-      process.once('SIGINT', () => void shutdown('SIGINT'));
-      process.once('SIGTERM', () => void shutdown('SIGTERM'));
-
-      return new Promise(() => {});
+        return new Promise(() => {});
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         if (parsed.isJson) {
@@ -2173,25 +2206,34 @@ async function runCliInner(
       }
     }
 
-    const vaultRoot = parsed.options.vaultRoot as string | undefined;
-    const statusPort = parsed.options['status-port']
-      ? parseInt(String(parsed.options['status-port']), 10)
-      : parsed.options.statusPort
-        ? parseInt(String(parsed.options.statusPort), 10)
-        : undefined;
-    const statusHost = (parsed.options['status-host'] as string) || (parsed.options.host as string) || '127.0.0.1';
-    const statusAuthToken =
-      (parsed.options['auth-token'] as string | undefined) ||
-      (parsed.options.authToken as string | undefined);
+    try {
+      const vaultRoot = parsed.options.vaultRoot as string | undefined;
+      const rawStatusPort =
+        (parsed.options['status-port'] as string | number | undefined) ??
+        (parsed.options.statusPort as string | number | undefined);
+      const statusPort = parseServicePort(rawStatusPort, undefined, 'status-port');
+      const statusHost = (parsed.options['status-host'] as string) || (parsed.options.host as string) || '127.0.0.1';
+      const statusAuthToken =
+        (parsed.options['auth-token'] as string | undefined) ||
+        (parsed.options.authToken as string | undefined);
 
-    await startMcpServer({
-      vaultRoot,
-      enableStatus: stdioServeEnablesStatus(parsed.options),
-      statusPort,
-      statusHost,
-      statusAuthToken
-    });
-    return 0;
+      await startMcpServer({
+        vaultRoot,
+        enableStatus: stdioServeEnablesStatus(parsed.options),
+        statusPort,
+        statusHost,
+        statusAuthToken
+      });
+      return 0;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'MCP_ERROR' });
+      } else {
+        console.error(`MCP server failed: ${msg}`);
+      }
+      return 1;
+    }
   }
 
   if (parsed.command === 'monitor' || parsed.command === 'status-monitor') {
