@@ -242,10 +242,16 @@ memo install-skills --global [--force] [--json]
 | Command | Job |
 |---|---|
 | `memo status` | Query read-only operational dashboard, daemon reachability probes, configuration, and storage statistics (aliases: `info`, `state`, `setup --check`). `--json`, `--check`. |
+| `memo start <service>` | Start background service: `monitor` (:3124), `canvas` (:3125), `server` (:3123), `mcp` (stdio/`--sse`). Idempotent: detects already running instances cleanly without error. |
+| `memo restart <service>` | Stop existing instance of `monitor`, `canvas`, or `server`, await port release, and restart fresh instance. |
+| `memo stop [service]` | Stop specific service (`server`, `monitor`, `canvas`) or `--port`. Plain `memo stop` preserves global shutdown. Alias: `memo shutdown`. |
+| `memo monitor` | Shortcut for `memo start monitor` (dashboard on :3124). |
+| `memo server` | Shortcut for `memo start server` (SSE on :3123 with companion :3124). |
+| `memo canvas` | Graph UI default port 3125 (configurable via `config.json` `ports.canvas`). `--project`, `--host`, `--json`. Shortcut for `memo start canvas`. (Not available in remote mode). |
+| `memo mcp` | Shortcut for `memo start mcp` (stdio by default, or `--sse`). |
 | `memo setup` | Configure deployment mode (`local`, `hybrid`, `remote`) and host MCP snippets (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo serve` | Stdio MCP (default). In remote mode, proxies over stdio to remote daemon. `--sse` HTTP SSE on `--port` (default 3123, configurable via `config.json` `ports.sse`). Status companion co-starts with `--sse` unless `--no-status`; stdio opt-in via `--status` / `--status-port` (default 3124, configurable via `config.json` `ports.status`). `--host` (default 127.0.0.1). `--auth-token` / `SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN` required off-loopback. |
 | `memo shutdown` (alias `stop`) | Gracefully stop orphaned serve processes: SIGTERM first (own handlers flush fail-open), force after `--timeout-ms` (else `SPEC_MEMO_SYNC_TIMEOUT_MS`, else 8000 ms). `--vaultRoot` scope, `--dry-run` preview, `--include-canvas` opt-in (canvas excluded by default), `--force`, `--json`. |
-| `memo canvas` | Graph UI default port 3125 (configurable via `config.json` `ports.canvas`). `--project`, `--host`, `--json`. (Not available in remote mode). |
 | `memo doctor [productRoot]` | Vault + FTS + pollution + mode + remote health + hybrid state. `--rebuild` FTS. `--fix` delete leftover in-repo residue. `--json`. |
 | `memo rank` | Active traps by `occurrences`. `--layer` `--limit` `--backfill` `--json`. Proxies in remote mode. |
 | `memo wiki` | Print or regenerate vault `projects/{projectId}/WIKI.md`. `--project`, `--regenerate`, `--json`. Not available in remote mode. Not an MCP tool. |
@@ -272,11 +278,12 @@ Private git remote backup of the vault root. `atomic` defaults `false` (batched)
 
 All ports can be customized in `~/.spec-memo/config.json` under `"ports"` (`sse`, `status`, `canvas`, with aliases `mcp`, `ui`):
 
-| Service | Port | Start |
-|---|---|---|
-| MCP SSE | 3123 | `memo serve --sse` |
-| Status monitor | 3124 | co-starts with `--sse` unless `--no-status` |
-| Canvas | 3125 | `memo canvas` |
+| Service | Port | Start Shortcut | Full Command |
+|---|---|---|---|
+| MCP SSE | 3123 | `memo server` | `memo start server` (or `memo serve --sse`) |
+| Status monitor | 3124 | `memo monitor` | `memo start monitor` (or co-starts with `memo server`) |
+| Canvas | 3125 | `memo canvas` | `memo start canvas` |
+| MCP stdio | — | `memo mcp` | `memo start mcp` (or `memo serve`) |
 
 ---
 

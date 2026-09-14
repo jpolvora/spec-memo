@@ -4,9 +4,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as net from 'node:net';
+import * as http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { isCliMainEntry, runCli, stdioServeEnablesStatus } from './cli.js';
+import { isCliMainEntry, parseServicePort, runCli, stdioServeEnablesStatus } from './cli.js';
 import { TOOL_NAMES } from './types.js';
 import { probeHttpService } from './status-cmd.js';
 import { closeIndex } from './indexer.js';
@@ -1686,6 +1687,299 @@ describe('CLI init and vault rename/merge (AC6-AC10, AC20, AC28, NS1)', () => {
     }
   });
 });
+
+describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
+  it('AC1, AC2, AC8: start --help exits 0 with usage and services', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['start', '--help']);
+      assert.equal(code, 0);
+      assert.match(out, /Usage: memo start/);
+      assert.match(out, /monitor/);
+      assert.match(out, /canvas/);
+      assert.match(out, /server/);
+      assert.match(out, /mcp/);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC8: start without target exits 1 with usage', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['start']);
+      assert.equal(code, 1);
+      assert.match(out, /Usage: memo start/);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC8: start unknown exits 1 with error and code', async () => {
+    let err = '';
+    const origErr = console.error;
+    console.error = (...a) => { err += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['start', 'bogus']);
+      assert.equal(code, 1);
+      assert.match(err, /Unknown service 'bogus'/);
+    } finally {
+      console.error = origErr;
+    }
+
+    let jsonOut = '';
+    const origLog = console.log;
+    console.log = (...a) => { jsonOut += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['start', 'bogus', '--json']);
+      assert.equal(code, 1);
+      const parsed = JSON.parse(jsonOut.trim());
+      assert.equal(parsed.isError, true);
+      assert.equal(parsed.code, 'UNKNOWN_SERVICE');
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC6: restart --help exits 0, restart without args exits 1', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['restart', '--help']);
+      assert.equal(code, 0);
+      assert.match(out, /Usage: memo restart/);
+
+      const codeNoArgs = await runCli(['restart']);
+      assert.equal(codeNoArgs, 1);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC7: stop --help exits 0, stop unknown exits 1', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['stop', '--help']);
+      assert.equal(code, 0);
+      assert.match(out, /Usage: memo stop/);
+    } finally {
+      console.log = origLog;
+    }
+
+    let err = '';
+    const origErr = console.error;
+    console.error = (...a) => { err += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['stop', 'bogus']);
+      assert.equal(code, 1);
+      assert.match(err, /Unknown stop service 'bogus'/);
+    } finally {
+      console.error = origErr;
+    }
+  });
+
+  it('AC7: stop server/monitor/canvas --dry-run --json emits report', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const codeServer = await runCli(['stop', 'server', '--dry-run', '--json']);
+      assert.equal(codeServer, 0);
+      const parsedServer = JSON.parse(out.trim());
+      assert.equal(parsedServer.ok, true);
+
+      out = '';
+      const codeMonitor = await runCli(['stop', 'monitor', '--dry-run', '--json']);
+      assert.equal(codeMonitor, 0);
+      const parsedMonitor = JSON.parse(out.trim());
+      assert.equal(parsedMonitor.ok, true);
+
+      out = '';
+      const codeCanvas = await runCli(['stop', 'canvas', '--dry-run', '--json']);
+      assert.equal(codeCanvas, 0);
+      const parsedCanvas = JSON.parse(out.trim());
+      assert.equal(parsedCanvas.ok, true);
+
+      out = '';
+      const codeScope = await runCli(['stop', '--scope', 'monitor', '--dry-run', '--json']);
+      assert.equal(codeScope, 0);
+      const parsedScope = JSON.parse(out.trim());
+      assert.equal(parsedScope.ok, true);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC5: shortcuts monitor/server/mcp with --help exit 0', async () => {
+    assert.equal(await runCli(['monitor', '--help']), 0);
+    assert.equal(await runCli(['server', '--help']), 0);
+    assert.equal(await runCli(['mcp', '--help']), 0);
+  });
+
+  it('AC9, AC10: idempotent detection when service is already running on port', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-idempotent-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    const { ensureVaultStructure } = await import('./vault.js');
+    ensureVaultStructure(vault);
+
+    // Start a mock HTTP server to simulate an already-running service
+    const mockPort = await allocateLoopbackPort();
+    const mockServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, status: 'mock' }));
+    });
+    await new Promise<void>((resolve) => mockServer.listen(mockPort, '127.0.0.1', () => resolve()));
+
+    // Start a foreign mock server returning 404 to verify it is NOT treated as already-running
+    const foreignPort = await allocateLoopbackPort();
+    const foreignServer = http.createServer((req, res) => {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    });
+    await new Promise<void>((resolve) => foreignServer.listen(foreignPort, '127.0.0.1', () => resolve()));
+
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+
+    try {
+      // Test monitor idempotent start
+      const codeMonitor = await runCli(['start', 'monitor', '--port', String(mockPort), '--vaultRoot', vault, '--json']);
+      assert.equal(codeMonitor, 0);
+      const parsedMonitor = JSON.parse(out.trim());
+      assert.equal(parsedMonitor.status, 'already-running');
+      assert.equal(parsedMonitor.service, 'status-monitor');
+      assert.equal(parsedMonitor.port, mockPort);
+
+      // Foreign 404 server must NOT be treated as already-running (fails bind with error)
+      out = '';
+      const codeForeign = await runCli(['start', 'monitor', '--port', String(foreignPort), '--vaultRoot', vault, '--json']);
+      assert.equal(codeForeign, 1);
+      const parsedForeign = JSON.parse(out.trim());
+      assert.equal(parsedForeign.isError, true);
+      assert.equal(parsedForeign.code, 'STATUS_SERVER_ERROR');
+
+      // Test canvas idempotent start
+      out = '';
+      const codeCanvas = await runCli(['start', 'canvas', '--port', String(mockPort), '--vaultRoot', vault, '--json']);
+      assert.equal(codeCanvas, 0);
+      const parsedCanvas = JSON.parse(out.trim());
+      assert.equal(parsedCanvas.status, 'already-running');
+      assert.equal(parsedCanvas.service, 'canvas');
+
+      // Test server idempotent start
+      out = '';
+      const codeServer = await runCli(['start', 'server', '--port', String(mockPort), '--vaultRoot', vault, '--json']);
+      assert.equal(codeServer, 0);
+      const parsedServer = JSON.parse(out.trim());
+      assert.equal(parsedServer.status, 'already-running');
+      assert.equal(parsedServer.service, 'mcp-sse');
+    } finally {
+      console.log = origLog;
+      await new Promise<void>((resolve) => mockServer.close(() => resolve()));
+      await new Promise<void>((resolve) => foreignServer.close(() => resolve()));
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  describe('parseServicePort & port validation (PR #74 review)', () => {
+    it('parseServicePort parses valid port integers and falls back when undefined', () => {
+      assert.equal(parseServicePort(3124), 3124);
+      assert.equal(parseServicePort('3124'), 3124);
+      assert.equal(parseServicePort('  8080  '), 8080);
+      assert.equal(parseServicePort(undefined, 3123), 3123);
+      assert.equal(parseServicePort(null, 3123), 3123);
+    });
+
+    it('parseServicePort throws on non-numeric, booleans, or out-of-range ports', () => {
+      assert.throws(() => parseServicePort('abc', undefined, 'port'), /Invalid --port value: abc/);
+      assert.throws(() => parseServicePort(true, undefined, 'port'), /Invalid --port value: true/);
+      assert.throws(() => parseServicePort('0', undefined, 'port'), /Invalid --port value: 0/);
+      assert.throws(() => parseServicePort('65536', undefined, 'port'), /Invalid --port value: 65536/);
+      assert.throws(() => parseServicePort('-1', undefined, 'status-port'), /Invalid --status-port value: -1/);
+      assert.throws(() => parseServicePort('12.34', undefined, 'port'), /Invalid --port value: 12.34/);
+    });
+
+    it('memo start rejects invalid --port with exit code 1', async () => {
+      let err = '';
+      const origErr = console.error;
+      console.error = (...a) => { err += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['start', 'monitor', '--port', 'abc']);
+        assert.equal(code, 1);
+        assert.match(err, /Invalid --port value: abc/);
+      } finally {
+        console.error = origErr;
+      }
+
+      let jsonOut = '';
+      const origLog = console.log;
+      console.log = (...a) => { jsonOut += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['start', 'canvas', '--port', '99999', '--json']);
+        assert.equal(code, 1);
+        const parsed = JSON.parse(jsonOut.trim());
+        assert.equal(parsed.isError, true);
+        assert.equal(parsed.code, 'CANVAS_ERROR');
+        assert.match(parsed.error, /Invalid --port value: 99999/);
+      } finally {
+        console.log = origLog;
+      }
+    });
+
+    it('memo start server rejects invalid --status-port with exit code 1', async () => {
+      let jsonOut = '';
+      const origLog = console.log;
+      console.log = (...a) => { jsonOut += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['start', 'server', '--status-port', 'not-a-port', '--json']);
+        assert.equal(code, 1);
+        const parsed = JSON.parse(jsonOut.trim());
+        assert.equal(parsed.isError, true);
+        assert.equal(parsed.code, 'SSE_ERROR');
+        assert.match(parsed.error, /Invalid --status-port value: not-a-port/);
+      } finally {
+        console.log = origLog;
+      }
+    });
+
+    it('memo restart rejects invalid --port with exit code 1', async () => {
+      let err = '';
+      const origErr = console.error;
+      console.error = (...a) => { err += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['restart', 'monitor', '--port', '-5']);
+        assert.equal(code, 1);
+        assert.match(err, /Invalid --port value: -5/);
+      } finally {
+        console.error = origErr;
+      }
+    });
+
+    it('memo stop rejects invalid --port with exit code 1', async () => {
+      let err = '';
+      const origErr = console.error;
+      console.error = (...a) => { err += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['stop', '--port', 'invalid']);
+        assert.equal(code, 1);
+        assert.match(err, /Invalid --port value: invalid/);
+      } finally {
+        console.error = origErr;
+      }
+    });
+  });
+});
+
 
 
 

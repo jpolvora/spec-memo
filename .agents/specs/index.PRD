@@ -135,6 +135,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [ ] AI-assisted wiki refine from latest project knowledge snapshot (`spec: 0062-wiki-ai-refine.spec.md`)
 - [x] AI Ops "Test AI" connectivity probe: raw-agent hello probe + force-logged `test` row (`spec: 0063-ai-ops-test-ai-button.spec.md`)
 - [x] AI cursor-sdk timeout: configurable `timeoutMs`, 30s default, honored everywhere (`spec: 0064-ai-timeout-config.spec.md`)
+- [x] CLI lifecycle shortcuts: start, stop, restart, and direct shortcuts for monitor, canvas, server, mcp (`spec: 0065-cli-start-shortcuts.spec.md`)
 
 
 
@@ -231,6 +232,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 62 | [`ai-timeout-config`](0064-ai-timeout-config.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | AI cursor-sdk timeout default 30s + honored everywhere (issue #70); v0.34.0 |
 
+| 63 | [`cli-start-shortcuts`](0065-cli-start-shortcuts.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | CLI lifecycle commands (start, stop, restart) and shortcuts for monitor, canvas, server, mcp; v0.35.0 |
+
 ## 9. Inbox (unscheduled ideas)
 
 - Mobile companion web dashboard.
@@ -315,6 +318,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-14 | open-github-issues-batch | Fix open GitHub bugs #66/#67/#68: AI Ops journal wired at resolveVaultAiAgent, version-skills test vault isolation + regression, silent Chrome probes on status + SSE; v0.33.1 | npm test 824 pass + 2 environmental (operator daemon holds :3123) |
 | 2026-09-14 | ai-ops-test-ai-button | AI Ops "Test AI" connectivity probe (issue #69): operation `test` journal row, `POST /api/ai-ops/test` force-logged raw agent, **Test AI** button + operation filter option; v0.34.0 | npm test 837 pass + issue #70 slice in same tree |
 | 2026-09-14 | ai-timeout-config | AI cursor-sdk timeout (issue #70): `timeoutMs` default 30s, shared constant replaces `15000` fallbacks, vault seed + README; v0.34.0 | npm test 837 pass |
+| 2026-09-14 | cli-start-shortcuts | CLI lifecycle commands (start, stop, restart) and shortcuts for monitor, canvas, server, mcp; v0.35.0 | npm test 851 pass |
 
 ## Archive
 

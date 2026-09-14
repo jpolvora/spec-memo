@@ -19,7 +19,7 @@ export interface MemoProcessInfo {
   command: string;
 }
 
-export type ShutdownScope = 'serve' | 'canvas';
+export type ShutdownScope = 'serve' | 'canvas' | 'monitor';
 
 export interface ShutdownTarget extends MemoProcessInfo {
   scope: ShutdownScope;
@@ -62,8 +62,14 @@ export interface ShutdownFilterOptions {
   currentPid?: number;
   /** Narrow to instances serving this vault root (slash-normalized substring). */
   vaultRoot?: string;
-  /** Include `memo canvas` processes (excluded by default). */
+  /** Include `memo canvas` processes (excluded by default when scope is not specified). */
   includeCanvas?: boolean;
+  /** Include `memo monitor` processes (excluded by default when scope is not specified). */
+  includeMonitor?: boolean;
+  /** Explicit scope filter ('serve', 'canvas', or 'monitor'). */
+  scope?: ShutdownScope;
+  /** Explicit port filter. */
+  port?: number;
 }
 
 export interface ShutdownSignalOps {
@@ -86,8 +92,9 @@ export interface ShutdownRunOptions extends ShutdownFilterOptions {
   verifyTarget?: (target: ShutdownTarget) => Promise<boolean> | boolean;
 }
 
-const SERVE_TOKEN_RE = /(^|\s)serve(\s|$)/;
+const SERVE_TOKEN_RE = /(^|\s)(serve|server|mcp|start\s+(server|mcp|serve)|restart\s+(server|mcp|serve))(\s|$)/i;
 const CANVAS_TOKEN_RE = /canvas/i;
+const MONITOR_TOKEN_RE = /(^|\s)(monitor|status-monitor|start\s+(monitor|status|status-monitor)|restart\s+(monitor|status|status-monitor))(\s|$)/i;
 
 function normalizedCommand(command: string): string {
   return command.replace(/\\/g, '/');
@@ -126,11 +133,21 @@ export function isCanvasCommand(command: string): boolean {
   return CANVAS_TOKEN_RE.test(norm);
 }
 
+/** True for `memo monitor` / `memo start monitor` dashboard processes (spec-memo marker required). */
+export function isMonitorCommand(command: string): boolean {
+  if (!command) return false;
+  const norm = normalizedCommand(command);
+  if (!norm.includes('spec-memo')) return false;
+  if (!norm.includes('dist/cli.js') && !norm.includes('dist/mcp.js')) return false;
+  return MONITOR_TOKEN_RE.test(norm);
+}
+
 export function classifyMemoCommand(command: string): ShutdownScope | null {
-  // Serve first: a serve orphan whose vault path contains `canvas` is still a
-  // serve process and must not be hidden by the canvas classifier.
+  // Serve first: a serve orphan whose vault path contains `canvas` or `monitor` is still a
+  // serve process and must not be hidden by other classifiers.
   if (isMemoServeCommand(command)) return 'serve';
   if (isCanvasCommand(command)) return 'canvas';
+  if (isMonitorCommand(command)) return 'monitor';
   return null;
 }
 
@@ -153,6 +170,29 @@ export function matchesScopeRoot(command: string, scopeRoot: string): boolean {
 }
 
 /**
+ * Check whether a command line matches an explicit port filter, either
+ * via an explicit `--port <n>` / `--status-port <n>` argument or falling back
+ * to the default port of that service scope.
+ */
+export function matchesScopePort(command: string, scope: ShutdownScope, port: number): boolean {
+  const norm = normalizedCommand(command);
+  const portMatch = norm.match(/--port[=\s]+(\d+)/i);
+  if (portMatch) {
+    return parseInt(portMatch[1], 10) === port;
+  }
+  const statusPortMatch = norm.match(/--status-port[=\s]+(\d+)/i);
+  if (statusPortMatch && parseInt(statusPortMatch[1], 10) === port) {
+    return true;
+  }
+  const defaultPortMap: Record<ShutdownScope, number> = {
+    serve: 3123,
+    monitor: 3124,
+    canvas: 3125
+  };
+  return defaultPortMap[scope] === port;
+}
+
+/**
  * Filter a raw process list down to shutdown targets. Never returns PID 0/1.
  * The invoking PID is reported as `skipped-self` when it would otherwise
  * match, so the invoker can never kill itself.
@@ -171,10 +211,24 @@ export function filterShutdownTargets(
     if (!proc.command) continue;
     const scope = classifyMemoCommand(proc.command);
     if (!scope) continue;
-    if (scope === 'canvas' && !options.includeCanvas) continue;
+
+    if (options.scope) {
+      if (scope !== options.scope) continue;
+    } else {
+      if (scope === 'canvas' && !options.includeCanvas) continue;
+      if (scope === 'monitor' && !options.includeMonitor) continue;
+    }
+
     if (scopeRoot && !matchesScopeRoot(proc.command, scopeRoot)) {
       continue;
     }
+
+    if (options.port) {
+      if (!matchesScopePort(proc.command, scope, options.port)) {
+        continue;
+      }
+    }
+
     if (proc.pid === currentPid) {
       skippedSelf.push({
         pid: proc.pid,
