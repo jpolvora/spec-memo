@@ -1,3 +1,23 @@
+### [2026-09-13 20:45] Agent: Cursor Grok 4.6
+- **Prompt**: `/ws-fable-method` implement 0061 Error Logs select/delete/New Issue
+- **Done**: Checkboxes + Delete modal + New Issue textarea; `POST /api/error-logs/delete`; tests and README/ws-memo
+- **Result**: `node --test dist/error-logger.test.js dist/status.test.js` 98 pass. Full `npm test` 828 pass; 1 unrelated `EADDRINUSE :3123` in server.test
+
+### [2026-09-13 20:30] Agent: Cursor Grok 4.6
+- **Prompt**: `/ws-spec-write` Error Logs checkboxes, Delete confirm, New Issue textarea
+- **Done**: Wrote `.agents/specs/0061-status-error-logs-actions.spec.md` (29 ACs); no `{plansDir}` register
+- **Result**: Authoring validate PASS. Awaiting index.PRD track gate.
+
+### [2026-09-13 20:18] Agent: Cursor Grok 4.6
+- **Prompt**: `/ws-spec-from-provider` fetch all GH issues into a single spec
+- **Done**: Listed open issues #66 #67 #68; wrote `.agents/specs/0060-open-github-issues-batch.spec.md` (19 ACs); registered `{plansDir}` step-00
+- **Result**: Authoring validate PASS. No per-id `us-66` specs. Not tracked on index.PRD yet.
+
+### [2026-09-13 20:05] Agent: Cursor Grok 4.6
+- **Prompt**: `/ws-goal-fix-pr` on PR 65
+- **Done**: IO_GUARD inbound scan on `createHandoff`; fence `handoffMarkdown` into bootstrap envelope checksum; tests
+- **Result**: `npm test` 820 pass; awaiting thread resolve + CI re-run
+
 ### [2026-09-13 15:50] Agent: Cursor Grok 4.6
 - **Prompt**: Inspect Memorix; spec-to-PR retrieval lens + memo resume; full auto ship
 - **Done**: Shared `src/retrieval-lens.ts`; search intent boost + bootstrap task lens; `budgetReport.omittedIds`; CLI `memo resume` / MCP `continuation` (11 tools); tests + tracking; v0.29.0

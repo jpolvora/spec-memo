@@ -454,6 +454,10 @@ test('Status Monitor REST Endpoints for Prompts & Activity', async () => {
     assert.strictEqual(detailData.record.path, undefined);
     assert.ok(typeof detailData.renderedHtml === 'string');
     assert.ok(detailData.renderedHtml.includes('sanitize') || detailData.renderedHtml.includes('Always'));
+    assert.ok(
+      detailData.renderedHtml.includes('<!-- spec-memo-untrusted-begin -->'),
+      'round 3: prompt renderedHtml carries the untrusted fence'
+    );
 
     // 7. GET /api/sessions
     const sessionsRes = await fetch(`${baseUrl}/api/sessions?project=${projectId}`);

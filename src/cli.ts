@@ -3179,6 +3179,12 @@ async function runCliInner(
     if (parsed.isJson) {
       if (response.isError) {
         printJson(response);
+      } else if (!response.isError && response.ioGuard && Array.isArray(response.data)) {
+        // Spec 0059 AC15: CLI --json carries the same I/O guard wrap as
+        // MCP. Array payloads (search hits) cannot hold the envelope, so
+        // they print as { hits, ioGuard }; object payloads (bootstrap/get)
+        // already embed ioGuard inside data.
+        printJson({ hits: response.data, ioGuard: response.ioGuard });
       } else {
         printJson(response.data);
       }

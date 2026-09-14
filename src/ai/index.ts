@@ -5,6 +5,7 @@ import type { VaultAiConfig, VaultAiStatus } from '../types.js';
 import { defaultAiConfig, parseAiConfig, resolveAiConfig } from './config.js';
 import { NoopVaultAiAgent } from './noop.js';
 import { CursorSdkVaultAiAgent } from './cursor-sdk.js';
+import { withAiOpsJournal } from './ops-log.js';
 import { getAiLastError, getAiQueueDepth } from './refine-queue.js';
 import type { VaultAiAgent } from './types.js';
 
@@ -79,10 +80,13 @@ export function resolveVaultAiAgent(
     config = resolveAiConfig(vaultConfig);
   }
   if (config.enabled !== true) {
-    return { agent: new NoopVaultAiAgent(), config };
+    return { agent: withAiOpsJournal(new NoopVaultAiAgent(), { vaultRoot, config }), config };
   }
   if (config.provider === 'cursor-sdk') {
-    return { agent: new CursorSdkVaultAiAgent(config), config };
+    return {
+      agent: withAiOpsJournal(new CursorSdkVaultAiAgent(config), { vaultRoot, config }),
+      config
+    };
   }
   throw new Error(
     `Invalid config.json: unknown ai.provider '${String((config as { provider?: unknown }).provider)}'`

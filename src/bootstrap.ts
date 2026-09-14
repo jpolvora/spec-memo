@@ -24,10 +24,12 @@ import {
   claimHandoff,
   getSessionObjective,
   peekEligibleHandoff,
-  renderHandoffMarkdown
+  renderHandoffMarkdown,
+  rollbackHandoffClaim
 } from './handoff.js';
 import { HandoffRecord, SessionObjective } from './types.js';
 import { hitCountOf } from './recurrence.js';
+import { inspectAgentIo, IO_GUARD_NOTICE, IO_GUARD_QUERY_DROPPED_NOTICE } from './io-guard.js';
 import type { VaultAiAgent } from './ai/types.js';
 import { rankRecordsWithAgent } from './ai/rank.js';
 import {
@@ -366,6 +368,16 @@ export async function compileBootstrapBrief(
 
   const notices: string[] = [];
 
+  // Spec 0059 inbound queries (drop-not-fail, AC11): a query matching the
+  // override table compiles as if omitted; the read path stays available.
+  const rawQuery = typeof options.query === 'string' ? options.query : undefined;
+  const queryDropped =
+    rawQuery !== undefined && rawQuery.trim().length > 0 && !inspectAgentIo(rawQuery).ok;
+  const briefQuery = queryDropped ? undefined : rawQuery;
+  if (queryDropped) {
+    notices.push(IO_GUARD_QUERY_DROPPED_NOTICE);
+  }
+
   // Best-effort hybrid pull prior to compiling brief (AC19)
   const config = ensureVaultStructure(vaultRoot);
   if (config.mode === 'hybrid') {
@@ -404,7 +416,7 @@ export async function compileBootstrapBrief(
 
   const scratchTtlDays = config.ttl?.scratchDays ?? 7;
   const reviewTtlDays = config.ttl?.reviewDays ?? 14;
-  const taskLens = inferTaskLens(options.query);
+  const taskLens = inferTaskLens(briefQuery);
   const continuation = options.continuation === true;
 
   if (taskLens === 'release') {
@@ -424,8 +436,8 @@ export async function compileBootstrapBrief(
         )
     )
     .sort((a, b) => {
-      const scoreA = scoreTrap(a, options.query, pathFilter, taskLens);
-      const scoreB = scoreTrap(b, options.query, pathFilter, taskLens);
+      const scoreA = scoreTrap(a, briefQuery, pathFilter, taskLens);
+      const scoreB = scoreTrap(b, briefQuery, pathFilter, taskLens);
       if (scoreB !== scoreA) {
         return scoreB - scoreA;
       }
@@ -434,7 +446,7 @@ export async function compileBootstrapBrief(
 
   if (continuation) {
     activeTraps = [...activeTraps]
-      .sort((a, b) => compareContinuationTraps(a, b, options.query, pathFilter))
+      .sort((a, b) => compareContinuationTraps(a, b, briefQuery, pathFilter))
       .slice(0, 3);
   }
 
@@ -452,8 +464,8 @@ export async function compileBootstrapBrief(
     )
     .map((record, index, arr) => ({ record, index, total: arr.length }))
     .sort((a, b) => {
-      const scoreA = scoreDecisionForBootstrap(a.record, a.index, a.total, options.query, taskLens);
-      const scoreB = scoreDecisionForBootstrap(b.record, b.index, b.total, options.query, taskLens);
+      const scoreA = scoreDecisionForBootstrap(a.record, a.index, a.total, briefQuery, taskLens);
+      const scoreB = scoreDecisionForBootstrap(b.record, b.index, b.total, briefQuery, taskLens);
       if (scoreB !== scoreA) return scoreB - scoreA;
       return String(b.record.frontmatter.updated || '').localeCompare(
         String(a.record.frontmatter.updated || '')
@@ -466,7 +478,7 @@ export async function compileBootstrapBrief(
   // Spec 0056 AC23: same post-lexical rank helper on trap/decision candidates
   // when the query is non-empty and AI is available. Empty query skips rank
   // (no extra LLM call). Rank only reorders — it cannot expand past budget.
-  if (ai.agent && ai.agent.isAvailable() && (options.query || '').trim().length > 0) {
+  if (ai.agent && ai.agent.isAvailable() && (briefQuery || '').trim().length > 0) {
     const rankTopK = ai.rankTopK && ai.rankTopK > 0 ? ai.rankTopK : 20;
     const toCandidate = (r: MemoRecord): { id: string; kind: string; title: string; snippet: string } => ({
       id: String(r.frontmatter.id),
@@ -477,7 +489,7 @@ export async function compileBootstrapBrief(
     try {
       const rankedTraps = await rankRecordsWithAgent({
         agent: ai.agent,
-        query: options.query,
+        query: briefQuery,
         items: activeTraps,
         toCandidate,
         rankTopK,
@@ -488,7 +500,7 @@ export async function compileBootstrapBrief(
       activeTraps = rankedTraps.items;
       const rankedDecisions = await rankRecordsWithAgent({
         agent: ai.agent,
-        query: options.query,
+        query: briefQuery,
         items: activeDecisions,
         toCandidate,
         rankTopK,
@@ -565,6 +577,17 @@ export async function compileBootstrapBrief(
     }
   }
 
+  // Spec 0059 outbound (always wrap): every brief with any trap/decision
+  // body carries the stable untrusted-data notice (AC7 in Description).
+  {
+    const hasBody = [...currentTraps, ...currentDecisions].some(
+      (r) => typeof r.body === 'string' && r.body.trim().length > 0
+    );
+    if (hasBody && !notices.includes(IO_GUARD_NOTICE)) {
+      notices.push(IO_GUARD_NOTICE);
+    }
+  }
+
   const initialBrief: BootstrapBrief = {
     projectId,
     gitRemote: metadata?.gitRemote || identity.normalizedRemote,
@@ -588,6 +611,11 @@ export async function compileBootstrapBrief(
 
   const finalizeBrief = (brief: BootstrapBrief): BootstrapBrief => {
     if (!handoffCandidate || !handoffMarkdown) {
+      // PR#65 round 3: a fenced/oversized session objective must not defeat
+      // the fail-closed byte cap when no handoff competes with it.
+      if (brief.sessionObjective && calculatePayloadSize(brief) > budgetBytes) {
+        delete brief.sessionObjective;
+      }
       brief.byteLength = calculatePayloadSize(brief);
       return brief;
     }
@@ -596,11 +624,33 @@ export async function compileBootstrapBrief(
       handoffMarkdown,
       sessionObjective: brief.sessionObjective ?? sessionObjective
     };
+    // PR#65 round 3: shed the objective before sizing the handoff claim so an
+    // oversized objective alone never forces an over-budget deliverable.
+    if (deliverable.sessionObjective && calculatePayloadSize(deliverable) > budgetBytes) {
+      delete deliverable.sessionObjective;
+    }
+    // Pre-claim estimate includes the unclaimed candidate so the claim
+    // itself cannot push a fitted brief over budget without a re-check.
+    const preClaim: BootstrapBrief = {
+      ...deliverable,
+      handoff: handoffCandidate
+    };
+    const mustShedObject = calculatePayloadSize(preClaim) > budgetBytes;
+    // When even the markdown alone cannot fit, deliver nothing and leave
+    // the handoff pending (no claim) for a larger-budget session — a
+    // claimed-but-undelivered handoff would be lost (never redelivered).
     if (calculatePayloadSize(deliverable) > budgetBytes) {
       delete brief.handoff;
       delete brief.handoffMarkdown;
       brief.byteLength = calculatePayloadSize(brief);
       return brief;
+    }
+    if (mustShedObject) {
+      // The object cannot fit but the markdown can: deliver markdown only
+      // WITHOUT claiming, so the handoff stays pending. Redelivery across
+      // tight-budget sessions beats loss; a roomy session claims it later.
+      deliverable.byteLength = calculatePayloadSize(deliverable);
+      return deliverable;
     }
     try {
       deliverable.handoff = withVaultLockSync(vaultRoot, () =>
@@ -613,6 +663,21 @@ export async function compileBootstrapBrief(
         })
       );
       deliverable.byteLength = calculatePayloadSize(deliverable);
+      // The claim stamps claimedAt/claimedBySession bytes; shed the object
+      // first (keeping the markdown content), then the markdown, so a
+      // fitted brief never returns over budget. (mustShedObject already
+      // returned early, so this only handles stamp overflow.)
+      if (deliverable.byteLength > budgetBytes) {
+        delete deliverable.handoff;
+        deliverable.byteLength = calculatePayloadSize(deliverable);
+      }
+      if (deliverable.byteLength > budgetBytes) {
+        // Full shed after a claim: roll the claim back so the handoff
+        // stays pending instead of being marked consumed but undelivered.
+        rollbackHandoffClaim(projectDir, handoffCandidate.id);
+        delete deliverable.handoffMarkdown;
+        deliverable.byteLength = calculatePayloadSize(deliverable);
+      }
       return deliverable;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -758,7 +823,7 @@ export async function compileBootstrapBrief(
           [],
           budgetBytes,
           minimal.byteLength,
-          options,
+          { ...options, query: briefQuery },
           pathFilter,
           scratchTtlDays,
           reviewTtlDays,
@@ -782,7 +847,7 @@ export async function compileBootstrapBrief(
       currentDecisions,
       budgetBytes,
       initialBrief.byteLength,
-      options,
+      { ...options, query: briefQuery },
       pathFilter,
       scratchTtlDays,
       reviewTtlDays,

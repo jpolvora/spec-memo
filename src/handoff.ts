@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { HandoffPayload, HandoffRecord, SessionObjective } from './types.js';
 import { withVaultLockSync } from './vault.js';
 import { recordTelemetry } from './telemetry.js';
+import { createIoGuardError, inspectAgentIo, logIoGuardRefusal } from './io-guard.js';
 
 const HANDOFFS_SUBDIR = '.sync/handoffs';
 const OBJECTIVES_SUBDIR = '.sync/objectives';
@@ -115,14 +116,43 @@ export function createHandoff(options: {
     throw new Error('handoff.nextSteps must contain at least one non-empty step.');
   }
 
+  const failedApproaches = options.payload.failedApproaches?.filter(Boolean);
+  const openQuestions = options.payload.openQuestions?.filter(Boolean);
+  // PR#65 round 3: scan every free-text field that lands in the record or the
+  // rendered markdown, including owner/branch/harness — not just the steps.
+  const handoffText = JSON.stringify({
+    nextSteps,
+    failedApproaches,
+    openQuestions,
+    owner,
+    branch,
+    harness: options.harness,
+    shared
+  });
+  const hit = inspectAgentIo(handoffText);
+  if (!hit.ok) {
+    logIoGuardRefusal(
+      {
+        reason: 'handoff refused: prompt-injection tokens',
+        flags: hit.flags,
+        bodyChars: handoffText.length,
+        projectId: options.projectId,
+        tool: 'handoff',
+        recordId: options.sessionId
+      },
+      { vaultRoot: options.vaultRoot }
+    );
+    throw createIoGuardError('prompt-injection tokens in handoff payload');
+  }
+
   const record: HandoffRecord = {
     id: `handoff-${Date.now()}-${randomBytes(3).toString('hex')}`,
     owner,
     branch,
     shared,
     nextSteps,
-    failedApproaches: options.payload.failedApproaches?.filter(Boolean),
-    openQuestions: options.payload.openQuestions?.filter(Boolean),
+    failedApproaches,
+    openQuestions,
     harness: options.harness,
     createdAt: new Date().toISOString(),
     sessionId: options.sessionId,
@@ -266,6 +296,62 @@ export function claimHandoff(options: {
   return claimed;
 }
 
+function readHandoffFileObject(filePath: string): HandoffRecord | null {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw) as HandoffRecord;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Roll a handoff claim back to pending (spec 0059, PR#65 round 2).
+ * Used when an over-budget shed must drop already-claimed handoff content
+ * from a brief: without the rollback the handoff would be marked consumed
+ * but never delivered (lost to future sessions). Best-effort: returns false
+ * when the file is missing, foreign, or unwritable — callers still shed.
+ *
+ * Runs under the vault lock (PR#65 round 3): claim and rollback are
+ * read-modify-write cycles, and SSE serve plus CLI run as separate
+ * processes, so an unlocked rollback could clobber a concurrent claim.
+ */
+export function rollbackHandoffClaim(projectDir: string, recordId: string): boolean {
+  const vaultRoot = path.resolve(projectDir, '..', '..');
+  try {
+    return withVaultLockSync(vaultRoot, () => doRollbackHandoffClaim(projectDir, recordId));
+  } catch {
+    return false;
+  }
+}
+
+function doRollbackHandoffClaim(projectDir: string, recordId: string): boolean {
+  try {
+    const dir = path.join(projectDir, HANDOFFS_SUBDIR);
+    if (!fs.existsSync(dir)) return false;
+    let filePath: string | null = null;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.json')) continue;
+      const candidate = path.join(dir, name);
+      const parsed = readHandoffFileObject(candidate);
+      if (parsed && parsed.id === recordId) {
+        filePath = candidate;
+        break;
+      }
+    }
+    if (!filePath) return false;
+    const raw = readHandoffFileObject(filePath);
+    if (!raw || raw.id !== recordId || !raw.claimed) return false;
+    const restored: HandoffRecord = { ...raw, claimed: false };
+    delete restored.claimedAt;
+    delete restored.claimedBySession;
+    fs.writeFileSync(filePath, JSON.stringify(restored, null, 2), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function cancelHandoffForContext(options: {
   projectDir: string;
   cwd: string;
@@ -339,13 +425,31 @@ export function setSessionObjective(options: {
   owner?: string;
   branch?: string;
   sessionId?: string;
+  vaultRoot?: string;
+  projectId?: string;
 }): SessionObjective {
   const owner = options.owner || resolveOwner(options.cwd);
   const branch = options.branch || resolveGitBranch(options.cwd);
+  const objective = options.objective.trim();
+  const hit = inspectAgentIo(objective);
+  if (!hit.ok) {
+    logIoGuardRefusal(
+      {
+        reason: 'objective refused: prompt-injection tokens',
+        flags: hit.flags,
+        bodyChars: objective.length,
+        projectId: options.projectId,
+        tool: 'session_start',
+        recordId: options.sessionId
+      },
+      { vaultRoot: options.vaultRoot }
+    );
+    throw createIoGuardError('prompt-injection tokens in session objective');
+  }
   const record: SessionObjective = {
     owner,
     branch,
-    objective: options.objective.trim(),
+    objective,
     sessionId: options.sessionId,
     updatedAt: new Date().toISOString()
   };

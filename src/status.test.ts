@@ -584,6 +584,35 @@ test("MCP status monitor", async (t) => {
       `expected wrapped h2 HTML, got: ${wikiBody.renderedHtml.slice(0, 400)}`
     );
     assert.ok(wikiBody.renderedHtml.includes("Overview"));
+    const wikiFile = path.join(vaultRoot, "projects", projectId, "WIKI.md");
+    const prevWiki = fs.readFileSync(wikiFile, "utf8");
+    fs.writeFileSync(wikiFile, `${prevWiki}\nSee ${vaultRoot} operator-home\n`, "utf8");
+    const leakRes = await fetch(`${baseUrl}/api/wiki?project=${encodeURIComponent(projectId)}`);
+    assert.strictEqual(leakRes.status, 200);
+    const leakBody = await leakRes.json() as { renderedHtml: string };
+    assert.ok(!leakBody.renderedHtml.includes(vaultRoot), "wiki HTML must not echo the vault path");
+    fs.writeFileSync(wikiFile, prevWiki, "utf8");
+  });
+
+  await t.test("round 3: /api/wiki renderedHtml and markdown carry the untrusted fence", async () => {
+    const regen = await fetch(`${baseUrl}/api/wiki/regenerate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId })
+    });
+    assert.strictEqual(regen.status, 200);
+    const res = await fetch(`${baseUrl}/api/wiki?project=${encodeURIComponent(projectId)}`);
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as { markdown?: string; renderedHtml?: string };
+    assert.ok(
+      body.markdown?.startsWith("<!-- spec-memo-untrusted-begin -->"),
+      "wiki markdown fenced"
+    );
+    assert.ok(
+      body.renderedHtml?.startsWith("<!-- spec-memo-untrusted-begin -->"),
+      "wiki renderedHtml fenced"
+    );
+    assert.ok(body.renderedHtml?.includes("<!-- spec-memo-untrusted-end -->"));
   });
 
   await t.test("GET /api/wiki/section returns 200 for known h2 slug and 404 Not found for unknown id", async () => {
@@ -726,12 +755,30 @@ test("MCP status monitor", async (t) => {
 
   await t.test("GET /favicon.ico and /robots.txt return silent 204 (AC5)", async () => {
     const errBefore = readErrorLogs(vaultRoot);
-    for (const p of ["/favicon.ico", "/robots.txt"]) {
+    for (const p of [
+      "/favicon.ico",
+      "/robots.txt",
+      "/json/version",
+      "/.well-known/appspecific/com.chrome.devtools.json"
+    ]) {
       const res = await fetch(`${baseUrl}${p}`);
       assert.strictEqual(res.status, 204);
       assert.strictEqual(await res.text(), "");
     }
     assert.strictEqual(readErrorLogs(vaultRoot), errBefore);
+  });
+
+  await t.test("silent probes stay silent while real unknown routes stay loud (issue #68)", async () => {
+    const errBefore = readErrorLogs(vaultRoot);
+    for (const p of ["/json/version", "/.well-known/appspecific/com.chrome.devtools.json"]) {
+      const res = await fetch(`${baseUrl}${p}`);
+      assert.strictEqual(res.status, 204);
+    }
+    assert.strictEqual(readErrorLogs(vaultRoot), errBefore);
+    const loud = await fetch(`${baseUrl}/definitely-not-a-probe`);
+    assert.strictEqual(loud.status, 404);
+    assert.ok(readErrorLogs(vaultRoot).length > errBefore.length);
+    assert.ok(readErrorLogs(vaultRoot).includes("Route not found"));
   });
 
   await t.test("GET /api/records returns memory list with hits and is read-only", async () => {
@@ -1748,6 +1795,14 @@ test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t
     assert.ok(html.includes('activateTab("tab-ai-ops")'));
     assert.ok(html.includes('id="errorlog-detail-error"'));
     assert.ok(!html.match(/errorlog-detail-error['"]?\)\.innerHTML/), "error detail must not use innerHTML");
+    assert.ok(html.includes('id="btn-errorlog-delete"'));
+    assert.ok(html.includes('id="btn-errorlog-new-issue"'));
+    assert.ok(html.includes('id="errorlog-select-all"'));
+    assert.ok(html.includes('id="modal-errorlog-delete"'));
+    assert.ok(html.includes('id="errorlog-issue-text"'));
+    assert.ok(!html.includes("api.github.com"));
+    assert.ok(!html.includes("github.com/api"));
+    assert.ok(!html.match(/errorlog-issue-text['"]?\)\.innerHTML/), "issue draft must not use innerHTML");
   });
 
   const bus = createActivityBus({ capacity: 200 });
@@ -1816,6 +1871,53 @@ test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t
 
     const badLevel = await fetch(`${baseUrl}/api/error-logs?level=DEBUG`);
     assert.strictEqual(badLevel.status, 400);
+  });
+
+  await t.test("POST /api/error-logs/delete removes listed ids and counts missing", async () => {
+    logErrorReport({
+      subsystem: "cli",
+      endpoint: "/api/error-logs",
+      error: new Error("delete-target-alpha"),
+      level: "ERROR"
+    }, { vaultRoot });
+    logErrorReport({
+      subsystem: "cli",
+      error: new Error("delete-keep-beta"),
+      level: "WARN"
+    }, { vaultRoot });
+    const listRes = await fetch(`${baseUrl}/api/error-logs`);
+    const list = await listRes.json() as { items: Array<{ id: string; error: string }>; total: number };
+    const drop = list.items.find((i) => i.error.includes("delete-target-alpha"));
+    assert.ok(drop);
+    const bad = await fetch(`${baseUrl}/api/error-logs/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [] })
+    });
+    assert.strictEqual(bad.status, 400);
+    const miss = await fetch(`${baseUrl}/api/error-logs/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: ["elog-ffffffffffff"] })
+    });
+    assert.strictEqual(miss.status, 200);
+    const missBody = await miss.json() as { ok: boolean; deleted: number; missing: number };
+    assert.strictEqual(missBody.deleted, 0);
+    assert.strictEqual(missBody.missing, 1);
+    const ok = await fetch(`${baseUrl}/api/error-logs/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [drop.id] })
+    });
+    assert.strictEqual(ok.status, 200);
+    const okBody = await ok.json() as { ok: boolean; deleted: number; missing: number };
+    assert.strictEqual(okBody.ok, true);
+    assert.strictEqual(okBody.deleted, 1);
+    assert.strictEqual(okBody.missing, 0);
+    assert.ok(!JSON.stringify(okBody).includes(vaultRoot));
+    const after = await fetch(`${baseUrl}/api/error-logs`);
+    const afterBody = await after.json() as { items: Array<{ error: string }>; total: number };
+    assert.ok(afterBody.items.every((i) => !i.error.includes("delete-target-alpha")));
   });
 
   await t.test("GET /api/config/ai defaults to noop with boolean hasApiKey and no secrets", async () => {
@@ -2102,6 +2204,13 @@ test("Status monitor sidebar, error logs, AI config, dashboard (0058)", async (t
         body: JSON.stringify({ provider: "noop" })
       });
       assert.strictEqual(putUnauth.status, 401);
+      const delUnauth = await fetch(`${authServer.url}/api/error-logs/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: ["elog-0"] })
+      });
+      assert.strictEqual(delUnauth.status, 401);
+      assert.ok(!(await delUnauth.text()).includes("vaultRoot"));
       const ok = await fetch(`${authServer.url}/api/dashboard`, {
         headers: { Authorization: "Bearer nav-0058-secret" }
       });

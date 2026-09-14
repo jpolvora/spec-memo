@@ -1,18 +1,24 @@
 import { z } from 'zod';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   TOOL_NAMES,
   ToolName,
   ToolResponse,
   AppendOptions,
   BootstrapOptions,
+  BootstrapBrief,
   ForgetOptions,
   GcOptions,
+  IoGuardEnvelope,
+  MemoRecord,
   PromoteOptions,
   CheckVersionOptions,
   InstallSkillsOptions,
   PromptOptions,
   RecordKind,
   RecordStatus,
+  SearchHit,
   SearchOptions
 } from './types.js';
 import { RecordKindSchema, RecordStatusSchema } from './schema.js';
@@ -47,6 +53,22 @@ import {
 } from './prompt.js';
 import { submitMemoryFeedback } from './feedback.js';
 import { sanitizeToolOutput } from './safety.js';
+import {
+  canonicalBodyForChecksum,
+  fenceInnerOf,
+  inspectAgentIo,
+  ioChecksumHex,
+  isIoGuardError,
+  isUntrustedWrapped,
+  logIoGuardRefusal,
+  UNTRUSTED_BEGIN,
+  verifyIoChecksum,
+  verifyStoredChecksum,
+  wrapUntrustedText
+} from './io-guard.js';
+import { parseRecord } from './schema.js';
+import { calculatePayloadSize } from './bootstrap.js';
+import { rollbackHandoffClaim } from './handoff.js';
 import { scheduleHybridPush } from './hybrid-sync.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getVaultRoot, getProjectMetadata } from './vault.js';
@@ -636,6 +658,90 @@ function ok(data: unknown): { data: unknown } {
   return { data: sanitizeToolOutput(data) };
 }
 
+/**
+ * Spec 0059 outbound (AC12-AC14, AC21): sanitize first (secrets/paths),
+ * then verify stored checksums (mismatch omits body, never whole-tool
+ * fail), then fence bodies/snippets as untrusted data with a SHA-256
+ * envelope over the fence-inner text.
+ */
+function buildIoGuardEnvelope(args: {
+  inners: string[];
+  queryDropped?: boolean;
+  checksumMismatch?: boolean;
+}): IoGuardEnvelope {
+  const envelope: IoGuardEnvelope = { untrusted: true, alg: 'sha256' };
+  if (args.inners.length > 0) {
+    const candidate = ioChecksumHex(args.inners.join('\n'));
+    // AC22: the checksum field is present only when it equals
+    // ioChecksumHex(inner); recomputed here, so it always does — the
+    // explicit re-verify keeps the invariant fail-closed by construction.
+    if (verifyIoChecksum(args.inners.join('\n'), candidate)) {
+      envelope.checksum = candidate;
+    }
+  }
+  if (args.queryDropped === true) {
+    envelope.queryDropped = true;
+  }
+  if (args.checksumMismatch === true) {
+    envelope.checksumMismatch = true;
+  }
+  return envelope;
+}
+
+/** Verify one sanitized record body; omit + flag on mismatch (AC21). */
+function verifyAndCollectRecordBody(
+  record: MemoRecord,
+  inners: string[],
+  ctx: { vaultRoot?: string; projectId?: string; tool: string; recordId: string }
+): boolean {
+  const stored = (record.frontmatter as Record<string, unknown> | undefined)?.ioChecksum;
+  if (
+    stored !== undefined &&
+    stored !== null &&
+    !verifyIoChecksum(canonicalBodyForChecksum(record.body || ''), stored)
+  ) {
+    record.body = '';
+    logIoGuardRefusal(
+      {
+        reason: 'read omitted: checksum mismatch',
+        flags: [],
+        bodyChars: 0,
+        projectId: ctx.projectId,
+        tool: ctx.tool,
+        recordId: ctx.recordId
+      },
+      { vaultRoot: ctx.vaultRoot }
+    );
+    return true;
+  }
+  if (typeof record.body === 'string' && record.body.length > 0) {
+    const fenced = wrapUntrustedText(record.body);
+    inners.push(fenceInnerOf(fenced));
+    record.body = fenced;
+  }
+  return false;
+}
+
+/** Spec 0059 outbound for `get` (AC12-AC14, AC21): sanitize, verify, fence. */
+function guardGetRecord(
+  record: MemoRecord,
+  ctx: { vaultRoot?: string; projectId?: string }
+): { data: unknown; ioGuard: IoGuardEnvelope } {
+  const sanitized = sanitizeToolOutput(record) as MemoRecord;
+  const inners: string[] = [];
+  const mismatch = verifyAndCollectRecordBody(sanitized, inners, {
+    vaultRoot: ctx.vaultRoot,
+    projectId: ctx.projectId || String(sanitized.frontmatter?.project || ''),
+    tool: 'get',
+    recordId: String(sanitized.frontmatter?.id || sanitized.frontmatter?.slug || 'unknown')
+  });
+  const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch: mismatch });
+  return {
+    data: { ...sanitized, ioGuard },
+    ioGuard
+  };
+}
+
 function fail(code: string, err: unknown, details?: unknown): ToolResponse {
   const message = wrapSqliteOpenError(err).message;
   return {
@@ -741,7 +847,261 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           cwd: bootstrapOpts.cwd
         });
       }
-      return ok(result);
+      // Spec 0059 outbound: sanitize, checksum-verify, fence, envelope.
+      const brief = sanitizeToolOutput(result) as BootstrapBrief;
+      // Round-3 review: thread the hostile-query signal into the envelope
+      // directly (not via notices, which budget pressure can evict).
+      const queryDropped =
+        typeof bootstrapOpts.query === 'string' &&
+        bootstrapOpts.query.trim().length > 0 &&
+        !inspectAgentIo(bootstrapOpts.query).ok;
+      const inners: string[] = [];
+      let checksumMismatch = false;
+      const guardCtx = {
+        vaultRoot: bootstrapOpts.vaultRoot,
+        projectId: bootstrapOpts.projectId || brief.projectId,
+        tool: 'bootstrap'
+      };
+      for (const rec of [...(brief.traps || []), ...(brief.decisions || [])]) {
+        if (
+          verifyAndCollectRecordBody(rec, inners, {
+            ...guardCtx,
+            recordId: String(rec.frontmatter?.id || rec.frontmatter?.slug || 'unknown')
+          })
+        ) {
+          checksumMismatch = true;
+        }
+      }
+      for (const sliceRec of [
+        brief.activeSlice?.spec,
+        brief.activeSlice?.plan,
+        brief.activeSlice?.state
+      ]) {
+        if (sliceRec) {
+          if (
+            verifyAndCollectRecordBody(sliceRec, inners, {
+              ...guardCtx,
+              recordId: String(sliceRec.frontmatter?.id || sliceRec.frontmatter?.slug || 'unknown')
+            })
+          ) {
+            checksumMismatch = true;
+          }
+        }
+      }
+      if (brief.handoffMarkdown) {
+        const fenced = isUntrustedWrapped(brief.handoffMarkdown)
+          ? brief.handoffMarkdown
+          : wrapUntrustedText(brief.handoffMarkdown);
+        inners.push(fenceInnerOf(fenced));
+        brief.handoffMarkdown = fenced;
+      }
+      if (brief.handoff) {
+        // PR#65 round 3: the structured handoff object carries the same free
+        // text as handoffMarkdown (nextSteps/failedApproaches/openQuestions/
+        // harness) but was delivered raw. Fence the object fields and fold
+        // their inners into the envelope so the checksum covers them.
+        const h = { ...brief.handoff };
+        const fenceOne = (s: string): string =>
+          isUntrustedWrapped(s) ? s : wrapUntrustedText(s);
+        h.nextSteps = (h.nextSteps || []).map(fenceOne);
+        if (h.failedApproaches) h.failedApproaches = h.failedApproaches.map(fenceOne);
+        if (h.openQuestions) h.openQuestions = h.openQuestions.map(fenceOne);
+        if (typeof h.harness === 'string' && h.harness.length > 0) {
+          h.harness = fenceOne(h.harness);
+        }
+        if (typeof h.owner === 'string' && h.owner.length > 0) {
+          h.owner = fenceOne(h.owner);
+        }
+        if (typeof h.branch === 'string' && h.branch.length > 0) {
+          h.branch = fenceOne(h.branch);
+        }
+        brief.handoff = h;
+        for (const s of [
+          ...h.nextSteps,
+          ...(h.failedApproaches ?? []),
+          ...(h.openQuestions ?? [])
+        ]) {
+          inners.push(fenceInnerOf(s));
+        }
+        for (const s of [h.harness, h.owner, h.branch]) {
+          if (typeof s === 'string' && s.length > 0) {
+            inners.push(fenceInnerOf(s));
+          }
+        }
+      }
+      if (brief.sessionObjective?.objective) {
+        const fenced = isUntrustedWrapped(brief.sessionObjective.objective)
+          ? brief.sessionObjective.objective
+          : wrapUntrustedText(brief.sessionObjective.objective);
+        inners.push(fenceInnerOf(fenced));
+        brief.sessionObjective = { ...brief.sessionObjective, objective: fenced };
+      }
+      if (brief.sessionResume) {
+        const resume = { ...brief.sessionResume };
+        for (const key of ['summary', 'body'] as const) {
+          const val = resume[key];
+          if (typeof val === 'string' && val.length > 0) {
+            const fenced = isUntrustedWrapped(val) ? val : wrapUntrustedText(val);
+            inners.push(fenceInnerOf(fenced));
+            resume[key] = fenced;
+          }
+        }
+        brief.sessionResume = resume;
+      }
+      const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch, queryDropped });
+      brief.ioGuard = ioGuard;
+      // Spec 0059 review (PR#65): fences grow bodies after the byte-budget
+      // pass, so re-account and shed lowest-ranked fenced records first.
+      // The stale-budget payload must never exceed what byteLength claims.
+      const collectFenceInners = (target: string[]): void => {
+        const collectOne = (rec: MemoRecord | undefined): void => {
+          if (!rec || typeof rec.body !== 'string' || !rec.body.includes(UNTRUSTED_BEGIN)) {
+            return;
+          }
+          target.push(fenceInnerOf(rec.body));
+        };
+        for (const rec of [...brief.traps, ...brief.decisions]) {
+          collectOne(rec);
+        }
+        collectOne(brief.activeSlice?.spec);
+        collectOne(brief.activeSlice?.plan);
+        collectOne(brief.activeSlice?.state);
+        if (brief.handoff) {
+          const h = brief.handoff;
+          for (const s of [
+            ...(h.nextSteps || []),
+            ...(h.failedApproaches ?? []),
+            ...(h.openQuestions ?? [])
+          ]) {
+            if (typeof s === 'string' && s.includes(UNTRUSTED_BEGIN)) {
+              target.push(fenceInnerOf(s));
+            }
+          }
+          if (typeof h.harness === 'string' && h.harness.includes(UNTRUSTED_BEGIN)) {
+            target.push(fenceInnerOf(h.harness));
+          }
+          for (const s of [h.owner, h.branch]) {
+            if (typeof s === 'string' && s.includes(UNTRUSTED_BEGIN)) {
+              target.push(fenceInnerOf(s));
+            }
+          }
+        }
+        if (
+          typeof brief.handoffMarkdown === 'string' &&
+          brief.handoffMarkdown.includes(UNTRUSTED_BEGIN)
+        ) {
+          target.push(fenceInnerOf(brief.handoffMarkdown));
+        }
+        if (
+          typeof brief.sessionObjective?.objective === 'string' &&
+          brief.sessionObjective.objective.includes(UNTRUSTED_BEGIN)
+        ) {
+          target.push(fenceInnerOf(brief.sessionObjective.objective));
+        }
+        for (const key of ['summary', 'body'] as const) {
+          const val = brief.sessionResume?.[key];
+          if (typeof val === 'string' && val.includes(UNTRUSTED_BEGIN)) {
+            target.push(fenceInnerOf(val));
+          }
+        }
+      };
+      const refitEnvelope = (): IoGuardEnvelope => {
+        const refitInners: string[] = [];
+        collectFenceInners(refitInners);
+        return buildIoGuardEnvelope({ inners: refitInners, checksumMismatch, queryDropped });
+      };
+      brief.byteLength = calculatePayloadSize(brief);
+      if (brief.byteLength > brief.budgetBytes) {
+        const overBudget = (): boolean => calculatePayloadSize(brief) > brief.budgetBytes;
+        while (brief.traps.length > 0 && overBudget()) {
+          brief.traps.pop();
+        }
+        while (brief.decisions.length > 0 && overBudget()) {
+          brief.decisions.pop();
+        }
+        while (brief.activeSlice?.state && overBudget()) {
+          delete brief.activeSlice.state;
+        }
+        while (brief.activeSlice?.plan && overBudget()) {
+          delete brief.activeSlice.plan;
+        }
+        while (brief.activeSlice?.spec && overBudget()) {
+          delete brief.activeSlice.spec;
+        }
+        // Round-2 review: shed the handoff block last (highest value).
+        // Partition is airtight: an object present at refit start was
+        // claimed this session (rollback on markdown shed); markdown-only
+        // briefs were delivered unclaimed pre-fence (no rollback needed).
+        const refitClaimedId =
+          brief.handoff && typeof brief.handoff.id === 'string' ? brief.handoff.id : undefined;
+        if (brief.handoff && overBudget()) {
+          delete brief.handoff;
+        }
+        if (brief.handoffMarkdown && overBudget()) {
+          if (refitClaimedId) {
+            try {
+              const handoffProjectDir = path.join(
+                getVaultRoot(bootstrapOpts.vaultRoot),
+                'projects',
+                String(bootstrapOpts.projectId || brief.projectId)
+              );
+              rollbackHandoffClaim(handoffProjectDir, refitClaimedId);
+            } catch {
+              // Best-effort rollback; the shed below still holds the budget.
+            }
+          }
+          delete brief.handoffMarkdown;
+        }
+        // Round-3 review: shed the same low-value fields bootstrap sheds
+        // pre-fence (drift, sessionResume, explain report), then notices
+        // oldest-first keeping the final receipt.
+        while (brief.drift && brief.drift.length > 0 && overBudget()) {
+          brief.drift.pop();
+        }
+        if (brief.drift && brief.drift.length === 0) {
+          brief.drift = undefined;
+        }
+        if (brief.sessionResume && overBudget()) {
+          delete brief.sessionResume;
+        }
+        if (brief.budgetReport && overBudget()) {
+          delete brief.budgetReport;
+        }
+        // PR#65 round 3: a large fenced sessionObjective must not keep the
+        // brief over budget once every lower-value field has been shed.
+        if (brief.sessionObjective && overBudget()) {
+          delete brief.sessionObjective;
+        }
+        while (brief.notices.length > 1 && overBudget()) {
+          brief.notices.shift();
+        }
+        brief.truncated = true;
+        if (!brief.notices.some((n) => n.includes('truncated'))) {
+          brief.notices.push(
+            `Context brief truncated to fit ${brief.budgetBytes} byte budget (post-fence refit).`
+          );
+        }
+        // Rebuild the envelope from the survivors so the checksum covers
+        // exactly the delivered fence-inner text (AC22).
+        const refit = refitEnvelope();
+        brief.ioGuard = refit;
+        brief.byteLength = calculatePayloadSize(brief);
+        // The refit notice itself costs bytes: shed whole records (no
+        // further notice edits) until the budget holds, then re-sync the
+        // envelope to the final delivered set.
+        while ((brief.traps.length > 0 || brief.decisions.length > 0) && overBudget()) {
+          if (brief.traps.length > 0) {
+            brief.traps.pop();
+          } else {
+            brief.decisions.pop();
+          }
+        }
+        const finalGuard = refitEnvelope();
+        brief.ioGuard = finalGuard;
+        brief.byteLength = calculatePayloadSize(brief);
+        return { data: brief, ioGuard: finalGuard };
+      }
+      return { data: brief, ioGuard };
     } catch (err: unknown) {
       return fail('BOOTSTRAP_FAILED', err);
     }
@@ -751,8 +1111,20 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
     try {
       const searchOpts = parseResult.data as SearchOptions;
       const { hitIds, sessionId, ...indexOpts } = searchOpts;
+      // Spec 0059 inbound queries (AC10): drop-not-fail. A query matching
+      // the override table runs as empty query (unfiltered sort path).
+      let queryDropped = false;
+      const effectiveIndexOpts: SearchOptions = { ...indexOpts };
+      if (
+        typeof searchOpts.query === 'string' &&
+        searchOpts.query.trim().length > 0 &&
+        !inspectAgentIo(searchOpts.query).ok
+      ) {
+        effectiveIndexOpts.query = '';
+        queryDropped = true;
+      }
       const toolAi = resolveToolAi(searchOpts.vaultRoot);
-      const { hits: results } = await searchIndexRanked(indexOpts, {
+      const { hits: results } = await searchIndexRanked(effectiveIndexOpts, {
         agent: toolAi.agent,
         rankTopK: toolAi.rankTopK,
         timeoutMs: toolAi.timeoutMs,
@@ -783,7 +1155,53 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           cwd: searchOpts.cwd
         });
       }
-      return ok(results);
+      // Spec 0059 outbound (AC12-AC14, AC21): verify stored checksums
+      // against the on-disk body (mismatch omits the snippet, never fails
+      // the tool), then sanitize and fence snippets as untrusted data.
+      const mismatchByIndex = new Set<number>();
+      results.forEach((hit, idx) => {
+        const filePath = typeof hit.filepath === 'string' ? hit.filepath : '';
+        if (!filePath) return;
+        try {
+          const parsed = parseRecord(fs.readFileSync(filePath, 'utf8'), filePath);
+          const stored = (parsed.frontmatter as Record<string, unknown>).ioChecksum;
+          if (stored !== undefined && stored !== null && !verifyStoredChecksum(parsed.body, stored)) {
+            mismatchByIndex.add(idx);
+            logIoGuardRefusal(
+              {
+                reason: 'search snippet omitted: checksum mismatch',
+                flags: [],
+                bodyChars: 0,
+                projectId: searchOpts.projectId || hit.projectId,
+                tool: 'search',
+                recordId: String(hit.id)
+              },
+              { vaultRoot: searchOpts.vaultRoot }
+            );
+          }
+        } catch {
+          // Fail-open: unreadable files keep their snippet.
+        }
+      });
+      const hits = sanitizeToolOutput(results) as SearchHit[];
+      const inners: string[] = [];
+      hits.forEach((hit, idx) => {
+        if (mismatchByIndex.has(idx)) {
+          delete hit.snippet;
+          return;
+        }
+        if (typeof hit.snippet === 'string' && hit.snippet.length > 0) {
+          const fencedSnippet = wrapUntrustedText(hit.snippet);
+          inners.push(fenceInnerOf(fencedSnippet));
+          hit.snippet = fencedSnippet;
+        }
+      });
+      const ioGuard = buildIoGuardEnvelope({
+        inners,
+        queryDropped,
+        checksumMismatch: mismatchByIndex.size > 0
+      });
+      return { data: hits, ioGuard };
     } catch (err: unknown) {
       return fail('SEARCH_FAILED', err);
     }
@@ -826,6 +1244,10 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
       return ok(result);
     } catch (err: unknown) {
+      // Spec 0059 AC8: IO_GUARD refusals map to a stable fail payload.
+      if (isIoGuardError(err)) {
+        return fail('IO_GUARD', err);
+      }
       return fail('UPSERT_FAILED', err);
     }
   }
@@ -863,23 +1285,25 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         const refreshed = await getRecord({ id: String(record.frontmatter.id), kind: record.frontmatter.kind, cwd, vaultRoot, projectId });
         if (refreshed) {
           // AC5: missing hits → 0 in payload without requiring a file rewrite
-          if (refreshed.frontmatter.hits == null) {
-            return ok({
-              ...refreshed,
-              frontmatter: { ...refreshed.frontmatter, hits: 0 }
-            });
-          }
-          return ok(refreshed);
+          const payload =
+            refreshed.frontmatter.hits == null
+              ? {
+                  ...refreshed,
+                  frontmatter: { ...refreshed.frontmatter, hits: 0 }
+                }
+              : refreshed;
+          return guardGetRecord(payload, { vaultRoot, projectId });
         }
       }
       // AC5: treat missing hits as 0 in payload without rewriting the file
-      if (record.frontmatter.hits == null) {
-        return ok({
-          ...record,
-          frontmatter: { ...record.frontmatter, hits: 0 }
-        });
-      }
-      return ok(record);
+      const payload =
+        record.frontmatter.hits == null
+          ? {
+              ...record,
+              frontmatter: { ...record.frontmatter, hits: 0 }
+            }
+          : record;
+      return guardGetRecord(payload, { vaultRoot, projectId });
     } catch (err: unknown) {
       return fail('GET_FAILED', err);
     }
@@ -898,6 +1322,10 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       );
       return ok(result);
     } catch (err: unknown) {
+      // Spec 0059 AC8: IO_GUARD refusals map to a stable fail payload.
+      if (isIoGuardError(err)) {
+        return fail('IO_GUARD', err);
+      }
       return fail('APPEND_FAILED', err);
     }
   }
@@ -1170,6 +1598,10 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
 
       return fail('INVALID_ARGUMENTS', `Unsupported prompt action: ${action}`);
     } catch (err: unknown) {
+      // Spec 0059 AC8: IO_GUARD refusals map to a stable fail payload.
+      if (isIoGuardError(err)) {
+        return fail('IO_GUARD', err);
+      }
       return fail('PROMPT_TOOL_FAILED', err);
     }
   }

@@ -8,6 +8,14 @@ import { rebuildIndex } from "./indexer.js";
 import { rebuildCompiledViews } from "./compiler.js";
 import { getVaultProjectList, listProjectRecordsInternal } from "./canvas.js";
 import { isPathInside, assertNoSecrets, assertValidProjectId } from "./safety.js";
+import {
+  IO_GUARD_CHECKSUM_CODE,
+  IO_GUARD_CODE,
+  inspectAgentIo,
+  isIoGuardError,
+  logIoGuardRefusal,
+  verifyStoredChecksum
+} from "./io-guard.js";
 import { RecordFrontmatter, RecordKind, ConflictStrategy, ConflictRecordDetail } from "./types.js";
 
 export interface ChangesetRecord {
@@ -117,6 +125,25 @@ export function mergeRecordMetadata(
   merged.updated = tIncomingUp >= tLocalUp ? incomingFm.updated : localFm.updated;
 
   return merged;
+}
+
+/**
+ * Spec 0059 inbound for hybrid apply (AC9, AC24): per-record IO_GUARD /
+ * checksum verdict for one incoming changeset record. A non-null result
+ * means skip-and-log this record (same spirit as capture-ignore AC6),
+ * never a full changeset rollback.
+ */
+export function checkIncomingIoGuard(item: ChangesetRecord): { code: string; reason: string } | null {
+  // AC6 names body + title; the scan covers the whole frontmatter JSON so
+  // sibling free-text fields cannot be used as an injection bypass.
+  if (!inspectAgentIo(item.body).ok || !inspectAgentIo(JSON.stringify(item.frontmatter)).ok) {
+    return { code: IO_GUARD_CODE, reason: 'prompt-injection tokens in synced record' };
+  }
+  const stored = (item.frontmatter as Record<string, unknown>).ioChecksum;
+  if (stored !== undefined && stored !== null && !verifyStoredChecksum(item.body, stored)) {
+    return { code: IO_GUARD_CHECKSUM_CODE, reason: 'remote body does not match its ioChecksum' };
+  }
+  return null;
 }
 
 /**
@@ -520,6 +547,39 @@ export async function applyChangeset(
         const { projId, projDir, kind, recId, slug, kindDir, targetFilePath, item } = rec;
         touchedProjects.add(projId);
 
+        // Spec 0059 AC9/AC24: inbound IO_GUARD / checksum failures skip
+        // this record and log it (same spirit as capture-ignore AC6) —
+        // never a full changeset rollback. Dry runs report the skip
+        // without touching disk or the refusal log.
+        const ioSkip = checkIncomingIoGuard(item);
+        if (ioSkip) {
+          if (!dryRun) {
+            logIoGuardRefusal(
+              {
+                reason: `sync apply skipped (${ioSkip.code}): ${item.project}/${kind}/${recId}`,
+                flags: [],
+                bodyChars: item.body.length,
+                projectId: projId,
+                tool: 'sync-apply',
+                recordId: recId
+              },
+              { vaultRoot }
+            );
+          }
+          skipped++;
+          recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ${ioSkip.code === IO_GUARD_CHECKSUM_CODE ? 'checksum-mismatch' : 'io-guard'})`);
+          conflictDetails.push({
+            id: recId,
+            kind,
+            projectId: projId,
+            category: "metadata_divergence",
+            resolution: "skipped",
+            remoteTime: item.frontmatter.updated || item.frontmatter.created,
+            message: `Skipped ${ioSkip.code} record (${ioSkip.reason}): ${projId}/${kind}/${recId}`
+          });
+          continue;
+        }
+
         if (!dryRun && !fs.existsSync(projDir)) {
           initVault({ vaultRoot, projectId: projId, displayName: projId });
         }
@@ -605,6 +665,20 @@ export async function applyChangeset(
                   });
                   continue;
                 }
+                if (isIoGuardError(err)) {
+                  skipped++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (skipped: io-guard)`);
+                  conflictDetails.push({
+                    id: recId,
+                    kind,
+                    projectId: projId,
+                    category: "metadata_divergence",
+                    resolution: "skipped",
+                    remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                    message: `Skipped IO_GUARD record: ${projId}/${kind}/${recId}`
+                  });
+                  continue;
+                }
                 if (!isCaptureIgnoreSkip(err)) throw err;
                 skipped++;
                 recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
@@ -664,6 +738,20 @@ export async function applyChangeset(
                     localTime: existing.frontmatter.updated || existing.frontmatter.created,
                     remoteTime: item.frontmatter.updated || item.frontmatter.created,
                     message: `View rebuild skipped (transient lock): ${projId}/${kind}/${recId}`
+                  });
+                  continue;
+                }
+                if (isIoGuardError(err)) {
+                  skipped++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (skipped: io-guard)`);
+                  conflictDetails.push({
+                    id: recId,
+                    kind,
+                    projectId: projId,
+                    category: "metadata_divergence",
+                    resolution: "skipped",
+                    remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                    message: `Skipped IO_GUARD record: ${projId}/${kind}/${recId}`
                   });
                   continue;
                 }
@@ -750,7 +838,21 @@ export async function applyChangeset(
                     });
                     continue;
                   }
-                  if (!isCaptureIgnoreSkip(err)) throw err;
+                  if (isIoGuardError(err)) {
+                  skipped++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (skipped: io-guard)`);
+                  conflictDetails.push({
+                    id: recId,
+                    kind,
+                    projectId: projId,
+                    category: "metadata_divergence",
+                    resolution: "skipped",
+                    remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                    message: `Skipped IO_GUARD record: ${projId}/${kind}/${recId}`
+                  });
+                  continue;
+                }
+                if (!isCaptureIgnoreSkip(err)) throw err;
                   skipped++;
                   recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
                   conflictDetails.push({
@@ -825,6 +927,20 @@ export async function applyChangeset(
                   resolution: "skipped",
                   remoteTime: item.frontmatter.updated || item.frontmatter.created,
                   message: `View rebuild skipped (transient lock): ${projId}/${kind}/${recId}`
+                });
+                continue;
+              }
+              if (isIoGuardError(err)) {
+                skipped++;
+                recordsApplied.push(`${projId}/${kind}/${recId} (skipped: io-guard)`);
+                conflictDetails.push({
+                  id: recId,
+                  kind,
+                  projectId: projId,
+                  category: "metadata_divergence",
+                  resolution: "skipped",
+                  remoteTime: item.frontmatter.updated || item.frontmatter.created,
+                  message: `Skipped IO_GUARD record: ${projId}/${kind}/${recId}`
                 });
                 continue;
               }

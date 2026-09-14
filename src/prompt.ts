@@ -19,6 +19,7 @@ import { getVaultProjects, getVaultRoot, withVaultLock, withVaultLockSync, ensur
 import { getRecord, listProjectRecords, upsertRecord } from './store.js';
 import { extractRulesFromPrompts, formatDerivedRulesForExport } from './rules-engine.js';
 import { assertAllowedIdeRulePromote, assertNotInProductRoot, isPathInside, redactSecretsInPayload } from './safety.js';
+import { createIoGuardError, inspectAgentIo, logIoGuardRefusal } from './io-guard.js';
 import { searchIndex } from './indexer.js';
 import { parseRecord } from './schema.js';
 import {
@@ -70,6 +71,28 @@ export async function recordPromptTurn(options: PromptOptions): Promise<PromptRe
   });
   const body = (redactSecretsInPayload(redactedBody) as string).trim();
   const sessionId = options.sessionId;
+
+  // Spec 0059 inbound (fail closed, AC5): scan after ignore-path redact
+  // and before the vault write. Refused turns write no prompt file. The
+  // downstream upsertRecord re-checks (defense in depth); this explicit
+  // gate keeps the refusal attributable to the prompt path.
+  {
+    const hit = inspectAgentIo(body);
+    if (!hit.ok) {
+      logIoGuardRefusal(
+        {
+          reason: 'prompt record refused: prompt-injection tokens',
+          flags: hit.flags,
+          bodyChars: body.length,
+          projectId,
+          tool: 'prompt',
+          recordId: sessionId ? `prompt-${sessionId}` : undefined
+        },
+        { vaultRoot }
+      );
+      throw createIoGuardError('prompt-injection tokens in prompt body');
+    }
+  }
 
   // Allocate turn + write under one vault lock so concurrent session turns cannot collide
   // on deterministic ids (`prompt-{sessionId}-t{N}`). withVaultLock is reentrant with upsertRecord.
@@ -197,7 +220,9 @@ export async function startSessionRecord(options: PromptOptions): Promise<Sessio
         projectDir,
         cwd,
         objective: options.objective,
-        sessionId
+        sessionId,
+        vaultRoot,
+        projectId
       });
     } else {
       clearSessionObjective({ projectDir, cwd });
