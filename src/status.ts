@@ -52,12 +52,13 @@ import {
   generateActivityReport,
   deriveRulesFromPrompts
 } from "./prompt.js";
-import { getVaultAiStatus } from "./ai/index.js";
+import { getVaultAiStatus, NoopVaultAiAgent, CursorSdkVaultAiAgent, resolveAiConfig } from "./ai/index.js";
 import {
   listAiOpsEntries,
   getAiOpsEntry,
   sanitizeAiOpsEntry,
-  parseAiOpsListQuery
+  parseAiOpsListQuery,
+  recordAiOpsEvent
 } from "./ai/ops-log.js";
 
 /** Zero-dep markdown → safe HTML for prompt drawer (interview Q4). */
@@ -1728,6 +1729,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
               <option value="">All</option>
               <option value="refine">refine</option>
               <option value="rank">rank</option>
+              <option value="test">test</option>
             </select>
           </div>
           <div class="filter-group" style="max-width: 160px;">
@@ -1738,7 +1740,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
               <option value="false">fail</option>
             </select>
           </div>
-          <button type="button" id="btn-aiops-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Refresh</button>
+          <button type="button" id="btn-aiops-test" class="btn-secondary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Test AI</button>
+          <button type="button" id="btn-aiops-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px;">Refresh</button>
         </div>
         <div id="aiops-error" class="helper-text" style="display:none; color: var(--err);"></div>
       </div>
@@ -3730,6 +3733,25 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     }
 
+    async function testAiConnectivity() {
+      const btn = document.getElementById("btn-aiops-test");
+      btn.disabled = true;
+      btn.textContent = "Testing…";
+      try {
+        const res = await fetch("/api/ai-ops/test", { method: "POST", credentials: "same-origin" });
+        if (!res.ok) {
+          throw new Error("AI test request failed (" + res.status + ")");
+        }
+        await loadAiOps(true);
+      } catch (err) {
+        showAiOpsError("AI connectivity test failed: " + (err && err.message ? err.message : String(err)));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Test AI";
+      }
+    }
+
+    document.getElementById("btn-aiops-test").addEventListener("click", testAiConnectivity);
     document.getElementById("btn-aiops-refresh").addEventListener("click", () => loadAiOps(true));
     document.getElementById("aiops-operation-select").addEventListener("change", () => loadAiOps(true));
     document.getElementById("aiops-ok-select").addEventListener("change", () => loadAiOps(true));
@@ -7196,6 +7218,84 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
       }
 
       // --- AI Ops journal (spec 0057): read-only list + detail, same auth as /api/* ---
+      if (req.method === "POST" && pathname === "/api/ai-ops/test") {
+        try {
+          const { config: vaultConfig } = readVaultConfig(vaultRoot);
+          const aiConfig = resolveAiConfig(vaultConfig);
+          // Raw (unjournaled) agent: the decorated resolveVaultAiAgent would
+          // emit a second refine row alongside our explicit test row.
+          const agent =
+            aiConfig.enabled === true && aiConfig.provider === "cursor-sdk"
+              ? new CursorSdkVaultAiAgent(aiConfig)
+              : new NoopVaultAiAgent();
+          const collapse = (value: string) => value.replace(/\s+/g, " ").trim();
+          const started = Date.now();
+          const result = await agent.refineForSearch({
+            id: "hello",
+            kind: "trap",
+            title: "hello",
+            body: "hello",
+            tags: [],
+            pathPatterns: []
+          });
+          const durationMs = Date.now() - started;
+          const response = result.ok
+            ? collapse(
+                JSON.stringify({
+                  searchTerms: result.searchTerms ?? [],
+                  summary: result.summary ?? null
+                })
+              ).slice(0, 2000)
+            : undefined;
+          const error = result.ok
+            ? undefined
+            : collapse(String(result.error || "unknown error")).slice(0, 500);
+          // Force-log through an explicit opsLogEnabled override so a disabled
+          // provider still produces a connectivity row instead of silence.
+          const entryId = recordAiOpsEvent({
+            vaultRoot,
+            config: { ...aiConfig, opsLogEnabled: true },
+            operation: "test",
+            ok: result.ok === true,
+            durationMs,
+            recordId: "hello",
+            provider: aiConfig.provider,
+            model: aiConfig.model,
+            input: { message: "hello" },
+            output: result.ok ? { response } : undefined,
+            error,
+            metadata: { provider: aiConfig.provider, model: aiConfig.model, test: "connectivity" }
+          });
+          writeJson(
+            res,
+            200,
+            sanitizeToolOutput({
+              ok: result.ok === true,
+              entryId,
+              operation: "test",
+              recordId: "hello",
+              provider: aiConfig.provider,
+              model: aiConfig.model,
+              ...(response !== undefined ? { response } : {}),
+              ...(error !== undefined ? { error } : {}),
+              durationMs
+            })
+          );
+        } catch (err: unknown) {
+          logErrorReport({
+            subsystem: "status-server",
+            port,
+            host,
+            method: req.method,
+            endpoint: "/api/ai-ops/test",
+            error: err
+          }, { vaultRoot, logPath: errorLogPath });
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, 500, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
       if (req.method === "GET" && pathname === "/api/ai-ops") {
         try {
           const raw: Record<string, string> = {};

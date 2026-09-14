@@ -24,7 +24,7 @@ import {
 import { RecordKindSchema, RecordStatusSchema } from './schema.js';
 import { upsertRecord, getRecord, appendEvent, forgetRecord } from './store.js';
 import { searchIndexRanked } from './ai/search.js';
-import { resolveVaultAiAgent } from './ai/index.js';
+import { resolveVaultAiAgent, VAULT_AI_DEFAULT_TIMEOUT_MS, VAULT_AI_DEFAULT_RANK_TOP_K } from './ai/index.js';
 import type { VaultAiAgent } from './ai/types.js';
 import { wrapSqliteOpenError } from './sqlite.js';
 import { compileBootstrapBrief } from './bootstrap.js';
@@ -106,7 +106,7 @@ function resolveToolAi(vaultRoot: string | undefined): {
     }
     return { agent, rankTopK: config.rankTopK, timeoutMs: config.timeoutMs };
   } catch {
-    return { agent: null, rankTopK: 20, timeoutMs: 15000 };
+    return { agent: null, rankTopK: VAULT_AI_DEFAULT_RANK_TOP_K, timeoutMs: VAULT_AI_DEFAULT_TIMEOUT_MS };
   }
 }
 

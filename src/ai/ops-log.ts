@@ -18,7 +18,7 @@ export const AI_OPS_DIR_NAME = 'ai-ops';
 export const AI_OPS_FILE_PREFIX = 'ai-ops-';
 export const AI_OPS_ERROR_SNIPPET_MAX = 200;
 
-export type AiOpsOperation = 'refine' | 'rank';
+export type AiOpsOperation = 'refine' | 'rank' | 'test';
 
 export interface AiOpsEntry {
   id: string;
@@ -63,7 +63,7 @@ export interface AiOpsListResult {
 export const AiOpsListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
-  operation: z.enum(['refine', 'rank']).optional(),
+  operation: z.enum(['refine', 'rank', 'test']).optional(),
   ok: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
@@ -469,7 +469,7 @@ function parseAiOpsLine(line: string): AiOpsEntry | null {
       parsed &&
       typeof parsed.id === 'string' &&
       typeof parsed.timestamp === 'string' &&
-      (parsed.operation === 'refine' || parsed.operation === 'rank') &&
+      (parsed.operation === 'refine' || parsed.operation === 'rank' || parsed.operation === 'test') &&
       typeof parsed.ok === 'boolean' &&
       typeof parsed.durationMs === 'number'
     ) {

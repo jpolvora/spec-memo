@@ -7,7 +7,7 @@ import { TOOL_NAMES, type MemoRecord } from './types.js';
 import { upsertRecord, getRecord } from './store.js';
 import { closeIndex, searchIndex } from './indexer.js';
 import { runDoctor } from './doctor.js';
-import { ensureVaultStructure } from './vault.js';
+import { ensureVaultStructure, DEFAULT_VAULT_CONFIG } from './vault.js';
 import { compileBootstrapBrief } from './bootstrap.js';
 import { NoopVaultAiAgent } from './ai/noop.js';
 import { CursorSdkVaultAiAgent, buildCursorSdkPromptOptions } from './ai/cursor-sdk.js';
@@ -164,10 +164,39 @@ describe('Vault AI assistance (spec 0056)', () => {
     assert.equal(defaults.enabled, false);
     assert.equal(defaults.model, 'composer-2.5');
     assert.equal(defaults.apiKeyEnv, 'CURSOR_API_KEY');
-    assert.equal(defaults.timeoutMs, 15000);
+    assert.equal(defaults.timeoutMs, 30000);
     assert.equal(defaults.rankTopK, 20);
     assert.throws(() => parseAiConfig({ enabled: true, provider: 'openai' }), /ai/);
     assert.throws(() => parseAiConfig('yes'), /ai/);
+  });
+
+  it('Issue #70: ai.timeoutMs defaults to 30s, honors config, single source of truth', async () => {
+    // Fresh defaults and the vault seed both use 30000.
+    assert.equal(defaultAiConfig().timeoutMs, 30000);
+    assert.equal(DEFAULT_VAULT_CONFIG.ai?.timeoutMs, 30000);
+    // Configured values win over the default.
+    assert.equal(resolveAiConfig({ ai: { timeoutMs: 45000 } }).timeoutMs, 45000);
+    // The adapter honors the resolved value on both refine and rank paths.
+    const hanging = new CursorSdkVaultAiAgent(
+      { ...defaultAiConfig(), enabled: true, timeoutMs: 1200 },
+      { promptFn: () => new Promise<{ result?: string }>(() => undefined) }
+    );
+    process.env.CURSOR_API_KEY = 'test-key';
+    const timed = await hanging.refineForSearch({
+      id: 't',
+      kind: 'trap',
+      title: 't',
+      body: 'b',
+      tags: [],
+      pathPatterns: []
+    });
+    assert.equal(timed.ok, false);
+    assert.match(String(timed.error), /timed out after 1200ms/);
+    const rankTimed = await hanging.rankCandidates({
+      query: 'q',
+      candidates: [{ id: 'a', kind: 'trap', title: 'a', snippet: 's' }]
+    });
+    assert.match(String(rankTimed.error), /timed out after 1200ms/);
   });
 
   it('AC7/AC8: adapter option shape uses cloud no-repo runtime and never a vault cwd', () => {
