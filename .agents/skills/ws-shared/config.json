@@ -203,8 +203,8 @@
     },
     "_comment_hostAdapter": "Optional. Skills call portable dispatch-agent / browser-mcp. mode auto|native-tool|cli-command|inline-isolated or a named host mapping from host-dispatch.md.",
     "specializedSubagents": {
-      "enabled": false,
-      "targetHost": "auto",
+      "enabled": true,
+      "targetHost": "cursor",
       "agentPrefix": "ws",
       "directory": "projectLevel"
     },

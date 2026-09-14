@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { redactSecretsInPayload, sanitizeToolOutput } from '../safety.js';
 import type { VaultAiConfig } from '../types.js';
+import { VAULT_AI_DEFAULT_TIMEOUT_MS } from './config.js';
 import type {
   VaultAiAgent,
   VaultAiRankInput,
@@ -18,10 +19,65 @@ const RankOutputSchema = z.object({
   orderedIds: z.array(z.string().min(1)).max(50)
 });
 
+/** Tags cloud agents created by spec-memo so stale slots can be reclaimed. */
+export const SPEC_MEMO_CLOUD_AGENT_METADATA = {
+  source: 'spec-memo',
+  purpose: 'vault-ai-ephemeral'
+} as const;
+
 export interface CursorPromptOptions {
   apiKey: string;
   model: { id: string };
-  cloud: { repos: [] };
+  cloud: { repos: []; metadata: Record<string, string> };
+  timeoutMs: number;
+}
+
+export interface CursorRunResult {
+  status: 'finished' | 'error' | 'cancelled';
+  result?: string;
+  error?: { message?: string; code?: string };
+}
+
+export interface CursorRunHandle {
+  readonly id: string;
+  readonly agentId: string;
+  supports?(operation: 'cancel'): boolean;
+  cancel(): Promise<void>;
+  wait(): Promise<CursorRunResult>;
+}
+
+export interface CursorSdkAgentHandle {
+  readonly agentId?: string;
+  send(message: string): Promise<CursorRunHandle>;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
+export interface CursorSdkAgentApi {
+  create(options: {
+    apiKey: string;
+    model: { id: string };
+    cloud: { repos: []; metadata: Record<string, string> };
+  }): CursorSdkAgentHandle;
+  cancelRun(
+    runId: string,
+    options: { runtime: 'cloud'; agentId: string; apiKey: string }
+  ): Promise<void>;
+  archive(agentId: string, options: { apiKey: string }): Promise<void>;
+  delete(agentId: string, options: { apiKey: string }): Promise<void>;
+  list(options: {
+    runtime: 'cloud';
+    apiKey: string;
+    includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{
+    items: Array<{
+      agentId: string;
+      status?: 'running' | 'finished' | 'error';
+      metadata?: Record<string, string>;
+    }>;
+    nextCursor?: string;
+  }>;
 }
 
 export interface CursorPromptFn {
@@ -29,7 +85,7 @@ export interface CursorPromptFn {
 }
 
 /**
- * Build the exact options passed to `@cursor/sdk` `Agent.prompt` (AC7–AC8).
+ * Build the exact options passed to the managed Cursor SDK prompt path (AC7–AC8).
  * Pure function so tests can assert the shape without live network:
  * - model comes from `config.ai.model` (default composer-2.5)
  * - cloud no-repo runtime (`cloud.repos: []`) — never a local `cwd`
@@ -44,18 +100,178 @@ export function buildCursorSdkPromptOptions(
   const modelId = typeof config.model === 'string' && config.model.trim().length > 0
     ? config.model.trim()
     : 'composer-2.5';
+  const timeoutMs =
+    typeof config.timeoutMs === 'number' && config.timeoutMs > 0
+      ? config.timeoutMs
+      : VAULT_AI_DEFAULT_TIMEOUT_MS;
   return {
     apiKey,
     model: { id: modelId },
-    cloud: { repos: [] }
+    cloud: { repos: [], metadata: { ...SPEC_MEMO_CLOUD_AGENT_METADATA } },
+    timeoutMs
   };
+}
+
+function readCloudAgentErrorText(err: unknown): string {
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof (err as { message?: unknown })?.message === 'string'
+        ? String((err as { message?: unknown }).message)
+        : String(err);
+  const code =
+    err instanceof Error
+      ? (err as Error & { code?: unknown }).code
+      : (err as { code?: unknown })?.code;
+  return `${String(code ?? '')} ${msg}`;
+}
+
+export function isCloudAgentLimitError(err: unknown): boolean {
+  const text = readCloudAgentErrorText(err);
+  if (/cloud agent|reached the limit|upgrade to ultra/i.test(text)) return true;
+  return /validation_error/i.test(text) && /\blimit\b/i.test(text);
+}
+
+function attachCloudAgentError(message: string, code?: string): Error {
+  const err = new Error(message);
+  if (code) {
+    (err as Error & { code?: string }).code = code;
+  }
+  return err;
+}
+
+async function archiveCloudAgent(
+  Agent: CursorSdkAgentApi,
+  agentId: string | undefined,
+  apiKey: string
+): Promise<void> {
+  if (!agentId || !agentId.startsWith('bc-')) return;
+  try {
+    await Agent.archive(agentId, { apiKey });
+    return;
+  } catch {
+    // Fall through to delete when archive is unavailable.
+  }
+  try {
+    await Agent.delete(agentId, { apiKey });
+  } catch {
+    // Fail-open: cleanup must never break refine/rank.
+  }
+}
+
+/**
+ * Archive finished/error spec-memo cloud agents that still occupy dashboard slots.
+ * Running agents are left alone — callers should cancel the active run first.
+ */
+export async function archiveStaleSpecMemoCloudAgents(
+  Agent: CursorSdkAgentApi,
+  apiKey: string,
+  limit = 32
+): Promise<number> {
+  let archived = 0;
+  let cursor: string | undefined;
+  let pages = 0;
+  try {
+    while (pages < 4 && archived < limit) {
+      const page = await Agent.list({
+        runtime: 'cloud',
+        apiKey,
+        includeArchived: false,
+        limit: 50,
+        cursor
+      });
+      for (const item of page.items) {
+        if (archived >= limit) break;
+        if (item.metadata?.source !== SPEC_MEMO_CLOUD_AGENT_METADATA.source) continue;
+        if (item.status === 'running') continue;
+        try {
+          await Agent.archive(item.agentId, { apiKey });
+          archived += 1;
+        } catch {
+          try {
+            await Agent.delete(item.agentId, { apiKey });
+            archived += 1;
+          } catch {
+            // Skip agents we cannot reclaim.
+          }
+        }
+      }
+      cursor = page.nextCursor;
+      pages += 1;
+      if (!cursor) break;
+    }
+  } catch {
+    // Listing is best-effort recovery only.
+  }
+  return archived;
+}
+
+async function cancelCloudRun(
+  Agent: CursorSdkAgentApi,
+  run: CursorRunHandle | undefined,
+  apiKey: string
+): Promise<void> {
+  if (!run) return;
+  try {
+    if (run.supports?.('cancel')) {
+      await run.cancel();
+      return;
+    }
+  } catch {
+    // Fall through to the static cancel API.
+  }
+  if (!run.id || !run.agentId) return;
+  try {
+    await Agent.cancelRun(run.id, { runtime: 'cloud', agentId: run.agentId, apiKey });
+  } catch {
+    // Fail-open.
+  }
+}
+
+/**
+ * Race a promise against a timeout and invoke `onTimeout` so cloud runs can
+ * be cancelled instead of lingering as concurrent agents.
+ */
+export async function raceWithTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+  onTimeout: () => Promise<void>
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  let settled = false;
+  try {
+    return await Promise.race([
+      promise.then(
+        (value) => {
+          settled = true;
+          return value;
+        },
+        (err) => {
+          settled = true;
+          throw err;
+        }
+      ),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          void Promise.race([
+            onTimeout().catch(() => undefined),
+            new Promise<void>((resolve) => setTimeout(resolve, 2000))
+          ]).finally(() => {
+            if (!settled) {
+              reject(new Error(`${label} timed out after ${ms}ms`));
+            }
+          });
+        }, ms);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    // Cleared on settle (no leak) but intentionally not unref'd: callers
-    // await this on foreground paths, and an unref'd timer lets the event
-    // loop drain while a hanging agent is still awaited. See withAiTimeout.
     const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
     promise.then(
       (value) => {
@@ -107,19 +323,80 @@ function extractJsonObject(text: string): unknown {
   throw new Error('model output was not valid JSON');
 }
 
-async function defaultPromptFn(
-  message: string,
-  options: CursorPromptOptions
-): Promise<{ result?: string }> {
-  // Imported lazily so the Noop path never requires `@cursor/sdk` (AC4, AC34).
-  const sdk = (await import('@cursor/sdk')) as unknown as { Agent: { prompt: CursorPromptFn } };
+async function loadCursorSdkAgentApi(): Promise<CursorSdkAgentApi> {
+  const sdk = (await import('@cursor/sdk')) as unknown as { Agent: CursorSdkAgentApi };
   const agentApi = sdk.Agent;
-  if (!agentApi || typeof agentApi.prompt !== 'function') {
-    throw new Error('@cursor/sdk Agent.prompt is unavailable');
+  if (!agentApi || typeof agentApi.create !== 'function') {
+    throw new Error('@cursor/sdk Agent.create is unavailable');
   }
-  const raw = await agentApi.prompt(message, options);
-  if (typeof raw === 'string') return { result: raw };
-  return raw;
+  return agentApi;
+}
+
+async function runManagedCloudPrompt(
+  message: string,
+  options: CursorPromptOptions,
+  Agent: CursorSdkAgentApi
+): Promise<{ result?: string }> {
+  const agent = Agent.create({
+    apiKey: options.apiKey,
+    model: options.model,
+    cloud: options.cloud
+  });
+  let run: CursorRunHandle | undefined;
+  let cloudAgentId: string | undefined;
+
+  const cleanup = async (): Promise<void> => {
+    try {
+      await agent[Symbol.asyncDispose]();
+    } catch {
+      // Fail-open.
+    }
+    await archiveCloudAgent(Agent, cloudAgentId, options.apiKey);
+  };
+
+  try {
+    run = await agent.send(message);
+    cloudAgentId = run.agentId || agent.agentId;
+    const timeoutMs = options.timeoutMs > 0 ? options.timeoutMs : VAULT_AI_DEFAULT_TIMEOUT_MS;
+    const result = await raceWithTimeout(
+      run.wait(),
+      timeoutMs,
+      'cursor sdk prompt',
+      () => cancelCloudRun(Agent, run, options.apiKey)
+    );
+    if (result.status === 'cancelled') {
+      throw new Error('cursor sdk prompt was cancelled');
+    }
+    if (result.status === 'error') {
+      throw attachCloudAgentError(
+        result.error?.message || 'cursor sdk prompt failed',
+        result.error?.code
+      );
+    }
+    return { result: result.result };
+  } finally {
+    // Bound cleanup so dispose/archive cannot extend the timeout SLA indefinitely.
+    await Promise.race([
+      cleanup().catch(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, 2000))
+    ]);
+  }
+}
+
+export function createDefaultPromptFn(
+  resolveAgent: () => Promise<CursorSdkAgentApi> = loadCursorSdkAgentApi
+): CursorPromptFn {
+  return async (message, options) => {
+    const Agent = await resolveAgent();
+    try {
+      return await runManagedCloudPrompt(message, options, Agent);
+    } catch (err) {
+      if (!isCloudAgentLimitError(err)) throw err;
+      const reclaimed = await archiveStaleSpecMemoCloudAgents(Agent, options.apiKey);
+      if (reclaimed === 0) throw err;
+      return await runManagedCloudPrompt(message, options, Agent);
+    }
+  };
 }
 
 function redactPromptText(text: string): string {
@@ -145,12 +422,14 @@ const RANK_INSTRUCTION =
 
 export interface CursorSdkAgentDeps {
   promptFn?: CursorPromptFn;
+  /** Test-only override for the managed SDK agent API loader. */
+  agentApi?: CursorSdkAgentApi;
 }
 
 /**
- * `VaultAiAgent` backed by TypeScript `@cursor/sdk` `Agent.prompt` one-shot
- * (AC7). No `Agent.create` follow-up runs. Cloud no-repo runtime keeps the
- * agent away from the vault and product filesystems (AC8).
+ * `VaultAiAgent` backed by TypeScript `@cursor/sdk` managed cloud prompts.
+ * Uses `Agent.create` + `send` + `wait` with explicit cancel/archive cleanup
+ * so timed-out or completed runs do not linger against cloud agent limits.
  */
 export class CursorSdkVaultAiAgent implements VaultAiAgent {
   private readonly config: VaultAiConfig;
@@ -158,7 +437,9 @@ export class CursorSdkVaultAiAgent implements VaultAiAgent {
 
   constructor(config: VaultAiConfig, deps: CursorSdkAgentDeps = {}) {
     this.config = config;
-    this.promptFn = deps.promptFn || defaultPromptFn;
+    this.promptFn =
+      deps.promptFn ||
+      createDefaultPromptFn(deps.agentApi ? async () => deps.agentApi! : loadCursorSdkAgentApi);
   }
 
   private readApiKey(): string {
@@ -192,7 +473,7 @@ export class CursorSdkVaultAiAgent implements VaultAiAgent {
       const options = buildCursorSdkPromptOptions(this.config, apiKey);
       const raw = await withTimeout(
         Promise.resolve(this.promptFn(prompt, options)),
-        this.config.timeoutMs,
+        options.timeoutMs,
         'cursor refine'
       );
       const text = typeof raw === 'string' ? raw : String(raw?.result || '');
@@ -231,7 +512,7 @@ export class CursorSdkVaultAiAgent implements VaultAiAgent {
       const options = buildCursorSdkPromptOptions(this.config, apiKey);
       const raw = await withTimeout(
         Promise.resolve(this.promptFn(prompt, options)),
-        this.config.timeoutMs,
+        options.timeoutMs,
         'cursor rank'
       );
       const text = typeof raw === 'string' ? raw : String(raw?.result || '');
