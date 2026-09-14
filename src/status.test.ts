@@ -594,6 +594,27 @@ test("MCP status monitor", async (t) => {
     fs.writeFileSync(wikiFile, prevWiki, "utf8");
   });
 
+  await t.test("round 3: /api/wiki renderedHtml and markdown carry the untrusted fence", async () => {
+    const regen = await fetch(`${baseUrl}/api/wiki/regenerate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId })
+    });
+    assert.strictEqual(regen.status, 200);
+    const res = await fetch(`${baseUrl}/api/wiki?project=${encodeURIComponent(projectId)}`);
+    assert.strictEqual(res.status, 200);
+    const body = await res.json() as { markdown?: string; renderedHtml?: string };
+    assert.ok(
+      body.markdown?.startsWith("<!-- spec-memo-untrusted-begin -->"),
+      "wiki markdown fenced"
+    );
+    assert.ok(
+      body.renderedHtml?.startsWith("<!-- spec-memo-untrusted-begin -->"),
+      "wiki renderedHtml fenced"
+    );
+    assert.ok(body.renderedHtml?.includes("<!-- spec-memo-untrusted-end -->"));
+  });
+
   await t.test("GET /api/wiki/section returns 200 for known h2 slug and 404 Not found for unknown id", async () => {
     const okRes = await fetch(`${baseUrl}/api/wiki/section?project=${encodeURIComponent(projectId)}&id=overview`);
     assert.strictEqual(okRes.status, 200);

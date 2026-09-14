@@ -611,6 +611,11 @@ export async function compileBootstrapBrief(
 
   const finalizeBrief = (brief: BootstrapBrief): BootstrapBrief => {
     if (!handoffCandidate || !handoffMarkdown) {
+      // PR#65 round 3: a fenced/oversized session objective must not defeat
+      // the fail-closed byte cap when no handoff competes with it.
+      if (brief.sessionObjective && calculatePayloadSize(brief) > budgetBytes) {
+        delete brief.sessionObjective;
+      }
       brief.byteLength = calculatePayloadSize(brief);
       return brief;
     }
@@ -619,6 +624,11 @@ export async function compileBootstrapBrief(
       handoffMarkdown,
       sessionObjective: brief.sessionObjective ?? sessionObjective
     };
+    // PR#65 round 3: shed the objective before sizing the handoff claim so an
+    // oversized objective alone never forces an over-budget deliverable.
+    if (deliverable.sessionObjective && calculatePayloadSize(deliverable) > budgetBytes) {
+      delete deliverable.sessionObjective;
+    }
     // Pre-claim estimate includes the unclaimed candidate so the claim
     // itself cannot push a fitted brief over budget without a re-check.
     const preClaim: BootstrapBrief = {

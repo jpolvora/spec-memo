@@ -7104,12 +7104,12 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         }
         const redactedRecord = sanitizeToolOutput(record) as { body?: string };
         const redactedBody = typeof redactedRecord.body === "string" ? redactedRecord.body : "";
-        writeJson(res, 200, {
+        writeJson(res, 200, fenceStatusPayload({
           ok: true,
-          record: fenceStatusPayload(redactedRecord),
+          record: redactedRecord,
           renderedHtml: renderPromptMarkdownHtml(redactedBody),
           secretsRedacted: redactedBody.includes("[REDACTED")
-        });
+        }));
         return;
       }
 

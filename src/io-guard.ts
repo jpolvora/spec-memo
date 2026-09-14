@@ -239,12 +239,21 @@ export function verifyStoredChecksum(body: string, stored: unknown): boolean {
   return verifyIoChecksum(canonicalBodyForChecksum(body), stored);
 }
 
-const STATUS_FENCED_KEYS = new Set(['body', 'snippet', 'markdown', 'suggestedBody']);
+const STATUS_FENCED_KEYS = new Set([
+  'body',
+  'snippet',
+  'markdown',
+  'suggestedBody',
+  'renderedHtml'
+]);
 
 /**
  * Status/REST companion to the MCP outbound fence: wrap markdown-echoing
- * string fields (`body`, `snippet`, `markdown`, `suggestedBody`) after
- * `sanitizeToolOutput` redaction. Idempotent; non-strings pass through.
+ * string fields (`body`, `snippet`, `markdown`, `suggestedBody`,
+ * `renderedHtml`) after `sanitizeToolOutput` redaction. `renderedHtml` is the
+ * already-rendered twin of the guarded markdown, so it must carry the same
+ * untrusted-data fence markers (and add them idempotently). Non-strings pass
+ * through.
  */
 export function fenceStatusPayload(payload: unknown): unknown {
   if (typeof payload === 'string') {

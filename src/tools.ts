@@ -895,6 +895,40 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         inners.push(fenceInnerOf(fenced));
         brief.handoffMarkdown = fenced;
       }
+      if (brief.handoff) {
+        // PR#65 round 3: the structured handoff object carries the same free
+        // text as handoffMarkdown (nextSteps/failedApproaches/openQuestions/
+        // harness) but was delivered raw. Fence the object fields and fold
+        // their inners into the envelope so the checksum covers them.
+        const h = { ...brief.handoff };
+        const fenceOne = (s: string): string =>
+          isUntrustedWrapped(s) ? s : wrapUntrustedText(s);
+        h.nextSteps = (h.nextSteps || []).map(fenceOne);
+        if (h.failedApproaches) h.failedApproaches = h.failedApproaches.map(fenceOne);
+        if (h.openQuestions) h.openQuestions = h.openQuestions.map(fenceOne);
+        if (typeof h.harness === 'string' && h.harness.length > 0) {
+          h.harness = fenceOne(h.harness);
+        }
+        if (typeof h.owner === 'string' && h.owner.length > 0) {
+          h.owner = fenceOne(h.owner);
+        }
+        if (typeof h.branch === 'string' && h.branch.length > 0) {
+          h.branch = fenceOne(h.branch);
+        }
+        brief.handoff = h;
+        for (const s of [
+          ...h.nextSteps,
+          ...(h.failedApproaches ?? []),
+          ...(h.openQuestions ?? [])
+        ]) {
+          inners.push(fenceInnerOf(s));
+        }
+        for (const s of [h.harness, h.owner, h.branch]) {
+          if (typeof s === 'string' && s.length > 0) {
+            inners.push(fenceInnerOf(s));
+          }
+        }
+      }
       if (brief.sessionObjective?.objective) {
         const fenced = isUntrustedWrapped(brief.sessionObjective.objective)
           ? brief.sessionObjective.objective
@@ -932,6 +966,26 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         collectOne(brief.activeSlice?.spec);
         collectOne(brief.activeSlice?.plan);
         collectOne(brief.activeSlice?.state);
+        if (brief.handoff) {
+          const h = brief.handoff;
+          for (const s of [
+            ...(h.nextSteps || []),
+            ...(h.failedApproaches ?? []),
+            ...(h.openQuestions ?? [])
+          ]) {
+            if (typeof s === 'string' && s.includes(UNTRUSTED_BEGIN)) {
+              target.push(fenceInnerOf(s));
+            }
+          }
+          if (typeof h.harness === 'string' && h.harness.includes(UNTRUSTED_BEGIN)) {
+            target.push(fenceInnerOf(h.harness));
+          }
+          for (const s of [h.owner, h.branch]) {
+            if (typeof s === 'string' && s.includes(UNTRUSTED_BEGIN)) {
+              target.push(fenceInnerOf(s));
+            }
+          }
+        }
         if (
           typeof brief.handoffMarkdown === 'string' &&
           brief.handoffMarkdown.includes(UNTRUSTED_BEGIN)
@@ -1012,6 +1066,11 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         }
         if (brief.budgetReport && overBudget()) {
           delete brief.budgetReport;
+        }
+        // PR#65 round 3: a large fenced sessionObjective must not keep the
+        // brief over budget once every lower-value field has been shed.
+        if (brief.sessionObjective && overBudget()) {
+          delete brief.sessionObjective;
         }
         while (brief.notices.length > 1 && overBudget()) {
           brief.notices.shift();

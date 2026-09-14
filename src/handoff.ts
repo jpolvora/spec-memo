@@ -118,7 +118,17 @@ export function createHandoff(options: {
 
   const failedApproaches = options.payload.failedApproaches?.filter(Boolean);
   const openQuestions = options.payload.openQuestions?.filter(Boolean);
-  const handoffText = JSON.stringify({ nextSteps, failedApproaches, openQuestions });
+  // PR#65 round 3: scan every free-text field that lands in the record or the
+  // rendered markdown, including owner/branch/harness — not just the steps.
+  const handoffText = JSON.stringify({
+    nextSteps,
+    failedApproaches,
+    openQuestions,
+    owner,
+    branch,
+    harness: options.harness,
+    shared
+  });
   const hit = inspectAgentIo(handoffText);
   if (!hit.ok) {
     logIoGuardRefusal(
