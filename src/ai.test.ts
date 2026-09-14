@@ -10,7 +10,14 @@ import { runDoctor } from './doctor.js';
 import { ensureVaultStructure, DEFAULT_VAULT_CONFIG } from './vault.js';
 import { compileBootstrapBrief } from './bootstrap.js';
 import { NoopVaultAiAgent } from './ai/noop.js';
-import { CursorSdkVaultAiAgent, buildCursorSdkPromptOptions } from './ai/cursor-sdk.js';
+import {
+  CursorSdkVaultAiAgent,
+  archiveStaleSpecMemoCloudAgents,
+  buildCursorSdkPromptOptions,
+  isCloudAgentLimitError,
+  raceWithTimeout,
+  SPEC_MEMO_CLOUD_AGENT_METADATA
+} from './ai/cursor-sdk.js';
 import { defaultAiConfig, parseAiConfig, resolveAiConfig } from './ai/config.js';
 import { resolveVaultAiAgent } from './ai/index.js';
 import { AiOpsJournaledAgent } from './ai/ops-log.js';
@@ -203,7 +210,8 @@ describe('Vault AI assistance (spec 0056)', () => {
     const config = { ...defaultAiConfig(), enabled: true };
     const opts = buildCursorSdkPromptOptions(config, 'test-key');
     assert.equal(opts.model.id, 'composer-2.5');
-    assert.deepEqual(opts.cloud, { repos: [] });
+    assert.deepEqual(opts.cloud, { repos: [], metadata: { ...SPEC_MEMO_CLOUD_AGENT_METADATA } });
+    assert.equal(opts.timeoutMs, 30000);
     assert.ok(!('local' in opts));
     assert.ok(!('cwd' in opts));
     assert.ok(!JSON.stringify(opts).includes(tempVault));
@@ -211,6 +219,75 @@ describe('Vault AI assistance (spec 0056)', () => {
     assert.equal(custom.model.id, 'custom-model');
     const blank = buildCursorSdkPromptOptions({ ...config, model: '   ' }, 'k');
     assert.equal(blank.model.id, 'composer-2.5');
+    const timed = buildCursorSdkPromptOptions({ ...config, timeoutMs: 45000 }, 'k');
+    assert.equal(timed.timeoutMs, 45000);
+  });
+
+  it('cloud agent limit errors are detected and stale spec-memo agents can be reclaimed', async () => {
+    assert.equal(
+      isCloudAgentLimitError(
+        new Error(
+          '[validation_error] Upgrade to Ultra for more Cloud Agents: You\'ve reached the limit for your current plan.'
+        )
+      ),
+      true
+    );
+    assert.equal(isCloudAgentLimitError(new Error('cursor refine timed out after 30000ms')), false);
+
+    let archived = 0;
+    const fakeAgentApi = {
+      create() {
+        throw new Error('unused in this test');
+      },
+      async cancelRun() {},
+      async archive(agentId: string) {
+        archived += 1;
+        assert.equal(agentId, 'bc-stale');
+      },
+      async delete() {},
+      async list(): Promise<{
+        items: Array<{
+          agentId: string;
+          status?: 'running' | 'finished' | 'error';
+          metadata?: Record<string, string>;
+        }>;
+      }> {
+        return {
+          items: [
+            {
+              agentId: 'bc-stale',
+              status: 'finished',
+              metadata: { source: SPEC_MEMO_CLOUD_AGENT_METADATA.source }
+            },
+            {
+              agentId: 'bc-other',
+              status: 'finished',
+              metadata: { source: 'other-client' }
+            },
+            {
+              agentId: 'bc-running',
+              status: 'running',
+              metadata: { source: SPEC_MEMO_CLOUD_AGENT_METADATA.source }
+            }
+          ]
+        };
+      }
+    };
+    const reclaimed = await archiveStaleSpecMemoCloudAgents(fakeAgentApi, 'test-key');
+    assert.equal(reclaimed, 1);
+    assert.equal(archived, 1);
+  });
+
+  it('raceWithTimeout invokes cancel hook instead of leaving cloud runs running', async () => {
+    let cancelled = false;
+    const never = new Promise<string>(() => undefined);
+    await assert.rejects(
+      raceWithTimeout(never, 30, 'cursor sdk prompt', async () => {
+        cancelled = true;
+      }),
+      /timed out after 30ms/
+    );
+    assert.equal(cancelled, true);
   });
 
   it('AC9/AC12: missing CURSOR_API_KEY means unavailable; upsert behaves as Noop', async () => {
