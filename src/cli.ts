@@ -7,13 +7,16 @@ import { runDoctor } from './doctor.js';
 import { formatCheckCaptureResult } from './capture-ignore.js';
 import { importWorkflowTree } from './importer.js';
 import { installPreCommitHook } from './hook.js';
-import { ensureVaultStructure, getVaultRoot, readVaultConfig } from './vault.js';
+import { ensureVaultStructure, getVaultRoot, readVaultConfig, resolveConfiguredPorts } from './vault.js';
 import { exportVault, importVault, resetVault, restoreVault, listBackups } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { sanitizeToolOutput } from './safety.js';
 import { startCanvasServer } from './canvas.js';
 import { syncVaults } from './sync.js';
 import { startSseServer } from './server.js';
+import { startStatusServer } from './status.js';
+import { createActivityBus } from './activity.js';
+import { runShutdown, redactCommandForDisplay, type ShutdownScope } from './shutdown.js';
 import { backfillTrapRecurrence, listProjectRecords } from './store.js';
 import { aliasLayer, rankActiveTraps, occurrenceOf, lastSeenOf, applyTrapClassification } from './recurrence.js';
 import { resolveProjectIdentity } from './identity.js';
@@ -22,7 +25,7 @@ import { installHooks } from './hooks-install.js';
 import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
 import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
-import { runStatusCheck, formatStatusDashboard } from './status-cmd.js';
+import { runStatusCheck, formatStatusDashboard, probeHttpService } from './status-cmd.js';
 import { readWikiFile, regenerateWiki, WikiError, wikiProjectExists, WIKI_PROJECT_REQUIRED } from './wiki.js';
 import { getPackageVersion } from './version.js';
 import { assertSupportedNodeRuntime } from './sqlite.js';
@@ -209,6 +212,9 @@ function printGeneralHelp(): void {
 Usage:
   memo <command> [options]
   memo serve
+  memo start <service> [options]
+  memo stop [service] [options]
+  memo restart <service> [options]
 
 Core Memory Commands:
   bootstrap       Bind cwd's git remote; compile a session brief
@@ -226,6 +232,15 @@ Core Memory Commands:
   session         Start, complete, export, or inspect session lifecycles
   activity        Generate timesheet activity and invoicing report
 
+Services & Daemon Lifecycle:
+  start         Start services: monitor (:3124), canvas (:3125), server (:3123), mcp
+  stop          Stop services by name (server, monitor, canvas) or all serve instances
+  restart       Restart a service (monitor, canvas, server, mcp)
+  monitor       Start status monitor dashboard (shortcut for memo start monitor)
+  canvas        Start interactive Canvas visualizer and graph UI server
+  server        Start MCP SSE server with status companion (shortcut for memo start server)
+  serve         Run the stdio or SSE MCP server for agent integration
+
 Utility Commands:
   status        Display read-only operational status, daemon probes, and configuration (aliases: info, state)
   setup         Configure deployment mode (local, hybrid, remote) and host MCP wiring
@@ -242,11 +257,9 @@ Utility Commands:
   restore       Restore a vault backup archive (aliases: restore-vault, import-vault)
   backups       List available timestamped backups in $SPEC_MEMO_ROOT/backups/
   reset         Reset vault database and clear records with mandatory pre-wipe backup
-  canvas        Start interactive Canvas visualizer and graph UI server
   wiki          Print or regenerate the vault project wiki (WIKI.md)
   vault         Manage vault projects (list, alias, merge, create, update, delete, rename)
   sync-vault    Synchronize delta changesets directly between vault instances
-  serve         Run the stdio or SSE MCP server for agent integration
 
 Global Options:
   --json        Output machine-readable JSON to stdout
@@ -254,7 +267,141 @@ Global Options:
 `);
 }
 
+function printStartHelp(): void {
+  console.log(`Usage: memo start <service> [options]
+
+Start a spec-memo background service or interactive server.
+If the service is already running on the requested port, reports active URLs and exits cleanly.
+
+Services:
+  monitor, status       Status monitor web dashboard (default :3124)
+  canvas                Visual graph canvas UI (default :3125)
+  server, sse           MCP SSE server with status companion (default :3123)
+  mcp                   MCP server (stdio by default, or pass --sse)
+
+Options:
+  --port <port>         Port to bind (defaults: server=3123, monitor=3124, canvas=3125)
+  --host <host>         Host to bind (default 127.0.0.1)
+  --status-port <port>  Override status companion port (server mode)
+  --no-status           Disable status companion (server mode)
+  --auth-token <token>  Bearer token for authentication
+  --vaultRoot <path>    Override vault root directory
+  --json                Output machine-readable JSON
+  -h, --help            Show this help message
+`);
+}
+
+function printStopHelp(): void {
+  console.log(`Usage: memo stop [service] [options]
+       memo shutdown [options]
+
+Gracefully stop running memo services or serve processes.
+
+Services (optional):
+  server, sse           Stop running MCP SSE / stdio server processes
+  monitor, status       Stop running status monitor dashboard processes
+  canvas                Stop running visual graph canvas UI processes
+  (omitted)             Stops all memo serve processes (default shutdown)
+
+Options:
+  --port <port>         Filter termination to processes using this port
+  --vaultRoot <path>    Scope to processes serving this vault root
+  --timeout-ms <n>      Graceful wait per process in ms (default: SPEC_MEMO_SYNC_TIMEOUT_MS or 8000)
+  --force               Skip graceful wait and terminate immediately
+  --dry-run             Preview matching targets without stopping them
+  --include-canvas      Include canvas processes when service is omitted
+  --include-monitor     Include monitor processes when service is omitted
+  --json                Output machine-readable JSON
+  -h, --help            Show this help message
+`);
+}
+
+function printRestartHelp(): void {
+  console.log(`Usage: memo restart <service> [options]
+
+Stop any running instance of the service and start a fresh instance.
+
+Services:
+  monitor, status       Restart status monitor web dashboard (default :3124)
+  canvas                Restart visual graph canvas UI (default :3125)
+  server, sse           Restart MCP SSE server with status companion (default :3123)
+  mcp                   Restart MCP server (stdio by default, or pass --sse)
+
+Options:
+  --port <port>         Port to bind (defaults: server=3123, monitor=3124, canvas=3125)
+  --host <host>         Host to bind (default 127.0.0.1)
+  --status-port <port>  Override status companion port (server mode)
+  --no-status           Disable status companion (server mode)
+  --auth-token <token>  Bearer token for authentication
+  --vaultRoot <path>    Override vault root directory
+  --json                Output machine-readable JSON
+  -h, --help            Show this help message
+`);
+}
+
 function printCommandHelp(cmd: string): void {
+  if (cmd === 'start') {
+    printStartHelp();
+    return;
+  }
+
+  if (cmd === 'restart') {
+    printRestartHelp();
+    return;
+  }
+
+  if (cmd === 'monitor' || cmd === 'status-monitor') {
+    console.log(`Usage: memo monitor [options]
+
+Shortcut for: memo start monitor [options]
+Starts the status monitor dashboard on default port :3124 (or configured ports.status).
+
+Options:
+  --port <port>         Port to bind (default: 3124)
+  --host <host>         Host to bind (default: 127.0.0.1)
+  --vaultRoot <path>    Override vault root directory
+  --auth-token <token>  Bearer token for authentication
+  --json                Output machine-readable JSON
+  -h, --help            Show this help message
+`);
+    return;
+  }
+
+  if (cmd === 'server') {
+    console.log(`Usage: memo server [options]
+
+Shortcut for: memo start server [options]
+Starts the MCP SSE server on default port :3123 with status companion on :3124.
+
+Options:
+  --port <port>         SSE port (default: 3123)
+  --status-port <port>  Status companion port (default: 3124)
+  --no-status           Disable status companion
+  --host <host>         Host to bind (default: 127.0.0.1)
+  --vaultRoot <path>    Override vault root directory
+  --auth-token <token>  Bearer token for authentication
+  --json                Output machine-readable JSON
+  -h, --help            Show this help message
+`);
+    return;
+  }
+
+  if (cmd === 'mcp') {
+    console.log(`Usage: memo mcp [options]
+
+Shortcut for: memo start mcp [options]
+Runs the MCP server (stdio by default, or pass --sse for SSE mode).
+
+Options:
+  --sse                 Run in SSE mode instead of stdio
+  --port <port>         Port to bind (SSE mode)
+  --vaultRoot <path>    Override vault root directory
+  --json                Output machine-readable JSON
+  -h, --help            Show this help message
+`);
+    return;
+  }
+
   if (cmd === 'init') {
     console.log(`Usage: memo init [options]
 
@@ -293,21 +440,7 @@ Options:
   }
 
   if (cmd === 'shutdown' || cmd === 'stop') {
-    console.log(`Usage: memo shutdown [options] (alias: memo stop)
-
-Gracefully stop orphaned memo serve processes (stdio and SSE). Useful after an
-IDE update or exit leaves a previous MCP server running and holding the vault
-lock. Each target first receives SIGTERM so its own shutdown handlers flush
-(vault-git + hybrid, fail-open); survivors are force-terminated.
-
-Options:
-  --vaultRoot       Only stop instances serving this vault root
-  --timeout-ms <n>  Graceful wait per process in ms (default: SPEC_MEMO_SYNC_TIMEOUT_MS or 8000)
-  --force           Skip the graceful wait; force-terminate immediately
-  --dry-run         List matched processes without stopping anything
-  --include-canvas  Also stop memo canvas graph UI processes (excluded by default)
-  --json            Output result as JSON
-  -h, --help        Show this help message`);
+    printStopHelp();
     return;
   }
 
@@ -1026,6 +1159,481 @@ async function runInstallSkillsCommand(parsed: ParsedCliArgs): Promise<number> {
   }
 }
 
+async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
+  const target = parsed.positionals[0]?.toLowerCase();
+
+  if (!target || target === 'help') {
+    printStartHelp();
+    return target ? 0 : 1;
+  }
+
+  const validTargets = ['monitor', 'status', 'status-monitor', 'canvas', 'server', 'sse', 'mcp'];
+  if (!validTargets.includes(target)) {
+    const msg = `Unknown service '${target}' for 'memo start'. Available services: monitor, canvas, server, mcp.`;
+    if (parsed.isJson) {
+      printJson({ isError: true, error: msg, code: 'UNKNOWN_SERVICE' });
+    } else {
+      console.error(msg);
+      printStartHelp();
+    }
+    return 1;
+  }
+
+  const vaultRootArg = (parsed.options.vaultRoot as string) || undefined;
+  const resolvedVaultRoot = getVaultRoot(vaultRootArg);
+  const config = ensureVaultStructure(resolvedVaultRoot);
+  const configuredPorts = resolveConfiguredPorts(resolvedVaultRoot, config);
+  const host = (parsed.options.host as string) || '127.0.0.1';
+
+  // 1. MONITOR
+  if (target === 'monitor' || target === 'status' || target === 'status-monitor') {
+    try {
+      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.status;
+      const authToken =
+        (parsed.options['auth-token'] as string | undefined) ||
+        (parsed.options.authToken as string | undefined) ||
+        process.env.SPEC_MEMO_AUTH_TOKEN ||
+        process.env.SPEC_MEMO_STATUS_TOKEN ||
+        process.env.SPEC_MEMO_SSE_TOKEN;
+
+      // Idempotent check: if already running, inform user and exit 0
+      const probe = await probeHttpService(`http://${host}:${port}/api/status`, 500, authToken);
+      if (probe.running || probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
+        const url = `http://${host}:${port}`;
+        if (parsed.isJson) {
+          printJson({
+            status: 'already-running',
+            service: 'status-monitor',
+            url,
+            port,
+            host
+          });
+        } else {
+          console.log(`spec-memo — Status Monitor is already running at: ${url}`);
+          console.log(`  Dashboard:     ${url}/`);
+          console.log(`  Health check:  ${url}/health`);
+          console.log(`  Events stream: ${url}/api/events/stream`);
+          console.log(`  (To restart, run: memo restart monitor)`);
+        }
+        return 0;
+      }
+
+      const activityBus = createActivityBus();
+      const instance = await startStatusServer({
+        port,
+        host,
+        vaultRoot: resolvedVaultRoot,
+        authToken,
+        activityBus
+      });
+
+      if (parsed.isJson) {
+        printJson({
+          status: 'running',
+          service: 'status-monitor',
+          url: instance.url,
+          port: instance.port,
+          host: instance.host
+        });
+      } else {
+        console.log(`spec-memo — Status Monitor running at: ${instance.url}`);
+        console.log(`  Dashboard:     ${instance.url}/`);
+        console.log(`  Health check:  ${instance.url}/health`);
+        console.log(`  Events stream: ${instance.url}/api/events/stream`);
+      }
+
+      const shutdown = async (signal: NodeJS.Signals) => {
+        try {
+          await instance.close();
+        } finally {
+          flushTelemetrySync(resolvedVaultRoot);
+          process.exit(signal === 'SIGTERM' ? 0 : 130);
+        }
+      };
+      process.once('SIGINT', () => void shutdown('SIGINT'));
+      process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
+      return new Promise(() => {});
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'STATUS_SERVER_ERROR' });
+      } else {
+        console.error(`Status monitor failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // 2. CANVAS
+  if (target === 'canvas') {
+    try {
+      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.canvas;
+      const project = (parsed.options.project as string) || undefined;
+      const authToken =
+        (parsed.options['auth-token'] as string | undefined) ||
+        (parsed.options.authToken as string | undefined);
+
+      // Idempotent check: if already running, inform user and exit 0
+      const probe = await probeHttpService(`http://${host}:${port}/api/graph`, 500, authToken);
+      if (probe.running || probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
+        const url = `http://${host}:${port}`;
+        if (parsed.isJson) {
+          printJson({
+            status: 'already-running',
+            service: 'canvas',
+            url,
+            port,
+            host
+          });
+        } else {
+          console.log(`spec-memo — Visual Graph Canvas is already running at: ${url}`);
+          console.log(`  (To restart, run: memo restart canvas)`);
+        }
+        return 0;
+      }
+
+      const instance = await startCanvasServer({ port, host, vaultRoot: resolvedVaultRoot, project, authToken });
+      if (parsed.isJson) {
+        printJson({ status: 'running', service: 'canvas', url: instance.url, port: instance.port, host: instance.host });
+      } else {
+        console.log(`spec-memo — Visual Graph Canvas running at: ${instance.url}`);
+      }
+
+      const shutdown = async (signal: NodeJS.Signals) => {
+        try {
+          await instance.close();
+        } finally {
+          flushTelemetrySync(resolvedVaultRoot);
+          process.exit(signal === 'SIGTERM' ? 0 : 130);
+        }
+      };
+      process.once('SIGINT', () => void shutdown('SIGINT'));
+      process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
+      return new Promise(() => {});
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'CANVAS_ERROR' });
+      } else {
+        console.error(`Canvas server failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // 3. SERVER (SSE)
+  if (target === 'server' || target === 'sse') {
+    try {
+      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.sse;
+      const authToken =
+        (parsed.options['auth-token'] as string | undefined) ||
+        (parsed.options.authToken as string | undefined);
+      const noStatus = isNoStatusOption(parsed.options);
+      const statusPort = parsed.options['status-port']
+        ? parseInt(String(parsed.options['status-port']), 10)
+        : parsed.options.statusPort
+          ? parseInt(String(parsed.options.statusPort), 10)
+          : undefined;
+
+      // Idempotent check: if already running, inform user and exit 0
+      const probe = await probeHttpService(`http://${host}:${port}/health`, 500, authToken);
+      if (probe.running || probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
+        const url = `http://${host}:${port}`;
+        if (parsed.isJson) {
+          printJson({
+            status: 'already-running',
+            service: 'mcp-sse',
+            url,
+            port,
+            host
+          });
+        } else {
+          console.log(`spec-memo — MCP SSE Server is already running at: ${url}`);
+          console.log(`  SSE endpoint:     ${url}/sse`);
+          console.log(`  Message endpoint: ${url}/message`);
+          console.log(`  Health check:     ${url}/health`);
+          console.log(`  (To restart, run: memo restart server)`);
+        }
+        return 0;
+      }
+
+      const instance = await startSseServer({
+        port,
+        host,
+        vaultRoot: resolvedVaultRoot,
+        authToken,
+        enableStatus: !noStatus,
+        statusPort
+      });
+      if (parsed.isJson) {
+        const payload: Record<string, unknown> = {
+          status: 'running',
+          service: 'mcp-sse',
+          url: instance.url,
+          port: instance.port,
+          host: instance.host
+        };
+        if (instance.statusUrl) {
+          payload.statusUrl = instance.statusUrl;
+          payload.statusPort = instance.statusPort;
+        }
+        printJson(payload);
+      } else {
+        console.log(`spec-memo — MCP SSE Server running at: ${instance.url}`);
+        console.log(`  SSE endpoint:     ${instance.url}/sse`);
+        console.log(`  Message endpoint: ${instance.url}/message`);
+        console.log(`  Health check:     ${instance.url}/health`);
+        if (instance.statusUrl) {
+          console.log(`  Status monitor:   ${instance.statusUrl}`);
+        }
+      }
+
+      const shutdown = async (signal: NodeJS.Signals) => {
+        try {
+          await instance.close();
+        } finally {
+          flushTelemetrySync(resolvedVaultRoot);
+          process.exit(signal === 'SIGTERM' ? 0 : 130);
+        }
+      };
+      process.once('SIGINT', () => void shutdown('SIGINT'));
+      process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
+      return new Promise(() => {});
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'SSE_ERROR' });
+      } else {
+        console.error(`SSE server failed: ${msg}`);
+      }
+      return 1;
+    }
+  }
+
+  // 4. MCP
+  if (target === 'mcp') {
+    if (parsed.options.sse) {
+      parsed.positionals[0] = 'server';
+      return runStartCommand(parsed);
+    }
+
+    const statusPort = parsed.options['status-port']
+      ? parseInt(String(parsed.options['status-port']), 10)
+      : parsed.options.statusPort
+        ? parseInt(String(parsed.options.statusPort), 10)
+        : undefined;
+    const statusHost = (parsed.options['status-host'] as string) || (parsed.options.host as string) || '127.0.0.1';
+    const statusAuthToken =
+      (parsed.options['auth-token'] as string | undefined) ||
+      (parsed.options.authToken as string | undefined);
+
+    await startMcpServer({
+      vaultRoot: resolvedVaultRoot,
+      enableStatus: stdioServeEnablesStatus(parsed.options),
+      statusPort,
+      statusHost,
+      statusAuthToken
+    });
+    return 0;
+  }
+
+  return 1;
+}
+
+async function runRestartCommand(parsed: ParsedCliArgs): Promise<number> {
+  const target = parsed.positionals[0]?.toLowerCase();
+  if (!target || target === 'help') {
+    printRestartHelp();
+    return target ? 0 : 1;
+  }
+
+  const validTargets = ['monitor', 'status', 'status-monitor', 'canvas', 'server', 'sse', 'mcp'];
+  if (!validTargets.includes(target)) {
+    const msg = `Unknown service '${target}' for 'memo restart'. Available services: monitor, canvas, server, mcp.`;
+    if (parsed.isJson) {
+      printJson({ isError: true, error: msg, code: 'UNKNOWN_SERVICE' });
+    } else {
+      console.error(msg);
+      printRestartHelp();
+    }
+    return 1;
+  }
+
+  const vaultRootArg = (parsed.options.vaultRoot as string) || undefined;
+  const resolvedVaultRoot = getVaultRoot(vaultRootArg);
+  const config = ensureVaultStructure(resolvedVaultRoot);
+  const configuredPorts = resolveConfiguredPorts(resolvedVaultRoot, config);
+  const host = (parsed.options.host as string) || '127.0.0.1';
+
+  let scope: ShutdownScope = 'serve';
+  let port = configuredPorts.sse;
+  let probePath = '/health';
+
+  if (target === 'monitor' || target === 'status' || target === 'status-monitor') {
+    scope = 'monitor';
+    port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.status;
+    probePath = '/api/status';
+  } else if (target === 'canvas') {
+    scope = 'canvas';
+    port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.canvas;
+    probePath = '/api/graph';
+  } else if (target === 'server' || target === 'sse') {
+    scope = 'serve';
+    port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : configuredPorts.sse;
+    probePath = '/health';
+  } else if (target === 'mcp') {
+    scope = 'serve';
+  }
+
+  // 1. Stop existing instances of that service
+  await runShutdown({
+    scope,
+    port,
+    vaultRoot: resolvedVaultRoot,
+    force: true,
+    includeCanvas: true,
+    includeMonitor: true
+  });
+
+  // 2. Poll until port is released (up to 2000 ms)
+  if (target !== 'mcp' || parsed.options.sse) {
+    const probeUrl = `http://${host}:${port}${probePath}`;
+    for (let i = 0; i < 20; i++) {
+      const p = await probeHttpService(probeUrl, 100);
+      if (!p.running && p.statusCode === undefined) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
+  // 3. Delegate to start
+  parsed.command = 'start';
+  return runStartCommand(parsed);
+}
+
+async function runStopCommand(parsed: ParsedCliArgs): Promise<number> {
+  try {
+    const cmdName = parsed.command === 'shutdown' ? 'shutdown' : 'stop';
+    const allowedShutdownFlags = new Set([
+      'vaultRoot',
+      'timeout-ms',
+      'timeoutMs',
+      'force',
+      'dry-run',
+      'dryRun',
+      'include-canvas',
+      'includeCanvas',
+      'include-monitor',
+      'includeMonitor',
+      'port',
+      'scope'
+    ]);
+    for (const key of Object.keys(parsed.options)) {
+      if (!allowedShutdownFlags.has(key)) {
+        throw new Error(
+          `Unknown flag --${key} for memo ${cmdName}. Usage: memo ${cmdName} [server|monitor|canvas] [--port <port>] [--vaultRoot <path>] [--timeout-ms <n>] [--force] [--dry-run] [--include-canvas] [--include-monitor] [--json]`
+        );
+      }
+    }
+    const scopeRoot = (parsed.options.vaultRoot as string | undefined) || undefined;
+    const timeoutRaw =
+      (parsed.options['timeout-ms'] as string | undefined) ??
+      (parsed.options.timeoutMs as string | undefined);
+    let timeoutMs: number | undefined;
+    if (timeoutRaw !== undefined) {
+      const parsedTimeout = Number(timeoutRaw);
+      if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0) {
+        throw new Error(
+          `Invalid --timeout-ms value: ${String(timeoutRaw)}. Expected a positive number of milliseconds.`
+        );
+      }
+      timeoutMs = Math.floor(parsedTimeout);
+    }
+    const force = parsed.options.force === true || parsed.options.force === 'true';
+    const dryRun =
+      parsed.options['dry-run'] === true ||
+      parsed.options['dry-run'] === 'true' ||
+      parsed.options.dryRun === true;
+
+    const target = parsed.positionals[0]?.toLowerCase();
+    let explicitScope: ShutdownScope | undefined;
+    let includeCanvas =
+      parsed.options['include-canvas'] === true ||
+      parsed.options['include-canvas'] === 'true' ||
+      parsed.options.includeCanvas === true;
+    let includeMonitor =
+      parsed.options['include-monitor'] === true ||
+      parsed.options['include-monitor'] === 'true' ||
+      parsed.options.includeMonitor === true;
+
+    if (target === 'server' || target === 'sse' || target === 'mcp') {
+      explicitScope = 'serve';
+    } else if (target === 'monitor' || target === 'status' || target === 'status-monitor') {
+      explicitScope = 'monitor';
+      includeMonitor = true;
+    } else if (target === 'canvas') {
+      explicitScope = 'canvas';
+      includeCanvas = true;
+    } else if (target && target !== 'all') {
+      const msg = `Unknown stop service '${target}'. Available services: server, monitor, canvas.`;
+      if (parsed.isJson) {
+        printJson({ isError: true, error: msg, code: 'UNKNOWN_SERVICE' });
+      } else {
+        console.error(msg);
+        printStopHelp();
+      }
+      return 1;
+    }
+
+    const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : undefined;
+
+    const { report, exitCode } = await runShutdown({
+      vaultRoot: scopeRoot,
+      timeoutMs,
+      force,
+      dryRun,
+      includeCanvas,
+      includeMonitor,
+      scope: explicitScope,
+      port
+    });
+
+    const displayTargets = report.targets.map((t) => ({
+      ...t,
+      command: redactCommandForDisplay(t.command)
+    }));
+
+    if (parsed.isJson) {
+      printJson({ ...report, targets: displayTargets });
+    } else if (displayTargets.length === 0) {
+      const scopeLabel = explicitScope ? ` ${explicitScope}` : '';
+      const portLabel = port ? ` on port ${port}` : '';
+      console.log(`No running memo${scopeLabel} processes found${portLabel}.`);
+    } else {
+      console.log(`spec-memo — Stopped (${report.summary.total} target(s), timeout ${report.timeoutMs} ms)\n`);
+      for (const t of displayTargets) {
+        const reason = t.reason ? ` — ${t.reason}` : '';
+        console.log(`  [${t.result}] PID ${t.pid} (${t.scope}): ${t.command}${reason}`);
+      }
+      console.log(
+        `Summary: graceful=${report.summary.stoppedGraceful}, forced=${report.summary.stoppedForced}, already-exited=${report.summary.alreadyExited}, skipped=${report.summary.skipped}, failed=${report.summary.failed}`
+      );
+    }
+    return exitCode;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (parsed.isJson) {
+      printJson({ isError: true, error: msg, code: 'SHUTDOWN_ERROR' });
+    } else {
+      const prefix = parsed.command === 'shutdown' ? 'Shutdown' : 'Stop';
+      console.error(`${prefix} failed: ${msg}`);
+    }
+    return 1;
+  }
+}
+
 function isReadOnlyStatusCommand(parsed: ParsedCliArgs): boolean {
   return (
     parsed.command === 'status' ||
@@ -1586,132 +2194,41 @@ async function runCliInner(
     return 0;
   }
 
-  // Handle memo shutdown command (alias: stop) — issue #56, spec 0053-memo-shutdown
-  if (parsed.command === 'shutdown' || parsed.command === 'stop') {
-    try {
-      const allowedShutdownFlags = new Set([
-        'vaultRoot',
-        'timeout-ms',
-        'timeoutMs',
-        'force',
-        'dry-run',
-        'dryRun',
-        'include-canvas',
-        'includeCanvas'
-      ]);
-      for (const key of Object.keys(parsed.options)) {
-        if (!allowedShutdownFlags.has(key)) {
-          throw new Error(
-            `Unknown flag --${key} for memo shutdown. Usage: memo shutdown [--vaultRoot <path>] [--timeout-ms <n>] [--force] [--dry-run] [--include-canvas] [--json]`
-          );
-        }
-      }
-      const scopeRoot =
-        (parsed.options.vaultRoot as string | undefined) || undefined;
-      const timeoutRaw =
-        (parsed.options['timeout-ms'] as string | undefined) ??
-        (parsed.options.timeoutMs as string | undefined);
-      let timeoutMs: number | undefined;
-      if (timeoutRaw !== undefined) {
-        const parsedTimeout = Number(timeoutRaw);
-        if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0) {
-          throw new Error(
-            `Invalid --timeout-ms value: ${String(timeoutRaw)}. Expected a positive number of milliseconds.`
-          );
-        }
-        timeoutMs = Math.floor(parsedTimeout);
-      }
-      const force = parsed.options.force === true || parsed.options.force === 'true';
-      const dryRun =
-        parsed.options['dry-run'] === true ||
-        parsed.options['dry-run'] === 'true' ||
-        parsed.options.dryRun === true;
-      const includeCanvas =
-        parsed.options['include-canvas'] === true ||
-        parsed.options['include-canvas'] === 'true' ||
-        parsed.options.includeCanvas === true;
-
-      const { runShutdown } = await import('./shutdown.js');
-      const { redactCommandForDisplay } = await import('./shutdown.js');
-      const { report, exitCode } = await runShutdown({
-        vaultRoot: scopeRoot,
-        timeoutMs,
-        force,
-        dryRun,
-        includeCanvas
-      });
-      // Never echo bearer material: redact --auth-token values from reported
-      // command lines before stdout / --json output (#58 review).
-      const displayTargets = report.targets.map((t) => ({
-        ...t,
-        command: redactCommandForDisplay(t.command)
-      }));
-
-      if (parsed.isJson) {
-        printJson({ ...report, targets: displayTargets });
-      } else if (displayTargets.length === 0) {
-        console.log('No running memo serve processes found.');
-      } else {
-        console.log(`spec-memo — Shutdown (${report.summary.total} target(s), timeout ${report.timeoutMs} ms)\n`);
-        for (const t of displayTargets) {
-          const reason = t.reason ? ` — ${t.reason}` : '';
-          console.log(`  [${t.result}] PID ${t.pid} (${t.scope}): ${t.command}${reason}`);
-        }
-        console.log(
-          `Summary: graceful=${report.summary.stoppedGraceful}, forced=${report.summary.stoppedForced}, already-exited=${report.summary.alreadyExited}, skipped=${report.summary.skipped}, failed=${report.summary.failed}`
-        );
-      }
-      return exitCode;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (parsed.isJson) {
-        printJson({ isError: true, error: msg, code: 'SHUTDOWN_ERROR' });
-      } else {
-        console.error(`Shutdown failed: ${msg}`);
-      }
-      return 1;
-    }
+  if (parsed.command === 'monitor' || parsed.command === 'status-monitor') {
+    parsed.command = 'start';
+    parsed.positionals.unshift('monitor');
+    return runStartCommand(parsed);
   }
 
-  // Handle memo canvas command
+  if (parsed.command === 'server') {
+    parsed.command = 'start';
+    parsed.positionals.unshift('server');
+    return runStartCommand(parsed);
+  }
+
+  if (parsed.command === 'mcp') {
+    parsed.command = 'start';
+    parsed.positionals.unshift('mcp');
+    return runStartCommand(parsed);
+  }
+
   if (parsed.command === 'canvas' || parsed.command === 'serve-canvas') {
-    try {
-      const port = parsed.options.port ? parseInt(String(parsed.options.port), 10) : undefined;
-      const host = (parsed.options.host as string) || '127.0.0.1';
-      const vaultRoot = parsed.options.vaultRoot as string | undefined;
-      const project = (parsed.options.project as string) || undefined;
-      const authToken =
-        (parsed.options['auth-token'] as string | undefined) ||
-        (parsed.options.authToken as string | undefined);
+    parsed.command = 'start';
+    parsed.positionals.unshift('canvas');
+    return runStartCommand(parsed);
+  }
 
-      const instance = await startCanvasServer({ port, host, vaultRoot, project, authToken });
-      if (parsed.isJson) {
-        printJson({ status: 'running', url: instance.url, port: instance.port, host: instance.host });
-      } else {
-        console.log(`spec-memo — Visual Graph Canvas running at: ${instance.url}`);
-      }
+  if (parsed.command === 'start') {
+    return runStartCommand(parsed);
+  }
 
-      const shutdown = async (signal: NodeJS.Signals) => {
-        try {
-          await instance.close();
-        } finally {
-          flushTelemetrySync(vaultRoot);
-          process.exit(signal === 'SIGTERM' ? 0 : 130);
-        }
-      };
-      process.once('SIGINT', () => void shutdown('SIGINT'));
-      process.once('SIGTERM', () => void shutdown('SIGTERM'));
+  if (parsed.command === 'restart') {
+    return runRestartCommand(parsed);
+  }
 
-      return new Promise(() => {});
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (parsed.isJson) {
-        printJson({ isError: true, error: msg, code: 'CANVAS_ERROR' });
-      } else {
-        console.error(`Canvas server failed: ${msg}`);
-      }
-      return 1;
-    }
+  // Handle memo shutdown command (alias: stop) — issue #56, spec 0053-memo-shutdown
+  if (parsed.command === 'shutdown' || parsed.command === 'stop') {
+    return runStopCommand(parsed);
   }
 
   // Handle memo sync-vault command

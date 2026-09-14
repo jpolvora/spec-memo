@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.34.2**.
+**Local working memory for coding agents outside the product repository.** Version **0.35.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -269,11 +269,12 @@ All daemon ports are fully configurable via `~/.spec-memo/config.json` under the
 }
 ```
 
-| Service | Default URL | Start |
-|---------|-------------|--------|
-| MCP SSE transport | `http://127.0.0.1:3123` (`/sse`, `/message`, `/health`) | `memo serve --sse` |
-| Status monitor | `http://127.0.0.1:3124/` | co-starts with `--sse` (disable: `--no-status`; override: `--status-port`) |
-| Canvas graph viewer | `http://127.0.0.1:3125` | `memo canvas` |
+| Service | Default URL | Shortcut | Full Command |
+|---------|-------------|----------|--------------|
+| MCP SSE transport | `http://127.0.0.1:3123` (`/sse`, `/message`, `/health`) | `memo server` | `memo start server` (or `memo serve --sse`) |
+| Status monitor | `http://127.0.0.1:3124/` | `memo monitor` | `memo start monitor` (or co-starts with `memo server`) |
+| Canvas graph viewer | `http://127.0.0.1:3125` | `memo canvas` | `memo start canvas` |
+| MCP stdio server | Stdio transport | `memo mcp` | `memo start mcp` (or `memo serve`) |
 
 ### How to run (local CLI)
 
@@ -331,6 +332,35 @@ memo serve --sse --json               # machine metadata (includes statusUrl)
 ```
 
 **Flags:** `--host` (default `127.0.0.1`), `--port`, `--status-port`, `--no-status`, `--auth-token`, `--vaultRoot`.
+
+### Service Lifecycle Commands (`start`, `stop`, `restart`)
+
+Easily start, stop, and restart spec-memo background services and web companion dashboards:
+
+#### 1. Starting Services (`memo start` or shortcuts)
+```bash
+memo start monitor      # Start Status Monitor on :3124 (shortcut: memo monitor)
+memo start server       # Start MCP SSE Server on :3123 with companion :3124 (shortcut: memo server)
+memo start canvas       # Start Visual Knowledge Graph on :3125 (shortcut: memo canvas)
+memo start mcp          # Start MCP stdio server (shortcut: memo mcp; pass --sse for SSE)
+```
+* **Idempotent Detection:** If the requested service is already running on the target port, `memo start` cleanly outputs the active URLs and health endpoints and exits `0` without throwing port conflict errors.
+
+#### 2. Stopping Services (`memo stop` or `memo shutdown`)
+```bash
+memo stop               # Gracefully stops all memo serve processes (alias: memo shutdown)
+memo stop server        # Stop only MCP SSE / serve processes
+memo stop monitor       # Stop status monitor companion processes
+memo stop canvas        # Stop visual knowledge graph canvas processes
+memo stop --port 3124   # Stop processes bound to a specific port
+```
+
+#### 3. Restarting Services (`memo restart`)
+```bash
+memo restart monitor    # Stops existing monitor, waits for port release, and restarts
+memo restart server     # Stops existing SSE server, waits for port release, and restarts
+memo restart canvas     # Stops existing canvas, waits for port release, and restarts
+```
 
 ### Stopping orphaned servers (`memo shutdown`)
 

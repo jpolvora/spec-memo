@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.34.2
+version: 0.35.0
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -575,12 +575,18 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 | CLI Command | Description & Flags |
 |---|---|
 | `memo status` | **Operational status & config inspector:** Read-only dashboard, live daemon probes (SSE `:3123`, Status companion `:3124`, Canvas `:3125`, remote `/health`), active project record breakdown, and storage metrics. Aliases: `info`, `state`, `setup --check`. Flags: `--check`, `--json`, `--cwd`, `--vaultRoot`. |
+| `memo start` | **Start services:** Start `monitor` (:3124), `canvas` (:3125), `server` (:3123), or `mcp` (stdio/`--sse`). Idempotent: detects running instances and prints info without error. Shortcuts: `memo monitor`, `memo server`, `memo mcp`, `memo canvas`. Flags: `--port`, `--host`, `--vaultRoot`, `--auth-token`, `--json`. |
+| `memo restart` | **Restart services:** Stop existing instance, await port release, and start fresh instance (`monitor`, `canvas`, `server`). Flags: `--port`, `--host`, `--vaultRoot`, `--auth-token`, `--json`. |
+| `memo stop` | **Stop services:** Stop specific service (`server`, `monitor`, `canvas`) or by `--port`. Plain `memo stop` preserves global shutdown. Alias: `memo shutdown`. Flags: `--port`, `--vaultRoot`, `--timeout-ms`, `--force`, `--dry-run`, `--include-canvas`, `--include-monitor`, `--json`. |
 | `memo setup` | **Host/deployment only:** mode (`local`, `hybrid`, `remote`) & host MCP wiring (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). Does **not** write workflow-skills `{sharedDir}/config.json` / `specMemo.*` — use `ws-spec-memo` for that. Flags: `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo doctor` | Vault health, project identity, FTS5 integrity, and in-repo pollution scan. Flags: `--rebuild` (re-index FTS), `--fix` (delete forbidden in-repo files), `--json`. |
 | `memo rank` | Recurrence-ranked traps report by occurrence count. Flags: `--layer <name>`, `--limit <n>`, `--backfill`, `--json`. |
 | `memo resume` | Opt-in continuation brief (CLI extra; not an MCP tool). Equals `bootstrap` with `continuation: true`. Injects optional `sessionResume`, handoff, and ≤3 traps. Flags: `[query]`, `--cwd`, `--path`, `--slug`, `--max-bytes`, `--session-id`, `--explain`, `--json`. |
 | `memo wiki` | Print or regenerate per-project vault wiki (`projects/{id}/WIKI.md`). Flags: `--project`, `--regenerate`, `--json`. Not available in remote mode. |
-| `memo canvas` | Launch graph visualizer dashboard (default port `3125`, configurable via `config.json` `ports.canvas`). Flags: `--port`, `--host`, `--project`. |
+| `memo canvas` | Launch graph visualizer dashboard (shortcut for `memo start canvas`, default port `3125`). Flags: `--port`, `--host`, `--project`. |
+| `memo monitor` | Launch status monitor companion dashboard (shortcut for `memo start monitor`, default port `3124`). Flags: `--port`, `--host`, `--vaultRoot`, `--auth-token`, `--json`. |
+| `memo server` | Launch MCP SSE server with status companion (shortcut for `memo start server`, default port `3123`). Flags: `--port`, `--status-port`, `--no-status`, `--host`, `--vaultRoot`, `--auth-token`, `--json`. |
+| `memo mcp` | Run MCP server (shortcut for `memo start mcp`, stdio by default, or `--sse`). Flags: `--sse`, `--port`, `--vaultRoot`, `--json`. |
 | `memo serve` | Start MCP transport. Stdio (default) or HTTP/SSE (`--sse` port `3123`, status companion `:3124`, configurable via `config.json` `ports.sse` / `ports.status`). Off-loopback requires `--auth-token` or `SPEC_MEMO_AUTH_TOKEN`. |
 | `memo shutdown` | Gracefully stop orphaned serve processes (alias: `stop`). SIGTERM first (own handlers flush), force after timeout. Flags: `--vaultRoot`, `--timeout-ms`, `--force`, `--dry-run`, `--include-canvas`, `--json`. |
 | `memo hook install` | Install Git pre-commit write-block hook to block `.agents/plans/`, `MEMORY.md`, `.state.md`. Bypass: `SKIP_MEMO_HOOK=1`. |
@@ -661,6 +667,9 @@ Match user intent to the correct action:
 | Export documentation / skill | **publish** | MCP `promote` (`destination: "..."`) |
 | Package version check | **version** | MCP `check_version` |
 | Install runtime skill in consumer | **install** | MCP `install_skills` (`productRoot: "."`) or `global: true` / CLI `--global` |
-| Visual graph UI | **observe** | CLI `memo canvas` |
-| Start SSE daemon + status UI | **serve** | CLI `memo serve --sse --status-port 3124` |
+| Visual graph UI | **observe** | CLI `memo canvas` (or `memo start canvas`) |
+| Start status monitor UI | **monitor** | CLI `memo monitor` (or `memo start monitor`) |
+| Start SSE daemon + status UI | **serve** | CLI `memo server` (or `memo start server`, `memo serve --sse`) |
+| Restart background service | **restart** | CLI `memo restart [monitor\|canvas\|server]` |
+| Stop background service or daemon | **stop** | CLI `memo stop [server\|monitor\|canvas]` or `memo shutdown` |
 | Pre-commit write guard | **guard** | CLI `memo hook install` |

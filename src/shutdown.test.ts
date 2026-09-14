@@ -5,6 +5,8 @@ import {
   filterShutdownTargets,
   isCanvasCommand,
   isMemoServeCommand,
+  isMonitorCommand,
+  matchesScopePort,
   matchesScopeRoot,
   redactCommandForDisplay,
   resolveShutdownTimeoutMs,
@@ -87,6 +89,41 @@ describe('shutdown discovery filtering (spec 0053 AC2/AC3)', () => {
       [101, 102]
     );
     assert.equal(withCanvas.targets[1]?.scope, 'canvas');
+  });
+
+  it('classifies monitor separately and supports scope and port filtering', () => {
+    const MONITOR = 'node /opt/spec-memo/dist/cli.js monitor --port 3124';
+    const START_MONITOR = 'node /opt/spec-memo/dist/cli.js start monitor';
+    const RESTART_MONITOR = 'node /opt/spec-memo/dist/cli.js restart monitor --port 4000';
+    assert.equal(isMonitorCommand(MONITOR), true);
+    assert.equal(isMonitorCommand(START_MONITOR), true);
+    assert.equal(isMonitorCommand(RESTART_MONITOR), true);
+    assert.equal(classifyMemoCommand(MONITOR), 'monitor');
+    assert.equal(classifyMemoCommand(START_MONITOR), 'monitor');
+
+    // Default shutdown excludes monitor
+    const procs: MemoProcessInfo[] = [
+      { pid: 201, command: SERVE_POSIX },
+      { pid: 202, command: MONITOR },
+      { pid: 203, command: CANVAS }
+    ];
+    const defaultTargets = filterShutdownTargets(procs, { currentPid: 1 });
+    assert.deepEqual(defaultTargets.targets.map((t) => t.pid), [201]);
+
+    // Explicit scope: 'monitor' targets only monitor
+    const monitorOnly = filterShutdownTargets(procs, { currentPid: 1, scope: 'monitor' });
+    assert.deepEqual(monitorOnly.targets.map((t) => t.pid), [202]);
+    assert.equal(monitorOnly.targets[0]?.scope, 'monitor');
+
+    // Explicit scope: 'canvas' targets only canvas
+    const canvasOnly = filterShutdownTargets(procs, { currentPid: 1, scope: 'canvas' });
+    assert.deepEqual(canvasOnly.targets.map((t) => t.pid), [203]);
+
+    // Port filtering
+    assert.equal(matchesScopePort(MONITOR, 'monitor', 3124), true);
+    assert.equal(matchesScopePort(MONITOR, 'monitor', 9999), false);
+    assert.equal(matchesScopePort(START_MONITOR, 'monitor', 3124), true); // default port
+    assert.equal(matchesScopePort(CANVAS, 'canvas', 3125), true); // explicit or default
   });
 
   it('excludes pid 0/1, empty commands, and reports self as skipped-self', () => {

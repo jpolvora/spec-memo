@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as net from 'node:net';
+import * as http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isCliMainEntry, runCli, stdioServeEnablesStatus } from './cli.js';
@@ -1686,6 +1687,188 @@ describe('CLI init and vault rename/merge (AC6-AC10, AC20, AC28, NS1)', () => {
     }
   });
 });
+
+describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
+  it('AC1, AC2, AC8: start --help exits 0 with usage and services', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['start', '--help']);
+      assert.equal(code, 0);
+      assert.match(out, /Usage: memo start/);
+      assert.match(out, /monitor/);
+      assert.match(out, /canvas/);
+      assert.match(out, /server/);
+      assert.match(out, /mcp/);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC8: start without target exits 1 with usage', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['start']);
+      assert.equal(code, 1);
+      assert.match(out, /Usage: memo start/);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC8: start unknown exits 1 with error and code', async () => {
+    let err = '';
+    const origErr = console.error;
+    console.error = (...a) => { err += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['start', 'bogus']);
+      assert.equal(code, 1);
+      assert.match(err, /Unknown service 'bogus'/);
+    } finally {
+      console.error = origErr;
+    }
+
+    let jsonOut = '';
+    const origLog = console.log;
+    console.log = (...a) => { jsonOut += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['start', 'bogus', '--json']);
+      assert.equal(code, 1);
+      const parsed = JSON.parse(jsonOut.trim());
+      assert.equal(parsed.isError, true);
+      assert.equal(parsed.code, 'UNKNOWN_SERVICE');
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC6: restart --help exits 0, restart without args exits 1', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['restart', '--help']);
+      assert.equal(code, 0);
+      assert.match(out, /Usage: memo restart/);
+
+      const codeNoArgs = await runCli(['restart']);
+      assert.equal(codeNoArgs, 1);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC7: stop --help exits 0, stop unknown exits 1', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['stop', '--help']);
+      assert.equal(code, 0);
+      assert.match(out, /Usage: memo stop/);
+    } finally {
+      console.log = origLog;
+    }
+
+    let err = '';
+    const origErr = console.error;
+    console.error = (...a) => { err += a.join(' ') + '\n'; };
+    try {
+      const code = await runCli(['stop', 'bogus']);
+      assert.equal(code, 1);
+      assert.match(err, /Unknown stop service 'bogus'/);
+    } finally {
+      console.error = origErr;
+    }
+  });
+
+  it('AC7: stop server/monitor/canvas --dry-run --json emits report', async () => {
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+    try {
+      const codeServer = await runCli(['stop', 'server', '--dry-run', '--json']);
+      assert.equal(codeServer, 0);
+      const parsedServer = JSON.parse(out.trim());
+      assert.equal(parsedServer.ok, true);
+
+      out = '';
+      const codeMonitor = await runCli(['stop', 'monitor', '--dry-run', '--json']);
+      assert.equal(codeMonitor, 0);
+      const parsedMonitor = JSON.parse(out.trim());
+      assert.equal(parsedMonitor.ok, true);
+
+      out = '';
+      const codeCanvas = await runCli(['stop', 'canvas', '--dry-run', '--json']);
+      assert.equal(codeCanvas, 0);
+      const parsedCanvas = JSON.parse(out.trim());
+      assert.equal(parsedCanvas.ok, true);
+    } finally {
+      console.log = origLog;
+    }
+  });
+
+  it('AC5: shortcuts monitor/server/mcp with --help exit 0', async () => {
+    assert.equal(await runCli(['monitor', '--help']), 0);
+    assert.equal(await runCli(['server', '--help']), 0);
+    assert.equal(await runCli(['mcp', '--help']), 0);
+  });
+
+  it('AC9, AC10: idempotent detection when service is already running on port', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-idempotent-'));
+    const vault = path.join(tmp, 'vault');
+    fs.mkdirSync(vault, { recursive: true });
+    const { ensureVaultStructure } = await import('./vault.js');
+    ensureVaultStructure(vault);
+
+    // Start a mock HTTP server to simulate an already-running service
+    const mockPort = await allocateLoopbackPort();
+    const mockServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, status: 'mock' }));
+    });
+    await new Promise<void>((resolve) => mockServer.listen(mockPort, '127.0.0.1', () => resolve()));
+
+    let out = '';
+    const origLog = console.log;
+    console.log = (...a) => { out += a.join(' ') + '\n'; };
+
+    try {
+      // Test monitor idempotent start
+      const codeMonitor = await runCli(['start', 'monitor', '--port', String(mockPort), '--vaultRoot', vault, '--json']);
+      assert.equal(codeMonitor, 0);
+      const parsedMonitor = JSON.parse(out.trim());
+      assert.equal(parsedMonitor.status, 'already-running');
+      assert.equal(parsedMonitor.service, 'status-monitor');
+      assert.equal(parsedMonitor.port, mockPort);
+
+      // Test canvas idempotent start
+      out = '';
+      const codeCanvas = await runCli(['start', 'canvas', '--port', String(mockPort), '--vaultRoot', vault, '--json']);
+      assert.equal(codeCanvas, 0);
+      const parsedCanvas = JSON.parse(out.trim());
+      assert.equal(parsedCanvas.status, 'already-running');
+      assert.equal(parsedCanvas.service, 'canvas');
+
+      // Test server idempotent start
+      out = '';
+      const codeServer = await runCli(['start', 'server', '--port', String(mockPort), '--vaultRoot', vault, '--json']);
+      assert.equal(codeServer, 0);
+      const parsedServer = JSON.parse(out.trim());
+      assert.equal(parsedServer.status, 'already-running');
+      assert.equal(parsedServer.service, 'mcp-sse');
+    } finally {
+      console.log = origLog;
+      await new Promise<void>((resolve) => mockServer.close(() => resolve()));
+      closeIndex(vault);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
 
 
 

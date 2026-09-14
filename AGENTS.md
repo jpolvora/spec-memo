@@ -220,14 +220,18 @@ Agents executing shell commands or diagnosing environment issues must follow thi
    - If `memo: command not found` occurs in a subagent or tool execution, immediately fall back to `node dist/cli.js` within the repository, or check if the global npm bin path (`%AppData%\Roaming\npm` / `~/.local/bin`) needs to be added to `PATH`.
 
 
-### Serve (MCP transport)
+### Serve & Service Lifecycle (MCP & Web Companion)
 
-| Mode | Command | Notes |
-|------|---------|--------|
-| Stdio | `memo serve` | Default for Cursor/Claude Desktop host spawn (proxies in remote mode) |
-| SSE | `memo serve --sse` | Prints SSE URL + status URL; `--json` emits `url` / `statusUrl` |
+| Mode / Intent | Command / Shortcut | Notes |
+|---------------|-------------------|--------|
+| Stdio MCP | `memo mcp` (or `memo start mcp`, `memo serve`) | Default for Cursor/Claude Desktop host spawn (proxies in remote mode) |
+| SSE Server | `memo server` (or `memo start server`, `memo serve --sse`) | Starts MCP SSE (:3123) + Status monitor companion (:3124); idempotent if running |
+| Status Monitor | `memo monitor` (or `memo start monitor`) | Starts read-only companion on :3124; idempotent if running |
+| Knowledge Graph | `memo canvas` (or `memo start canvas`) | Starts visual graph UI on :3125; idempotent if running |
+| Restart | `memo restart [monitor\|canvas\|server]` | Graceful stop, await port release, and restart service |
+| Stop Specific | `memo stop [server\|monitor\|canvas] [--port <port>]` | Stop specific service processes or port |
+| Shutdown All | `memo shutdown` (alias: plain `memo stop`) | Gracefully stop all orphaned serve processes (SIGTERM first, force after timeout) |
 | Flags | `--host` `--port` `--status-port` `--no-status` `--auth-token` `--vaultRoot` | Non-loopback without token **must fail** (`SPEC_MEMO_SSE_TOKEN` / `SPEC_MEMO_AUTH_TOKEN` / `--auth-token`) |
-| Shutdown | `memo shutdown [--vaultRoot] [--timeout-ms] [--force] [--dry-run] [--include-canvas] [--json]` (alias: `stop`) | Gracefully stop orphaned serve processes (SIGTERM first, force after timeout). Preview with `--dry-run`; canvas excluded by default. Use after IDE exit/update before restart. |
 
 On status companion bind failure: close SSE listener + activity bus before rejecting (trap `sse-status-bind-rollback`). On SSE transport disconnect: `await mcpServer.close()` (trap `sse-mcp-server-close`).
 

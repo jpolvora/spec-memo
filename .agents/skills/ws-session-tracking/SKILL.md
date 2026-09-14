@@ -1,6 +1,6 @@
 ---
 name: ws-session-tracking
-version: 0.34.2
+version: 0.35.0
 description: >-
   Session-level deliverable and prompt intent tracking engine. Automatically correlates turn-level
   prompt instructions with git commits, PR deliverables, and task lifecycle boundaries.

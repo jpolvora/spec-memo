@@ -243,6 +243,7 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 38 | `sync-conflict-reconciliation` | `[x]` | Phase 7 | Vault sync conflict reconciliation, semantic auto-merge, rollback journal, single conflict cap |
 | 39 | `project-wiki` | `[x]` | Phase 7 | Per-project vault wiki (`WIKI.md`), status Wiki tab, CLI `memo wiki` |
 | 40 | `install-hooks-skills-interactive` | `[x]` | Phase 8 | Interactive installer wizard with explicit scope, hosts, conflict policy, confirmation, and Codex support |
+| 41 | `cli-start-shortcuts` | `[x]` | Phase 8 | CLI service lifecycle (start, stop, restart) and shortcuts (monitor, server, canvas, mcp) |
 
 Split a row into `*.spec.md` only when that slice starts. Until then this table is the backlog.
 
@@ -332,6 +333,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-09-14 | open-github-issues-batch | Fix open GitHub bugs #66/#67/#68: AI Ops journal wired at resolveVaultAiAgent, version-skills test vault isolation + regression, silent Chrome probes on status + SSE; v0.33.1 | npm test 824 pass + 2 environmental (operator daemon holds :3123) |
 | 2026-09-14 | ai-ops-test-ai-button | AI Ops "Test AI" connectivity probe (issue #69): operation `test` journal row, `POST /api/ai-ops/test` force-logged raw agent, **Test AI** button + operation filter option; v0.34.0 | npm test 837 pass |
 | 2026-09-14 | ai-timeout-config | AI cursor-sdk timeout (issue #70): `timeoutMs` default 30s, shared constant replaces `15000` fallbacks, vault seed + README; v0.34.0 | npm test 837 pass |
+| 2026-09-14 | cli-start-shortcuts | CLI service lifecycle (start, stop, restart) and shortcuts (monitor, server, canvas, mcp) | v0.35.0 |
 
 
 ## 12. Related docs

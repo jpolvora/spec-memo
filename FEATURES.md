@@ -132,6 +132,7 @@ Out of this repo’s Phase 1. Listed so agents do not invent it early.
 - [x] **Interactive Canvas UI & Visual Graph.** Embedded HTTP visualizer (`memo canvas`) with SVG/Canvas force graph, dark theme, node filter, inspection drawer, and REST API.
 - [x] **Multi-Machine Vault Sync.** Delta changeset export, two-way peer vault synchronization (`memo sync-vault`), and conflict-safe resolution.
 - [x] **HTTP / SSE MCP Server Transport.** Standalone network daemon (`memo serve --sse`) supporting Server-Sent Events (SSE) for remote agents and IDE plugins.
+- [x] **CLI Service Lifecycle & Shortcuts.** Subcommands `memo start [monitor|canvas|server|mcp]`, `memo restart`, and `memo stop [server|monitor|canvas]` with direct shortcuts `memo monitor`, `memo server`, `memo mcp`, and `memo canvas` (idempotent port detection, safe graceful shutdown, and port release polling).
 
 ---
 

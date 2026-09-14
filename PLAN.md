@@ -258,3 +258,5 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 | 2026-09-14 | open-github-issues-batch | Fix open GitHub bugs #66/#67/#68: AI Ops journal wired at resolveVaultAiAgent, version-skills test vault isolation + regression, silent Chrome probes on status + SSE; v0.33.1; npm test 824 pass + 2 environmental (operator daemon holds :3123) |
 | 2026-09-14 | ai-ops-test-ai-button | AI Ops "Test AI" connectivity probe (issue #69): operation `test` journal row, `POST /api/ai-ops/test` force-logged raw agent, **Test AI** button + operation filter option; v0.34.0; npm test 837 pass |
 | 2026-09-14 | ai-timeout-config | AI cursor-sdk timeout (issue #70): `timeoutMs` default 30s, shared constant replaces `15000` fallbacks, vault seed + README; v0.34.0; npm test 837 pass |
+| 2026-09-14 | cli-start-shortcuts | CLI service lifecycle (start, stop, restart) and direct shortcuts (monitor, server, canvas, mcp), idempotent port checks, tests & docs; v0.35.0; npm test 851 pass |
+
