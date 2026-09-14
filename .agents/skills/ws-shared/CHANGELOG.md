@@ -1,3 +1,8 @@
+### [2026-09-13 20:30] Agent: Cursor Grok 4.6
+- **Prompt**: `/ws-spec-write` Error Logs checkboxes, Delete confirm, New Issue textarea
+- **Done**: Wrote `.agents/specs/0061-status-error-logs-actions.spec.md` (29 ACs); no `{plansDir}` register
+- **Result**: Authoring validate PASS. Awaiting index.PRD track gate.
+
 ### [2026-09-13 20:18] Agent: Cursor Grok 4.6
 - **Prompt**: `/ws-spec-from-provider` fetch all GH issues into a single spec
 - **Done**: Listed open issues #66 #67 #68; wrote `.agents/specs/0060-open-github-issues-batch.spec.md` (19 ACs); registered `{plansDir}` step-00
