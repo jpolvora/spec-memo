@@ -1,3 +1,8 @@
+### [2026-09-13 20:45] Agent: Cursor Grok 4.6
+- **Prompt**: `/ws-fable-method` implement 0061 Error Logs select/delete/New Issue
+- **Done**: Checkboxes + Delete modal + New Issue textarea; `POST /api/error-logs/delete`; tests and README/ws-memo
+- **Result**: `node --test dist/error-logger.test.js dist/status.test.js` 98 pass. Full `npm test` 828 pass; 1 unrelated `EADDRINUSE :3123` in server.test
+
 ### [2026-09-13 20:30] Agent: Cursor Grok 4.6
 - **Prompt**: `/ws-spec-write` Error Logs checkboxes, Delete confirm, New Issue textarea
 - **Done**: Wrote `.agents/specs/0061-status-error-logs-actions.spec.md` (29 ACs); no `{plansDir}` register

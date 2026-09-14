@@ -9,6 +9,10 @@ import {
   logErrorReport,
   readErrorLogs,
   clearErrorLogs,
+  listErrorLogEntries,
+  deleteErrorLogEntries,
+  parseErrorLogDeleteBody,
+  ERROR_LOG_SCAN_MAX_BYTES,
   ErrorReport
 } from './error-logger.js';
 
@@ -191,5 +195,56 @@ describe('Error Logger Subsystem', () => {
     clearErrorLogs(testVaultRoot);
     assert(!fs.existsSync(path.join(testVaultRoot, 'error.logs')));
     assert.strictEqual(readErrorLogs(testVaultRoot), '');
+  });
+
+  it('parseErrorLogDeleteBody rejects empty, duplicate, and oversized ids', () => {
+    assert.throws(() => parseErrorLogDeleteBody({ ids: [] }));
+    assert.throws(() => parseErrorLogDeleteBody({ ids: ['elog-0', 'elog-0'] }));
+    assert.throws(() => parseErrorLogDeleteBody({ ids: ['not-an-id'] }));
+    const ok = parseErrorLogDeleteBody({ ids: ['elog-abc123def456'] });
+    assert.deepStrictEqual(ok.ids, ['elog-abc123def456']);
+  });
+
+  it('deleteErrorLogEntries removes matching blocks and counts missing ids', () => {
+    logErrorReport({ subsystem: 'cli', error: 'keep-me', level: 'WARN' }, { vaultRoot: testVaultRoot });
+    logErrorReport({ subsystem: 'cli', error: 'drop-me', level: 'ERROR' }, { vaultRoot: testVaultRoot });
+    const list = listErrorLogEntries(testVaultRoot);
+    const drop = list.items.find((i) => i.error.includes('drop-me'));
+    const keep = list.items.find((i) => i.error.includes('keep-me'));
+    assert.ok(drop && keep);
+    const missing = deleteErrorLogEntries(testVaultRoot, ['elog-9999']);
+    assert.strictEqual(missing.deleted, 0);
+    assert.strictEqual(missing.missing, 1);
+    assert.strictEqual(missing.deleted + missing.missing, 1);
+    const gone = deleteErrorLogEntries(testVaultRoot, [drop.id]);
+    assert.strictEqual(gone.deleted, 1);
+    assert.strictEqual(gone.missing, 0);
+    const after = listErrorLogEntries(testVaultRoot);
+    assert.strictEqual(after.total, 1);
+    assert.ok(after.items[0].error.includes('keep-me'));
+    const emptyFile = deleteErrorLogEntries(path.join(testVaultRoot, 'no-such-vault'), ['elog-0']);
+    assert.strictEqual(emptyFile.deleted, 0);
+    assert.strictEqual(emptyFile.missing, 1);
+  });
+
+  it('deleteErrorLogEntries preserves unread prefix when the file exceeds the scan cap', () => {
+    const marker = 'KEEP-PREFIX-BYTES';
+    const logPath = path.join(testVaultRoot, 'error.logs');
+    const prefix = Buffer.concat([Buffer.from(marker), Buffer.alloc(ERROR_LOG_SCAN_MAX_BYTES, 0x61)]);
+    const report = formatErrorReport({
+      subsystem: 'cli',
+      error: 'tail-only-delete-target',
+      level: 'ERROR'
+    });
+    fs.writeFileSync(logPath, Buffer.concat([prefix, Buffer.from('\n' + report, 'utf8')]));
+    const list = listErrorLogEntries(testVaultRoot);
+    assert.ok(list.truncated);
+    assert.ok(list.items.some((i) => i.error.includes('tail-only-delete-target')));
+    const id = list.items.find((i) => i.error.includes('tail-only-delete-target'))!.id;
+    const result = deleteErrorLogEntries(testVaultRoot, [id]);
+    assert.strictEqual(result.deleted, 1);
+    const after = fs.readFileSync(logPath, 'utf8');
+    assert.ok(after.startsWith(marker));
+    assert.ok(!after.includes('tail-only-delete-target'));
   });
 });

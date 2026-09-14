@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import crypto from 'node:crypto';
+import { z } from 'zod';
 import { getVaultRoot } from './vault.js';
 import { redactSecretsInPayload } from './safety.js';
 import { redactVaultGitError } from './vault-git-redact.js';
@@ -611,4 +612,137 @@ export function getErrorLogEntry(
         : entry.context;
   }
   return detail;
+}
+
+const ERROR_LOG_ID_RE = /^elog-(?:[0-9a-f]{12}|\d+)$/;
+const ERROR_LOG_BLOCK_RULE = '================================================================================';
+
+const errorLogDeleteBodySchema = z.object({
+  ids: z
+    .array(z.string().regex(ERROR_LOG_ID_RE, 'Invalid error-log id'))
+    .min(1)
+    .max(200)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'ids must be unique' })
+});
+
+export interface ErrorLogDeleteResult {
+  ok: true;
+  deleted: number;
+  missing: number;
+}
+
+function badRequest(message: string): Error {
+  const err = new Error(message);
+  (err as { statusCode?: number }).statusCode = 400;
+  return err;
+}
+
+function writeErrorLogFileAtomic(targetPath: string, content: string): void {
+  const tmpPath = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmpPath, content, 'utf8');
+  fs.renameSync(tmpPath, targetPath);
+}
+
+function readErrorLogTailAndPrefix(targetPath: string): { prefix: Buffer; content: string; truncated: boolean } {
+  const st = fs.statSync(targetPath);
+  if (st.size <= ERROR_LOG_SCAN_MAX_BYTES) {
+    return { prefix: Buffer.alloc(0), content: fs.readFileSync(targetPath, 'utf8'), truncated: false };
+  }
+  const start = st.size - ERROR_LOG_SCAN_MAX_BYTES;
+  const fd = fs.openSync(targetPath, 'r');
+  try {
+    const buf = Buffer.alloc(ERROR_LOG_SCAN_MAX_BYTES);
+    fs.readSync(fd, buf, 0, ERROR_LOG_SCAN_MAX_BYTES, start);
+    let content = buf.toString('utf8');
+    const delim = content.search(/^={10,}\s*$/m);
+    const prefixEnd = start + (delim > 0 ? delim : 0);
+    const prefix = Buffer.alloc(prefixEnd);
+    if (prefixEnd > 0) {
+      fs.readSync(fd, prefix, 0, prefixEnd, 0);
+    }
+    if (delim > 0) {
+      content = content.slice(delim);
+    }
+    return { prefix, content, truncated: true };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function joinErrorLogBlocks(blocks: string[]): string {
+  if (blocks.length === 0) return '';
+  return blocks.map((b) => `${ERROR_LOG_BLOCK_RULE}\n${b.trim()}\n${ERROR_LOG_BLOCK_RULE}\n`).join('\n');
+}
+
+/**
+ * Validate POST /api/error-logs/delete JSON. Throws statusCode 400 on invalid input.
+ */
+export function parseErrorLogDeleteBody(raw: unknown): { ids: string[] } {
+  const parsed = errorLogDeleteBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    throw badRequest('Invalid error-logs delete body (ids must be a unique array of 1..200 elog- ids)');
+  }
+  return parsed.data;
+}
+
+/**
+ * Remove matching error.logs blocks in the 2 MiB tail window.
+ * Preserves unread prefix bytes when the file is larger than the scan cap.
+ * Caller should hold withVaultLock around this write.
+ */
+export function deleteErrorLogEntries(
+  vaultRoot: string | undefined,
+  ids: string[],
+  customPath?: string
+): ErrorLogDeleteResult {
+  const uniqueIds = ids;
+  const targetPath = resolveErrorLogPath(vaultRoot, customPath);
+  if (!fs.existsSync(targetPath)) {
+    return { ok: true, deleted: 0, missing: uniqueIds.length };
+  }
+  const { prefix, content } = readErrorLogTailAndPrefix(targetPath);
+  const rawBlocks = splitErrorLogBlocks(content);
+  const parsedBlocks: Array<{ raw: string; parsed: ParsedErrorBlock | null; stableId: string | null }> = rawBlocks.map(
+    (raw) => {
+      try {
+        const parsed = parseErrorLogBlock(raw);
+        return {
+          raw,
+          parsed,
+          stableId: parsed ? errorLogStableId(parsed) : null
+        };
+      } catch {
+        return { raw, parsed: null, stableId: null };
+      }
+    }
+  );
+  const newestFirst = [...parsedBlocks].reverse();
+  const removeRaw = new Set<string>();
+  let deleted = 0;
+  for (const id of uniqueIds) {
+    let hit: (typeof parsedBlocks)[number] | undefined;
+    if (/^elog-[0-9a-f]{12}$/.test(id)) {
+      hit = parsedBlocks.find((b) => b.stableId === id);
+    } else if (/^elog-\d+$/.test(id)) {
+      hit = newestFirst[Number(id.slice('elog-'.length))];
+    }
+    if (hit) {
+      removeRaw.add(hit.raw);
+      deleted += 1;
+    }
+  }
+  const missing = uniqueIds.length - deleted;
+  if (deleted === 0) {
+    return { ok: true, deleted: 0, missing };
+  }
+  const remaining = parsedBlocks.filter((b) => !removeRaw.has(b.raw)).map((b) => b.raw);
+  const tail = joinErrorLogBlocks(remaining);
+  let out = '';
+  if (prefix.length > 0) {
+    out = prefix.toString('utf8');
+    if (out.length > 0 && !out.endsWith('\n') && tail) out += '\n';
+  }
+  out += tail;
+  writeErrorLogFileAtomic(targetPath, out);
+  return { ok: true, deleted, missing };
 }

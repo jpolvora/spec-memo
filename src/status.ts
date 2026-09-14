@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { getVaultRoot, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts, flushVaultGit, readVaultConfig, updateVaultAiConfig, getVaultProjects } from "./vault.js";
+import { getVaultRoot, getProjectMetadata, ensureVaultStructure, resolveConfiguredPorts, flushVaultGit, readVaultConfig, updateVaultAiConfig, getVaultProjects, withVaultLock } from "./vault.js";
 import { getVaultProjectList } from "./canvas.js";
 import { ActivityBus, ActivityEvent, eventMatchesProjectFilter } from "./activity.js";
 import { getPackageVersion } from "./version.js";
@@ -16,7 +16,7 @@ import {
   resolveBackupPath
 } from "./backup.js";
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
-import { logErrorReport, listErrorLogEntries, getErrorLogEntry, parseErrorLogListQuery } from "./error-logger.js";
+import { logErrorReport, listErrorLogEntries, getErrorLogEntry, parseErrorLogListQuery, parseErrorLogDeleteBody, deleteErrorLogEntries } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
 import { getRecord } from "./store.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
@@ -2319,6 +2319,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
             <input type="text" id="errorlog-subsystem-input" placeholder="e.g. status-server" autocomplete="off">
           </div>
           <button type="button" id="btn-errorlog-refresh" class="btn-primary" style="width:auto; margin-top:0; padding:6px 14px; margin-left:auto;">Refresh</button>
+          <button type="button" id="btn-errorlog-delete" class="btn-secondary" disabled style="width:auto; margin-top:0; padding:6px 14px; border-color:var(--err); color:#ffb4b0;">Delete</button>
+          <button type="button" id="btn-errorlog-new-issue" class="btn-secondary" disabled style="width:auto; margin-top:0; padding:6px 14px;">New Issue</button>
         </div>
         <div id="errorlog-error" class="helper-text" style="display:none; color: var(--err);"></div>
       </div>
@@ -2327,6 +2329,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         <table class="data-table" id="errorlog-table">
           <thead>
             <tr>
+              <th style="width: 36px;"><input type="checkbox" id="errorlog-select-all" aria-label="Select all error log rows on this page"></th>
               <th style="width: 170px;">Time</th>
               <th style="width: 80px;">Level</th>
               <th style="width: 140px;">Subsystem</th>
@@ -2334,7 +2337,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
             </tr>
           </thead>
           <tbody id="errorlog-tbody">
-            <tr><td colspan="4" style="text-align:center; padding:30px; color:var(--muted);">Open this tab to load error logs…</td></tr>
+            <tr><td colspan="5" style="text-align:center; padding:30px; color:var(--muted);">Open this tab to load error logs…</td></tr>
           </tbody>
         </table>
       </div>
@@ -2367,6 +2370,30 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       </div>
     </div>
   </section>
+
+  <div id="modal-errorlog-delete" class="modal-overlay">
+    <div class="modal-card">
+      <h3>Delete error log entries</h3>
+      <p id="errorlog-delete-copy">Delete the selected error log entries from the vault file? This cannot be undone.</p>
+      <p id="errorlog-delete-modal-error" style="display:none; color:var(--err); font-size:0.82rem;"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-errorlog-delete-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="btn-errorlog-delete-confirm" class="btn-primary" style="border-color:var(--err);">Delete</button>
+      </div>
+    </div>
+  </div>
+  <div id="modal-errorlog-issue" class="modal-overlay">
+    <div class="modal-card modal-card-wide">
+      <h3>New Issue draft</h3>
+      <p>Copy this text into a GitHub issue. Nothing is sent to GitHub from this page.</p>
+      <textarea id="errorlog-issue-text" readonly rows="14" style="width:100%; font-family:ui-monospace,monospace; font-size:0.78rem;"></textarea>
+      <p id="errorlog-issue-copy-status" class="helper-text" style="display:none;"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-errorlog-issue-copy" class="btn-secondary">Copy</button>
+        <button type="button" id="btn-errorlog-issue-close" class="btn-primary">Close</button>
+      </div>
+    </div>
+  </div>
 
   </div><!-- /#status-main -->
   </div><!-- /.status-body -->
@@ -3127,9 +3154,10 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       }
     }
 
-    // --- ERROR LOGS VIEWER (spec 0058) ---
+    // --- ERROR LOGS VIEWER (spec 0058 + 0061) ---
     let errorlogOffset = 0;
     const ERRORLOG_PAGE_SIZE = 50;
+    let errorlogItems = [];
 
     function showErrorLogError(message) {
       const errEl = document.getElementById("errorlog-error");
@@ -3150,11 +3178,39 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (el) el.style.display = "none";
     }
 
+    function setErrorLogActionEnabled(enabled) {
+      const del = document.getElementById("btn-errorlog-delete");
+      const issue = document.getElementById("btn-errorlog-new-issue");
+      if (del) del.disabled = !enabled;
+      if (issue) issue.disabled = !enabled;
+    }
+
+    function selectedErrorLogIds() {
+      return Array.from(document.querySelectorAll(".errorlog-row-select:checked")).map((el) => el.getAttribute("data-id")).filter(Boolean);
+    }
+
+    function syncErrorLogActionButtons() {
+      const ids = selectedErrorLogIds();
+      setErrorLogActionEnabled(ids.length > 0);
+      const selectAll = document.getElementById("errorlog-select-all");
+      const boxes = document.querySelectorAll(".errorlog-row-select");
+      if (selectAll) {
+        selectAll.checked = boxes.length > 0 && ids.length === boxes.length;
+      }
+    }
+
+    function clearErrorLogSelection() {
+      document.querySelectorAll(".errorlog-row-select").forEach((el) => { el.checked = false; });
+      const selectAll = document.getElementById("errorlog-select-all");
+      if (selectAll) selectAll.checked = false;
+      setErrorLogActionEnabled(false);
+    }
+
     function errorlogLoadingRow(tbody, message) {
       tbody.textContent = "";
       const tr = document.createElement("tr");
       const td = document.createElement("td");
-      td.setAttribute("colspan", "4");
+      td.setAttribute("colspan", "5");
       td.setAttribute("style", "text-align:center; padding:30px; color:var(--muted);");
       td.textContent = message;
       tr.appendChild(td);
@@ -3165,6 +3221,8 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       const tbody = document.getElementById("errorlog-tbody");
       if (!tbody) return;
       tbody.textContent = "";
+      errorlogItems = items || [];
+      clearErrorLogSelection();
       const badge = document.getElementById("errorlog-count-badge");
       if (badge) badge.textContent = total + " entr" + (total === 1 ? "y" : "ies") + (truncated ? " (truncated)" : "");
       const page = Math.floor(errorlogOffset / ERRORLOG_PAGE_SIZE) + 1;
@@ -3182,6 +3240,14 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       for (const item of items) {
         const tr = document.createElement("tr");
         tr.className = "master-row";
+        const checkTd = document.createElement("td");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "errorlog-row-select";
+        cb.setAttribute("data-id", item.id);
+        cb.addEventListener("click", (ev) => { ev.stopPropagation(); });
+        cb.addEventListener("change", () => syncErrorLogActionButtons());
+        checkTd.appendChild(cb);
         const time = document.createElement("td");
         time.textContent = formatIsoShort(item.timestamp);
         const level = document.createElement("td");
@@ -3192,11 +3258,15 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         const err = document.createElement("td");
         err.textContent = item.error ? String(item.error).slice(0, 160) : "-";
         err.setAttribute("title", item.error || "");
+        tr.appendChild(checkTd);
         tr.appendChild(time);
         tr.appendChild(level);
         tr.appendChild(sub);
         tr.appendChild(err);
-        tr.addEventListener("click", () => loadErrorLogDetail(item.id));
+        tr.addEventListener("click", (ev) => {
+          if (ev.target && ev.target.closest && ev.target.closest(".errorlog-row-select")) return;
+          loadErrorLogDetail(item.id);
+        });
         tbody.appendChild(tr);
       }
     }
@@ -3205,6 +3275,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       if (reset) errorlogOffset = 0;
       hideErrorLogError();
       hideErrorLogDetail();
+      clearErrorLogSelection();
       const tbody = document.getElementById("errorlog-tbody");
       if (tbody) errorlogLoadingRow(tbody, "Loading error logs…");
       try {
@@ -3258,6 +3329,97 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       } catch (e) {
         showErrorLogError("Error detail fetch failed.");
       }
+    }
+
+    function openErrorLogModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("open");
+    }
+    function closeErrorLogModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("open");
+    }
+
+    function formatErrorLogIssueEntry(listItem, detail, detailFailed) {
+      const e = detail || listItem || {};
+      const lines = [];
+      lines.push("Timestamp: " + (e.timestamp || listItem.timestamp || "-"));
+      lines.push("Level: " + (e.level || listItem.level || "-"));
+      lines.push("Subsystem: " + (e.subsystem || listItem.subsystem || "-"));
+      if (e.endpoint || listItem.endpoint) lines.push("Endpoint: " + (e.endpoint || listItem.endpoint));
+      if (e.tool || listItem.tool) lines.push("Tool: " + (e.tool || listItem.tool));
+      if (e.projectId || listItem.projectId) lines.push("Project: " + (e.projectId || listItem.projectId));
+      lines.push("Error: " + (e.error || listItem.error || "-"));
+      if (detailFailed) lines.push("(detail unavailable)");
+      else if (e.stack) lines.push("Stack:\\n" + e.stack);
+      return lines.join("\\n");
+    }
+
+    async function confirmDeleteErrorLogs() {
+      const ids = selectedErrorLogIds();
+      if (!ids.length) return;
+      const copy = document.getElementById("errorlog-delete-copy");
+      if (copy) copy.textContent = "Delete " + ids.length + " selected error log " + (ids.length === 1 ? "entry" : "entries") + " from the vault file? This cannot be undone.";
+      const modalErr = document.getElementById("errorlog-delete-modal-error");
+      if (modalErr) { modalErr.style.display = "none"; modalErr.textContent = ""; }
+      openErrorLogModal("modal-errorlog-delete");
+    }
+
+    async function submitDeleteErrorLogs() {
+      const ids = selectedErrorLogIds();
+      if (!ids.length) return;
+      const modalErr = document.getElementById("errorlog-delete-modal-error");
+      try {
+        const res = await fetch("/api/error-logs/delete", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: ids })
+        });
+        let body = null;
+        try { body = await res.json(); } catch {}
+        if (!res.ok) {
+          const msg = (body && body.error) || ("Delete failed (HTTP " + res.status + ").");
+          if (modalErr) { modalErr.textContent = msg; modalErr.style.display = "block"; }
+          showErrorLogError(msg);
+          return;
+        }
+        closeErrorLogModal("modal-errorlog-delete");
+        clearErrorLogSelection();
+        await loadErrorLogs(false);
+      } catch (e) {
+        const msg = "Delete failed.";
+        if (modalErr) { modalErr.textContent = msg; modalErr.style.display = "block"; }
+        showErrorLogError(msg);
+      }
+    }
+
+    async function openNewIssueDraft() {
+      const ids = selectedErrorLogIds();
+      if (!ids.length) return;
+      const parts = [];
+      for (const id of ids) {
+        const listItem = errorlogItems.find((it) => it.id === id) || { id: id };
+        let detail = null;
+        let detailFailed = false;
+        try {
+          const res = await fetch("/api/error-logs/" + encodeURIComponent(id), { credentials: "same-origin" });
+          if (res.ok) {
+            const data = await res.json();
+            detail = data.entry || data;
+          } else {
+            detailFailed = true;
+          }
+        } catch (e) {
+          detailFailed = true;
+        }
+        parts.push(formatErrorLogIssueEntry(listItem, detail, detailFailed));
+      }
+      const ta = document.getElementById("errorlog-issue-text");
+      if (ta) ta.value = parts.join("\\n\\n----\\n\\n");
+      const st = document.getElementById("errorlog-issue-copy-status");
+      if (st) { st.style.display = "none"; st.textContent = ""; }
+      openErrorLogModal("modal-errorlog-issue");
     }
 
     // --- AI ASSISTANT CONFIG (spec 0058: provider+model save, key stays in env) ---
@@ -3345,6 +3507,52 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     const btnErrorlogRefresh = document.getElementById("btn-errorlog-refresh");
     if (btnErrorlogRefresh) {
       btnErrorlogRefresh.addEventListener("click", () => loadErrorLogs(true));
+    }
+    const btnErrorlogDelete = document.getElementById("btn-errorlog-delete");
+    if (btnErrorlogDelete) {
+      btnErrorlogDelete.addEventListener("click", () => confirmDeleteErrorLogs());
+    }
+    const btnErrorlogNewIssue = document.getElementById("btn-errorlog-new-issue");
+    if (btnErrorlogNewIssue) {
+      btnErrorlogNewIssue.addEventListener("click", () => openNewIssueDraft());
+    }
+    const btnErrorlogDeleteCancel = document.getElementById("btn-errorlog-delete-cancel");
+    if (btnErrorlogDeleteCancel) {
+      btnErrorlogDeleteCancel.addEventListener("click", () => closeErrorLogModal("modal-errorlog-delete"));
+    }
+    const btnErrorlogDeleteConfirm = document.getElementById("btn-errorlog-delete-confirm");
+    if (btnErrorlogDeleteConfirm) {
+      btnErrorlogDeleteConfirm.addEventListener("click", () => submitDeleteErrorLogs());
+    }
+    const btnErrorlogIssueClose = document.getElementById("btn-errorlog-issue-close");
+    if (btnErrorlogIssueClose) {
+      btnErrorlogIssueClose.addEventListener("click", () => closeErrorLogModal("modal-errorlog-issue"));
+    }
+    const btnErrorlogIssueCopy = document.getElementById("btn-errorlog-issue-copy");
+    if (btnErrorlogIssueCopy) {
+      btnErrorlogIssueCopy.addEventListener("click", async () => {
+        const ta = document.getElementById("errorlog-issue-text");
+        const st = document.getElementById("errorlog-issue-copy-status");
+        const text = ta ? ta.value : "";
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            if (st) { st.textContent = "Copied."; st.style.display = "block"; }
+          } else {
+            throw new Error("clipboard unavailable");
+          }
+        } catch (e) {
+          if (st) { st.textContent = "Clipboard denied. Select the text and copy manually."; st.style.display = "block"; }
+        }
+      });
+    }
+    const errorlogSelectAll = document.getElementById("errorlog-select-all");
+    if (errorlogSelectAll) {
+      errorlogSelectAll.addEventListener("change", () => {
+        const on = errorlogSelectAll.checked;
+        document.querySelectorAll(".errorlog-row-select").forEach((el) => { el.checked = on; });
+        syncErrorLogActionButtons();
+      });
     }
     const btnErrorlogPrev = document.getElementById("btn-errorlog-prev");
     if (btnErrorlogPrev) {
@@ -7044,7 +7252,38 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         return;
       }
 
-      // --- Error logs viewer (spec 0058): newest-first tail window, same auth as /api/* ---
+      // --- Error logs viewer (spec 0058 + 0061) ---
+      if (req.method === "POST" && pathname === "/api/error-logs/delete") {
+        try {
+          const rawBody = await readBodyBuffer(req, 64 * 1024);
+          let parsed: unknown = {};
+          try {
+            parsed = JSON.parse(rawBody.toString("utf8") || "{}");
+          } catch {
+            writeJson(res, 400, sanitizeToolOutput({ error: "Invalid JSON body" }));
+            return;
+          }
+          const { ids } = parseErrorLogDeleteBody(parsed);
+          const result = await withVaultLock(vaultRoot, () => deleteErrorLogEntries(vaultRoot, ids, errorLogPath));
+          writeJson(res, 200, sanitizeToolOutput(result));
+        } catch (err: unknown) {
+          const statusCode = (err as { statusCode?: number }).statusCode === 400 ? 400 : 500;
+          if (statusCode === 500) {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: req.method,
+              endpoint: "/api/error-logs/delete",
+              error: err
+            }, { vaultRoot, logPath: errorLogPath });
+          }
+          const msg = err instanceof Error ? err.message : String(err);
+          writeJson(res, statusCode, sanitizeToolOutput({ error: msg }));
+        }
+        return;
+      }
+
       if (req.method === "GET" && pathname === "/api/error-logs") {
         try {
           const raw: Record<string, string | null> = {};
