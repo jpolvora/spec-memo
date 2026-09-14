@@ -259,4 +259,5 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 | 2026-09-14 | ai-ops-test-ai-button | AI Ops "Test AI" connectivity probe (issue #69): operation `test` journal row, `POST /api/ai-ops/test` force-logged raw agent, **Test AI** button + operation filter option; v0.34.0; npm test 837 pass |
 | 2026-09-14 | ai-timeout-config | AI cursor-sdk timeout (issue #70): `timeoutMs` default 30s, shared constant replaces `15000` fallbacks, vault seed + README; v0.34.0; npm test 837 pass |
 | 2026-09-14 | cli-start-shortcuts | CLI service lifecycle (start, stop, restart) and direct shortcuts (monitor, server, canvas, mcp), idempotent port checks, tests & docs; v0.35.0; npm test 851 pass |
+| 2026-09-14 | status-details-drawer-errors-aiops | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0; npm test 862 pass |
 
