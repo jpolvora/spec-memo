@@ -59,6 +59,7 @@ import {
   inspectAgentIo,
   ioChecksumHex,
   isIoGuardError,
+  isUntrustedWrapped,
   logIoGuardRefusal,
   UNTRUSTED_BEGIN,
   verifyIoChecksum,
@@ -887,6 +888,13 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
           }
         }
       }
+      if (brief.handoffMarkdown) {
+        const fenced = isUntrustedWrapped(brief.handoffMarkdown)
+          ? brief.handoffMarkdown
+          : wrapUntrustedText(brief.handoffMarkdown);
+        inners.push(fenceInnerOf(fenced));
+        brief.handoffMarkdown = fenced;
+      }
       const ioGuard = buildIoGuardEnvelope({ inners, checksumMismatch, queryDropped });
       brief.ioGuard = ioGuard;
       // Spec 0059 review (PR#65): fences grow bodies after the byte-budget
@@ -905,6 +913,12 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
         collectOne(brief.activeSlice?.spec);
         collectOne(brief.activeSlice?.plan);
         collectOne(brief.activeSlice?.state);
+        if (
+          typeof brief.handoffMarkdown === 'string' &&
+          brief.handoffMarkdown.includes(UNTRUSTED_BEGIN)
+        ) {
+          target.push(fenceInnerOf(brief.handoffMarkdown));
+        }
       };
       const refitEnvelope = (): IoGuardEnvelope => {
         const refitInners: string[] = [];

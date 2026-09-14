@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { HandoffPayload, HandoffRecord, SessionObjective } from './types.js';
 import { withVaultLockSync } from './vault.js';
 import { recordTelemetry } from './telemetry.js';
+import { createIoGuardError, inspectAgentIo, logIoGuardRefusal } from './io-guard.js';
 
 const HANDOFFS_SUBDIR = '.sync/handoffs';
 const OBJECTIVES_SUBDIR = '.sync/objectives';
@@ -115,14 +116,33 @@ export function createHandoff(options: {
     throw new Error('handoff.nextSteps must contain at least one non-empty step.');
   }
 
+  const failedApproaches = options.payload.failedApproaches?.filter(Boolean);
+  const openQuestions = options.payload.openQuestions?.filter(Boolean);
+  const handoffText = JSON.stringify({ nextSteps, failedApproaches, openQuestions });
+  const hit = inspectAgentIo(handoffText);
+  if (!hit.ok) {
+    logIoGuardRefusal(
+      {
+        reason: 'handoff refused: prompt-injection tokens',
+        flags: hit.flags,
+        bodyChars: handoffText.length,
+        projectId: options.projectId,
+        tool: 'handoff',
+        recordId: options.sessionId
+      },
+      { vaultRoot: options.vaultRoot }
+    );
+    throw createIoGuardError('prompt-injection tokens in handoff payload');
+  }
+
   const record: HandoffRecord = {
     id: `handoff-${Date.now()}-${randomBytes(3).toString('hex')}`,
     owner,
     branch,
     shared,
     nextSteps,
-    failedApproaches: options.payload.failedApproaches?.filter(Boolean),
-    openQuestions: options.payload.openQuestions?.filter(Boolean),
+    failedApproaches,
+    openQuestions,
     harness: options.harness,
     createdAt: new Date().toISOString(),
     sessionId: options.sessionId,
