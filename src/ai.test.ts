@@ -223,6 +223,11 @@ describe('Vault AI assistance (spec 0056)', () => {
     assert.equal(timed.timeoutMs, 45000);
   });
 
+  function attachTestCode(err: Error, code: string): Error {
+    (err as Error & { code?: string }).code = code;
+    return err;
+  }
+
   it('cloud agent limit errors are detected and stale spec-memo agents can be reclaimed', async () => {
     assert.equal(
       isCloudAgentLimitError(
@@ -233,6 +238,16 @@ describe('Vault AI assistance (spec 0056)', () => {
       true
     );
     assert.equal(isCloudAgentLimitError(new Error('cursor refine timed out after 30000ms')), false);
+    assert.equal(
+      isCloudAgentLimitError(
+        attachTestCode(new Error("You've reached the limit for your current plan."), 'validation_error')
+      ),
+      true
+    );
+    assert.equal(
+      isCloudAgentLimitError({ code: 'validation_error', message: 'plan limit reached' }),
+      true
+    );
 
     let archived = 0;
     const fakeAgentApi = {
@@ -288,6 +303,21 @@ describe('Vault AI assistance (spec 0056)', () => {
       /timed out after 30ms/
     );
     assert.equal(cancelled, true);
+  });
+
+  it('raceWithTimeout rejects even when the cancel hook hangs', async () => {
+    const never = new Promise<string>(() => undefined);
+    const started = Date.now();
+    await assert.rejects(
+      raceWithTimeout(
+        never,
+        30,
+        'cursor sdk prompt',
+        () => new Promise<void>(() => undefined)
+      ),
+      /timed out after 30ms/
+    );
+    assert.ok(Date.now() - started < 2500);
   });
 
   it('AC9/AC12: missing CURSOR_API_KEY means unavailable; upsert behaves as Noop', async () => {

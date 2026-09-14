@@ -112,9 +112,33 @@ export function buildCursorSdkPromptOptions(
   };
 }
 
+function readCloudAgentErrorText(err: unknown): string {
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof (err as { message?: unknown })?.message === 'string'
+        ? String((err as { message?: unknown }).message)
+        : String(err);
+  const code =
+    err instanceof Error
+      ? (err as Error & { code?: unknown }).code
+      : (err as { code?: unknown })?.code;
+  return `${String(code ?? '')} ${msg}`;
+}
+
 export function isCloudAgentLimitError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /validation_error/i.test(msg) && /cloud agent|reached the limit|upgrade to ultra/i.test(msg);
+  const text = readCloudAgentErrorText(err);
+  const hasValidationCode = /validation_error/i.test(text);
+  const hasLimitPhrase = /cloud agent|reached the limit|upgrade to ultra/i.test(text);
+  return hasValidationCode || hasLimitPhrase;
+}
+
+function attachCloudAgentError(message: string, code?: string): Error {
+  const err = new Error(message);
+  if (code) {
+    (err as Error & { code?: string }).code = code;
+  }
+  return err;
 }
 
 async function archiveCloudAgent(
@@ -231,13 +255,14 @@ export async function raceWithTimeout<T>(
       ),
       new Promise<T>((_, reject) => {
         timer = setTimeout(() => {
-          void onTimeout()
-            .catch(() => undefined)
-            .finally(() => {
-              if (!settled) {
-                reject(new Error(`${label} timed out after ${ms}ms`));
-              }
-            });
+          void Promise.race([
+            onTimeout().catch(() => undefined),
+            new Promise<void>((resolve) => setTimeout(resolve, 2000))
+          ]).finally(() => {
+            if (!settled) {
+              reject(new Error(`${label} timed out after ${ms}ms`));
+            }
+          });
         }, ms);
       })
     ]);
@@ -344,7 +369,10 @@ async function runManagedCloudPrompt(
       throw new Error('cursor sdk prompt was cancelled');
     }
     if (result.status === 'error') {
-      throw new Error(result.error?.message || 'cursor sdk prompt failed');
+      throw attachCloudAgentError(
+        result.error?.message || 'cursor sdk prompt failed',
+        result.error?.code
+      );
     }
     return { result: result.result };
   } finally {
