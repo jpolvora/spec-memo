@@ -57,7 +57,7 @@ export interface CursorSdkAgentApi {
     apiKey: string;
     model: { id: string };
     cloud: { repos: []; metadata: Record<string, string> };
-  }): CursorSdkAgentHandle;
+  }): CursorSdkAgentHandle | Promise<CursorSdkAgentHandle>;
   cancelRun(
     runId: string,
     options: { runtime: 'cloud'; agentId: string; apiKey: string }
@@ -332,16 +332,28 @@ async function loadCursorSdkAgentApi(): Promise<CursorSdkAgentApi> {
   return agentApi;
 }
 
+async function resolveCreatedAgent(
+  created: CursorSdkAgentHandle | Promise<CursorSdkAgentHandle>
+): Promise<CursorSdkAgentHandle> {
+  const agent = await created;
+  if (!agent || typeof agent.send !== 'function') {
+    throw new Error('@cursor/sdk Agent.create did not return a handle with send()');
+  }
+  return agent;
+}
+
 async function runManagedCloudPrompt(
   message: string,
   options: CursorPromptOptions,
   Agent: CursorSdkAgentApi
 ): Promise<{ result?: string }> {
-  const agent = Agent.create({
-    apiKey: options.apiKey,
-    model: options.model,
-    cloud: options.cloud
-  });
+  const agent = await resolveCreatedAgent(
+    Agent.create({
+      apiKey: options.apiKey,
+      model: options.model,
+      cloud: options.cloud
+    })
+  );
   let run: CursorRunHandle | undefined;
   let cloudAgentId: string | undefined;
 

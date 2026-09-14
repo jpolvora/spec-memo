@@ -384,6 +384,41 @@ describe('Vault AI assistance (spec 0056)', () => {
     assert.equal(nonLimitLists, 0);
   });
 
+  it('awaits Agent.create when it returns a Promise (SDK thenable handle)', async () => {
+    let sendCalls = 0;
+    const fakeAgentApi: CursorSdkAgentApi = {
+      create() {
+        return Promise.resolve({
+          agentId: 'bc-async',
+          async send() {
+            sendCalls += 1;
+            return {
+              id: 'run-1',
+              agentId: 'bc-async',
+              supports: () => true,
+              async cancel() {},
+              async wait() {
+                return { status: 'finished', result: '{"searchTerms":["ok"],"summary":"s"}' };
+              }
+            };
+          },
+          async [Symbol.asyncDispose]() {}
+        });
+      },
+      async cancelRun() {},
+      async archive() {},
+      async delete() {},
+      async list() {
+        return { items: [] };
+      }
+    };
+    const promptFn = createDefaultPromptFn(async () => fakeAgentApi);
+    const out = await promptFn('hello', buildCursorSdkPromptOptions(defaultAiConfig(), 'k'));
+    const text = typeof out === 'string' ? out : String(out.result || '');
+    assert.equal(text, '{"searchTerms":["ok"],"summary":"s"}');
+    assert.equal(sendCalls, 1);
+  });
+
   it('raceWithTimeout rejects even when the cancel hook hangs', async () => {
     const never = new Promise<string>(() => undefined);
     const started = Date.now();

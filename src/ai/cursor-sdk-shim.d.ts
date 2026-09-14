@@ -31,7 +31,7 @@ declare module '@cursor/sdk' {
     [Symbol.asyncDispose](): Promise<void>;
   }
   export const Agent: {
-    create(options: CursorAgentCreateOptions): CursorAgentHandle;
+    create(options: CursorAgentCreateOptions): CursorAgentHandle | Promise<CursorAgentHandle>;
     prompt(message: string, options?: CursorAgentCreateOptions): Promise<CursorRunResult>;
     cancelRun(
       runId: string,
