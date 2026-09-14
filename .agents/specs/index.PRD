@@ -132,6 +132,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
  - [x] Status monitor left nav, home dashboard, error logs viewer, and AI config save (`spec: 0058-status-monitor-nav-ai-config.spec.md`)
 - [x] MCP I/O guard: untrusted vault data, prompt-intent refuse, always-on skill harness (`spec: 0059-mcp-io-guard.spec.md`)
 - [ ] Status Error Logs: row selection, delete with confirm, New Issue copy draft (`spec: 0061-status-error-logs-actions.spec.md`)
+- [ ] AI-assisted wiki refine from latest project knowledge snapshot (`spec: 0062-wiki-ai-refine.spec.md`)
+
 
 
 
@@ -220,6 +222,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 58 | `open-github-issues-batch` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Fix open GitHub bugs: AI Ops journal wiring (#66), test vault isolation (#67), silent Chrome probes (#68) |
 
 | 59 | `status-error-logs-actions` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Error Logs: row selection, delete with confirm, New Issue copy draft |
+
+| 60 | `wiki-ai-refine` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | AI-assisted wiki refine from latest project knowledge snapshot |
 
 ## 9. Inbox (unscheduled ideas)
 
