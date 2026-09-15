@@ -6674,17 +6674,8 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             path: "/api/wiki/regenerate",
             statusCode: 200
           });
-          if (result.aiPolished || result.aiError) {
-            bus.capture({
-              type: "system",
-              kind: "meta",
-              ok: result.aiPolished === true,
-              durationMs: Date.now() - startTime,
-              summary: `${result.aiPolished ? "ai.wiki.ok" : "ai.wiki.fail"} ${result.projectId}`,
-              operation: result.aiPolished ? "ai.wiki.ok" : "ai.wiki.fail",
-              projectId: result.projectId
-            });
-          }
+          // Single-observe: emitWikiOps already emitted ai.wiki.ok/fail via the
+          // activity bus; a second capture here would duplicate the event.
           writeJson(res, 200, sanitizeToolOutput(result));
         } catch (err: unknown) {
           if (err instanceof WikiError) {

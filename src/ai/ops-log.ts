@@ -721,50 +721,9 @@ export class AiOpsJournaledAgent implements VaultAiAgent {
     if (!innerPolish) {
       throw new Error('wiki polish unavailable');
     }
-    if (this.inner instanceof NoopVaultAiAgent) {
-      return innerPolish(input);
-    }
-    const started = Date.now();
-    const config = this.resolveConfig();
-    try {
-      const result = await innerPolish(input);
-      if (config && isAiOpsLogEnabled(config)) {
-        recordAiOpsEvent({
-          vaultRoot: this.options.vaultRoot,
-          config,
-          operation: 'wiki',
-          ok: typeof result === 'string' && result.length > 0,
-          durationMs: Date.now() - started,
-          projectId: input.snapshot.projectId || this.options.projectId,
-          input: {
-            projectId: input.snapshot.projectId,
-            recordCount: input.snapshot.records.length,
-            markdownChars: input.markdown.length
-          },
-          output: { polishedChars: typeof result === 'string' ? result.length : 0 },
-          metadata: { agent: 'vault-ai' }
-        });
-      }
-      return result;
-    } catch (err: unknown) {
-      if (config && isAiOpsLogEnabled(config)) {
-        recordAiOpsEvent({
-          vaultRoot: this.options.vaultRoot,
-          config,
-          operation: 'wiki',
-          ok: false,
-          durationMs: Date.now() - started,
-          projectId: input.snapshot.projectId || this.options.projectId,
-          input: {
-            projectId: input.snapshot.projectId,
-            recordCount: input.snapshot.records.length
-          },
-          error: err instanceof Error ? err.message : String(err),
-          metadata: { agent: 'vault-ai', threw: true }
-        });
-      }
-      throw err;
-    }
+    // Single-observe: regenerateWiki owns the one operation=wiki journal row
+    // via emitWikiOps; journaling here would write a second row per regenerate.
+    return innerPolish(input);
   }
 }
 
