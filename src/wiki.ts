@@ -443,6 +443,24 @@ function shortAiError(err: unknown): string {
   return String(sanitizeToolOutput(clipped || 'polish failed'));
 }
 
+/**
+ * Re-assert machine-produced marker + Last generated timestamp after AI polish
+ * so model output cannot drop provenance (agentic review PR #77).
+ */
+export function ensureWikiProvenance(markdown: string, lastGenerated: string): string {
+  let out = String(markdown || '');
+  if (!out.includes(WIKI_AUTO_MARKER)) {
+    const withTitle = out.replace(/^#\s+.*$/m, (m) => `${m}\n\n${WIKI_AUTO_MARKER}`);
+    out = withTitle.includes(WIKI_AUTO_MARKER) ? withTitle : `${WIKI_AUTO_MARKER}\n${out}`;
+  }
+  if (/\*Last generated:/.test(out)) {
+    out = out.replace(/\*Last generated:[^*]*\*/, `*Last generated: ${lastGenerated}*`);
+  } else {
+    out = out.replace(WIKI_AUTO_MARKER, `${WIKI_AUTO_MARKER}\n*Last generated: ${lastGenerated}*`);
+  }
+  return out;
+}
+
 function recordRef(r: MemoRecord): { id: string; kind: string; title: string } {
   return {
     id: String(r.frontmatter.id),
@@ -620,7 +638,7 @@ export async function regenerateWiki(options: RegenerateWikiOptions): Promise<Wi
       if (!wikiHasRequiredH2Slugs(safe)) {
         throw new Error('polished wiki missing required h2 sections');
       }
-      markdown = safe;
+      markdown = ensureWikiProvenance(safe, lastGenerated);
       aiPolished = true;
       emitWikiOps(options.vaultRoot, true, Date.now() - started, id);
     } catch (err) {

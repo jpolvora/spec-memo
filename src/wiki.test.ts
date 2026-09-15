@@ -247,6 +247,30 @@ describe('project wiki', () => {
     assert.ok(seenSnapshot.records.some((r) => r.id === 'wiki-snap-trap' && r.title === 'Snapshot Trap Title'));
   });
 
+  it('successful polish that drops AUTO-GENERATED marker still persists provenance + fresh lastGenerated', async () => {
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.wiki = { aiEnabled: true };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    const now = new Date('2026-09-15T12:00:00.000Z');
+    const result = await regenerateWiki({
+      projectId,
+      vaultRoot,
+      now,
+      polishWikiMarkdown: async ({ markdown }) => {
+        return markdown
+          .replace(WIKI_AUTO_MARKER, '')
+          .replace(/\*Last generated:[^*]*\*/, '*Last generated: 1999-01-01T00:00:00.000Z*');
+      }
+    });
+    assert.equal(result.aiPolished, true);
+    assert.equal(result.lastGenerated, '2026-09-15T12:00:00.000Z');
+    const body = fs.readFileSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md'), 'utf8');
+    assert.ok(body.includes(WIKI_AUTO_MARKER));
+    assert.match(body, /\*Last generated:\s*2026-09-15T12:00:00\.000Z\*/);
+    assert.ok(!body.includes('1999-01-01'));
+  });
+
   it('IO_GUARD-style refuse keeps deterministic markdown', async () => {
     const cfgPath = path.join(vaultRoot, 'config.json');
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
