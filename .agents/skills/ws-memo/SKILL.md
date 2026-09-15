@@ -1,6 +1,6 @@
 ---
 name: ws-memo
-version: 0.36.0
+version: 0.36.1
 description: >-
   Route agent working memory through spec-memo MCP (11 tools) and matching CLI extras.
   Trigger on memo vault, bootstrap brief, upsert trap/decision/spec/plan, search vault,
@@ -575,8 +575,8 @@ These capabilities are available exclusively via the CLI binary (`memo <command>
 | CLI Command | Description & Flags |
 |---|---|
 | `memo status` | **Operational status & config inspector:** Read-only dashboard, live daemon probes (SSE `:3123`, Status companion `:3124`, Canvas `:3125`, remote `/health`), active project record breakdown, and storage metrics. Aliases: `info`, `state`, `setup --check`. Flags: `--check`, `--json`, `--cwd`, `--vaultRoot`. |
-| `memo start` | **Start services:** Start `monitor` (:3124), `canvas` (:3125), `server` (:3123), or `mcp` (stdio/`--sse`). Idempotent: detects running instances and prints info without error. Shortcuts: `memo monitor`, `memo server`, `memo mcp`, `memo canvas`. Flags: `--port`, `--host`, `--vaultRoot`, `--auth-token`, `--json`. |
-| `memo restart` | **Restart services:** Stop existing instance, await port release, and start fresh instance (`monitor`, `canvas`, `server`). Flags: `--port`, `--host`, `--vaultRoot`, `--auth-token`, `--json`. |
+| `memo start` | **Start services:** Start `monitor` (:3124), `canvas` (:3125), or `server` (:3123) as background daemons by default; `mcp` stays foreground for stdio (use `--sse` for the background SSE path). Idempotent: detects running instances and prints info without error. Shortcuts: `memo monitor`, `memo server`, `memo mcp`, `memo canvas`. Flags: `--port`, `--host`, `--vaultRoot`, `--auth-token`, `--foreground` / `-f`, `--json`. |
+| `memo restart` | **Restart services:** Stop existing instance, await port release, and start fresh in the background by default (`monitor`, `canvas`, `server`). Use `--foreground` / `-f` for an attached process. Flags: `--port`, `--host`, `--vaultRoot`, `--auth-token`, `--foreground` / `-f`, `--json`. |
 | `memo stop` | **Stop services:** Stop specific service (`server`, `monitor`, `canvas`) or by `--port`. Plain `memo stop` preserves global shutdown. Alias: `memo shutdown`. Flags: `--port`, `--vaultRoot`, `--timeout-ms`, `--force`, `--dry-run`, `--include-canvas`, `--include-monitor`, `--json`. |
 | `memo setup` | **Host/deployment only:** mode (`local`, `hybrid`, `remote`) & host MCP wiring (`cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`). Does **not** write workflow-skills `{sharedDir}/config.json` / `specMemo.*` — use `ws-spec-memo` for that. Flags: `--mode`, `--url`, `--host`, `--print-mcp`, `--write-mcp`, `--json`. |
 | `memo doctor` | Vault health, project identity, FTS5 integrity, and in-repo pollution scan. Flags: `--rebuild` (re-index FTS), `--fix` (delete forbidden in-repo files), `--json`. |

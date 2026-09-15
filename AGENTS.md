@@ -225,15 +225,15 @@ Agents executing shell commands or diagnosing environment issues must follow thi
 | Mode / Intent | Command / Shortcut | Notes |
 |---------------|-------------------|--------|
 | Stdio MCP | `memo mcp` (or `memo start mcp`, `memo serve`) | Default for Cursor/Claude Desktop host spawn (proxies in remote mode) |
-| SSE Server | `memo server` (or `memo start server`, `memo serve --sse`) | Starts MCP SSE (:3123) + Status monitor companion (:3124); idempotent if running |
-| Status Monitor | `memo monitor` (or `memo start monitor`) | Starts read-only companion on :3124; idempotent if running |
-| Knowledge Graph | `memo canvas` (or `memo start canvas`) | Starts visual graph UI on :3125; idempotent if running |
-| Restart | `memo restart [monitor\|canvas\|server]` | Graceful stop, await port release, and restart service |
-| Stop Specific | `memo stop [server\|monitor\|canvas] [--port <port>]` | Stop specific service processes or port |
+| SSE Server | `memo server` (or `memo start server`, `memo serve --sse`) | Starts MCP SSE (:3123) + Status monitor companion (:3124) in the background by default; idempotent if running |
+| Status Monitor | `memo monitor` (or `memo start monitor`) | Starts read-only companion on :3124 in the background by default; idempotent if running |
+| Knowledge Graph | `memo canvas` (or `memo start canvas`) | Starts visual graph UI on :3125 in the background by default; idempotent if running |
+| Restart | `memo restart [monitor\|canvas\|server]` | Graceful stop, await port release, and restart service in the background by default |
+| Stop Specific | `memo stop [server\|monitor\|canvas] [--port <port>]` | Stop specific service processes or port, then print the result and exit |
 | Shutdown All | `memo shutdown` (alias: plain `memo stop`) | Gracefully stop all orphaned serve processes (SIGTERM first, force after timeout) |
 | Flags | `--host` `--port` `--status-port` `--no-status` `--auth-token` `--vaultRoot` | Non-loopback without token **must fail** (`SPEC_MEMO_SSE_TOKEN` / `SPEC_MEMO_AUTH_TOKEN` / `--auth-token`) |
 
-On status companion bind failure: close SSE listener + activity bus before rejecting (trap `sse-status-bind-rollback`). On SSE transport disconnect: `await mcpServer.close()` (trap `sse-mcp-server-close`).
+`memo start` / `memo restart` print status and return `0` once background HTTP services are reachable. Pass `-f` / `--foreground` for monitor, canvas, or server debugging. `memo start mcp` remains foreground because stdio MCP must stay attached to its host; `memo start mcp --sse` uses the background SSE server path. On status companion bind failure: close SSE listener + activity bus before rejecting (trap `sse-status-bind-rollback`). On SSE transport disconnect: `await mcpServer.close()` (trap `sse-mcp-server-close`).
 
 ### Diagnose
 

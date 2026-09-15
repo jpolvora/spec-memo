@@ -84,6 +84,41 @@ async function assertPortBindable(port: number): Promise<void> {
   });
 }
 
+async function runExternalCli(
+  args: string[],
+  env: NodeJS.ProcessEnv
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const cliJs = path.join(path.dirname(fileURLToPath(import.meta.url)), 'cli.js');
+  const child = spawn(process.execPath, [cliJs, ...args], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+    env: { ...process.env, ...env }
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout?.on('data', (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr?.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`CLI process did not exit: memo ${args.join(' ')}`));
+    }, 5000);
+    child.once('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
 describe('CLI Integration', { concurrency: false }, () => {
   it('stdio memo serve does not bind status port unless --status', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-stdio-status-bind-'));
@@ -1975,6 +2010,138 @@ describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
         assert.match(err, /Invalid --port value: invalid/);
       } finally {
         console.error = origErr;
+      }
+    });
+  });
+
+  describe('background daemon lifecycle (memo start, restart, stop non-blocking terminal)', () => {
+    it('start monitor starts background daemon, probes 200, and stop monitor halts it', async () => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-daemon-'));
+      const vault = path.join(tmp, 'vault');
+      fs.mkdirSync(vault, { recursive: true });
+      const { ensureVaultStructure } = await import('./vault.js');
+      ensureVaultStructure(vault);
+      const testPort = await allocateLoopbackPort();
+
+      let out = '';
+      const origLog = console.log;
+      console.log = (...a) => { out += a.join(' ') + '\n'; };
+
+      try {
+        // 1. Start daemon on testPort
+        const codeStart = await runCli(['start', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--json']);
+        assert.equal(codeStart, 0);
+        const parsedStart = JSON.parse(out.trim());
+        assert.equal(parsedStart.status, 'running');
+        assert.equal(parsedStart.service, 'status-monitor');
+        assert.equal(parsedStart.port, testPort);
+
+        // Verify reachable (200 or 401 when token active)
+        const probe = await probeHttpService(`http://127.0.0.1:${testPort}/api/status`, 1000);
+        assert.ok(probe.statusCode === 200 || probe.statusCode === 401);
+
+        // 2. Start again when running is idempotent and reports already-running
+        out = '';
+        const codeIdempotent = await runCli(['start', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--json']);
+        assert.equal(codeIdempotent, 0);
+        const parsedIdempotent = JSON.parse(out.trim());
+        assert.equal(parsedIdempotent.status, 'already-running');
+
+        // 3. Stop daemon
+        out = '';
+        const codeStop = await runCli(['stop', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--json']);
+        assert.equal(codeStop, 0);
+        const parsedStop = JSON.parse(out.trim());
+        assert.equal(parsedStop.ok, true);
+
+        // Verify stopped
+        const probeAfter = await probeHttpService(`http://127.0.0.1:${testPort}/api/status`, 500);
+        assert.equal(probeAfter.running, false);
+      } finally {
+        console.log = origLog;
+        await runCli(['stop', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--force']);
+        closeIndex(vault);
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+
+    it('restart monitor stops existing daemon and starts a fresh one', async () => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-restart-'));
+      const vault = path.join(tmp, 'vault');
+      fs.mkdirSync(vault, { recursive: true });
+      const { ensureVaultStructure } = await import('./vault.js');
+      ensureVaultStructure(vault);
+      const testPort = await allocateLoopbackPort();
+
+      let out = '';
+      const origLog = console.log;
+      console.log = (...a) => { out += a.join(' ') + '\n'; };
+
+      try {
+        // Start initial daemon
+        const codeStart = await runCli(['start', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--json']);
+        assert.equal(codeStart, 0);
+
+        // Restart daemon
+        out = '';
+        const codeRestart = await runCli(['restart', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--json']);
+        assert.equal(codeRestart, 0);
+        const parsedRestart = JSON.parse(out.trim());
+        assert.equal(parsedRestart.status, 'running');
+        assert.equal(parsedRestart.service, 'status-monitor');
+
+        // Verify still reachable
+        const probe = await probeHttpService(`http://127.0.0.1:${testPort}/api/status`, 1000);
+        assert.ok(probe.statusCode === 200 || probe.statusCode === 401);
+      } finally {
+        console.log = origLog;
+        await runCli(['stop', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--force']);
+        closeIndex(vault);
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+
+    it('external start, restart, and stop commands exit after reporting status', async () => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-cli-external-lifecycle-'));
+      const vault = path.join(tmp, 'vault');
+      fs.mkdirSync(vault, { recursive: true });
+      const { ensureVaultStructure } = await import('./vault.js');
+      ensureVaultStructure(vault);
+      const testPort = await allocateLoopbackPort();
+      const commonArgs = ['monitor', '--port', String(testPort), '--vaultRoot', vault, '--json'];
+
+      try {
+        const started = await runExternalCli(['start', ...commonArgs], { SPEC_MEMO_ROOT: vault });
+        assert.equal(started.code, 0, started.stderr);
+        assert.equal(JSON.parse(started.stdout.trim()).status, 'running');
+
+        const restarted = await runExternalCli(['restart', ...commonArgs], { SPEC_MEMO_ROOT: vault });
+        assert.equal(restarted.code, 0, restarted.stderr);
+        assert.equal(JSON.parse(restarted.stdout.trim()).status, 'running');
+
+        const stopped = await runExternalCli(
+          ['stop', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--json'],
+          { SPEC_MEMO_ROOT: vault }
+        );
+        assert.equal(stopped.code, 0, stopped.stderr);
+        assert.equal(JSON.parse(stopped.stdout.trim()).ok, true);
+      } finally {
+        await runCli(['stop', 'monitor', '--port', String(testPort), '--vaultRoot', vault, '--force']);
+        closeIndex(vault);
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+
+    it('supports -f and --foreground flag in start help and argument parsing', async () => {
+      let out = '';
+      const origLog = console.log;
+      console.log = (...a) => { out += a.join(' ') + '\n'; };
+      try {
+        const code = await runCli(['start', '--help']);
+        assert.equal(code, 0);
+        assert.match(out, /-f, --foreground/);
+      } finally {
+        console.log = origLog;
       }
     });
   });

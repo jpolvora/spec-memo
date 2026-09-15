@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.36.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.36.1**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -344,6 +344,8 @@ memo start server       # Start MCP SSE Server on :3123 with companion :3124 (sh
 memo start canvas       # Start Visual Knowledge Graph on :3125 (shortcut: memo canvas)
 memo start mcp          # Start MCP stdio server (shortcut: memo mcp; pass --sse for SSE)
 ```
+`monitor`, `server`, and `canvas` run as background daemons by default. They print their URLs and exit `0` once the service is reachable, so the terminal is immediately available. Use `-f` / `--foreground` when an attached process is needed for debugging. `memo start mcp` remains foreground because stdio MCP must stay attached to its host; use `memo start mcp --sse` for a background HTTP/SSE daemon.
+
 * **Idempotent Detection:** If the requested service is already running on the target port, `memo start` cleanly outputs the active URLs and health endpoints and exits `0` without throwing port conflict errors.
 
 #### 2. Stopping Services (`memo stop` or `memo shutdown`)
@@ -354,6 +356,7 @@ memo stop monitor       # Stop status monitor companion processes
 memo stop canvas        # Stop visual knowledge graph canvas processes
 memo stop --port 3124   # Stop processes bound to a specific port
 ```
+Stop commands wait for graceful shutdown, report the result, and exit `0` when all matching processes have stopped or no process was running. They do not require Ctrl+C.
 
 #### 3. Restarting Services (`memo restart`)
 ```bash
@@ -361,6 +364,7 @@ memo restart monitor    # Stops existing monitor, waits for port release, and re
 memo restart server     # Stops existing SSE server, waits for port release, and restarts
 memo restart canvas     # Stops existing canvas, waits for port release, and restarts
 ```
+Restarted HTTP services use the same background-by-default behavior as `memo start`; add `-f` / `--foreground` for an attached process.
 
 ### Stopping orphaned servers (`memo shutdown`)
 

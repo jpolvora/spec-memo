@@ -69,6 +69,12 @@ describe('shutdown discovery filtering (spec 0053 AC2/AC3)', () => {
     assert.equal(isMemoServeCommand('node server.js'), false);
   });
 
+  it('requires the spec-memo package marker for daemon commands', () => {
+    assert.equal(isMemoServeCommand('node /opt/other/dist/cli.js serve'), false);
+    assert.equal(isCanvasCommand('node /opt/other/dist/cli.js canvas'), false);
+    assert.equal(isMonitorCommand('node /opt/other/dist/cli.js start monitor'), false);
+  });
+
   it('classifies canvas separately and excludes it by default', () => {
     assert.equal(isCanvasCommand(CANVAS), true);
     assert.equal(classifyMemoCommand(CANVAS), 'canvas');
