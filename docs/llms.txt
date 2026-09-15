@@ -13,7 +13,8 @@ spec-memo gives AI coding agents a curated working memory outside the product gi
 - Optional vault-git (config.json vaultGit): private git remote backup of ~/.spec-memo/. vaultGit.atomic defaults false (batched)—mutations write markdown only; git commit + pull/push flush on memo sync, prompt session_end, or graceful memo serve shutdown. atomic true restores per-mutation commit+push (fail-open). When hybrid and vaultGit are both enabled, memo sync runs both channels in parallel; either may fail without crashing MCP/SSE.
 
 ## Installation
-npm install -g github:jpolvora/spec-memo
+npm install -g --allow-git=all github:jpolvora/spec-memo
+# npm 12+ blocks git deps by default (EALLOWGIT). Opt in once with: npm config set allow-git=all
 
 ## Documentation & Repository
 Website: https://jpolvora.github.io/spec-memo/

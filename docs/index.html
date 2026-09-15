@@ -98,9 +98,9 @@
       <div class="hero-quick-install">
         <div class="quick-install-code">
           <span class="prompt-sym">$</span>
-          <code>npm install -g github:jpolvora/spec-memo</code>
+          <code>npm install -g --allow-git=all github:jpolvora/spec-memo</code>
         </div>
-        <button type="button" class="copy-btn" data-copy="npm install -g github:jpolvora/spec-memo" aria-label="Copy install command">
+        <button type="button" class="copy-btn" data-copy="npm install -g --allow-git=all github:jpolvora/spec-memo" aria-label="Copy install command">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -108,6 +108,7 @@
           <span>Copy</span>
         </button>
       </div>
+      <p class="hero-install-note">npm 12+ blocks git dependencies by default. Use <code>--allow-git=all</code> or see <a href="#faq-install">FAQ</a> if you hit <code>EALLOWGIT</code>.</p>
     </div>
   </section>
 
@@ -190,9 +191,17 @@
         <span class="section-tag">Zero-Config MCP Integration</span>
         <h2 class="section-title">Enable In Your AI Coding Environment</h2>
         <p class="section-subtitle">
-          spec-memo runs as a standard Model Context Protocol (MCP) server.
-          Configure it in seconds for your favorite coding assistant.
+          Install the <code>memo</code> CLI, then configure spec-memo as a standard Model Context Protocol (MCP) server in your coding assistant.
         </p>
+      </div>
+
+      <div class="install-prereq-box">
+        <h3 class="install-prereq-title">Step 1: Install <code>memo</code> (Node.js 22+)</h3>
+        <p>Global install from GitHub adds <code>memo</code> to your npm global bin (e.g. <code>%AppData%\Roaming\npm</code> on Windows).</p>
+        <div class="faq-code-box">npm install -g --allow-git=all github:jpolvora/spec-memo</div>
+        <p><strong>npm 12+ and <code>EALLOWGIT</code>:</strong> npm now blocks git-hosted packages unless you opt in. Pass <code>--allow-git=all</code> on the install command, or persist the setting once:</p>
+        <div class="faq-code-box">npm config set allow-git=all</div>
+        <p>Then re-run the install above. Verify with <code>memo --help</code>. Building from a local clone? Use <code>npm install &amp;&amp; npm run build &amp;&amp; npm link</code> instead (see <a href="#faq">FAQ &amp; Setup</a>).</p>
       </div>
 
       <div class="host-config-wrapper">
@@ -235,6 +244,7 @@
               </div>
               <button type="button" class="code-copy-btn copy-btn" aria-label="Copy configuration">Copy JSON</button>
             </div>
+            <p class="host-pane-note">On npm 12+, run <code>npm config set allow-git=all</code> once before using <code>npx</code> with a <code>github:</code> URL, or install globally with <code>memo</code> on PATH instead (see Step 1 above).</p>
             <div class="code-block-wrapper">
               <pre><code>{
   "mcpServers": {
@@ -1027,7 +1037,30 @@ memo doctor --fix</code></pre>
       </div>
 
       <div class="faq-grid">
-        <!-- Card 1: Adding memo to PATH -->
+        <!-- Card 1: npm install from GitHub -->
+        <div class="faq-card" id="faq-install">
+          <div class="faq-card-header">
+            <div class="faq-icon-badge">📦</div>
+            <h3 class="faq-card-title">How do I install <code>spec-memo</code> with npm from GitHub?</h3>
+          </div>
+          <div class="faq-card-body">
+            <p>Requires <strong>Node.js 22+</strong>. The recommended global install:</p>
+            <div class="faq-code-box">npm install -g --allow-git=all github:jpolvora/spec-memo</div>
+            <p>This adds <code>memo</code> to your npm global bin. Confirm with <code>memo --help</code>.</p>
+            <p><strong><code>EALLOWGIT</code> on npm 12+:</strong> npm blocks git dependencies by default. If you see <code>npm error code EALLOWGIT</code>, either pass <code>--allow-git=all</code> on the command (as above) or opt in once:</p>
+            <div class="faq-code-box">npm config set allow-git=all</div>
+            <p>That setting also applies to <code>npx github:jpolvora/spec-memo</code> (used in some MCP configs). See the <a href="https://docs.npmjs.com/cli/v12/using-npm/config#allow-git" target="_blank" rel="noopener">npm <code>allow-git</code> docs</a>.</p>
+            <p><strong>Build from source (alternative):</strong></p>
+            <div class="faq-code-box">
+              git clone https://github.com/jpolvora/spec-memo.git<br>
+              cd spec-memo<br>
+              npm install &amp;&amp; npm run build<br>
+              npm link
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Adding memo to PATH -->
         <div class="faq-card">
           <div class="faq-card-header">
             <div class="faq-icon-badge">⚡</div>
@@ -1035,16 +1068,19 @@ memo doctor --fix</code></pre>
           </div>
           <div class="faq-card-body">
             <p><code>spec-memo</code> declares its binary in <code>package.json</code> (<code>"bin": { "memo": "./dist/cli.js" }</code>) with a Node shebang.</p>
-            <p><strong>Option 1: Global link (Recommended for Dev)</strong></p>
+            <p><strong>Option 1: Global install from GitHub (Recommended)</strong></p>
+            <div class="faq-code-box">npm install -g --allow-git=all github:jpolvora/spec-memo</div>
+            <p>On npm 12+, <code>--allow-git=all</code> is required unless you run <code>npm config set allow-git=all</code> first.</p>
+            <p><strong>Option 2: Global link from clone (Recommended for Dev)</strong></p>
             <div class="faq-code-box">
               cd /path/to/spec-memo<br>
               npm install &amp;&amp; npm run build<br>
               npm link
             </div>
             <p>On Windows, this links <code>memo</code>, <code>memo.cmd</code>, and <code>memo.ps1</code> in <code>%AppData%\Roaming\npm</code> (already on PATH). On Linux/macOS, it links into <code>/usr/local/bin</code> or your nvm global prefix.</p>
-            <p><strong>Option 2: Global Install from Local Path</strong></p>
+            <p><strong>Option 3: Global Install from Local Path</strong></p>
             <div class="faq-code-box">npm install -g "/path/to/spec-memo"</div>
-            <p><strong>Option 3: Manual Shims (Standalone Wrapper)</strong></p>
+            <p><strong>Option 4: Manual Shims (Standalone Wrapper)</strong></p>
             <ul>
               <li><strong>Linux/macOS:</strong> In <code>~/.local/bin/memo</code>:<br><code>exec node "/path/to/spec-memo/dist/cli.js" "$@"</code></li>
               <li><strong>Windows:</strong> In a PATH folder (e.g. <code>C:\bin\memo.cmd</code>):<br><code>node "C:\path\to\spec-memo\dist\cli.js" %*</code></li>
@@ -1052,7 +1088,7 @@ memo doctor --fix</code></pre>
           </div>
         </div>
 
-        <!-- Card 2: Rebuild Persistence -->
+        <!-- Card 3: Rebuild Persistence -->
         <div class="faq-card">
           <div class="faq-card-header">
             <div class="faq-icon-badge">🔄</div>
@@ -1064,7 +1100,7 @@ memo doctor --fix</code></pre>
           </div>
         </div>
 
-        <!-- Card 3: IDE MCP vs Terminal CLI -->
+        <!-- Card 4: IDE MCP vs Terminal CLI -->
         <div class="faq-card">
           <div class="faq-card-header">
             <div class="faq-icon-badge">🔌</div>
@@ -1076,7 +1112,7 @@ memo doctor --fix</code></pre>
           </div>
         </div>
 
-        <!-- Card 4: Troubleshooting -->
+        <!-- Card 5: Troubleshooting -->
         <div class="faq-card">
           <div class="faq-card-header">
             <div class="faq-icon-badge">🛠️</div>
@@ -1097,7 +1133,7 @@ memo doctor --fix</code></pre>
           </div>
         </div>
 
-        <!-- Card 5: Daemon Ports & Configuration -->
+        <!-- Card 6: Daemon Ports & Configuration -->
         <div class="faq-card">
           <div class="faq-card-header">
             <div class="faq-icon-badge">🌐</div>
