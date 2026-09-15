@@ -236,10 +236,12 @@ export async function raceWithTimeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string,
-  onTimeout: () => Promise<void>
+  onTimeout: () => Promise<void>,
+  displayTimeoutMs?: number
 ): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   let settled = false;
+  const reportedMs = displayTimeoutMs ?? ms;
   try {
     return await Promise.race([
       promise.then(
@@ -259,7 +261,7 @@ export async function raceWithTimeout<T>(
             new Promise<void>((resolve) => setTimeout(resolve, 2000))
           ]).finally(() => {
             if (!settled) {
-              reject(new Error(`${label} timed out after ${ms}ms`));
+              reject(new Error(`${label} timed out after ${reportedMs}ms`));
             }
           });
         }, ms);
@@ -347,6 +349,8 @@ async function runManagedCloudPrompt(
   options: CursorPromptOptions,
   Agent: CursorSdkAgentApi
 ): Promise<{ result?: string }> {
+  const startedAt = Date.now();
+  const timeoutMs = options.timeoutMs > 0 ? options.timeoutMs : VAULT_AI_DEFAULT_TIMEOUT_MS;
   const agent = await resolveCreatedAgent(
     Agent.create({
       apiKey: options.apiKey,
@@ -367,14 +371,23 @@ async function runManagedCloudPrompt(
   };
 
   try {
+    const elapsedAfterCreate = Date.now() - startedAt;
+    if (elapsedAfterCreate >= timeoutMs) {
+      throw new Error(`cursor sdk prompt timed out after ${timeoutMs}ms`);
+    }
     run = await agent.send(message);
     cloudAgentId = run.agentId || agent.agentId;
-    const timeoutMs = options.timeoutMs > 0 ? options.timeoutMs : VAULT_AI_DEFAULT_TIMEOUT_MS;
+    const elapsed = Date.now() - startedAt;
+    // Account for elapsed time during Agent.create and agent.send so that
+    // raceWithTimeout and its cancellation hook fire BEFORE any outer deadline
+    // abandons the promise. Leave a 500ms margin.
+    const remainingMs = Math.max(100, timeoutMs - elapsed - 500);
     const result = await raceWithTimeout(
       run.wait(),
-      timeoutMs,
+      remainingMs,
       'cursor sdk prompt',
-      () => cancelCloudRun(Agent, run, options.apiKey)
+      () => cancelCloudRun(Agent, run, options.apiKey),
+      timeoutMs
     );
     if (result.status === 'cancelled') {
       throw new Error('cursor sdk prompt was cancelled');

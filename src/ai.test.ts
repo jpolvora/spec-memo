@@ -311,6 +311,24 @@ describe('Vault AI assistance (spec 0056)', () => {
     assert.equal(cancelled, true);
   });
 
+  it('raceWithTimeout reports displayTimeoutMs when remainingMs triggers earlier', async () => {
+    let cancelled = false;
+    const never = new Promise<string>(() => undefined);
+    await assert.rejects(
+      raceWithTimeout(
+        never,
+        30,
+        'cursor sdk prompt',
+        async () => {
+          cancelled = true;
+        },
+        60000
+      ),
+      /timed out after 60000ms/
+    );
+    assert.equal(cancelled, true);
+  });
+
   it('default prompt reclaims stale agents once on limit errors only', async () => {
     let managedCalls = 0;
     let listCalls = 0;
