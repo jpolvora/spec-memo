@@ -509,6 +509,13 @@ export function wikiHasRequiredH2Slugs(markdown: string): boolean {
   return requiredWikiH2Slugs().every((id) => present.has(id));
 }
 
+/** Topic catalog must keep `[Title](#slug)` targets for progressive nav (AC21/AC22). */
+export function wikiHasValidCatalogLinks(markdown: string): boolean {
+  const catalog = splitWikiSections(markdown).find((s) => s.id === slugify('Topic catalog'));
+  if (!catalog) return false;
+  return TOPIC_CATALOG_ENTRIES.every((e) => catalog.markdown.includes(`](#${slugify(e.title)})`));
+}
+
 /**
  * Bind polish from a VaultAiAgent (production choke point with resolveVaultAiAgent).
  * Used by status/CLI regenerate wiring and regenerateWiki fallback.
@@ -635,8 +642,8 @@ export async function regenerateWiki(options: RegenerateWikiOptions): Promise<Wi
         throw new Error('IO_GUARD refused wiki polish output');
       }
       const safe = String(sanitizeToolOutput(polished));
-      if (!wikiHasRequiredH2Slugs(safe)) {
-        throw new Error('polished wiki missing required h2 sections');
+      if (!wikiHasRequiredH2Slugs(safe) || !wikiHasValidCatalogLinks(safe)) {
+        throw new Error('polished wiki missing required h2 sections or catalog links');
       }
       markdown = ensureWikiProvenance(safe, lastGenerated);
       aiPolished = true;

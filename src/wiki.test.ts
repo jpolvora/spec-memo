@@ -247,6 +247,25 @@ describe('project wiki', () => {
     assert.ok(seenSnapshot.records.some((r) => r.id === 'wiki-snap-trap' && r.title === 'Snapshot Trap Title'));
   });
 
+  it('successful polish that drops Topic catalog link targets falls back to deterministic', async () => {
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.wiki = { aiEnabled: true };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    const result = await regenerateWiki({
+      projectId,
+      vaultRoot,
+      polishWikiMarkdown: async ({ markdown }) =>
+        markdown.replace(/\]\(#active-traps\)/g, '](#broken-traps)')
+    });
+    assert.equal(result.aiPolished, false);
+    assert.ok(result.aiError);
+    const after = fs.readFileSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md'), 'utf8');
+    assert.ok(after.includes('](#active-traps)'));
+    assert.ok(!after.includes('](#broken-traps)'));
+    assert.ok(after.includes(WIKI_AUTO_MARKER));
+  });
+
   it('successful polish that drops AUTO-GENERATED marker still persists provenance + fresh lastGenerated', async () => {
     const cfgPath = path.join(vaultRoot, 'config.json');
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
