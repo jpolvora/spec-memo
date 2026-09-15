@@ -132,7 +132,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
  - [x] Status monitor left nav, home dashboard, error logs viewer, and AI config save (`spec: 0058-status-monitor-nav-ai-config.spec.md`)
 - [x] MCP I/O guard: untrusted vault data, prompt-intent refuse, always-on skill harness (`spec: 0059-mcp-io-guard.spec.md`)
 - [x] Status Error Logs: row selection, delete with confirm, New Issue copy draft (`spec: 0061-status-error-logs-actions.spec.md`)
-- [ ] AI-assisted wiki refine from latest project knowledge snapshot (`spec: 0062-wiki-ai-refine.spec.md`)
+- [ ] AI-assisted wiki refine + index/topic progressive disclosure (ws-wiki inspired) (`spec: 0062-wiki-ai-refine.spec.md`)
 - [x] AI Ops "Test AI" connectivity probe: raw-agent hello probe + force-logged `test` row (`spec: 0063-ai-ops-test-ai-button.spec.md`)
 - [x] AI cursor-sdk timeout: configurable `timeoutMs`, 30s default, honored everywhere (`spec: 0064-ai-timeout-config.spec.md`)
 - [x] CLI lifecycle shortcuts: start, stop, restart, and direct shortcuts for monitor, canvas, server, mcp (`spec: 0065-cli-start-shortcuts.spec.md`)
@@ -228,7 +228,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 59 | `status-error-logs-actions` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Error Logs: row selection, delete with confirm, New Issue copy draft |
 
-| 60 | `wiki-ai-refine` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | AI-assisted wiki refine from latest project knowledge snapshot |
+| 60 | `wiki-ai-refine` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | AI-assisted wiki refine + index/topic progressive disclosure (ws-wiki inspired) |
 
 | 61 | [`ai-ops-test-ai-button`](0063-ai-ops-test-ai-button.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | AI Ops "Test AI" connectivity probe (issue #69); v0.34.0 |
 
