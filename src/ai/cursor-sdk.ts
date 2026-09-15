@@ -7,8 +7,10 @@ import type {
   VaultAiRankInput,
   VaultAiRankResult,
   VaultAiRefineInput,
-  VaultAiRefineResult
+  VaultAiRefineResult,
+  VaultAiWikiPolishInput
 } from './types.js';
+import { inspectAgentIo } from '../io-guard.js';
 
 const RefineOutputSchema = z.object({
   searchTerms: z.array(z.string().min(1).max(80)).max(20).optional(),
@@ -445,6 +447,11 @@ const RANK_INSTRUCTION =
   'Schema: {"orderedIds": string[]}. orderedIds must contain only ids from the candidate list, ' +
   'ordered most-relevant-first for the query. A subset is allowed; unknown ids are ignored.';
 
+const WIKI_POLISH_INSTRUCTION =
+  'You polish a vault project wiki page. Reply with Markdown ONLY (no JSON, no fences wrapping the whole page). ' +
+  'Preserve every required ## heading and Topic catalog link targets exactly. Improve Overview and topic prose; ' +
+  'do not invent vault paths, secrets, or absolute filesystem paths. Keep relative ./ links intact.';
+
 export interface CursorSdkAgentDeps {
   promptFn?: CursorPromptFn;
   /** Test-only override for the managed SDK agent API loader. */
@@ -551,5 +558,41 @@ export class CursorSdkVaultAiAgent implements VaultAiAgent {
     } catch (err) {
       return { orderedIds: input.candidates.map((c) => c.id), error: shortError(err) };
     }
+  }
+
+  async polishWikiMarkdown(input: VaultAiWikiPolishInput): Promise<string> {
+    const apiKey = this.readApiKey();
+    if (!apiKey) throw new Error('missing api key');
+    let prompt: string;
+    try {
+      const snapshotJson = redactPromptText(JSON.stringify(input.snapshot));
+      const md = redactPromptText(input.markdown);
+      const io = inspectAgentIo(`${snapshotJson}\n${md}`);
+      if (!io.ok) {
+        throw new Error('IO_GUARD refused wiki polish prompt');
+      }
+      prompt =
+        `${WIKI_POLISH_INSTRUCTION}\n` +
+        `SNAPSHOT_JSON:\n${snapshotJson}\n` +
+        `DETERMINISTIC_WIKI:\n${md}`;
+    } catch (err) {
+      throw new Error(shortError(err));
+    }
+    const options = buildCursorSdkPromptOptions(this.config, apiKey);
+    const raw = await withTimeout(
+      Promise.resolve(this.promptFn(prompt, options)),
+      options.timeoutMs,
+      'cursor wiki polish'
+    );
+    const text = typeof raw === 'string' ? raw : String(raw?.result || '');
+    const trimmed = text.trim();
+    if (!trimmed) {
+      throw new Error('empty wiki polish output');
+    }
+    const outIo = inspectAgentIo(trimmed);
+    if (!outIo.ok) {
+      throw new Error('IO_GUARD refused wiki polish output');
+    }
+    return String(sanitizeToolOutput(trimmed));
   }
 }

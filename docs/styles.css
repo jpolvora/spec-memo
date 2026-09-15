@@ -323,7 +323,7 @@ code, pre {
 
 /* Quick install box in hero */
 .hero-quick-install {
-  max-width: 580px;
+  max-width: 720px;
   margin: 0 auto;
   background: rgba(14, 20, 34, 0.85);
   border: 1px solid var(--border-card);
@@ -364,6 +364,53 @@ code, pre {
   align-items: center;
   gap: 0.35rem;
   transition: all 0.2s ease;
+}
+
+.hero-install-note {
+  max-width: 720px;
+  margin: 0.75rem auto 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.hero-install-note code {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent-mint);
+}
+
+.hero-install-note a {
+  color: var(--accent-mint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.install-prereq-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-md);
+}
+
+.install-prereq-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  color: var(--text-primary);
+}
+
+.install-prereq-box p {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin: 0 0 0.65rem;
+}
+
+.install-prereq-box p:last-child {
+  margin-bottom: 0;
 }
 
 .copy-btn:hover {
@@ -557,6 +604,20 @@ code, pre {
   gap: 0.5rem;
   transition: all 0.2s ease;
   white-space: nowrap;
+}
+
+.host-pane-note {
+  margin: 0;
+  padding: 0.85rem 1.25rem 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.host-pane-note code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent-mint);
 }
 
 .host-tab:hover {

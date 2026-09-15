@@ -11,14 +11,21 @@ import {
   VAULT_AI_DEFAULT_OPS_LOG_MAX_FILE_SIZE_MB,
   resolveAiConfig
 } from './config.js';
-import type { VaultAiAgent, VaultAiRankInput, VaultAiRankResult, VaultAiRefineInput, VaultAiRefineResult } from './types.js';
+import type {
+  VaultAiAgent,
+  VaultAiRankInput,
+  VaultAiRankResult,
+  VaultAiRefineInput,
+  VaultAiRefineResult,
+  VaultAiWikiPolishInput
+} from './types.js';
 import { NoopVaultAiAgent } from './noop.js';
 
 export const AI_OPS_DIR_NAME = 'ai-ops';
 export const AI_OPS_FILE_PREFIX = 'ai-ops-';
 export const AI_OPS_ERROR_SNIPPET_MAX = 200;
 
-export type AiOpsOperation = 'refine' | 'rank' | 'test';
+export type AiOpsOperation = 'refine' | 'rank' | 'wiki' | 'test';
 
 export interface AiOpsEntry {
   id: string;
@@ -63,7 +70,7 @@ export interface AiOpsListResult {
 export const AiOpsListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
-  operation: z.enum(['refine', 'rank', 'test']).optional(),
+  operation: z.enum(['refine', 'rank', 'wiki', 'test']).optional(),
   ok: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
@@ -469,7 +476,10 @@ function parseAiOpsLine(line: string): AiOpsEntry | null {
       parsed &&
       typeof parsed.id === 'string' &&
       typeof parsed.timestamp === 'string' &&
-      (parsed.operation === 'refine' || parsed.operation === 'rank' || parsed.operation === 'test') &&
+      (parsed.operation === 'refine' ||
+        parsed.operation === 'rank' ||
+        parsed.operation === 'wiki' ||
+        parsed.operation === 'test') &&
       typeof parsed.ok === 'boolean' &&
       typeof parsed.durationMs === 'number'
     ) {
@@ -704,6 +714,16 @@ export class AiOpsJournaledAgent implements VaultAiAgent {
       }
       throw err;
     }
+  }
+
+  async polishWikiMarkdown(input: VaultAiWikiPolishInput): Promise<string> {
+    const innerPolish = this.inner.polishWikiMarkdown?.bind(this.inner);
+    if (!innerPolish) {
+      throw new Error('wiki polish unavailable');
+    }
+    // Single-observe: regenerateWiki owns the one operation=wiki journal row
+    // via emitWikiOps; journaling here would write a second row per regenerate.
+    return innerPolish(input);
   }
 }
 

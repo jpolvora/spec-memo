@@ -55,13 +55,44 @@ export interface VaultAiRankResult {
 }
 
 /**
+ * Bounded wiki polish snapshot (spec 0062). Titles/ids/counts only — no
+ * record bodies. Shared with `src/wiki.ts` so the agent and regenerate path
+ * agree on the payload shape.
+ */
+export interface VaultAiWikiSnapshot {
+  projectId: string;
+  inventory: {
+    traps: number;
+    trapsActive: number;
+    decisions: number;
+    specs: number;
+    plans: number;
+    sessions: number;
+    prompts: number;
+  };
+  records: Array<{ id: string; kind: string; title: string }>;
+}
+
+/**
+ * Input for optional wiki polish (spec 0062). Deterministic markdown plus
+ * a fresh snapshot from the same regenerate call.
+ */
+export interface VaultAiWikiPolishInput {
+  markdown: string;
+  snapshot: VaultAiWikiSnapshot;
+}
+
+/**
  * Common contract for the optional vault intelligence layer (AC1).
  * Implementations must not use unchecked `any` for these payloads.
+ * `polishWikiMarkdown` is optional so Noop and older wrappers stay valid.
  */
 export interface VaultAiAgent {
   isAvailable(): boolean;
   refineForSearch(input: VaultAiRefineInput): Promise<VaultAiRefineResult>;
   rankCandidates(input: VaultAiRankInput): Promise<VaultAiRankResult>;
+  /** Spec 0062: polish vault WIKI.md from snapshot; fail-open at the caller. */
+  polishWikiMarkdown?(input: VaultAiWikiPolishInput): Promise<string>;
 }
 
 export type VaultAiProvider = 'cursor-sdk';

@@ -15,7 +15,8 @@ import {
   readWikiFile,
   regenerateWiki,
   renderWikiMarkdown,
-  WIKI_AUTO_MARKER
+  WIKI_AUTO_MARKER,
+  type WikiSnapshot
 } from './wiki.js';
 
 function listRel(root: string): string[] {
@@ -72,6 +73,7 @@ describe('project wiki', () => {
     const headings = [...raw.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1]);
     assert.deepEqual(headings, [
       'Overview',
+      'Topic catalog',
       'Architecture & decisions',
       'Active traps',
       'Specs & plans',
@@ -80,6 +82,7 @@ describe('project wiki', () => {
     ]);
     const loaded = loadWikiTemplate();
     assert.ok(loaded.includes('{{projectTitle}}'));
+    assert.ok(loaded.includes('{{topicCatalog}}'));
     assert.ok(loaded.includes('{{structuredLinks}}'));
   });
 
@@ -199,6 +202,166 @@ describe('project wiki', () => {
     });
     assert.equal(result.aiPolished, false);
     assert.ok(fs.existsSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md')));
+  });
+
+  it('assistant off (ai.enabled false) does not invoke polish', async () => {
+    let called = false;
+    const result = await regenerateWiki({
+      projectId,
+      vaultRoot,
+      polishWikiMarkdown: async () => {
+        called = true;
+        return '# polished';
+      }
+    });
+    assert.equal(called, false);
+    assert.equal(result.aiPolished, false);
+  });
+
+  it('assistant on + fake polish receives snapshot with known trap id/title', async () => {
+    await upsertRecord({
+      vaultRoot,
+      cwd: productDir,
+      projectId,
+      kind: 'trap',
+      slug: 'wiki-snap-trap',
+      frontmatter: { title: 'Snapshot Trap Title', status: 'active' },
+      body: 'snap body'
+    });
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.ai = { enabled: true, provider: 'cursor-sdk', model: 'composer-2.5', apiKeyEnv: 'CURSOR_API_KEY', timeoutMs: 5000, rankTopK: 10, maxConcurrent: 1 };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    let seenSnapshot: WikiSnapshot | undefined;
+    const result = await regenerateWiki({
+      projectId,
+      vaultRoot,
+      polishWikiMarkdown: async ({ markdown, snapshot }) => {
+        seenSnapshot = snapshot;
+        return markdown;
+      }
+    });
+    assert.equal(result.aiPolished, true);
+    assert.ok(seenSnapshot);
+    assert.equal(seenSnapshot.projectId, projectId);
+    assert.ok(seenSnapshot.records.some((r) => r.id === 'wiki-snap-trap' && r.title === 'Snapshot Trap Title'));
+  });
+
+  it('successful polish that drops Topic catalog link targets falls back to deterministic', async () => {
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.wiki = { aiEnabled: true };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    const result = await regenerateWiki({
+      projectId,
+      vaultRoot,
+      polishWikiMarkdown: async ({ markdown }) =>
+        markdown.replace(/\]\(#active-traps\)/g, '](#broken-traps)')
+    });
+    assert.equal(result.aiPolished, false);
+    assert.ok(result.aiError);
+    const after = fs.readFileSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md'), 'utf8');
+    assert.ok(after.includes('](#active-traps)'));
+    assert.ok(!after.includes('](#broken-traps)'));
+    assert.ok(after.includes(WIKI_AUTO_MARKER));
+  });
+
+  it('successful polish that drops AUTO-GENERATED marker still persists provenance + fresh lastGenerated', async () => {
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.wiki = { aiEnabled: true };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    const now = new Date('2026-09-15T12:00:00.000Z');
+    const result = await regenerateWiki({
+      projectId,
+      vaultRoot,
+      now,
+      polishWikiMarkdown: async ({ markdown }) => {
+        return markdown
+          .replace(WIKI_AUTO_MARKER, '')
+          .replace(/\*Last generated:[^*]*\*/, '*Last generated: 1999-01-01T00:00:00.000Z*');
+      }
+    });
+    assert.equal(result.aiPolished, true);
+    assert.equal(result.lastGenerated, '2026-09-15T12:00:00.000Z');
+    const body = fs.readFileSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md'), 'utf8');
+    assert.ok(body.includes(WIKI_AUTO_MARKER));
+    assert.match(body, /\*Last generated:\s*2026-09-15T12:00:00\.000Z\*/);
+    assert.ok(!body.includes('1999-01-01'));
+  });
+
+  it('IO_GUARD-style refuse keeps deterministic markdown', async () => {
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.wiki = { aiEnabled: true };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    const deterministicFirst = await regenerateWiki({ projectId, vaultRoot });
+    assert.equal(deterministicFirst.aiPolished, false);
+    const before = fs.readFileSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md'), 'utf8');
+    const result = await regenerateWiki({
+      projectId,
+      vaultRoot,
+      polishWikiMarkdown: async () => {
+        throw new Error('IO_GUARD refused wiki polish output');
+      }
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.aiPolished, false);
+    assert.ok(result.aiError && /IO_GUARD|refuse/i.test(result.aiError));
+    const after = fs.readFileSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md'), 'utf8');
+    assert.ok(after.includes('## Overview'));
+    assert.ok(after.includes(WIKI_AUTO_MARKER));
+    assert.equal(after.includes('{{'), false);
+    // Same structure as deterministic (ignore lastGenerated timestamp drift by checking marker + sections)
+    assert.ok(before.includes('## Topic catalog'));
+    assert.ok(after.includes('## Topic catalog'));
+  });
+
+  it('polish that drops required h2 falls back to deterministic', async () => {
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.wiki = { aiEnabled: true };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    const result = await regenerateWiki({
+      projectId,
+      vaultRoot,
+      polishWikiMarkdown: async () => '# Broken\n\n## Overview\n\nOnly overview survives.\n'
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.aiPolished, false);
+    assert.ok(result.aiError);
+    const body = fs.readFileSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md'), 'utf8');
+    assert.ok(body.includes('## Topic catalog'));
+    assert.ok(body.includes('## Active traps'));
+    assert.ok(body.includes('## Structured links'));
+  });
+
+  it('topic catalog rows use Title(#slug) blurbs for required topics', async () => {
+    await regenerateWiki({ projectId, vaultRoot });
+    const body = fs.readFileSync(path.join(vaultRoot, 'projects', projectId, 'WIKI.md'), 'utf8');
+    assert.ok(body.includes('[Architecture & decisions](#architecture-decisions):'));
+    assert.ok(body.includes('[Active traps](#active-traps):'));
+    assert.ok(body.includes('[Specs & plans](#specs-plans):'));
+    assert.ok(body.includes('[Sessions](#sessions):'));
+    assert.ok(body.includes('[Structured links](#structured-links):'));
+  });
+
+  it('resolveWikiPolishFromVault is imported from production wiki module (AC14 wiring)', async () => {
+    const wikiSrc = fs.readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'wiki.ts'),
+      'utf8'
+    );
+    assert.ok(wikiSrc.includes('resolveVaultAiAgent'));
+    const statusSrc = fs.readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'status.ts'),
+      'utf8'
+    );
+    assert.ok(statusSrc.includes('resolveWikiPolishFromVault'));
+    const cliSrc = fs.readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.ts'),
+      'utf8'
+    );
+    assert.ok(cliSrc.includes('resolveWikiPolishFromVault'));
   });
 
   it('collect/regenerate does not increment hits or occurrences on sample trap', async () => {

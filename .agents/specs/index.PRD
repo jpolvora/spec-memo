@@ -131,12 +131,12 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [ ] Status monitor AI ops log UI and durable analysis journal (`spec: 0057-status-ai-ops-logs.spec.md`)
  - [x] Status monitor left nav, home dashboard, error logs viewer, and AI config save (`spec: 0058-status-monitor-nav-ai-config.spec.md`)
 - [x] MCP I/O guard: untrusted vault data, prompt-intent refuse, always-on skill harness (`spec: 0059-mcp-io-guard.spec.md`)
-- [ ] Status Error Logs: row selection, delete with confirm, New Issue copy draft (`spec: 0061-status-error-logs-actions.spec.md`)
-- [ ] AI-assisted wiki refine from latest project knowledge snapshot (`spec: 0062-wiki-ai-refine.spec.md`)
+- [x] Status Error Logs: row selection, delete with confirm, New Issue copy draft (`spec: 0061-status-error-logs-actions.spec.md`)
+- [x] AI-assisted wiki refine + index/topic progressive disclosure (ws-wiki inspired) (`spec: 0062-wiki-ai-refine.spec.md`)
 - [x] AI Ops "Test AI" connectivity probe: raw-agent hello probe + force-logged `test` row (`spec: 0063-ai-ops-test-ai-button.spec.md`)
 - [x] AI cursor-sdk timeout: configurable `timeoutMs`, 30s default, honored everywhere (`spec: 0064-ai-timeout-config.spec.md`)
 - [x] CLI lifecycle shortcuts: start, stop, restart, and direct shortcuts for monitor, canvas, server, mcp (`spec: 0065-cli-start-shortcuts.spec.md`)
-- [ ] Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops (`spec: 0066-status-details-drawer-errors-aiops.spec.md`)
+- [x] Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops (`spec: 0066-status-details-drawer-errors-aiops.spec.md`)
 
 
 
@@ -226,9 +226,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 58 | `open-github-issues-batch` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Fix open GitHub bugs: AI Ops journal wiring (#66), test vault isolation (#67), silent Chrome probes (#68) |
 
-| 59 | `status-error-logs-actions` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Error Logs: row selection, delete with confirm, New Issue copy draft |
+| 59 | `status-error-logs-actions` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Error Logs: row selection, delete with confirm, New Issue copy draft |
 
-| 60 | `wiki-ai-refine` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | AI-assisted wiki refine from latest project knowledge snapshot |
+| 60 | `wiki-ai-refine` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | AI-assisted wiki refine + index/topic progressive disclosure (ws-wiki inspired); v0.37.0 |
 
 | 61 | [`ai-ops-test-ai-button`](0063-ai-ops-test-ai-button.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | AI Ops "Test AI" connectivity probe (issue #69); v0.34.0 |
 
@@ -325,6 +325,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-14 | cli-start-shortcuts | CLI lifecycle commands (start, stop, restart) and shortcuts for monitor, canvas, server, mcp; v0.35.0 | npm test 851 pass |
 | 2026-09-14 | status-details-drawer-errors-aiops | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0 | npm test 862 pass |
 | 2026-09-14 | cli-background-lifecycle | HTTP lifecycle commands background by default with readiness status and clean exit; stdio MCP remains host-attached | v0.36.1; npm test 868 pass |
+| 2026-09-13 | status-error-logs-actions | Status Error Logs: row selection, delete with confirm, New Issue copy draft | `9739c98`; npm test 828 pass |
+| 2026-09-15 | wiki-ai-refine | AI-assisted wiki refine from knowledge snapshot + index/topic progressive disclosure (ws-wiki inspired); v0.37.0 | npm test 875 pass |
 
 ## Archive
 
