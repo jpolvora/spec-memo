@@ -1,3 +1,8 @@
+### [2026-09-14 22:36] Agent: Cursor GPT-5.6 Luna
+- **Prompt**: Make `memo start`, `restart`, and `stop` return to the terminal instead of holding it.
+- **Done**: HTTP lifecycle services now start/restart in the background with readiness status and clean exits; added external-process coverage, discovery hardening, and operator documentation.
+- **Result**: `npm test` passes 868 tests.
+
 ### [2026-09-13 20:45] Agent: Cursor Grok 4.6
 - **Prompt**: `/ws-fable-method` implement 0061 Error Logs select/delete/New Issue
 - **Done**: Checkboxes + Delete modal + New Issue textarea; `POST /api/error-logs/delete`; tests and README/ws-memo

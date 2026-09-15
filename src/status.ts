@@ -1771,37 +1771,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           <button type="button" id="btn-aiops-next" class="btn-secondary" disabled>Next &rarr;</button>
         </div>
       </div>
-
-      <div class="metadata-card" id="aiops-detail" style="display:none; margin: 0;">
-        <div style="grid-column: 1 / -1; display:flex; justify-content:space-between; align-items:center;">
-          <strong id="aiops-detail-title">AI operation</strong>
-          <button type="button" id="btn-aiops-detail-close" class="btn-secondary" style="width:auto; margin:0; padding:4px 10px;">Close</button>
-        </div>
-        <div class="meta-item"><span class="meta-label">Operation</span><span class="meta-val" id="aiops-detail-operation">-</span></div>
-        <div class="meta-item"><span class="meta-label">Result</span><span class="meta-val" id="aiops-detail-ok">-</span></div>
-        <div class="meta-item"><span class="meta-label">Duration</span><span class="meta-val" id="aiops-detail-duration">-</span></div>
-        <div class="meta-item"><span class="meta-label">Timestamp</span><span class="meta-val" id="aiops-detail-time">-</span></div>
-        <div class="meta-item"><span class="meta-label">Record</span><span class="meta-val" id="aiops-detail-record">-</span></div>
-        <div class="meta-item"><span class="meta-label">Model</span><span class="meta-val" id="aiops-detail-model">-</span></div>
-        <div style="grid-column: 1 / -1;">
-          <details>
-            <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem;">Input</summary>
-            <pre id="aiops-detail-input" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
-          </details>
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <details>
-            <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem;">Output</summary>
-            <pre id="aiops-detail-output" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
-          </details>
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <details>
-            <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem;">Metadata</summary>
-            <pre id="aiops-detail-meta" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
-          </details>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -2352,25 +2321,6 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           <button type="button" id="btn-errorlog-next" class="btn-secondary" disabled>Next &rarr;</button>
         </div>
       </div>
-
-      <div class="metadata-card" id="errorlog-detail" style="display:none; margin: 0;">
-        <div style="grid-column: 1 / -1; display:flex; justify-content:space-between; align-items:center;">
-          <strong id="errorlog-detail-title">Error detail</strong>
-          <button type="button" id="btn-errorlog-detail-close" class="btn-secondary" style="width:auto; margin:0; padding:4px 10px;">Close</button>
-        </div>
-        <div class="meta-item"><span class="meta-label">Timestamp</span><span class="meta-val" id="errorlog-detail-time">-</span></div>
-        <div class="meta-item"><span class="meta-label">Level</span><span class="meta-val" id="errorlog-detail-level">-</span></div>
-        <div class="meta-item"><span class="meta-label">Subsystem</span><span class="meta-val" id="errorlog-detail-subsystem">-</span></div>
-        <div class="meta-item"><span class="meta-label">Endpoint</span><span class="meta-val" id="errorlog-detail-endpoint">-</span></div>
-        <div style="grid-column: 1 / -1;">
-          <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Error</div>
-          <pre id="errorlog-detail-error" style="white-space: pre-wrap; word-break: break-word; font-size: 0.78rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto;"></pre>
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Stack</div>
-          <pre id="errorlog-detail-stack" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto;"></pre>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -2469,6 +2419,78 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       <div style="margin-top:12px;">
         <h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Manifest</h4>
         <pre id="backup-drawer-manifest" style="font-size:0.72rem; background:var(--code-bg); padding:10px; border-radius:6px; overflow:auto; max-height:240px;">—</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Log Details Drawer -->
+  <div class="drawer-overlay" id="errorlog-drawer-overlay"></div>
+  <div class="drawer" id="errorlog-drawer">
+    <div class="drawer-header">
+      <h3 id="errorlog-drawer-title">Error Details</h3>
+      <span id="errorlog-detail-title" style="display:none;"></span>
+      <button type="button" class="drawer-close" id="errorlog-drawer-close">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="metadata-card" id="errorlog-detail" style="display:none; margin:0 0 16px 0;">
+        <div class="meta-item"><span class="meta-label">Timestamp</span><span class="meta-val" id="errorlog-detail-time">-</span></div>
+        <div class="meta-item"><span class="meta-label">Level</span><span class="meta-val" id="errorlog-detail-level">-</span></div>
+        <div class="meta-item"><span class="meta-label">Subsystem</span><span class="meta-val" id="errorlog-detail-subsystem">-</span></div>
+        <div class="meta-item"><span class="meta-label">Endpoint</span><span class="meta-val" id="errorlog-detail-endpoint">-</span></div>
+        <div class="meta-item"><span class="meta-label">Project</span><span class="meta-val" id="errorlog-detail-project">-</span></div>
+      </div>
+      <div class="drawer-actions" style="margin-bottom:16px;">
+        <button type="button" id="btn-errorlog-detail-close" class="btn-secondary" style="width:auto;">Close</button>
+      </div>
+      <div style="margin-bottom:14px;">
+        <h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Error</h4>
+        <pre id="errorlog-detail-error" style="white-space: pre-wrap; word-break: break-word; font-size: 0.78rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin:0;"></pre>
+      </div>
+      <div>
+        <h4 style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Stack / Context</h4>
+        <pre id="errorlog-detail-stack" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin:0;"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Ops Details Drawer -->
+  <div class="drawer-overlay" id="aiops-drawer-overlay"></div>
+  <div class="drawer" id="aiops-drawer">
+    <div class="drawer-header">
+      <h3 id="aiops-drawer-title">AI Operation Details</h3>
+      <span id="aiops-detail-title" style="display:none;"></span>
+      <button type="button" class="drawer-close" id="aiops-drawer-close">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="metadata-card" id="aiops-detail" style="display:none; margin:0 0 16px 0;">
+        <div class="meta-item"><span class="meta-label">Operation</span><span class="meta-val" id="aiops-detail-operation">-</span></div>
+        <div class="meta-item"><span class="meta-label">Result</span><span class="meta-val" id="aiops-detail-ok">-</span></div>
+        <div class="meta-item"><span class="meta-label">Duration</span><span class="meta-val" id="aiops-detail-duration">-</span></div>
+        <div class="meta-item"><span class="meta-label">Timestamp</span><span class="meta-val" id="aiops-detail-time">-</span></div>
+        <div class="meta-item"><span class="meta-label">Record</span><span class="meta-val" id="aiops-detail-record">-</span></div>
+        <div class="meta-item"><span class="meta-label">Model</span><span class="meta-val" id="aiops-detail-model">-</span></div>
+        <div class="meta-item"><span class="meta-label">Project</span><span class="meta-val" id="aiops-detail-project">-</span></div>
+      </div>
+      <div class="drawer-actions" style="margin-bottom:16px;">
+        <button type="button" id="btn-aiops-detail-close" class="btn-secondary" style="width:auto;">Close</button>
+      </div>
+      <div style="margin-bottom:14px;">
+        <details open>
+          <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; margin-bottom: 6px;">Input</summary>
+          <pre id="aiops-detail-input" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
+        </details>
+      </div>
+      <div style="margin-bottom:14px;">
+        <details open>
+          <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; margin-bottom: 6px;">Output</summary>
+          <pre id="aiops-detail-output" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
+        </details>
+      </div>
+      <div>
+        <details open>
+          <summary style="cursor:pointer; color: var(--accent); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; margin-bottom: 6px;">Metadata</summary>
+          <pre id="aiops-detail-meta" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; margin-top: 6px;"></pre>
+        </details>
       </div>
     </div>
   </div>
@@ -3009,7 +3031,43 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       } catch {}
     }
 
+    function closeAllStatusDrawers() {
+      if (typeof closeErrorLogDrawer === "function") {
+        closeErrorLogDrawer();
+      } else {
+        const d = document.getElementById("errorlog-drawer");
+        if (d) d.classList.remove("open");
+        const o = document.getElementById("errorlog-drawer-overlay");
+        if (o) o.classList.remove("open");
+        const p = document.getElementById("errorlog-detail");
+        if (p) p.style.display = "none";
+      }
+      if (typeof closeAiOpsDrawer === "function") {
+        closeAiOpsDrawer();
+      } else {
+        const d = document.getElementById("aiops-drawer");
+        if (d) d.classList.remove("open");
+        const o = document.getElementById("aiops-drawer-overlay");
+        if (o) o.classList.remove("open");
+        const p = document.getElementById("aiops-detail");
+        if (p) p.style.display = "none";
+      }
+      const memDrawer = document.getElementById("memory-drawer");
+      if (memDrawer) memDrawer.classList.remove("open");
+      const memOverlay = document.getElementById("memory-drawer-overlay");
+      if (memOverlay) memOverlay.classList.remove("open");
+      const backupDrawer = document.getElementById("backup-drawer");
+      if (backupDrawer) backupDrawer.classList.remove("open");
+      const backupOverlay = document.getElementById("backup-drawer-overlay");
+      if (backupOverlay) backupOverlay.classList.remove("open");
+      const promptDrawer = document.getElementById("prompt-drawer");
+      if (promptDrawer) promptDrawer.classList.remove("open");
+      const promptOverlay = document.getElementById("drawer-overlay");
+      if (promptOverlay) promptOverlay.classList.remove("open");
+    }
+
     function activateTab(tabId) {
+      closeAllStatusDrawers();
       document.querySelectorAll(".tab-btn").forEach((b) => {
         b.classList.toggle("active", b.getAttribute("data-tab") === tabId);
       });
@@ -3176,9 +3234,26 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       errEl.style.display = "none";
     }
 
+    function openErrorLogDrawer() {
+      const drawer = document.getElementById("errorlog-drawer");
+      if (drawer) drawer.classList.add("open");
+      const overlay = document.getElementById("errorlog-drawer-overlay");
+      if (overlay) overlay.classList.add("open");
+      const panel = document.getElementById("errorlog-detail");
+      if (panel) panel.style.display = "grid";
+    }
+
+    function closeErrorLogDrawer() {
+      const drawer = document.getElementById("errorlog-drawer");
+      if (drawer) drawer.classList.remove("open");
+      const overlay = document.getElementById("errorlog-drawer-overlay");
+      if (overlay) overlay.classList.remove("open");
+      const panel = document.getElementById("errorlog-detail");
+      if (panel) panel.style.display = "none";
+    }
+
     function hideErrorLogDetail() {
-      const el = document.getElementById("errorlog-detail");
-      if (el) el.style.display = "none";
+      closeErrorLogDrawer();
     }
 
     function setErrorLogActionEnabled(enabled) {
@@ -3319,16 +3394,19 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         }
         const data = await res.json();
         const entry = data.entry || data;
-        const panel = document.getElementById("errorlog-detail");
-        if (panel) panel.style.display = "grid";
-        const title = document.getElementById("errorlog-detail-title");
-        if (title) title.textContent = "Error " + (entry.id || id);
+        const titleText = "Error " + (entry.id || id);
+        const drawerTitle = document.getElementById("errorlog-drawer-title");
+        if (drawerTitle) drawerTitle.textContent = titleText;
+        const detailTitle = document.getElementById("errorlog-detail-title");
+        if (detailTitle) detailTitle.textContent = titleText;
         setHomeText("errorlog-detail-time", entry.timestamp ? formatIsoShort(entry.timestamp) : "-");
         setHomeText("errorlog-detail-level", entry.level || "-");
         setHomeText("errorlog-detail-subsystem", entry.subsystem || "-");
         setHomeText("errorlog-detail-endpoint", entry.endpoint || entry.tool || "-");
+        setHomeText("errorlog-detail-project", entry.projectId ? (typeof displayNameForProject === "function" ? displayNameForProject(entry.projectId) : entry.projectId) : "-");
         setHomeText("errorlog-detail-error", entry.error || "-");
         setHomeText("errorlog-detail-stack", entry.stack || (entry.context ? JSON.stringify(entry.context, null, 2) : "-"));
+        openErrorLogDrawer();
       } catch (e) {
         showErrorLogError("Error detail fetch failed.");
       }
@@ -3573,7 +3651,15 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     }
     const btnErrorlogDetailClose = document.getElementById("btn-errorlog-detail-close");
     if (btnErrorlogDetailClose) {
-      btnErrorlogDetailClose.addEventListener("click", () => hideErrorLogDetail());
+      btnErrorlogDetailClose.addEventListener("click", () => closeErrorLogDrawer());
+    }
+    const btnErrorlogClose = document.getElementById("errorlog-drawer-close");
+    if (btnErrorlogClose) {
+      btnErrorlogClose.addEventListener("click", () => closeErrorLogDrawer());
+    }
+    const overlayErrorlog = document.getElementById("errorlog-drawer-overlay");
+    if (overlayErrorlog) {
+      overlayErrorlog.addEventListener("click", () => closeErrorLogDrawer());
     }
     const btnAiConfigSave = document.getElementById("btn-ai-config-save");
     if (btnAiConfigSave) {
@@ -3601,8 +3687,26 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       errEl.style.display = "none";
     }
 
+    function openAiOpsDrawer() {
+      const drawer = document.getElementById("aiops-drawer");
+      if (drawer) drawer.classList.add("open");
+      const overlay = document.getElementById("aiops-drawer-overlay");
+      if (overlay) overlay.classList.add("open");
+      const detail = document.getElementById("aiops-detail");
+      if (detail) detail.style.display = "grid";
+    }
+
+    function closeAiOpsDrawer() {
+      const drawer = document.getElementById("aiops-drawer");
+      if (drawer) drawer.classList.remove("open");
+      const overlay = document.getElementById("aiops-drawer-overlay");
+      if (overlay) overlay.classList.remove("open");
+      const detail = document.getElementById("aiops-detail");
+      if (detail) detail.style.display = "none";
+    }
+
     function hideAiOpsDetail() {
-      document.getElementById("aiops-detail").style.display = "none";
+      closeAiOpsDrawer();
     }
 
     function aiopsLoadingRow(tbody, message) {
@@ -3704,13 +3808,21 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         }
         const data = await res.json();
         const entry = data.entry || {};
-        document.getElementById("aiops-detail-title").textContent = "AI operation " + (entry.id || id);
+        const titleText = "AI operation " + (entry.id || id);
+        const drawerTitle = document.getElementById("aiops-drawer-title");
+        if (drawerTitle) drawerTitle.textContent = titleText;
+        const detailTitle = document.getElementById("aiops-detail-title");
+        if (detailTitle) detailTitle.textContent = titleText;
         document.getElementById("aiops-detail-operation").textContent = entry.operation || "-";
         document.getElementById("aiops-detail-ok").textContent = entry.ok ? "ok" : "fail";
         document.getElementById("aiops-detail-duration").textContent =
           (entry.durationMs != null ? Math.round(entry.durationMs) + "ms" : "-");
         document.getElementById("aiops-detail-time").textContent = formatIsoShort(entry.timestamp);
         document.getElementById("aiops-detail-record").textContent = entry.recordId || "-";
+        const projEl = document.getElementById("aiops-detail-project");
+        if (projEl) {
+          projEl.textContent = entry.projectId ? (typeof displayNameForProject === "function" ? displayNameForProject(entry.projectId) : entry.projectId) : "-";
+        }
         const modelBits = [];
         if (entry.provider) modelBits.push(entry.provider);
         if (entry.model) modelBits.push(entry.model);
@@ -3727,7 +3839,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           );
         document.getElementById("aiops-detail-meta").textContent =
           JSON.stringify(entry.metadata !== undefined ? entry.metadata : null, null, 2);
-        document.getElementById("aiops-detail").style.display = "grid";
+        openAiOpsDrawer();
       } catch (err) {
         showAiOpsError("Failed to load AI operation detail: " + (err && err.message ? err.message : String(err)));
       }
@@ -3763,7 +3875,11 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       aiopsOffset = aiopsOffset + AIOPS_PAGE_SIZE;
       loadAiOps(false);
     });
-    document.getElementById("btn-aiops-detail-close").addEventListener("click", hideAiOpsDetail);
+    document.getElementById("btn-aiops-detail-close").addEventListener("click", closeAiOpsDrawer);
+    const btnAiopsClose = document.getElementById("aiops-drawer-close");
+    if (btnAiopsClose) btnAiopsClose.addEventListener("click", closeAiOpsDrawer);
+    const overlayAiops = document.getElementById("aiops-drawer-overlay");
+    if (overlayAiops) overlayAiops.addEventListener("click", closeAiOpsDrawer);
 
     // --- MEMORY TAB LOGIC ---
     let memoryRecordsCache = [];
@@ -4749,8 +4865,29 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && document.getElementById("backup-drawer").classList.contains("open")) {
-        closeBackupDrawer();
+      if (e.key === "Escape") {
+        const elDrawer = document.getElementById("errorlog-drawer");
+        if (elDrawer && elDrawer.classList.contains("open")) {
+          closeErrorLogDrawer();
+        }
+        const aiDrawer = document.getElementById("aiops-drawer");
+        if (aiDrawer && aiDrawer.classList.contains("open")) {
+          closeAiOpsDrawer();
+        }
+        const backupDrawer = document.getElementById("backup-drawer");
+        if (backupDrawer && backupDrawer.classList.contains("open")) {
+          closeBackupDrawer();
+        }
+        const memDrawer = document.getElementById("memory-drawer");
+        if (memDrawer && memDrawer.classList.contains("open")) {
+          closeMemoryDrawer();
+        }
+        const promptDrawer = document.getElementById("prompt-drawer");
+        if (promptDrawer && promptDrawer.classList.contains("open")) {
+          promptDrawer.classList.remove("open");
+          const pdo = document.getElementById("drawer-overlay");
+          if (pdo) pdo.classList.remove("open");
+        }
       }
     });
 

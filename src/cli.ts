@@ -34,6 +34,18 @@ import type { FeedbackType } from './types.js';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as readline from 'node:readline';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+// Safety handlers: ignore unhandled EPIPE on stdout/stderr when daemon is unlinked
+process.stdout?.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return;
+});
+process.stderr?.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return;
+});
+
+let isRunningStdioMcp = false;
 import {
   getInstallPreflight,
   normalizeInstallHosts,
@@ -144,6 +156,8 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       result.isJson = true;
     } else if (arg === '--version' || arg === '-v') {
       result.options.version = true;
+    } else if (arg === '--foreground' || arg === '-f') {
+      result.options.foreground = true;
     } else if (arg === '--help' || arg === '-h') {
       if (result.command) {
         result.subcommandHelp = true;
@@ -179,6 +193,16 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   }
 
   return result;
+}
+
+function isForegroundRequested(parsed: ParsedCliArgs): boolean {
+  return (
+    parsed.options.foreground === true ||
+    parsed.options.foreground === 'true' ||
+    parsed.options.f === true ||
+    parsed.options.f === 'true' ||
+    process.env.SPEC_MEMO_START_FOREGROUND === '1'
+  );
 }
 
 function isNoStatusOption(options: Record<string, unknown>): boolean {
@@ -286,6 +310,7 @@ Options:
   --no-status           Disable status companion (server mode)
   --auth-token <token>  Bearer token for authentication
   --vaultRoot <path>    Override vault root directory
+  -f, --foreground      Run in foreground instead of background daemon
   --json                Output machine-readable JSON
   -h, --help            Show this help message
 `);
@@ -334,6 +359,7 @@ Options:
   --no-status           Disable status companion (server mode)
   --auth-token <token>  Bearer token for authentication
   --vaultRoot <path>    Override vault root directory
+  -f, --foreground      Run in foreground instead of background daemon
   --json                Output machine-readable JSON
   -h, --help            Show this help message
 `);
@@ -361,6 +387,7 @@ Options:
   --host <host>         Host to bind (default: 127.0.0.1)
   --vaultRoot <path>    Override vault root directory
   --auth-token <token>  Bearer token for authentication
+  -f, --foreground      Run in foreground instead of background daemon
   --json                Output machine-readable JSON
   -h, --help            Show this help message
 `);
@@ -380,6 +407,7 @@ Options:
   --host <host>         Host to bind (default: 127.0.0.1)
   --vaultRoot <path>    Override vault root directory
   --auth-token <token>  Bearer token for authentication
+  -f, --foreground      Run in foreground instead of background daemon
   --json                Output machine-readable JSON
   -h, --help            Show this help message
 `);
@@ -1175,6 +1203,167 @@ export function parseServicePort(raw: unknown, fallback?: number, flagName = 'po
   return n;
 }
 
+function buildChildStartArgs(
+  target: string,
+  parsed: ParsedCliArgs,
+  port: number,
+  host: string,
+  extra?: { statusPort?: number; noStatus?: boolean; project?: string }
+): string[] {
+  const args: string[] = ['start', target, '--foreground', '--port', String(port), '--host', host];
+
+  if (extra?.statusPort !== undefined) {
+    args.push('--status-port', String(extra.statusPort));
+  }
+  if (extra?.noStatus) {
+    args.push('--no-status');
+  }
+  if (extra?.project) {
+    args.push('--project', extra.project);
+  }
+
+  const vaultRootArg = (parsed.options.vaultRoot as string) || undefined;
+  if (vaultRootArg) {
+    args.push('--vaultRoot', vaultRootArg);
+  }
+
+  if (parsed.isJson) {
+    args.push('--json');
+  }
+
+  return args;
+}
+
+async function startBackgroundDaemon(
+  target: string,
+  parsed: ParsedCliArgs,
+  details: {
+    port: number;
+    host: string;
+    probeUrl: string;
+    authToken?: string;
+    extraArgs?: { statusPort?: number; noStatus?: boolean; project?: string };
+    onSuccess: (url: string) => void;
+  }
+): Promise<number> {
+  const childArgs = buildChildStartArgs(target, parsed, details.port, details.host, details.extraArgs);
+  const cliScript = fileURLToPath(import.meta.url);
+  const childEnv = { ...process.env };
+  if (details.authToken) {
+    childEnv.SPEC_MEMO_AUTH_TOKEN = details.authToken;
+  }
+
+  let child;
+  try {
+    child = spawn(process.execPath, [cliScript, ...childArgs], {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      env: childEnv
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (parsed.isJson) {
+      printJson({ isError: true, error: msg, code: 'SPAWN_ERROR' });
+    } else {
+      console.error(`Failed to spawn background daemon for ${target}: ${msg}`);
+    }
+    return 1;
+  }
+
+  let childStdout = '';
+  let childStderr = '';
+  let childExited = false;
+  let childExitCode: number | null = null;
+  let childSpawnError: Error | undefined;
+
+  child.stdout?.on('data', (chunk) => {
+    childStdout += chunk.toString();
+  });
+  child.stderr?.on('data', (chunk) => {
+    childStderr += chunk.toString();
+  });
+  child.on('error', (err) => {
+    childSpawnError = err;
+    childExited = true;
+  });
+  child.on('close', (code) => {
+    childExited = true;
+    childExitCode = code;
+  });
+
+  const startTime = Date.now();
+  const timeoutMs = 8000;
+  let running = false;
+
+  while (Date.now() - startTime < timeoutMs) {
+    if (childExited) {
+      break;
+    }
+    const probe = await probeHttpService(details.probeUrl, 150, details.authToken);
+    if (probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
+      running = true;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  if (running) {
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+    child.unref();
+
+    const url = `http://${details.host}:${details.port}`;
+    details.onSuccess(url);
+    return 0;
+  }
+
+  if (childExited) {
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+    child.unref();
+
+    const raw = (childStdout + '\n' + childStderr).trim();
+    if (parsed.isJson) {
+      try {
+        const parsedJson = JSON.parse(raw);
+        printJson(parsedJson);
+      } catch {
+        printJson({
+          isError: true,
+          error:
+            raw ||
+            childSpawnError?.message ||
+            `Service '${target}' exited unexpectedly with code ${childExitCode}`,
+          code: `${target.toUpperCase().replace(/-/g, '_')}_ERROR`
+        });
+      }
+    } else {
+      console.error(
+        raw ||
+          childSpawnError?.message ||
+          `Service '${target}' failed to start (exit code ${childExitCode}).`
+      );
+    }
+    return 1;
+  }
+
+  try {
+    child.kill('SIGKILL');
+  } catch {}
+  child.stdout?.destroy();
+  child.stderr?.destroy();
+  child.unref();
+
+  const errorMsg = `Service '${target}' did not become reachable at ${details.probeUrl} within ${timeoutMs}ms.`;
+  if (parsed.isJson) {
+    printJson({ isError: true, error: errorMsg, code: 'START_TIMEOUT' });
+  } else {
+    console.error(errorMsg);
+  }
+  return 1;
+}
+
 async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
   const target = parsed.positionals[0]?.toLowerCase();
 
@@ -1213,7 +1402,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
         process.env.SPEC_MEMO_SSE_TOKEN;
 
       // Idempotent check: if already running, inform user and exit 0
-      const probe = await probeHttpService(`http://${host}:${port}/api/status`, 500, authToken);
+      const probe = await probeHttpService(`http://${host}:${port}/api/status`, 1500, authToken);
       if (probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
         const url = `http://${host}:${port}`;
         if (parsed.isJson) {
@@ -1232,6 +1421,31 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
           console.log(`  (To restart, run: memo restart monitor)`);
         }
         return 0;
+      }
+
+      if (!isForegroundRequested(parsed)) {
+        return await startBackgroundDaemon('monitor', parsed, {
+          port,
+          host,
+          probeUrl: `http://${host}:${port}/api/status`,
+          authToken,
+          onSuccess: (url) => {
+            if (parsed.isJson) {
+              printJson({
+                status: 'running',
+                service: 'status-monitor',
+                url,
+                port,
+                host
+              });
+            } else {
+              console.log(`spec-memo — Status Monitor running at: ${url}`);
+              console.log(`  Dashboard:     ${url}/`);
+              console.log(`  Health check:  ${url}/health`);
+              console.log(`  Events stream: ${url}/api/events/stream`);
+            }
+          }
+        });
       }
 
       const activityBus = createActivityBus();
@@ -1291,7 +1505,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
         (parsed.options.authToken as string | undefined);
 
       // Idempotent check: if already running, inform user and exit 0
-      const probe = await probeHttpService(`http://${host}:${port}/api/graph`, 500, authToken);
+      const probe = await probeHttpService(`http://${host}:${port}/api/graph`, 1500, authToken);
       if (probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
         const url = `http://${host}:${port}`;
         if (parsed.isJson) {
@@ -1307,6 +1521,23 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
           console.log(`  (To restart, run: memo restart canvas)`);
         }
         return 0;
+      }
+
+      if (!isForegroundRequested(parsed)) {
+        return await startBackgroundDaemon('canvas', parsed, {
+          port,
+          host,
+          probeUrl: `http://${host}:${port}/api/graph`,
+          authToken,
+          extraArgs: { project },
+          onSuccess: (url) => {
+            if (parsed.isJson) {
+              printJson({ status: 'running', service: 'canvas', url, port, host });
+            } else {
+              console.log(`spec-memo — Visual Graph Canvas running at: ${url}`);
+            }
+          }
+        });
       }
 
       const instance = await startCanvasServer({ port, host, vaultRoot: resolvedVaultRoot, project, authToken });
@@ -1353,7 +1584,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
       const statusPort = parseServicePort(rawStatusPort, undefined, 'status-port');
 
       // Idempotent check: if already running, inform user and exit 0
-      const probe = await probeHttpService(`http://${host}:${port}/health`, 500, authToken);
+      const probe = await probeHttpService(`http://${host}:${port}/health`, 1500, authToken);
       if (probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
         const url = `http://${host}:${port}`;
         if (parsed.isJson) {
@@ -1372,6 +1603,42 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
           console.log(`  (To restart, run: memo restart server)`);
         }
         return 0;
+      }
+
+      if (!isForegroundRequested(parsed)) {
+        const effectiveStatusPort = statusPort ?? configuredPorts.status;
+        const statusUrl = !noStatus ? `http://${host}:${effectiveStatusPort}` : undefined;
+        return await startBackgroundDaemon('server', parsed, {
+          port,
+          host,
+          probeUrl: `http://${host}:${port}/health`,
+          authToken,
+          extraArgs: { statusPort: effectiveStatusPort, noStatus },
+          onSuccess: (url) => {
+            if (parsed.isJson) {
+              const payload: Record<string, unknown> = {
+                status: 'running',
+                service: 'mcp-sse',
+                url,
+                port,
+                host
+              };
+              if (statusUrl) {
+                payload.statusUrl = statusUrl;
+                payload.statusPort = effectiveStatusPort;
+              }
+              printJson(payload);
+            } else {
+              console.log(`spec-memo — MCP SSE Server running at: ${url}`);
+              console.log(`  SSE endpoint:     ${url}/sse`);
+              console.log(`  Message endpoint: ${url}/message`);
+              console.log(`  Health check:     ${url}/health`);
+              if (statusUrl) {
+                console.log(`  Status monitor:   ${statusUrl}`);
+              }
+            }
+          }
+        });
       }
 
       const instance = await startSseServer({
@@ -1445,6 +1712,7 @@ async function runStartCommand(parsed: ParsedCliArgs): Promise<number> {
         (parsed.options['auth-token'] as string | undefined) ||
         (parsed.options.authToken as string | undefined);
 
+      isRunningStdioMcp = true;
       await startMcpServer({
         vaultRoot: resolvedVaultRoot,
         enableStatus: stdioServeEnablesStatus(parsed.options),
@@ -1517,7 +1785,7 @@ async function runRestartCommand(parsed: ParsedCliArgs): Promise<number> {
     await runShutdown({
       scope,
       port,
-      vaultRoot: resolvedVaultRoot,
+      vaultRoot: vaultRootArg,
       force: true,
       includeCanvas: true,
       includeMonitor: true
@@ -2219,6 +2487,7 @@ async function runCliInner(
         (parsed.options['auth-token'] as string | undefined) ||
         (parsed.options.authToken as string | undefined);
 
+      isRunningStdioMcp = true;
       await startMcpServer({
         vaultRoot,
         enableStatus: stdioServeEnablesStatus(parsed.options),
@@ -3961,7 +4230,7 @@ async function runCliInner(
 if (isCliMainEntry()) {
   runCli()
     .then((exitCode) => {
-      if (exitCode !== 0) {
+      if (!isRunningStdioMcp || exitCode !== 0) {
         process.exit(exitCode);
       }
     })

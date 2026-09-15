@@ -136,6 +136,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] AI Ops "Test AI" connectivity probe: raw-agent hello probe + force-logged `test` row (`spec: 0063-ai-ops-test-ai-button.spec.md`)
 - [x] AI cursor-sdk timeout: configurable `timeoutMs`, 30s default, honored everywhere (`spec: 0064-ai-timeout-config.spec.md`)
 - [x] CLI lifecycle shortcuts: start, stop, restart, and direct shortcuts for monitor, canvas, server, mcp (`spec: 0065-cli-start-shortcuts.spec.md`)
+- [ ] Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops (`spec: 0066-status-details-drawer-errors-aiops.spec.md`)
+
 
 
 
@@ -232,7 +234,9 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 62 | [`ai-timeout-config`](0064-ai-timeout-config.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | AI cursor-sdk timeout default 30s + honored everywhere (issue #70); v0.34.0 |
 
-| 63 | [`cli-start-shortcuts`](0065-cli-start-shortcuts.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | CLI lifecycle commands (start, stop, restart) and shortcuts for monitor, canvas, server, mcp; v0.35.0 |
+| 63 | [`cli-start-shortcuts`](0065-cli-start-shortcuts.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | CLI lifecycle commands (start, stop, restart) and shortcuts for monitor, canvas, server, mcp; HTTP services background by default; v0.35.0 |
+
+| 64 | [`status-details-drawer-errors-aiops`](0066-status-details-drawer-errors-aiops.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0 |
 
 ## 9. Inbox (unscheduled ideas)
 
@@ -319,6 +323,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-14 | ai-ops-test-ai-button | AI Ops "Test AI" connectivity probe (issue #69): operation `test` journal row, `POST /api/ai-ops/test` force-logged raw agent, **Test AI** button + operation filter option; v0.34.0 | npm test 837 pass + issue #70 slice in same tree |
 | 2026-09-14 | ai-timeout-config | AI cursor-sdk timeout (issue #70): `timeoutMs` default 30s, shared constant replaces `15000` fallbacks, vault seed + README; v0.34.0 | npm test 837 pass |
 | 2026-09-14 | cli-start-shortcuts | CLI lifecycle commands (start, stop, restart) and shortcuts for monitor, canvas, server, mcp; v0.35.0 | npm test 851 pass |
+| 2026-09-14 | status-details-drawer-errors-aiops | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0 | npm test 862 pass |
+| 2026-09-14 | cli-background-lifecycle | HTTP lifecycle commands background by default with readiness status and clean exit; stdio MCP remains host-attached | v0.36.1; npm test 868 pass |
 
 ## Archive
 

@@ -242,8 +242,8 @@ memo install-skills --global [--force] [--json]
 | Command | Job |
 |---|---|
 | `memo status` | Query read-only operational dashboard, daemon reachability probes, configuration, and storage statistics (aliases: `info`, `state`, `setup --check`). `--json`, `--check`. |
-| `memo start <service>` | Start background service: `monitor` (:3124), `canvas` (:3125), `server` (:3123), `mcp` (stdio/`--sse`). Idempotent: detects already running instances cleanly without error. |
-| `memo restart <service>` | Stop existing instance of `monitor`, `canvas`, or `server`, await port release, and restart fresh instance. |
+| `memo start <service>` | Start background service by default: `monitor` (:3124), `canvas` (:3125), or `server` (:3123). `mcp` remains foreground for stdio (use `--sse` for the background SSE path). Idempotent: detects already running instances cleanly without error. Use `--foreground` / `-f` for an attached HTTP service. |
+| `memo restart <service>` | Stop existing instance of `monitor`, `canvas`, or `server`, await port release, and restart fresh in the background by default. Use `--foreground` / `-f` for an attached process. |
 | `memo stop [service]` | Stop specific service (`server`, `monitor`, `canvas`) or `--port`. Plain `memo stop` preserves global shutdown. Alias: `memo shutdown`. |
 | `memo monitor` | Shortcut for `memo start monitor` (dashboard on :3124). |
 | `memo server` | Shortcut for `memo start server` (SSE on :3123 with companion :3124). |

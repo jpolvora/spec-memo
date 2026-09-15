@@ -615,6 +615,7 @@ export interface VaultAiConfigPatch {
   enabled?: boolean;
   provider?: string;
   model?: string;
+  timeoutMs?: number;
 }
 
 /**
@@ -646,6 +647,7 @@ export async function updateVaultAiConfig(
     if (patch.enabled !== undefined) nextAi.enabled = patch.enabled;
     if (patch.provider !== undefined) nextAi.provider = patch.provider;
     if (patch.model !== undefined) nextAi.model = patch.model;
+    if (patch.timeoutMs !== undefined) nextAi.timeoutMs = patch.timeoutMs;
     raw.ai = nextAi;
     // Validate the merged ai section before persisting.
     const parsedAi = parseAiConfig(nextAi);

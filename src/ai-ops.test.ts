@@ -527,6 +527,11 @@ describe('Status monitor AI ops log (spec 0057)', () => {
     assert.ok(html.includes('id="aiops-ok-select"'));
     assert.ok(html.includes('id="aiops-tbody"'));
     assert.ok(html.includes('id="aiops-detail"'));
+    assert.ok(html.includes('id="aiops-drawer"'));
+    assert.ok(html.includes('id="aiops-drawer-overlay"'));
+    assert.ok(html.includes('id="aiops-drawer-title"'));
+    assert.ok(html.includes('id="aiops-drawer-close"'));
+    assert.ok(html.includes('id="aiops-detail-project"'));
     assert.ok(html.includes('No AI operations recorded yet.'));
     assert.ok(html.includes('/api/ai-ops'));
     // AC20: the detail pane fills <pre> via textContent, never innerHTML of JSON.

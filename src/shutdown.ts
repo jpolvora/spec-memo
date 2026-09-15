@@ -119,7 +119,7 @@ export function redactCommandForDisplay(command: string): string {
 export function isMemoServeCommand(command: string): boolean {
   if (!command) return false;
   const norm = normalizedCommand(command);
-  if (!norm.includes('spec-memo')) return false;
+  if (!norm.toLowerCase().includes('spec-memo')) return false;
   if (!norm.includes('dist/cli.js') && !norm.includes('dist/mcp.js')) return false;
   return SERVE_TOKEN_RE.test(norm);
 }
@@ -128,7 +128,7 @@ export function isMemoServeCommand(command: string): boolean {
 export function isCanvasCommand(command: string): boolean {
   if (!command) return false;
   const norm = normalizedCommand(command);
-  if (!norm.includes('spec-memo')) return false;
+  if (!norm.toLowerCase().includes('spec-memo')) return false;
   if (!norm.includes('dist/cli.js') && !norm.includes('dist/mcp.js')) return false;
   return CANVAS_TOKEN_RE.test(norm);
 }
@@ -137,12 +137,19 @@ export function isCanvasCommand(command: string): boolean {
 export function isMonitorCommand(command: string): boolean {
   if (!command) return false;
   const norm = normalizedCommand(command);
-  if (!norm.includes('spec-memo')) return false;
+  if (!norm.toLowerCase().includes('spec-memo')) return false;
   if (!norm.includes('dist/cli.js') && !norm.includes('dist/mcp.js')) return false;
   return MONITOR_TOKEN_RE.test(norm);
 }
 
 export function classifyMemoCommand(command: string): ShutdownScope | null {
+  if (!command) return null;
+  const norm = normalizedCommand(command);
+  // Never target a stop or shutdown command
+  if (/(^|\s)(stop|shutdown)(\s|$)/i.test(norm)) return null;
+  // Never target a shell wrapper process (pwsh, powershell, cmd, bash, sh, zsh)
+  if (/(^|[/\\])(pwsh|powershell|cmd|bash|sh|zsh)(\.exe)?(\s|$)/i.test(norm)) return null;
+
   // Serve first: a serve orphan whose vault path contains `canvas` or `monitor` is still a
   // serve process and must not be hidden by other classifiers.
   if (isMemoServeCommand(command)) return 'serve';
@@ -493,7 +500,10 @@ export async function runShutdown(options: ShutdownRunOptions = {}): Promise<{
   const { targets, skippedSelf } = filterShutdownTargets(processes, {
     currentPid: options.currentPid,
     vaultRoot: options.vaultRoot,
-    includeCanvas: options.includeCanvas
+    includeCanvas: options.includeCanvas,
+    includeMonitor: options.includeMonitor,
+    scope: options.scope,
+    port: options.port
   });
 
   // Default pre-kill revalidation: confirm the pid still runs the same

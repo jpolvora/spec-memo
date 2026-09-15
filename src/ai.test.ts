@@ -311,6 +311,24 @@ describe('Vault AI assistance (spec 0056)', () => {
     assert.equal(cancelled, true);
   });
 
+  it('raceWithTimeout reports displayTimeoutMs when remainingMs triggers earlier', async () => {
+    let cancelled = false;
+    const never = new Promise<string>(() => undefined);
+    await assert.rejects(
+      raceWithTimeout(
+        never,
+        30,
+        'cursor sdk prompt',
+        async () => {
+          cancelled = true;
+        },
+        60000
+      ),
+      /timed out after 60000ms/
+    );
+    assert.equal(cancelled, true);
+  });
+
   it('default prompt reclaims stale agents once on limit errors only', async () => {
     let managedCalls = 0;
     let listCalls = 0;
@@ -520,7 +538,7 @@ describe('Vault AI assistance (spec 0056)', () => {
 
   it('AC13/AC14: upsert never awaits a slow agent and never floats a rejection', async () => {
     const fake = new FakeVaultAiAgent();
-    fake.refineDelayMs = 400;
+    fake.refineDelayMs = 1200;
     let refineDone = false;
     const original = fake.refineForSearch.bind(fake);
     fake.refineForSearch = async (input) => {
@@ -540,7 +558,7 @@ describe('Vault AI assistance (spec 0056)', () => {
     });
     const elapsed = Date.now() - started;
     assert.equal(refineDone, false, 'upsert must resolve before the slow agent finishes');
-    assert.ok(elapsed < 400, `upsert blocked on agent (${elapsed}ms)`);
+    assert.ok(elapsed < 1100, `upsert blocked on agent (${elapsed}ms)`);
     const refined = await waitForAids(tempVault, tempProject, 'ai-slow-decision');
     assert.ok(refined);
     assert.ok(refineDone);
