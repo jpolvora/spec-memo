@@ -11,14 +11,21 @@ import {
   VAULT_AI_DEFAULT_OPS_LOG_MAX_FILE_SIZE_MB,
   resolveAiConfig
 } from './config.js';
-import type { VaultAiAgent, VaultAiRankInput, VaultAiRankResult, VaultAiRefineInput, VaultAiRefineResult } from './types.js';
+import type {
+  VaultAiAgent,
+  VaultAiRankInput,
+  VaultAiRankResult,
+  VaultAiRefineInput,
+  VaultAiRefineResult,
+  VaultAiWikiPolishInput
+} from './types.js';
 import { NoopVaultAiAgent } from './noop.js';
 
 export const AI_OPS_DIR_NAME = 'ai-ops';
 export const AI_OPS_FILE_PREFIX = 'ai-ops-';
 export const AI_OPS_ERROR_SNIPPET_MAX = 200;
 
-export type AiOpsOperation = 'refine' | 'rank' | 'test';
+export type AiOpsOperation = 'refine' | 'rank' | 'wiki' | 'test';
 
 export interface AiOpsEntry {
   id: string;
@@ -63,7 +70,7 @@ export interface AiOpsListResult {
 export const AiOpsListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
-  operation: z.enum(['refine', 'rank', 'test']).optional(),
+  operation: z.enum(['refine', 'rank', 'wiki', 'test']).optional(),
   ok: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
@@ -469,7 +476,10 @@ function parseAiOpsLine(line: string): AiOpsEntry | null {
       parsed &&
       typeof parsed.id === 'string' &&
       typeof parsed.timestamp === 'string' &&
-      (parsed.operation === 'refine' || parsed.operation === 'rank' || parsed.operation === 'test') &&
+      (parsed.operation === 'refine' ||
+        parsed.operation === 'rank' ||
+        parsed.operation === 'wiki' ||
+        parsed.operation === 'test') &&
       typeof parsed.ok === 'boolean' &&
       typeof parsed.durationMs === 'number'
     ) {
@@ -697,6 +707,57 @@ export class AiOpsJournaledAgent implements VaultAiAgent {
           input: {
             query: input.query,
             candidateIds: input.candidates.map((c) => c.id)
+          },
+          error: err instanceof Error ? err.message : String(err),
+          metadata: { agent: 'vault-ai', threw: true }
+        });
+      }
+      throw err;
+    }
+  }
+
+  async polishWikiMarkdown(input: VaultAiWikiPolishInput): Promise<string> {
+    const innerPolish = this.inner.polishWikiMarkdown?.bind(this.inner);
+    if (!innerPolish) {
+      throw new Error('wiki polish unavailable');
+    }
+    if (this.inner instanceof NoopVaultAiAgent) {
+      return innerPolish(input);
+    }
+    const started = Date.now();
+    const config = this.resolveConfig();
+    try {
+      const result = await innerPolish(input);
+      if (config && isAiOpsLogEnabled(config)) {
+        recordAiOpsEvent({
+          vaultRoot: this.options.vaultRoot,
+          config,
+          operation: 'wiki',
+          ok: typeof result === 'string' && result.length > 0,
+          durationMs: Date.now() - started,
+          projectId: input.snapshot.projectId || this.options.projectId,
+          input: {
+            projectId: input.snapshot.projectId,
+            recordCount: input.snapshot.records.length,
+            markdownChars: input.markdown.length
+          },
+          output: { polishedChars: typeof result === 'string' ? result.length : 0 },
+          metadata: { agent: 'vault-ai' }
+        });
+      }
+      return result;
+    } catch (err: unknown) {
+      if (config && isAiOpsLogEnabled(config)) {
+        recordAiOpsEvent({
+          vaultRoot: this.options.vaultRoot,
+          config,
+          operation: 'wiki',
+          ok: false,
+          durationMs: Date.now() - started,
+          projectId: input.snapshot.projectId || this.options.projectId,
+          input: {
+            projectId: input.snapshot.projectId,
+            recordCount: input.snapshot.records.length
           },
           error: err instanceof Error ? err.message : String(err),
           metadata: { agent: 'vault-ai', threw: true }

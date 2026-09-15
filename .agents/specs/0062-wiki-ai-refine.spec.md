@@ -55,20 +55,21 @@ Product gray areas (gate vs legacy `wiki.aiEnabled`, single-file vs multi-file t
 
 ### Generation / visual structure (ws-wiki inspired)
 
-- AC19: Shipped `src/wiki/template.md` is index-first: after title / auto-marker / `lastGenerated` / inventory, it includes (in order) `## Overview`, `## Topic catalog`, then the stable topic `h2` sections at least: Architecture & decisions, Active traps, Specs & plans, Sessions, Structured links (titles may be tightened for readability; **slugs** must stay stable or be dual-mapped in `splitWikiSections` so existing section ids do not break).
-- AC20: Deterministic render fills `## Topic catalog` with relative Markdown links of the form `[Title](#slug): one-line description` for each topic section that has content or an explicit empty-state (catalog rows always present for the required topics). No raw `{{` placeholders remain (preserves `0046` AC3).
-- AC21: Topic section bodies remain suitable for progressive disclosure: inventory lists stay capped (existing `LIST_CAP`); narrative sections prefer short Feature / How it works style statements (condensed verbosity), not a second dump of the whole vault. AI polish instructions (when used) must preserve catalog link targets and required `h2` slugs.
-- AC22: Optional multi-file mode (default **off** unless enabled in context): when enabled, regenerate may also write `projects/{projectId}/wiki/{slug}.md` topic files and point catalog links at `./wiki/{slug}.md`; index `WIKI.md` remains the entrypoint; path containment under the project dir is mandatory; product git is never written.
-- AC23: `GET /api/wiki?project=` continues to return the index markdown (`WIKI.md`). When multi-file mode is off, topic bodies remain inside that file under `h2` headings. `GET /api/wiki/section` continues to resolve topic bodies by slug.
+- AC19: Shipped `src/wiki/template.md` is index-first after title, auto-marker, `lastGenerated`, and inventory: `## Overview`, then `## Topic catalog`, then topic `h2` sections Architecture & decisions, Active traps, Specs & plans, Sessions, Structured links.
+- AC20: Topic `h2` slugs stay stable for `GET /api/wiki/section`, or `splitWikiSections` dual-maps renamed titles so existing section ids do not break.
+- AC21: Deterministic render fills `## Topic catalog` with `[Title](#slug): one-line description` rows for every required topic (content or empty-state). No raw `{{` placeholders remain.
+- AC22: Topic bodies stay progressive: lists respect `LIST_CAP`; narrative prefers condensed Feature / How it works style. AI polish must preserve catalog targets and required `h2` slugs.
+- AC23: Optional multi-file mode defaults off. When enabled, regenerate may write `projects/{projectId}/wiki/{slug}.md`, point catalog links at `./wiki/{slug}.md`, keep `WIKI.md` as entrypoint, enforce path containment, and never write product git.
+- AC24: `GET /api/wiki?project=` returns index `WIKI.md`. With multi-file off, topic bodies stay under `h2` in that file. `GET /api/wiki/section` still resolves by slug.
 
 ### Status Wiki tab UX
 
-- AC24: Status HTML Wiki tab (`#tab-wiki`) uses a split layout: left **topic menu** (`#wiki-topic-nav`, or equivalent stable id) and right **content pane** (`#wiki-view`). Project selector + Regenerate remain in the Wiki toolbar.
-- AC25: After a successful wiki load, the left menu lists the Topic catalog entries (or derived `h2` topics). The first/default selection is **Index** (overview + catalog), not an expanded dump of every topic.
-- AC26: Clicking a topic in the left menu shows only that topic’s body in the content pane (progressive disclosure). Prefer `GET /api/wiki/section?project=&id={slug}`; if the full markdown is already in memory, client-side section split is allowed as a fallback. Expanding all topics at once is not the default.
-- AC27: URL deep link `?tab=wiki&project={id}&section={slug}` activates the Wiki tab, selects the project, and selects that topic when the slug exists; unknown section falls back to Index without error toast spam.
-- AC28: Mobile / narrow viewport: topic menu remains usable (stacked above content or collapsible); no reliance on hover-only affordances.
-- AC29: Tests assert Wiki tab markers for `#wiki-topic-nav` (or chosen stable id), Index-default behavior, and `section=` deep-link handling analogous to existing `tab=wiki` tests. Legacy `wrapWikiH2` flat collapse may remain as a fallback for malformed pages without a catalog, but is not the primary UX when catalog topics exist.
+- AC25: Status Wiki tab (`#tab-wiki`) uses a split layout: left topic menu (`#wiki-topic-nav`) and right content pane (`#wiki-view`). Project selector and Regenerate stay in the Wiki toolbar.
+- AC26: After a successful wiki load, the left menu lists Topic catalog entries (or derived `h2` topics). Default selection is Index (overview + catalog), not every topic expanded.
+- AC27: Clicking a left-menu topic shows only that topic body. Prefer `GET /api/wiki/section?project=&id={slug}`; in-memory section split is an allowed fallback. Expanding all topics is not the default.
+- AC28: Deep link `?tab=wiki&project={id}&section={slug}` opens Wiki, selects the project, and selects that topic when present; unknown section falls back to Index without toast spam.
+- AC29: On narrow viewports the topic menu stays usable (stacked or collapsible) without hover-only controls.
+- AC30: Tests assert `#wiki-topic-nav`, Index-default load, and `section=` deep-link handling. Legacy `wrapWikiH2` may remain only as fallback when no catalog exists.
 
 ## Original Issue Context
 
@@ -121,18 +122,18 @@ Extend `regenerateWiki` / polish injection and the Wiki tab chrome. Preserve: de
 | Snapshot is titles/ids/counts, not full bodies | Yes | Token/safety bound | n |
 | Index-first template + Topic catalog sublinks | Yes | Owner asked for ws-wiki-inspired generation | y |
 | Status Wiki left topic menu + progressive section pane | Yes | Owner asked for left menu topics / progressive disclosure | y |
-| Multi-file `wiki/{slug}.md` topic files | Default **off** (single `WIKI.md` + `h2` + section API); optional later | Keeps v1 closer to `0046`; multi-file is AC22 optional | n |
-| Auth, i18n, TTL, rate limits, concurrency beyond single regenerate | N/A | Existing 0046/status contracts | y |
+| Multi-file `wiki/{slug}.md` topic files | Off by default (single `WIKI.md` + `h2` + section API); optional later | Keeps v1 closer to `0046`; multi-file is AC23 optional | n |
+| Auth, i18n, TTL, rate limits, concurrency beyond single regenerate | Inherit existing 0046 and status contracts | Already covered by status token-auth and single-project regenerate | y |
 | Idempotent retry | Same `projectId` regenerate is safe to repeat | Snapshot is recomputed each call | y |
 
 ## Definition of Ready (DoR)
 
 | Readiness Item | Requirement | Verification Method |
 |----------------|-------------|---------------------|
-| Bounded scope | On-demand wiki polish from snapshot when assistant enabled; index/topic UI revamp; no MCP/schema explosion | This spec ACs 1–29 vs Out of Scope table |
+| Bounded scope | On-demand wiki polish from snapshot when assistant enabled; index/topic UI revamp; no MCP/schema explosion | This spec ACs 1–30 vs Out of Scope table |
 | Atomic criteria | Each AC is pass/fail in `src/wiki.test.ts` / `src/status.test.ts` / `src/cli.test.ts` | Authoring validate + later orch tests |
-| Failure modes | Timeout, unavailable key, IO_GUARD, bad model output, missing polish wiring, missing section deep link | AC5–AC8, AC13–AC14, AC27 |
-| Observation | `aiPolished`, `aiError`, activity `ai.wiki.*`, AI ops journal; Wiki tab nav markers | AC9, AC15, AC29 |
+| Failure modes | Timeout, unavailable key, IO_GUARD, bad model output, missing polish wiring, missing section deep link | AC5–AC8, AC13–AC14, AC28 |
+| Observation | `aiPolished`, `aiError`, activity `ai.wiki.*`, AI ops journal; Wiki tab nav markers | AC9, AC15, AC30 |
 | Stack invariants | No unchecked `any` on snapshot types; await polish; validate HTTP body; path containment on `projectId`; no floating promises | `npx tsc --noEmit`; `npm test` |
 | Open blockers | Owner may revise snapshot richness, gate vs `wiki.aiEnabled`, and multi-file on/off | Tracked in context.md; defaults are implementable |
 | Zero secrets in logs | Key stays in env; prompts redacted | AC5, AC15 |

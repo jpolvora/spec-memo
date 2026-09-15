@@ -26,8 +26,8 @@ Out of scope: auto-regen on upsert, product `{wikiDir}` / docs-site wiki, portin
 3. **Snapshot richness (v1):** ids, kinds, titles, counts — not full bodies. Owner may later allow excerpts.
 4. **Polish API:** extend regenerate to pass `{ markdown, snapshot }` into polish (or an optional agent method) rather than markdown-only.
 5. **Template:** revamp `src/wiki/template.md` to index-first + Topic catalog + stable topic `h2`s (AC19–AC21).
-6. **Status UX:** split Wiki tab — `#wiki-topic-nav` + `#wiki-view`; Index default; `?section=` deep link (AC24–AC29).
-7. **Multi-file topic pages:** default **off**. Single `WIKI.md` with `h2` + existing `GET /api/wiki/section` is enough for progressive disclosure. AC22 remains the optional on-ramp if the owner enables it later.
+6. **Status UX:** split Wiki tab — `#wiki-topic-nav` + `#wiki-view`; Index default; `?section=` deep link (AC25–AC30).
+7. **Multi-file topic pages:** default off. Single `WIKI.md` with `h2` + existing `GET /api/wiki/section` is enough for progressive disclosure. AC23 remains the optional on-ramp if the owner enables it later.
 
 ## Deferred Ideas
 

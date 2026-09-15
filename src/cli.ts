@@ -26,7 +26,7 @@ import { syncHybrid } from './hybrid-sync.js';
 import { callRemoteTool } from './mcp-proxy.js';
 import { recordTelemetry, flushTelemetrySync } from './telemetry.js';
 import { runStatusCheck, formatStatusDashboard, probeHttpService } from './status-cmd.js';
-import { readWikiFile, regenerateWiki, WikiError, wikiProjectExists, WIKI_PROJECT_REQUIRED } from './wiki.js';
+import { readWikiFile, regenerateWiki, resolveWikiPolishFromVault, WikiError, wikiProjectExists, WIKI_PROJECT_REQUIRED } from './wiki.js';
 import { getPackageVersion } from './version.js';
 import { assertSupportedNodeRuntime } from './sqlite.js';
 import { submitMemoryFeedback } from './feedback.js';
@@ -2176,7 +2176,11 @@ async function runCliInner(
           return 1;
         }
       }
-      const result = await regenerateWiki({ projectId, vaultRoot });
+      const result = await regenerateWiki({
+        projectId,
+        vaultRoot,
+        polishWikiMarkdown: resolveWikiPolishFromVault(vaultRoot)
+      });
       if (parsed.isJson) {
         printJson(result);
       } else {

@@ -31,6 +31,7 @@ import {
   readWikiFile,
   readWikiSection,
   regenerateWiki,
+  resolveWikiPolishFromVault,
   WikiError
 } from "./wiki.js";
 import {
@@ -52,7 +53,13 @@ import {
   generateActivityReport,
   deriveRulesFromPrompts
 } from "./prompt.js";
-import { getVaultAiStatus, NoopVaultAiAgent, CursorSdkVaultAiAgent, resolveAiConfig } from "./ai/index.js";
+import {
+  getVaultAiStatus,
+  NoopVaultAiAgent,
+  CursorSdkVaultAiAgent,
+  resolveAiConfig,
+  setAiActivityBus
+} from "./ai/index.js";
 import {
   listAiOpsEntries,
   getAiOpsEntry,
@@ -1135,6 +1142,66 @@ export function generateStatusHtml(version = getPackageVersion()): string {
     .log-summary { color: var(--bright); word-break: break-word; }
     .log-meta { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
 
+    /* Wiki tab split layout (spec 0062) */
+    .wiki-layout {
+      display: grid;
+      grid-template-columns: minmax(160px, 220px) 1fr;
+      gap: 12px;
+      flex: 1;
+      min-height: 0;
+      align-items: stretch;
+    }
+    #wiki-topic-nav {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 8px;
+      overflow: auto;
+      max-height: min(70vh, 640px);
+    }
+    #wiki-topic-nav .wiki-nav-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      padding: 4px 8px 8px;
+    }
+    #wiki-topic-nav button.wiki-nav-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: var(--bright);
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.88rem;
+    }
+    #wiki-topic-nav button.wiki-nav-item:hover,
+    #wiki-topic-nav button.wiki-nav-item:focus-visible {
+      background: rgba(88, 166, 255, 0.12);
+      outline: none;
+    }
+    #wiki-topic-nav button.wiki-nav-item.active {
+      background: rgba(88, 166, 255, 0.2);
+      color: var(--accent, #58a6ff);
+    }
+    #wiki-view.wiki-view {
+      padding: 12px 8px;
+      overflow: auto;
+      min-height: 0;
+    }
+    @media (max-width: 700px) {
+      .wiki-layout {
+        grid-template-columns: 1fr;
+      }
+      #wiki-topic-nav {
+        max-height: 180px;
+      }
+    }
+
     /* Prompts Tab Styles */
     .prompts-container {
       display: flex;
@@ -2088,7 +2155,10 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         </div>
       </div>
       <div class="helper-text" id="wiki-empty" style="margin-bottom:8px;">Select a project to view its wiki. Missing wiki shows an empty state; Regenerate is always available.</div>
-      <div id="wiki-view" class="wiki-view" style="padding:12px 4px;"></div>
+      <div class="wiki-layout" id="wiki-layout" style="display:none;">
+        <nav id="wiki-topic-nav" aria-label="Wiki topics"></nav>
+        <div id="wiki-view" class="wiki-view"></div>
+      </div>
     </div>
   </section>
 
@@ -5048,13 +5118,172 @@ export function generateStatusHtml(version = getPackageVersion()): string {
       return out;
     }
 
-    async function loadWiki() {
+    function slugifyWikiTitle(text) {
+      return String(text || "")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9._-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+    }
+
+    function splitWikiMarkdownSections(markdown) {
+      const lines = String(markdown || "").split(/\\r?\\n/);
+      const sections = [];
+      let current = null;
+      for (const line of lines) {
+        const h2 = line.match(/^##\\s+(.+)$/);
+        if (h2) {
+          if (current) {
+            sections.push({
+              id: slugifyWikiTitle(current.title),
+              title: current.title,
+              markdown: current.lines.join("\\n").trim()
+            });
+          }
+          current = { title: h2[1].trim(), lines: [line] };
+        } else if (current) {
+          current.lines.push(line);
+        }
+      }
+      if (current) {
+        sections.push({
+          id: slugifyWikiTitle(current.title),
+          title: current.title,
+          markdown: current.lines.join("\\n").trim()
+        });
+      }
+      return sections;
+    }
+
+    function parseWikiCatalogTopics(markdown) {
+      const sections = splitWikiMarkdownSections(markdown);
+      const catalog = sections.find((s) => s.id === "topic-catalog");
+      const topics = [];
+      if (catalog) {
+        const re = /\\[([^\\]]+)\\]\\(#([^)]+)\\)/g;
+        let m;
+        while ((m = re.exec(catalog.markdown)) !== null) {
+          topics.push({ id: m[2], title: m[1] });
+        }
+      }
+      if (topics.length === 0) {
+        for (const s of sections) {
+          if (s.id === "overview" || s.id === "topic-catalog") continue;
+          topics.push({ id: s.id, title: s.title });
+        }
+      }
+      return { sections, topics };
+    }
+
+    function buildWikiIndexMarkdown(markdown, sections) {
+      const lines = String(markdown || "").split(/\\r?\\n/);
+      const catalogIdx = sections.findIndex((s) => s.id === "topic-catalog");
+      if (catalogIdx < 0) {
+        const overview = sections.find((s) => s.id === "overview");
+        if (overview) {
+          const preamble = [];
+          for (const line of lines) {
+            if (/^##\\s+/.test(line)) break;
+            preamble.push(line);
+          }
+          return (preamble.join("\\n").trim() + "\\n\\n" + overview.markdown).trim();
+        }
+        return markdown;
+      }
+      const rebuilt = [];
+      let pastCatalogHeading = false;
+      for (const line of lines) {
+        const h2 = line.match(/^##\\s+(.+)$/);
+        if (h2) {
+          const id = slugifyWikiTitle(h2[1].trim());
+          if (pastCatalogHeading) break;
+          if (id === "topic-catalog") pastCatalogHeading = true;
+        }
+        rebuilt.push(line);
+      }
+      return rebuilt.join("\\n").trim();
+    }
+
+    let wikiState = { markdown: "", projectId: "", sectionId: "index", topics: [], sections: [] };
+
+    function syncWikiSectionToUrl(sectionId) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.set("tab", "wiki");
+        if (wikiState.projectId) params.set("project", wikiState.projectId);
+        if (sectionId && sectionId !== "index") params.set("section", sectionId);
+        else params.delete("section");
+        const qs = params.toString();
+        history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+      } catch {}
+    }
+
+    function renderWikiTopicNav() {
+      const nav = document.getElementById("wiki-topic-nav");
+      if (!nav) return;
+      const items = [{ id: "index", title: "Index" }].concat(wikiState.topics || []);
+      nav.innerHTML = '<div class="wiki-nav-title">Topics</div>' + items.map((t) => {
+        const active = t.id === wikiState.sectionId ? " active" : "";
+        return '<button type="button" class="wiki-nav-item' + active + '" data-wiki-section="' +
+          escapeHtml(t.id) + '">' + escapeHtml(t.title) + "</button>";
+      }).join("");
+      nav.querySelectorAll("button.wiki-nav-item").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          selectWikiSection(btn.getAttribute("data-wiki-section") || "index");
+        });
+      });
+    }
+
+    async function selectWikiSection(sectionId) {
+      const view = document.getElementById("wiki-view");
+      if (!view) return;
+      const id = sectionId || "index";
+      wikiState.sectionId = id;
+      renderWikiTopicNav();
+      syncWikiSectionToUrl(id);
+      if (id === "index") {
+        const indexMd = buildWikiIndexMarkdown(wikiState.markdown, wikiState.sections);
+        view.innerHTML = renderPromptMarkdownHtml(indexMd);
+        return;
+      }
+      const known = wikiState.topics.some((t) => t.id === id) || wikiState.sections.some((s) => s.id === id);
+      if (!known) {
+        wikiState.sectionId = "index";
+        renderWikiTopicNav();
+        syncWikiSectionToUrl("index");
+        const indexMd = buildWikiIndexMarkdown(wikiState.markdown, wikiState.sections);
+        view.innerHTML = renderPromptMarkdownHtml(indexMd);
+        return;
+      }
+      try {
+        const res = await apiFetch(
+          "/api/wiki/section?project=" + encodeURIComponent(wikiState.projectId) + "&id=" + encodeURIComponent(id),
+          { headers: apiHeaders() }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          view.innerHTML = renderPromptMarkdownHtml(data.markdown || "");
+          return;
+        }
+      } catch {}
+      const local = wikiState.sections.find((s) => s.id === id);
+      if (local) {
+        view.innerHTML = renderPromptMarkdownHtml(local.markdown || "");
+      } else {
+        view.innerHTML = wrapWikiH2(renderPromptMarkdownHtml(wikiState.markdown || ""));
+      }
+    }
+
+    async function loadWiki(preferredSection) {
       const sel = document.getElementById("wiki-vault-select");
       const view = document.getElementById("wiki-view");
       const empty = document.getElementById("wiki-empty");
+      const layout = document.getElementById("wiki-layout");
       const projectId = sel ? sel.value : "";
       if (!projectId || projectId === "all") {
         if (view) view.innerHTML = "";
+        if (layout) layout.style.display = "none";
         if (empty) {
           empty.style.display = "block";
           empty.textContent = "Select a project to view its wiki.";
@@ -5065,6 +5294,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         const res = await apiFetch("/api/wiki?project=" + encodeURIComponent(projectId), { headers: apiHeaders() });
         if (!res.ok) {
           if (view) view.innerHTML = "";
+          if (layout) layout.style.display = "none";
           if (empty) {
             empty.style.display = "block";
             empty.textContent = "Unable to load wiki for this project.";
@@ -5074,6 +5304,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         const data = await res.json();
         if (!data.exists) {
           if (view) view.innerHTML = "";
+          if (layout) layout.style.display = "none";
           if (empty) {
             empty.style.display = "block";
             empty.textContent = "No wiki has been generated for this project yet. Click Regenerate to create one.";
@@ -5081,9 +5312,27 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           return;
         }
         if (empty) empty.style.display = "none";
-        if (view) view.innerHTML = data.renderedHtml || wrapWikiH2(renderPromptMarkdownHtml(data.markdown || ""));
+        if (layout) layout.style.display = "grid";
+        const md = data.markdown || "";
+        const parsed = parseWikiCatalogTopics(md);
+        wikiState = {
+          markdown: md,
+          projectId: projectId,
+          sectionId: "index",
+          topics: parsed.topics,
+          sections: parsed.sections
+        };
+        if (!parsed.topics.length && !parsed.sections.length) {
+          if (view) view.innerHTML = data.renderedHtml || wrapWikiH2(renderPromptMarkdownHtml(md));
+          const nav = document.getElementById("wiki-topic-nav");
+          if (nav) nav.innerHTML = '<div class="wiki-nav-title">Topics</div>';
+          return;
+        }
+        const want = preferredSection || (typeof urlParams !== "undefined" ? urlParams.get("section") : null);
+        await selectWikiSection(want || "index");
       } catch {
         if (view) view.innerHTML = "";
+        if (layout) layout.style.display = "none";
         if (empty) {
           empty.style.display = "block";
           empty.textContent = "Unable to load wiki for this project.";
@@ -5118,7 +5367,7 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           } else {
             showBanner("Wiki regenerated for " + data.projectId, "success");
           }
-          await loadWiki();
+          await loadWiki(wikiState.sectionId);
         } catch (err) {
           showBanner("Wiki regenerate failed: " + (err.message || String(err)), "error");
         } finally {
@@ -5556,6 +5805,11 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
     process.env.SPEC_MEMO_SSE_TOKEN;
   const bus = options.activityBus;
   const errorLogPath = options.errorLogPath;
+  try {
+    setAiActivityBus(bus);
+  } catch {
+    // fail-open
+  }
 
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !authToken) {
     const err = new Error(
@@ -6406,7 +6660,8 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
           }
           const result = await regenerateWiki({
             projectId: parsed.projectId as string,
-            vaultRoot
+            vaultRoot,
+            polishWikiMarkdown: resolveWikiPolishFromVault(vaultRoot)
           });
           bus.capture({
             type: "system",
@@ -6419,6 +6674,17 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             path: "/api/wiki/regenerate",
             statusCode: 200
           });
+          if (result.aiPolished || result.aiError) {
+            bus.capture({
+              type: "system",
+              kind: "meta",
+              ok: result.aiPolished === true,
+              durationMs: Date.now() - startTime,
+              summary: `${result.aiPolished ? "ai.wiki.ok" : "ai.wiki.fail"} ${result.projectId}`,
+              operation: result.aiPolished ? "ai.wiki.ok" : "ai.wiki.fail",
+              projectId: result.projectId
+            });
+          }
           writeJson(res, 200, sanitizeToolOutput(result));
         } catch (err: unknown) {
           if (err instanceof WikiError) {

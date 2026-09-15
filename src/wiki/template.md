@@ -9,6 +9,10 @@
 
 {{overview}}
 
+## Topic catalog
+
+{{topicCatalog}}
+
 ## Architecture & decisions
 
 {{architectureDecisions}}
