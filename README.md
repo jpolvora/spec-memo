@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.36.1**.
+**Local working memory for coding agents outside the product repository.** Version **0.37.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -521,10 +521,12 @@ Consumers can pin a repository to a vault partition with a project-root `.spec-m
 - `memo vault rename --from <id> --to <id>` renames a vault project (dir, `project.json`, aliases, FTS index). REST `POST /api/vaults/rename` returns 200/400/404/409/401. The Vaults tab has a Rename modal.
 - `memo vault merge --source <id> --target <id> [--no-dedup] [--delete-sources]` smart-merges with trap/decision/spec/plan deduplication (`{copied,deduplicated,skipped}`). REST `POST /api/vaults/merge` accepts `dedup`/`deleteSources`. The Vaults tab merge modal has dedup/delete controls and a results banner.
 
-The **Wiki** tab (`?tab=wiki` or `?tab=wiki&project={id}`) shows the vault file `projects/{projectId}/WIKI.md`. It is not the consumer product README.
+The **Wiki** tab (`?tab=wiki`, `?tab=wiki&project={id}`, optional `&section={slug}`) shows the vault file `projects/{projectId}/WIKI.md`. It is not the consumer product README.
 
 - Select a project (All vaults is refused). Missing `WIKI.md` shows an empty state; **Regenerate** stays available.
-- **Regenerate** posts `POST /api/wiki/regenerate` with `{ "projectId" }` (collect → fill `template.md` → persist). Optional AI polish is off by default; set `wiki.aiEnabled` in vault `config.json` or `SPEC_MEMO_WIKI_AI=1`. Polish failures still save the deterministic page (`aiPolished: false`).
+- Layout is a split view: left **topic menu** (`#wiki-topic-nav`) and right content pane. Default selection is **Index** (overview + Topic catalog); choosing a topic loads that section only (`GET /api/wiki/section`).
+- Regenerated pages are **index-first**: Overview, Topic catalog (`[Title](#slug): blurb`), then stable topic `h2` sections.
+- **Regenerate** posts `POST /api/wiki/regenerate` with `{ "projectId" }` (collect → fill `template.md` → optional AI polish from a fresh knowledge snapshot → persist). When vault `ai.enabled` is true and the assistant is available, polish uses the same `resolveVaultAiAgent` path as refine (fail-open: deterministic page kept, `aiPolished: false`, short `aiError`). Legacy `wiki.aiEnabled` / `SPEC_MEMO_WIKI_AI=1` still supports injected test callbacks.
 - CLI extra (not an MCP tool): `memo wiki --project <id>` and `memo wiki --project <id> --regenerate`. Unavailable in remote mode.
 
 HTTP routes:
