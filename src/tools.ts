@@ -49,8 +49,38 @@ import {
   deriveRulesFromPrompts,
   generateActivityReport,
   cancelHandoffRecord,
-  showHandoffRecord
+  showHandoffRecord,
+  listSessions
 } from './prompt.js';
+
+function preprocessJsonObject(val: unknown): unknown {
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      return val;
+    }
+  }
+  return val;
+}
+
+function preprocessJsonArray(val: unknown): unknown {
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      return val;
+    }
+  }
+  return val;
+}
+
 import { submitMemoryFeedback } from './feedback.js';
 import { sanitizeToolOutput } from './safety.js';
 import {
@@ -312,7 +342,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     zodSchema: z.object({
       kind: RecordKindSchema,
       slug: z.string().optional(),
-      frontmatter: z.record(z.unknown()).optional(),
+      frontmatter: z.preprocess(preprocessJsonObject, z.record(z.unknown()).optional()),
       body: z.string().min(1, 'Record body must not be empty'),
       path: z.string().optional(),
       cwd: z.string().optional(),
@@ -341,7 +371,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     zodSchema: z.object({
       event: z.string().min(1, 'Event description must not be empty'),
       kind: RecordKindSchema.optional(),
-      details: z.record(z.unknown()).optional(),
+      details: z.preprocess(preprocessJsonObject, z.record(z.unknown()).optional()),
       cwd: z.string().optional(),
       vaultRoot: z.string().optional(),
       projectId: z.string().optional()
@@ -534,7 +564,7 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
             'derive_rules',
             'export_story'
           ],
-          description: 'Action to perform (default: "record"). session_end closes the session and triggers dual sync flush when hybrid or vaultGit is enabled.'
+          description: 'Action to perform (default: "record"). session returns turns for a sessionId, or lists sessions if sessionId is omitted. session_end closes the session and triggers dual sync flush when hybrid or vaultGit is enabled.'
         },
         body: { type: 'string', description: 'Prompt content or work summary' },
         id: { type: 'string', description: 'Unique record identifier' },
@@ -619,12 +649,15 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       gitSha: z.string().optional(),
       linkedPaths: z.array(z.string()).optional(),
       tags: z.array(z.string()).optional(),
-      deliverables: z.array(z.object({
-        type: z.enum(['pr', 'commit', 'spec']),
-        url: z.string().optional(),
-        sha: z.string().optional(),
-        title: z.string().optional()
-      })).optional(),
+      deliverables: z.preprocess(
+        preprocessJsonArray,
+        z.array(z.object({
+          type: z.enum(['pr', 'commit', 'spec']),
+          url: z.string().optional(),
+          sha: z.string().optional(),
+          title: z.string().optional()
+        })).optional()
+      ),
       query: z.string().optional(),
       since: z.string().optional(),
       until: z.string().optional(),
@@ -636,14 +669,17 @@ export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       format: z.string().optional(),
       feedback: z.enum(['helpful', 'not_helpful', 'stale', 'wrong']).optional(),
       comment: z.string().optional(),
-      handoff: z.object({
-        nextSteps: z.array(z.string()),
-        failedApproaches: z.array(z.string()).optional(),
-        openQuestions: z.array(z.string()).optional(),
-        branch: z.string().optional(),
-        owner: z.string().optional(),
-        shared: z.boolean().optional()
-      }).optional(),
+      handoff: z.preprocess(
+        preprocessJsonObject,
+        z.object({
+          nextSteps: z.array(z.string()),
+          failedApproaches: z.array(z.string()).optional(),
+          openQuestions: z.array(z.string()).optional(),
+          branch: z.string().optional(),
+          owner: z.string().optional(),
+          shared: z.boolean().optional()
+        }).optional()
+      ),
       objective: z.string().optional(),
       shared: z.boolean().optional(),
       cwd: z.string().optional(),
@@ -1478,7 +1514,8 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
 
       if (action === 'session') {
         if (!promptOpts.sessionId) {
-          return fail('INVALID_ARGUMENTS', "Parameter 'sessionId' is required for session action.");
+          const result = listSessions(promptOpts);
+          return ok(result);
         }
         const result = getSessionTurns({
           sessionId: promptOpts.sessionId,

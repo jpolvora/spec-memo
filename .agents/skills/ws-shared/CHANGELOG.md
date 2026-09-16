@@ -1,3 +1,13 @@
+### [2026-09-16 09:00] Agent: Antigravity
+- **Prompt**: check $HOME/.spec-memo recent error logs for possible bugs/issues not fixed. clear old logs / entries already fixed. bump, commit.
+- **Done**: Healed corrupted local records during sync changeset apply; fixed hybrid push acknowledgment for tombstone deletions; preprocessed stringified JSON arguments in MCP tools; routed prompt session queries without sessionId to listSessions; bumped v0.37.1.
+- **Result**: `npm test` 878 pass (65 suites); clean dual-sync.
+
+### [2026-09-15 08:43] Agent: Cursor Auto
+- **Prompt**: `/ws-spec-to-pr-lite` 0062 wiki-ai-refine full auto ship
+- **Done**: AI snapshot polish + index/topic Wiki UI; review fixes (provenance, catalog links, single-observe ops); v0.37.0; PR #77 merged
+- **Result**: `npm test` 875 pass; merge `93c92ce`
+
 ### [2026-09-14 22:36] Agent: Cursor GPT-5.6 Luna
 - **Prompt**: Make `memo start`, `restart`, and `stop` return to the terminal instead of holding it.
 - **Done**: HTTP lifecycle services now start/restart in the background with readiness status and clean exits; added external-process coverage, discovery hardening, and operator documentation.
