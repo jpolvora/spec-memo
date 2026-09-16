@@ -6,19 +6,43 @@ import { CheckVersionOptions, CheckVersionResult } from './types.js';
 const NPM_LATEST_URL = 'https://registry.npmjs.org/spec-memo/latest';
 const DEFAULT_TIMEOUT_MS = 3000;
 
+const versionCache = new Map<string, string>();
+
+/** Clear the in-memory package version cache (primarily for tests). */
+export function clearPackageVersionCache(): void {
+  versionCache.clear();
+}
+
 /** Resolve the installed package root (parent of `dist/` when running compiled code). */
 export function getPackageRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 }
 
-export function getPackageVersion(packageRoot = getPackageRoot()): string {
-  const pkgPath = path.join(packageRoot, 'package.json');
-  const raw = fs.readFileSync(pkgPath, 'utf8');
-  const pkg = JSON.parse(raw) as { version?: string };
-  if (!pkg.version || typeof pkg.version !== 'string') {
-    throw new Error(`package.json at ${pkgPath} is missing a version field`);
+export function getPackageVersion(
+  packageRoot = getPackageRoot(),
+  options: { reload?: boolean } = {}
+): string {
+  if (!options.reload) {
+    const cached = versionCache.get(packageRoot);
+    if (cached) {
+      return cached;
+    }
   }
-  return pkg.version;
+
+  const pkgPath = path.join(packageRoot, 'package.json');
+  try {
+    const raw = fs.readFileSync(pkgPath, 'utf8');
+    const pkg = JSON.parse(raw) as { version?: string };
+    if (typeof pkg?.version === 'string' && pkg.version.trim()) {
+      const version = pkg.version.trim();
+      versionCache.set(packageRoot, version);
+      return version;
+    }
+  } catch {
+    // transient read/parse error (e.g., ENOENT during npm global upgrade swap)
+  }
+
+  return versionCache.get(packageRoot) ?? 'unknown';
 }
 
 /** Compare semver core (major.minor.patch); returns true when `a` is strictly newer than `b`. */
@@ -84,7 +108,7 @@ export async function checkVersion(options: CheckVersionOptions = {}): Promise<C
   }
 
   let updateAvailable: CheckVersionResult['updateAvailable'];
-  if (latest === null) {
+  if (latest === null || current === 'unknown') {
     updateAvailable = 'unknown';
   } else {
     updateAvailable = isSemverNewer(latest, current);

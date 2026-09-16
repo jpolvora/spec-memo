@@ -8,7 +8,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createMcpServer } from './mcp.js';
 import { TOOL_NAMES } from './types.js';
 import { executeTool, TOOL_DEFINITIONS } from './tools.js';
-import { checkVersion, getPackageVersion, isSemverNewer } from './version.js';
+import { checkVersion, clearPackageVersionCache, getPackageVersion, isSemverNewer } from './version.js';
 import { installSkills, listRelativeFiles, resolveSkillInstallTargets } from './skills-install.js';
 import { getPackageRoot } from './version.js';
 import { runCli } from './cli.js';
@@ -516,4 +516,53 @@ describe('check_version and install_skills', () => {
       console.log = origLog;
     }
   });
+
+  it('getPackageVersion caches on success and degrades gracefully on missing or malformed package.json', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-memo-version-'));
+    try {
+      clearPackageVersionCache();
+
+      // 1. Missing package.json returns 'unknown' without throwing
+      const nonExistent = path.join(tmp, 'missing');
+      assert.equal(getPackageVersion(nonExistent), 'unknown');
+
+      // 2. Malformed package.json returns 'unknown' without throwing
+      const malformedDir = path.join(tmp, 'malformed');
+      fs.mkdirSync(malformedDir, { recursive: true });
+      fs.writeFileSync(path.join(malformedDir, 'package.json'), '{ not valid json');
+      assert.equal(getPackageVersion(malformedDir), 'unknown');
+
+      // 3. package.json missing version field returns 'unknown' without throwing
+      const noVersionDir = path.join(tmp, 'no-version');
+      fs.mkdirSync(noVersionDir, { recursive: true });
+      fs.writeFileSync(path.join(noVersionDir, 'package.json'), JSON.stringify({ name: 'test' }));
+      assert.equal(getPackageVersion(noVersionDir), 'unknown');
+
+      // 4. Valid package.json is read and cached
+      const validDir = path.join(tmp, 'valid');
+      fs.mkdirSync(validDir, { recursive: true });
+      const pkgFile = path.join(validDir, 'package.json');
+      fs.writeFileSync(pkgFile, JSON.stringify({ version: '1.2.3' }));
+      assert.equal(getPackageVersion(validDir), '1.2.3');
+
+      // 5. Subsequent call returns cached version even if file is removed (e.g. during npm swap)
+      fs.rmSync(pkgFile);
+      assert.equal(getPackageVersion(validDir), '1.2.3');
+
+      // 6. Reload option falls back to cached version if file still missing
+      assert.equal(getPackageVersion(validDir, { reload: true }), '1.2.3');
+
+      // 7. Clear cache drops cached version; now missing returns 'unknown'
+      clearPackageVersionCache();
+      assert.equal(getPackageVersion(validDir), 'unknown');
+
+      // 8. Restoring file allows re-reading and caching new version
+      fs.writeFileSync(pkgFile, JSON.stringify({ version: '1.2.4' }));
+      assert.equal(getPackageVersion(validDir), '1.2.4');
+    } finally {
+      clearPackageVersionCache();
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });
+
