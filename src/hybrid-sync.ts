@@ -265,8 +265,7 @@ export async function pushHybridProject(
       const exportedCount = recordCount + (changeset.deletions?.length ?? 0);
       const totalProcessed = pushResult.applied + (pushResult.autoMerged || 0) + pushResult.skipped + pushResult.conflicts;
       const fullyAcknowledged =
-        (exportedCount > 0 && totalProcessed >= exportedCount && pushResult.conflicts === 0) ||
-        (recordCount > 0 && totalProcessed >= recordCount && pushResult.conflicts === 0);
+        exportedCount > 0 && totalProcessed >= exportedCount && pushResult.conflicts === 0;
 
       if (pushResult.applied > 0 || (pushResult.autoMerged || 0) > 0 || fullyAcknowledged) {
         // Use export snapshot time — not push-completion wall clock — so records
@@ -292,7 +291,7 @@ export async function pushHybridProject(
       const pushIncomplete =
         exportedCount > 0 &&
         !fullyAcknowledged &&
-        (totalProcessed < recordCount ||
+        (totalProcessed < exportedCount ||
           (pushResult.applied === 0 &&
             (pushResult.skipped || 0) > 0 &&
             (prefer === 'local' || strategy === 'local-wins')));

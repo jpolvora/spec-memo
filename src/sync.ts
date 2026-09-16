@@ -602,15 +602,32 @@ export async function applyChangeset(
           if (!existing) {
             // Local file is corrupted/unparseable. Overwrite/heal with valid incoming remote record.
             if (!dryRun) {
-              await upsertRecord({
-                vaultRoot,
-                projectId: projId,
-                kind,
-                slug,
-                frontmatter: item.frontmatter,
-                body: item.body,
-                allowDuplicate: kind !== "trap"
-              });
+              try {
+                await upsertRecord({
+                  vaultRoot,
+                  projectId: projId,
+                  kind,
+                  slug,
+                  frontmatter: item.frontmatter,
+                  body: item.body,
+                  allowDuplicate: true
+                });
+              } catch (err: unknown) {
+                if (isViewRebuildSkip(err)) {
+                  applied++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (healed, view-rebuild-skipped)`);
+                  continue;
+                }
+                if (isIoGuardError(err)) {
+                  skipped++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (skipped: io-guard)`);
+                  continue;
+                }
+                if (!isCaptureIgnoreSkip(err)) throw err;
+                skipped++;
+                recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
+                continue;
+              }
             }
             applied++;
             recordsApplied.push(`${projId}/${kind}/${recId} (healed corrupted file)`);
