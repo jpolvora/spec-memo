@@ -232,7 +232,13 @@ export function reportAiFailure(args: {
 }
 
 function emitAiActivity(
-  operation: 'ai.refine.ok' | 'ai.refine.fail' | 'ai.rank.ok' | 'ai.rank.fail',
+  operation:
+    | 'ai.refine.ok'
+    | 'ai.refine.fail'
+    | 'ai.rank.ok'
+    | 'ai.rank.fail'
+    | 'ai.wiki.ok'
+    | 'ai.wiki.fail',
   ok: boolean,
   durationMs: number,
   recordId?: string,
@@ -262,6 +268,15 @@ export function emitAiRankActivity(
   projectId?: string
 ): void {
   emitAiActivity(ok ? 'ai.rank.ok' : 'ai.rank.fail', ok, durationMs, undefined, projectId);
+}
+
+/** Spec 0062: wiki polish activity distinct from per-record refine/rank. */
+export function emitAiWikiActivity(
+  ok: boolean,
+  durationMs: number,
+  projectId?: string
+): void {
+  emitAiActivity(ok ? 'ai.wiki.ok' : 'ai.wiki.fail', ok, durationMs, undefined, projectId);
 }
 
 /**

@@ -23,6 +23,7 @@ export {
   setAiActivityBus,
   getAiActivityBus,
   emitAiRankActivity,
+  emitAiWikiActivity,
   withAiTimeout,
   isAiRefineEligibleKind,
   hashRecordBody,

@@ -206,6 +206,7 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes('id="tab-wiki"'));
     assert.ok(html.includes('id="wiki-vault-select"'));
     assert.ok(html.includes('id="wiki-view"'));
+    assert.ok(html.includes('id="wiki-topic-nav"'));
     assert.ok(html.includes('id="btn-wiki-regenerate"'));
     assert.ok(html.includes("Regenerate"));
   });
@@ -217,7 +218,15 @@ test("MCP status monitor", async (t) => {
     assert.ok(html.includes("No wiki has been generated"));
   });
 
-  await t.test("Wiki tab wraps h2 in details/summary collapsed by default", () => {
+  await t.test("Wiki tab includes topic nav and section deep-link handling", () => {
+    const html = generateStatusHtml(getPackageVersion());
+    assert.ok(html.includes('id="wiki-topic-nav"'));
+    assert.ok(html.includes("urlParams.get(\"section\")") || html.includes("urlParams.get('section')"));
+    assert.ok(html.includes("selectWikiSection"));
+    assert.ok(html.includes("/api/wiki/section?project="));
+  });
+
+  await t.test("Wiki tab keeps wrapWikiH2 as fallback when no catalog", () => {
     const html = generateStatusHtml(getPackageVersion());
     assert.ok(html.includes("<details><summary><h2>"));
     assert.ok(html.includes("wrapWikiH2"));
