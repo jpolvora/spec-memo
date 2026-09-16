@@ -590,3 +590,115 @@ test("PR-58 review: isViewRebuildSkip narrows to view-path errors only", () => {
 
   assert.equal(isViewRebuildSkip(new Error('boom')), false);
 });
+
+test("applyChangeset heals corrupted local file on disk without aborting changeset", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-sync-corrupt-"));
+  const vaultT = path.join(tempDir, "vault");
+  const proj = "p-corrupted-test";
+  const now = new Date().toISOString();
+
+  t.after(() => {
+    closeIndex(vaultT);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  initVault({ vaultRoot: vaultT, projectId: proj, displayName: "Corrupt Test" });
+
+  // Create a 0-byte corrupted file on disk
+  const trapDir = path.join(vaultT, "projects", proj, "traps");
+  fs.mkdirSync(trapDir, { recursive: true });
+  const corruptFile = path.join(trapDir, "trap-corrupt-1.md");
+  fs.writeFileSync(corruptFile, "", "utf8");
+
+  const changeset = {
+    schemaVersion: 1 as const,
+    generatedAt: now,
+    records: [
+      {
+        frontmatter: {
+          id: "trap-corrupt-1",
+          kind: "trap" as const,
+          source: "agent" as const,
+          status: "active" as const,
+          created: now,
+          updated: now,
+          project: proj,
+          severity: "high" as const,
+          pathPatterns: ["src/file.ts"]
+        },
+        body: "# Healed trap\nIncoming valid content.",
+        project: proj
+      }
+    ]
+  };
+
+  const result = await applyChangeset(vaultT, changeset);
+  assert.strictEqual(result.conflicts, 0);
+  assert.strictEqual(result.applied, 1);
+  const healed = await getRecord({ vaultRoot: vaultT, projectId: proj, kind: "trap", id: "trap-corrupt-1" });
+  assert.ok(healed);
+  assert.strictEqual(healed.body, "# Healed trap\nIncoming valid content.");
+});
+
+test("applyChangeset heals corrupted local trap even when duplicate pathPatterns exist", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-sync-corrupt-dup-"));
+  const vaultT = path.join(tempDir, "vault");
+  const proj = "p-corrupt-dup";
+  const now = new Date().toISOString();
+
+  t.after(() => {
+    closeIndex(vaultT);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  initVault({ vaultRoot: vaultT, projectId: proj, displayName: "Corrupt Dup Test" });
+
+  // Pre-seed an existing active trap with the same pathPatterns and overlapping body
+  await upsertRecord({
+    vaultRoot: vaultT,
+    projectId: proj,
+    kind: "trap",
+    slug: "trap-existing",
+    frontmatter: {
+      id: "trap-existing",
+      title: "Existing Trap",
+      severity: "high",
+      pathPatterns: ["src/shared.ts"]
+    },
+    body: "Shared trap body text about database connection."
+  });
+
+  // Create a 0-byte corrupted file on disk for a second trap
+  const trapDir = path.join(vaultT, "projects", proj, "traps");
+  const corruptFile = path.join(trapDir, "trap-second.md");
+  fs.writeFileSync(corruptFile, "", "utf8");
+
+  const changeset = {
+    schemaVersion: 1 as const,
+    generatedAt: now,
+    records: [
+      {
+        frontmatter: {
+          id: "trap-second",
+          kind: "trap" as const,
+          source: "agent" as const,
+          status: "active" as const,
+          created: now,
+          updated: now,
+          project: proj,
+          severity: "high" as const,
+          pathPatterns: ["src/shared.ts"]
+        },
+        body: "Shared trap body text about database connection.",
+        project: proj
+      }
+    ]
+  };
+
+  const result = await applyChangeset(vaultT, changeset);
+  assert.strictEqual(result.conflicts, 0);
+  assert.strictEqual(result.applied, 1);
+  const healed = await getRecord({ vaultRoot: vaultT, projectId: proj, kind: "trap", id: "trap-second" });
+  assert.ok(healed, "corrupted file must be healed directly and not deduplicated into existing trap");
+  assert.strictEqual(healed.frontmatter.id, "trap-second");
+});

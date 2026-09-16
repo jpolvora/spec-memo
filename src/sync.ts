@@ -16,7 +16,7 @@ import {
   logIoGuardRefusal,
   verifyStoredChecksum
 } from "./io-guard.js";
-import { RecordFrontmatter, RecordKind, ConflictStrategy, ConflictRecordDetail } from "./types.js";
+import { RecordFrontmatter, RecordKind, ConflictStrategy, ConflictRecordDetail, MemoRecord } from "./types.js";
 
 export interface ChangesetRecord {
   frontmatter: RecordFrontmatter;
@@ -586,17 +586,58 @@ export async function applyChangeset(
 
         if (fs.existsSync(targetFilePath)) {
           const existingContent = fs.readFileSync(targetFilePath, "utf8");
-          const existing = parseRecord(existingContent);
-
-          const localTime = new Date(existing.frontmatter.updated || existing.frontmatter.created).getTime();
-          const remoteTime = new Date(item.frontmatter.updated || item.frontmatter.created).getTime();
-
-          const bodiesMatch = areBodiesSemanticallyEqual(existing.body, item.body);
 
           // Record original for rollback journal before any modification
           if (!dryRun && !journal.some((j) => j.filePath === targetFilePath)) {
             journal.push({ filePath: targetFilePath, originalContent: existingContent });
           }
+
+          let existing: MemoRecord | null = null;
+          try {
+            existing = parseRecord(existingContent, targetFilePath);
+          } catch {
+            existing = null;
+          }
+
+          if (!existing) {
+            // Local file is corrupted/unparseable. Overwrite/heal with valid incoming remote record.
+            if (!dryRun) {
+              try {
+                await upsertRecord({
+                  vaultRoot,
+                  projectId: projId,
+                  kind,
+                  slug,
+                  frontmatter: item.frontmatter,
+                  body: item.body,
+                  allowDuplicate: true
+                });
+              } catch (err: unknown) {
+                if (isViewRebuildSkip(err)) {
+                  applied++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (healed, view-rebuild-skipped)`);
+                  continue;
+                }
+                if (isIoGuardError(err)) {
+                  skipped++;
+                  recordsApplied.push(`${projId}/${kind}/${recId} (skipped: io-guard)`);
+                  continue;
+                }
+                if (!isCaptureIgnoreSkip(err)) throw err;
+                skipped++;
+                recordsApplied.push(`${projId}/${kind}/${recId} (skipped: ignored-path)`);
+                continue;
+              }
+            }
+            applied++;
+            recordsApplied.push(`${projId}/${kind}/${recId} (healed corrupted file)`);
+            continue;
+          }
+
+          const localTime = new Date(existing.frontmatter.updated || existing.frontmatter.created).getTime();
+          const remoteTime = new Date(item.frontmatter.updated || item.frontmatter.created).getTime();
+
+          const bodiesMatch = areBodiesSemanticallyEqual(existing.body, item.body);
 
           if (bodiesMatch) {
             // Bodies are identical: check if frontmatter also matches
@@ -982,6 +1023,8 @@ export async function applyChangeset(
             touchedProjects.add(projId);
             applied++;
             recordsApplied.push(`${projId}/${del.kind}/${del.id} (deleted)`);
+          } else {
+            skipped++;
           }
         }
       }

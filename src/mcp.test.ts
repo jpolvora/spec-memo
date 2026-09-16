@@ -188,6 +188,52 @@ describe('MCP Server Integration', () => {
     const errData = JSON.parse(errContent[0].text as string);
     assert.equal(errData.code, 'INVALID_ARGUMENTS');
 
+    // Test upsert tool with stringified JSON frontmatter
+    const jsonStrUpsertRes = await client.callTool({
+      name: 'upsert',
+      arguments: {
+        kind: 'trap',
+        slug: 'mcp-json-str-trap',
+        frontmatter: JSON.stringify({ id: 'mcp-json-str-trap', title: 'Stringified JSON Trap', severity: 'medium' }),
+        body: 'DO NOT fail on stringified frontmatter. INSTEAD DO parse it.'
+      }
+    });
+    assert.equal(jsonStrUpsertRes.isError, undefined);
+
+    // Test search with stringified kinds, tags, and hitIds
+    const stringifiedSearchRes = await client.callTool({
+      name: 'search',
+      arguments: {
+        query: 'stringified',
+        kinds: JSON.stringify(['trap']),
+        tags: JSON.stringify(['test-tag']),
+        hitIds: JSON.stringify(['mcp-json-str-trap'])
+      }
+    });
+    assert.equal(stringifiedSearchRes.isError, undefined);
+
+    // Test prompt with stringified tags and linkedPaths
+    const promptRecordRes = await client.callTool({
+      name: 'prompt',
+      arguments: {
+        action: 'record',
+        body: 'Testing stringified arrays in prompt',
+        tags: JSON.stringify(['prompt-tag-1', 'prompt-tag-2']),
+        linkedPaths: JSON.stringify(['src/tools.ts'])
+      }
+    });
+    assert.equal(promptRecordRes.isError, undefined);
+
+    // Test prompt tool action: session without sessionId (lists sessions)
+    const listSessRes = await client.callTool({
+      name: 'prompt',
+      arguments: {
+        action: 'session',
+        limit: 10
+      }
+    });
+    assert.equal(listSessRes.isError, undefined);
+
     await client.close();
     await server.close();
   });
