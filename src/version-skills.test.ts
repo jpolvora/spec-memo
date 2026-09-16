@@ -559,6 +559,14 @@ describe('check_version and install_skills', () => {
       // 8. Restoring file allows re-reading and caching new version
       fs.writeFileSync(pkgFile, JSON.stringify({ version: '1.2.4' }));
       assert.equal(getPackageVersion(validDir), '1.2.4');
+
+      // 9. In-place upgrade on disk is picked up immediately by long-running process
+      fs.writeFileSync(pkgFile, JSON.stringify({ version: '1.2.5' }));
+      assert.equal(getPackageVersion(validDir), '1.2.5');
+
+      // 10. Transient file removal falls back to the newly upgraded version
+      fs.rmSync(pkgFile);
+      assert.equal(getPackageVersion(validDir), '1.2.5');
     } finally {
       clearPackageVersionCache();
       fs.rmSync(tmp, { recursive: true, force: true });

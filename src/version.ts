@@ -22,13 +22,7 @@ export function getPackageVersion(
   packageRoot = getPackageRoot(),
   options: { reload?: boolean } = {}
 ): string {
-  if (!options.reload) {
-    const cached = versionCache.get(packageRoot);
-    if (cached) {
-      return cached;
-    }
-  }
-
+  void options;
   const pkgPath = path.join(packageRoot, 'package.json');
   try {
     const raw = fs.readFileSync(pkgPath, 'utf8');
