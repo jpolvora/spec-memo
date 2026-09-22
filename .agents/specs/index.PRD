@@ -137,6 +137,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] AI cursor-sdk timeout: configurable `timeoutMs`, 30s default, honored everywhere (`spec: 0064-ai-timeout-config.spec.md`)
 - [x] CLI lifecycle shortcuts: start, stop, restart, and direct shortcuts for monitor, canvas, server, mcp (`spec: 0065-cli-start-shortcuts.spec.md`)
 - [x] Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops (`spec: 0066-status-details-drawer-errors-aiops.spec.md`)
+- [x] Vault stability: truthful doctor/status, dual-sync observability, telemetry and error-log lifecycle (`spec: 0067-vault-stability-audit.spec.md`)
+
 
 
 
@@ -237,6 +239,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 63 | [`cli-start-shortcuts`](0065-cli-start-shortcuts.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | CLI lifecycle commands (start, stop, restart) and shortcuts for monitor, canvas, server, mcp; HTTP services background by default; v0.35.0 |
 
 | 64 | [`status-details-drawer-errors-aiops`](0066-status-details-drawer-errors-aiops.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0 |
+
+| 65 | [`vault-stability-audit`](0067-vault-stability-audit.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Vault stability: truthful doctor/status, dual-sync observability, telemetry and error-log lifecycle; v0.37.3; PR #81 |
 
 ## 9. Inbox (unscheduled ideas)
 
