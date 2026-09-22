@@ -186,10 +186,29 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
     operation: 'sync_dual',
     durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
     success: ok,
-    errorCode: ok ? undefined : 'DUAL_SYNC_FAILED',
+    errorCode: ok
+      ? undefined
+      : hybrid && !hybrid.ok && vaultGit && !vaultGit.ok
+        ? 'DUAL_SYNC_FAILED'
+        : hybrid && !hybrid.ok
+          ? 'HYBRID_SYNC_FAILED'
+          : vaultGit && !vaultGit.ok
+            ? 'VAULT_GIT_SYNC_FAILED'
+            : 'DUAL_SYNC_FAILED',
     projectId: options.projectId,
     vaultRoot,
-    metadata: { trigger, hybrid: Boolean(hybridEnabled), vaultGit: Boolean(gitEnabled) }
+    metadata: {
+      trigger,
+      hybrid: Boolean(hybridEnabled),
+      vaultGit: Boolean(gitEnabled),
+      hybridOk: hybrid?.ok,
+      vaultGitOk: vaultGit?.ok,
+      hybridError: hybrid?.error,
+      vaultGitError: vaultGit?.error,
+      vaultGitPhase: vaultGit?.lastPhase,
+      vaultGitDurationMs: vaultGit?.durationMs,
+      vaultGitPhases: vaultGit?.phases
+    }
   });
 
   return report;

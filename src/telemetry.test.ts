@@ -13,7 +13,9 @@ import {
   closeTelemetry,
   resetTelemetryRecorderForTest,
   listTelemetryFiles,
-  readTelemetryEvents
+  readTelemetryEvents,
+  summarizeTelemetry,
+  latestTelemetryFile
 } from './telemetry.js';
 import { ensureVaultStructure, DEFAULT_VAULT_CONFIG } from './vault.js';
 import { executeTool } from './tools.js';
@@ -476,5 +478,23 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
 
     events = readTelemetryEvents(tempVault);
     assert.equal(events.length, 2);
+  });
+
+  it('summarizeTelemetry classifies expected vs product faults and points at rolling files', () => {
+    const dir = getTelemetryDir(tempVault);
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'telemetry-2026-09-22.part-1.jsonl');
+    const rows = [
+      { timestamp: '2026-09-22T00:00:00.000Z', eventId: 'a', category: 'cli_command', operation: 'doctor', durationMs: 10, success: false, errorCode: 'EXIT_1' },
+      { timestamp: '2026-09-22T00:00:01.000Z', eventId: 'b', category: 'sync_operation', operation: 'sync_dual', durationMs: 40, success: false, errorCode: 'VAULT_GIT_SYNC_FAILED' },
+      { timestamp: '2026-09-22T00:00:02.000Z', eventId: 'c', category: 'mcp_tool', operation: 'get', durationMs: 5, success: true }
+    ];
+    fs.writeFileSync(file, rows.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+    const summary = summarizeTelemetry(tempVault, { maxEvents: 100 });
+    assert.equal(summary.eventCount, 3);
+    assert.equal(summary.failureCount, 2);
+    assert.equal(summary.expectedFaults, 1);
+    assert.equal(summary.productFaults, 1);
+    assert.ok(latestTelemetryFile(tempVault)?.endsWith('telemetry-2026-09-22.part-1.jsonl'));
   });
 });

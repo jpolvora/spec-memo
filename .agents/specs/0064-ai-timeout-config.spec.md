@@ -4,7 +4,7 @@ slug: ai-timeout-config
 title: 'AI cursor-sdk timeout: configurable timeoutMs, 30s default, honored everywhere'
 source: github
 specDate: 2026-09-14
-issueState: open
+issueState: closed
 labels:
 ---
 

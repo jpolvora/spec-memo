@@ -213,6 +213,37 @@ export function formatErrorReport(report: ErrorReport): string {
  * Appends a detailed error report to the resolved error.logs file.
  * Fail-safe: catches write errors to ensure calling servers never crash due to logging.
  */
+export const ERROR_LOG_MAX_BYTES = 8 * 1024 * 1024;
+export const ERROR_LOG_BACKUP_KEEP = 8;
+
+function rotateErrorLogIfNeeded(targetPath: string): void {
+  try {
+    if (!fs.existsSync(targetPath)) return;
+    const st = fs.statSync(targetPath);
+    if (st.size < ERROR_LOG_MAX_BYTES) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backup = `${targetPath}.${stamp}.bak`;
+    fs.copyFileSync(targetPath, backup);
+    fs.writeFileSync(targetPath, '', 'utf8');
+    const dir = path.dirname(targetPath);
+    const base = path.basename(targetPath);
+    const backups = fs
+      .readdirSync(dir)
+      .filter((f) => f.startsWith(`${base}.`) && f.endsWith('.bak'))
+      .map((f) => ({ f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+    for (const extra of backups.slice(ERROR_LOG_BACKUP_KEEP)) {
+      try {
+        fs.unlinkSync(path.join(dir, extra.f));
+      } catch {
+        // keep remaining backups
+      }
+    }
+  } catch {
+    // rotation must never throw
+  }
+}
+
 export function logErrorReport(report: ErrorReport, options: ErrorLogOptions = {}): string {
   const formatted = formatErrorReport(report);
   const targetPath = resolveErrorLogPath(options.vaultRoot, options.logPath);
@@ -222,6 +253,7 @@ export function logErrorReport(report: ErrorReport, options: ErrorLogOptions = {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    rotateErrorLogIfNeeded(targetPath);
     fs.appendFileSync(targetPath, formatted, 'utf8');
   } catch (appendErr) {
     try {

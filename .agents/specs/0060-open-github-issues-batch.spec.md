@@ -4,7 +4,7 @@ slug: open-github-issues-batch
 title: "Fix open GitHub bugs: AI Ops journal wiring, test vault isolation, silent Chrome probes"
 source: github
 specDate: 2026-09-13
-issueState: open
+issueState: closed
 labels: 
 ---
 

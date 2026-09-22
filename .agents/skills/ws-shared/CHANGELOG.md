@@ -1,3 +1,8 @@
+### [2026-09-22 12:50] Agent: Cursor Grok 4.6
+- **Prompt**: Implement Vault Stability and Spec-Write Remediation Plan (doctor/status truth, sync reliability, multi-vault audit, observability, spec/release coherence)
+- **Done**: Gitignored `.agents/plans` classified without failing doctor; live vs persisted vault-git; FTS markdown/id consistency; dual-sync per-channel telemetry + sequential docs; hybrid cursor only on full ack; error-log rotation; telemetry rolling-file summaries; `memo vault list --audit`; shipped spec metadata closed; 0027 VFS left deferred
+- **Result**: `npm test` 886 pass after site stamp; `npm run check:site` pass (v0.37.3); `memo doctor --json` healthy with 70 classified gitignored plans
+
 ### [2026-09-16 09:00] Agent: Antigravity
 - **Prompt**: check $HOME/.spec-memo recent error logs for possible bugs/issues not fixed. clear old logs / entries already fixed. bump, commit.
 - **Done**: Healed corrupted local records during sync changeset apply; fixed hybrid push acknowledgment for tombstone deletions; preprocessed stringified JSON arguments in MCP tools; routed prompt session queries without sessionId to listSessions; bumped v0.37.1.

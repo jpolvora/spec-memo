@@ -7,6 +7,7 @@ import { ProjectIdentity, ProjectMetadata, VaultConfig } from './types.js';
 import { resolveProjectIdentity } from './identity.js';
 import { getPackageVersion } from './version.js';
 import { logErrorReport } from './error-logger.js';
+import { inspectVaultGitAuthor } from './vault-git-inspect.js';
 import { writeVaultGitState } from './vault-git-state.js';
 import { safeVaultGitError } from './vault-git-redact.js';
 import { defaultAiConfig, parseAiConfig } from './ai/config.js';
@@ -795,6 +796,9 @@ export interface VaultGitChannelResult {
   error?: string;
   skipped?: boolean;
   wouldCommit?: string[];
+  durationMs?: number;
+  lastPhase?: string;
+  phases?: Record<string, number>;
 }
 
 export interface FlushVaultGitOptions {
@@ -1035,6 +1039,13 @@ export function commitVaultChange(
 
       initVaultGit(vaultRoot);
 
+      const author = inspectVaultGitAuthor(vaultRoot);
+      if (!author.configured) {
+        const identityErr = 'Author identity unknown: set git user.email (and user.name) for the vault repository';
+        writeVaultGitState(vaultRoot, { dirty: true, lastError: identityErr });
+        return false;
+      }
+
       const toAdd = resolveVaultCommitAddPaths(vaultRoot, paths);
       if (toAdd.length === 0) return false;
 
@@ -1199,6 +1210,11 @@ export async function flushVaultGit(
       error: 'Vault config.json not found.'
     };
   }
+  const started = performance.now();
+  const phases: Record<string, number> = {};
+  const mark = (phase: string, from: number) => {
+    phases[phase] = Math.max(0, Math.round((performance.now() - from) * 10) / 10);
+  };
   if (!config.vaultGit?.enabled || config.mode === 'remote') {
     return {
       ok: true,
@@ -1206,13 +1222,36 @@ export async function flushVaultGit(
       pulled: false,
       pushed: false,
       skipped: true,
-      message: 'Vault git sync is disabled in config.json.'
+      message: 'Vault git sync is disabled in config.json.',
+      durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
+      lastPhase: 'skip',
+      phases
     };
   }
 
   try {
+    const tInit = performance.now();
     await initVaultGitAsync(vaultRoot);
+    mark('init', tInit);
+    const author = inspectVaultGitAuthor(vaultRoot);
+    if (!author.configured) {
+      const identityErr = 'Author identity unknown: set git user.email (and user.name) for the vault repository';
+      writeVaultGitState(vaultRoot, { dirty: true, lastError: identityErr });
+      return {
+        ok: false,
+        committed: false,
+        pulled: false,
+        pushed: false,
+        message: `Sync failed: ${identityErr}`,
+        error: identityErr,
+        durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
+        lastPhase: 'identity',
+        phases
+      };
+    }
+    const tStatus = performance.now();
     const statusRes = await vaultGitPorcelainAsync(vaultRoot);
+    mark('status', tStatus);
     if (!statusRes.ok) {
       const err = safeVaultGitError(statusRes.error)!;
       writeVaultGitState(vaultRoot, { dirty: true, lastError: statusRes.error });
@@ -1240,7 +1279,10 @@ export async function flushVaultGit(
         pulled: false,
         pushed: false,
         wouldCommit,
-        message: `Dry-run: ${wouldCommit.length} path(s) would commit`
+        message: `Dry-run: ${wouldCommit.length} path(s) would commit`,
+        durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
+        lastPhase: 'dry-run',
+        phases
       };
     }
 
@@ -1253,7 +1295,9 @@ export async function flushVaultGit(
         trigger === 'session_end' || trigger === 'shutdown' || trigger === 'sync' || trigger === 'remote-follow'
           ? `vault-git flush ${iso}${sessionBit}`
           : `vault-git flush ${iso}${sessionBit}`;
+      const tCommit = performance.now();
       committed = commitVaultChange(message, vaultRoot, [], { force: true, skipRemote: true });
+      mark('commit', tCommit);
       if (!committed) {
         const localErr = 'Local vault-git commit failed';
         writeVaultGitState(vaultRoot, { dirty: true, lastError: localErr });
@@ -1263,7 +1307,10 @@ export async function flushVaultGit(
           pulled: false,
           pushed: false,
           message: `Sync failed: ${localErr}`,
-          error: localErr
+          error: localErr,
+          durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
+          lastPhase: 'commit',
+          phases
         };
       }
     }
@@ -1274,15 +1321,12 @@ export async function flushVaultGit(
     if (config.vaultGit.remoteUrl) {
       await withVaultGitRemoteExclusive(vaultRoot, options.trigger, async () => {
         const branch = resolveVaultGitBranch(config, vaultRoot);
+        const tPull = performance.now();
         const pullRes = await gitExecAsync(vaultRoot, ['pull', '--rebase', '--autostash', 'origin', branch], 'pull');
+        mark('pull', tPull);
         pulled = pullRes.ok;
         if (!pullRes.ok) {
           remoteError = pullRes.error;
-          // #55 follow-up: a failed --autostash pull leaves the autostash
-          // behind (stash@{0}, stash@{1} pile-up). Abort the half-rebase and
-          // drain every autostash entry by explicit ref — never a bare pop,
-          // which could restore a user stash. Re-list per iteration so refs
-          // stay fresh as entries drop.
           try {
             await gitExecAsync(vaultRoot, ['rebase', '--abort'], 'pull');
             for (let i = 0; i < 10; i++) {
@@ -1307,7 +1351,9 @@ export async function flushVaultGit(
             // Best-effort recovery must never mask the original pull error.
           }
         } else {
+          const tPush = performance.now();
           const pushRes = await gitExecAsync(vaultRoot, ['push', '-u', 'origin', branch], 'push');
+          mark('push', tPush);
           pushed = pushRes.ok;
           if (!pushRes.ok) remoteError = pushRes.error;
         }
@@ -1317,19 +1363,27 @@ export async function flushVaultGit(
     const hasRemote = Boolean(config.vaultGit.remoteUrl);
     const localOk = !hasRemote ? porcelain.length === 0 || committed : true;
     const channelOk = hasRemote ? pulled && pushed && !remoteError : localOk;
+    const liveAfter = await vaultGitPorcelainAsync(vaultRoot);
+    const stillDirty =
+      Boolean(remoteError) ||
+      (hasRemote && committed && !pushed) ||
+      (liveAfter.ok && liveAfter.porcelain.trim().length > 0);
     writeVaultGitState(vaultRoot, {
-      dirty: Boolean(remoteError) || (hasRemote && committed && !pushed),
-      lastError: remoteError || null,
+      dirty: stillDirty,
+      lastError: remoteError || (stillDirty && !channelOk ? 'vault-git tree still dirty after flush' : null),
       lastSyncAt: new Date().toISOString()
     });
 
     return {
-      ok: channelOk,
+      ok: channelOk && !stillDirty,
       committed,
       pulled,
       pushed,
       message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`,
-      error: safeVaultGitError(remoteError)
+      error: safeVaultGitError(remoteError),
+      durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
+      lastPhase: remoteError ? (pulled ? 'push' : 'pull') : 'flush',
+      phases
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

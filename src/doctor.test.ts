@@ -323,5 +323,31 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     assert.ok(fs.existsSync(liveTrap));
     assert.ok(fs.existsSync(trackedMemory));
   });
+
+  it('gitignored .agents/plans residue is classified and does not fail doctor', async () => {
+    fs.rmSync(path.join(tempProductRepo, '.git'), { recursive: true, force: true });
+    execFileSync('git', ['init'], { cwd: tempProductRepo, stdio: 'ignore' });
+    await upsertRecord({
+      cwd: tempProductRepo,
+      vaultRoot: tempVaultRoot,
+      kind: 'trap',
+      slug: 'gitignore-trap',
+      frontmatter: { id: 'gitignore-trap', title: 'Gitignore Trap' },
+      body: 'Body'
+    });
+    fs.writeFileSync(path.join(tempProductRepo, '.gitignore'), '.agents/plans/\n', 'utf8');
+    const planDir = path.join(tempProductRepo, '.agents', 'plans');
+    fs.mkdirSync(planDir, { recursive: true });
+    fs.writeFileSync(path.join(planDir, 'gitignored.md'), '# gitignored plan\n', 'utf8');
+
+    const scan = scanForRepoPollution(tempProductRepo, tempVaultRoot);
+    assert.ok(scan.gitignoredCount > 0);
+    assert.equal(scan.items.length, 0);
+
+    const doc = await runDoctor({ cwd: tempProductRepo, vaultRoot: tempVaultRoot });
+    assert.equal(doc.pollution.detected, false);
+    assert.equal(doc.healthy, true);
+    assert.ok((doc.pollution.classifiedResidue || []).length > 0);
+  });
 });
 

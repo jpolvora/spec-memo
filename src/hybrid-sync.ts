@@ -118,7 +118,7 @@ export async function pullHybridProject(
     if (!dryRun) {
       const now = new Date().toISOString();
       let cursorsUpdate: Record<string, string> | undefined;
-      if (applyResult.applied > 0) {
+      if (applyResult.applied > 0 && applyResult.skipped === 0 && applyResult.conflicts === 0) {
         const cursorVal = changeset.generatedAt || now;
         if (projectId) {
           cursorsUpdate = { [projectId]: cursorVal };
@@ -136,11 +136,14 @@ export async function pullHybridProject(
         }
       }
 
-      if (applyResult.conflicts > 0) {
+      if (applyResult.conflicts > 0 || applyResult.skipped > 0) {
         writeHybridState(vaultRoot, {
           dirty: true,
           dirtyProjects: projectId ? { [projectId]: true } : undefined,
-          lastError: `Hybrid sync pull wrote ${applyResult.conflicts} conflict sidecar(s); review and run memo sync`,
+          lastError:
+            applyResult.conflicts > 0
+              ? `Hybrid sync pull wrote ${applyResult.conflicts} conflict sidecar(s); review and run memo sync`
+              : `Hybrid sync pull skipped ${applyResult.skipped} record(s); cursor not advanced`,
           lastSyncAt: now,
           cursors: cursorsUpdate
         });
@@ -267,7 +270,7 @@ export async function pushHybridProject(
       const fullyAcknowledged =
         exportedCount > 0 && totalProcessed >= exportedCount && pushResult.conflicts === 0;
 
-      if (pushResult.applied > 0 || (pushResult.autoMerged || 0) > 0 || fullyAcknowledged) {
+      if (fullyAcknowledged) {
         // Use export snapshot time — not push-completion wall clock — so records
         // updated during an in-flight push remain visible to the next since-filter.
         const cursorVal = changeset.generatedAt || now;

@@ -13,6 +13,7 @@ import {
   deleteErrorLogEntries,
   parseErrorLogDeleteBody,
   ERROR_LOG_SCAN_MAX_BYTES,
+  ERROR_LOG_MAX_BYTES,
   ErrorReport
 } from './error-logger.js';
 
@@ -246,5 +247,16 @@ describe('Error Logger Subsystem', () => {
     const after = fs.readFileSync(logPath, 'utf8');
     assert.ok(after.startsWith(marker));
     assert.ok(!after.includes('tail-only-delete-target'));
+  });
+
+  it('rotates error.logs to a timestamped backup when the file exceeds the cap', () => {
+    const logPath = path.join(testVaultRoot, 'error.logs');
+    fs.writeFileSync(logPath, 'x'.repeat(ERROR_LOG_MAX_BYTES), 'utf8');
+    logErrorReport({ subsystem: 'cli', error: 'after-rotate', level: 'WARN' }, { vaultRoot: testVaultRoot });
+    const backups = fs.readdirSync(testVaultRoot).filter((f) => f.startsWith('error.logs.') && f.endsWith('.bak'));
+    assert.ok(backups.length >= 1);
+    const current = fs.readFileSync(logPath, 'utf8');
+    assert.ok(current.includes('after-rotate'));
+    assert.ok(current.length < ERROR_LOG_MAX_BYTES);
   });
 });

@@ -1084,6 +1084,12 @@ export interface OperationalStatus {
     dirty?: boolean;
     lastError?: string | null;
     lastSyncAt?: string | null;
+    liveDirty?: boolean;
+    persistedDirty?: boolean;
+    persistedStale?: boolean;
+    authorConfigured?: boolean;
+    authorSource?: 'local' | 'global' | 'none';
+    porcelainCount?: number;
   };
   sync: {
     conflictStrategy: string;
@@ -1108,6 +1114,23 @@ export interface StatusResult {
     remote: RemoteDaemonStatus;
   };
   operational: OperationalStatus;
+  telemetrySummary?: {
+    eventCount: number;
+    failureCount: number;
+    productFaults: number;
+    expectedFaults: number;
+    p50Ms?: number;
+    p95Ms?: number;
+    p99Ms?: number;
+  };
+  vaultAudit?: Array<{
+    id: string;
+    aliasOf: string | null;
+    recordCount: number;
+    isFallback: boolean;
+    lastSeenRoot?: string | null;
+    quarantine?: boolean;
+  }>;
   /** Optional vault AI assistance status (spec 0056, AC29). Read-only. */
   ai?: VaultAiStatus;
   issues: string[];
@@ -1128,6 +1151,22 @@ export interface DoctorResult {
     dirty?: boolean;
     lastError?: string | null;
     lastSyncAt?: string | null;
+    liveDirty?: boolean;
+    persistedDirty?: boolean;
+    persistedStale?: boolean;
+    authorConfigured?: boolean;
+    authorSource?: 'local' | 'global' | 'none';
+    porcelainCount?: number;
+  };
+  configVersion?: string;
+  packageVersion?: string;
+  telemetry?: {
+    enabled: boolean;
+    logFile?: string;
+    eventCount: number;
+    failureCount: number;
+    productFaults: number;
+    expectedFaults: number;
   };
   remoteHealth?: {
     reachable: boolean;
@@ -1147,6 +1186,10 @@ export interface DoctorResult {
     indexedRecordsCount: number;
     healthy: boolean;
     rebuilt?: boolean;
+    markdownRecordFiles?: number;
+    markdownRecordIds?: number;
+    indexedDistinctIds?: number;
+    consistent?: boolean;
   };
   pollution: {
     detected: boolean;
@@ -1156,6 +1199,9 @@ export interface DoctorResult {
     skippedTracked?: string[];
     /** Candidates suppressed by the ignore boundary (AC1 filter) before residue classification. */
     excludedByIgnoreCount?: number;
+    /** Candidates gitignored in the product tree (classified, not doctor-unhealthy). */
+    gitignoredCount?: number;
+    classifiedResidue?: DoctorPollutionItem[];
   };
   agentHooks?: AgentHooksInspection;
   exclusionBoundary?: {

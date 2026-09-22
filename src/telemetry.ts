@@ -487,6 +487,107 @@ export function readTelemetryEvents(
   return events;
 }
 
+export interface TelemetrySummary {
+  enabled: boolean;
+  logFile?: string;
+  eventCount: number;
+  failureCount: number;
+  productFaults: number;
+  expectedFaults: number;
+  p50Ms?: number;
+  p95Ms?: number;
+  p99Ms?: number;
+  topErrorCodes: Array<{ code: string; count: number }>;
+}
+
+const EXPECTED_FAULT_CODES = new Set([
+  'EXIT_1',
+  'HTTP_401',
+  '401',
+  'INSTALL_PERMISSION',
+  'PERMISSION_DENIED',
+  'EACCES'
+]);
+
+function classifyFault(code?: string): 'expected' | 'product' | 'none' {
+  if (!code) return 'none';
+  const upper = code.toUpperCase();
+  if (EXPECTED_FAULT_CODES.has(upper) || upper.includes('401') || upper.includes('PERMISSION')) {
+    return 'expected';
+  }
+  return 'product';
+}
+
+function percentile(sorted: number[], p: number): number | undefined {
+  if (sorted.length === 0) return undefined;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[idx];
+}
+
+export function latestTelemetryFile(vaultRoot?: string): string | undefined {
+  const files = listTelemetryFiles(vaultRoot);
+  if (files.length === 0) return undefined;
+  return path.join(getTelemetryDir(vaultRoot), files[files.length - 1]);
+}
+
+/**
+ * Bounded telemetry summary. Reads at most maxEvents newest parsed lines without loading unbounded history into callers.
+ */
+export function summarizeTelemetry(
+  vaultRoot?: string,
+  options?: { maxEvents?: number }
+): TelemetrySummary {
+  const maxEvents = options?.maxEvents && options.maxEvents > 0 ? options.maxEvents : 5000;
+  const files = listTelemetryFiles(vaultRoot).reverse();
+  const dir = getTelemetryDir(vaultRoot);
+  const events: TelemetryEvent[] = [];
+  for (const file of files) {
+    if (events.length >= maxEvents) break;
+    const fullPath = path.join(dir, file);
+    try {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      const lines = content.split('\n').filter((l) => l.trim().length > 0);
+      for (let i = lines.length - 1; i >= 0 && events.length < maxEvents; i--) {
+        try {
+          events.push(JSON.parse(lines[i]) as TelemetryEvent);
+        } catch {
+          // skip
+        }
+      }
+    } catch {
+      // skip
+    }
+  }
+  const durations = events.map((e) => e.durationMs).filter((n) => typeof n === 'number' && n >= 0).sort((a, b) => a - b);
+  const failures = events.filter((e) => !e.success);
+  let expectedFaults = 0;
+  let productFaults = 0;
+  const codes = new Map<string, number>();
+  for (const e of failures) {
+    const kind = classifyFault(e.errorCode);
+    if (kind === 'expected') expectedFaults++;
+    else productFaults++;
+    const code = e.errorCode || 'UNKNOWN';
+    codes.set(code, (codes.get(code) || 0) + 1);
+  }
+  const topErrorCodes = [...codes.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([code, count]) => ({ code, count }));
+  return {
+    enabled: isTelemetryEnabled(vaultRoot),
+    logFile: latestTelemetryFile(vaultRoot),
+    eventCount: events.length,
+    failureCount: failures.length,
+    productFaults,
+    expectedFaults,
+    p50Ms: percentile(durations, 50),
+    p95Ms: percentile(durations, 95),
+    p99Ms: percentile(durations, 99),
+    topErrorCodes
+  };
+}
+
 // Global exit handler to drain pending telemetry
 process.on('beforeExit', () => {
   try {

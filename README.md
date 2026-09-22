@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.37.2**.
+**Local working memory for coding agents outside the product repository.** Version **0.37.3**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -872,7 +872,7 @@ In `~/.spec-memo/config.json`:
 
 `vaultGit.atomic` defaults to `false` (batched): mutations write markdown only; git commit + remote pull/push run on `memo sync`, MCP/CLI `session_end`, or graceful `memo serve` shutdown. Set `"atomic": true` for per-mutation commit and push (fail-open; errors go to `error.logs`).
 
-When **both** `mode: hybrid` and `vaultGit.enabled` are set, `memo sync` dispatches hybrid HTTP and vault-git in parallel. Either channel can fail without crashing the MCP/SSE server. CLI one-shot `memo upsert` in batched mode does not flush git on process exit; run `memo sync`. Vault-git pull uses `git pull --rebase --autostash` so a daemon-dirtied tree no longer aborts the pull, and `memo sync --all` reports per-channel partial failure instead of failing silently.
+When **both** `mode: hybrid` and `vaultGit.enabled` are set, `memo sync` runs hybrid HTTP first, then vault-git sequentially in the same run. Either channel can fail without crashing the MCP/SSE server. CLI one-shot `memo upsert` in batched mode does not flush git on process exit; run `memo sync`. Vault-git pull uses `git pull --rebase --autostash` so a daemon-dirtied tree no longer aborts the pull, and `memo sync --all` reports per-channel partial failure instead of failing silently.
 
 ### 5. Promoting Records to Product Documentation (`promote`)
 
@@ -932,7 +932,7 @@ memo reconcile --clean-sidecars
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |
 | `resume` | Opt-in continuation brief: latest session summary, eligible handoff, ≤3 durable traps (CLI-only; equals `bootstrap` with `continuation: true`) | `[query]`, `--cwd`, `--path`, `--slug`, `--max-bytes`, `--session-id`, `--explain`, `--json` |
 | `doctor` | Diagnose health, mode, conflict sidecars, semantic contradictions, stale traps, and fix repo pollution | `--fix`, `--rebuild`, `--json` |
-| `sync` | Synchronize vault records (hybrid HTTP, vault-git, or both in parallel) | `--all`, `--dry-run`, `--prefer` (`local`\|`remote`), `--strategy`, `--clean-sidecars`, `--force`, `--json` |
+| `sync` | Synchronize vault records (hybrid HTTP, vault-git, or both sequentially: hybrid then vault-git) | `--all`, `--dry-run`, `--prefer` (`local`\|`remote`), `--strategy`, `--clean-sidecars`, `--force`, `--json` |
 | `reconcile` | Reconcile sync conflicts, apply smart semantic auto-merge, and clean conflict sidecars | `--prefer` (`local`\|`remote`), `--strategy` (`smart-merge`\|`local-wins`\|`remote-wins`\|`sidecar`), `--clean-sidecars`, `--dry-run`, `--all`, `--json` |
 | `import` | Import legacy `.agents` tree to vault | `--from`, `--vaultRoot` |
 | `export-vault` | Export encrypted portable archive | `--password`, `--output`, `--project` |
