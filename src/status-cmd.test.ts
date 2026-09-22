@@ -530,4 +530,25 @@ describe('status-cmd & CLI memo status', () => {
     assert.strictEqual(out.project.configFilePath, 'L:\\proj\\.spec-memo.json');
     assert.equal((out as Record<string, unknown>).vaultRoot, undefined);
   });
+
+  it('reports rolling telemetry part files instead of usage.jsonl', async () => {
+    ensureVaultStructure(vaultRoot);
+    const telDir = path.join(vaultRoot, 'telemetry');
+    fs.mkdirSync(telDir, { recursive: true });
+    const part = path.join(telDir, 'telemetry-2026-09-22.part-1.jsonl');
+    fs.writeFileSync(
+      part,
+      `${JSON.stringify({ timestamp: '2026-09-22T00:00:00.000Z', eventId: '1', category: 'cli_command', operation: 'status', durationMs: 1, success: true })}\n`,
+      'utf8'
+    );
+    const cfgPath = path.join(vaultRoot, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg.enableTelemetry = true;
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), 'utf8');
+    const result = await runStatusCheck({ vaultRoot, cwd: repoDir });
+    assert.ok(result.operational.telemetry.logFile?.includes('telemetry-2026-09-22.part-1.jsonl'));
+    assert.equal(result.operational.telemetry.logFile?.includes('usage.jsonl'), false);
+    assert.ok(result.telemetrySummary);
+    assert.equal(result.telemetrySummary?.eventCount, 1);
+  });
 });

@@ -172,6 +172,57 @@ export function getVaultProjectListEnriched(vaultRoot: string): VaultProjectList
   return list;
 }
 
+export interface VaultProjectAuditEntry extends VaultProjectListEntry {
+  isFallback: boolean;
+  lastSeenRoot?: string | null;
+  missingProjectJson: boolean;
+  leftoverRecordsOnAlias: boolean;
+  quarantine: boolean;
+  notes: string[];
+}
+
+const TRANSIENT_ROOT_HINTS = [
+  'appdata',
+  'tmp',
+  'temp',
+  '.cursor',
+  'node_modules',
+  'agent-tools',
+  'terminals'
+];
+
+export function auditVaultProjects(vaultRoot: string = getVaultRoot()): VaultProjectAuditEntry[] {
+  const aliases = readProjectAliases(vaultRoot);
+  const list = getVaultProjectListEnriched(vaultRoot);
+  return list.map((entry) => {
+    const meta = getProjectMetadata(entry.id, vaultRoot);
+    const projectJsonPath = path.join(vaultRoot, 'projects', entry.id, 'project.json');
+    const missingProjectJson = !fs.existsSync(projectJsonPath);
+    const lastSeenRoot = meta?.lastSeenRoot || null;
+    const lastSeenLower = (lastSeenRoot || '').toLowerCase();
+    const isFallback = !meta?.gitRemote && !aliases[entry.id];
+    const leftoverRecordsOnAlias = Boolean(entry.aliasOf) && entry.recordCount > 0;
+    const transientRoot = TRANSIENT_ROOT_HINTS.some((h) => lastSeenLower.includes(h));
+    const notes: string[] = [];
+    if (leftoverRecordsOnAlias) {
+      notes.push(`Alias ${entry.id} still has ${entry.recordCount} record(s); merge only after backup.`);
+    }
+    if (missingProjectJson) notes.push('Missing project.json');
+    if (transientRoot) notes.push('lastSeenRoot looks like a tool/runtime path');
+    const quarantine = /marchanteerp/i.test(entry.id) && !entry.aliasOf;
+    if (quarantine) notes.push('Quarantined until records are proven duplicate or intentionally distinct');
+    return {
+      ...entry,
+      isFallback: Boolean(isFallback || transientRoot),
+      lastSeenRoot,
+      missingProjectJson,
+      leftoverRecordsOnAlias,
+      quarantine,
+      notes
+    };
+  });
+}
+
 export function listIncomingAliases(vaultRoot: string, canonicalId: string): string[] {
   const aliases = readProjectAliases(vaultRoot);
   return Object.entries(aliases)

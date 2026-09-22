@@ -22,6 +22,9 @@ import { parseRecord } from './schema.js';
 import { RECORD_SUBDIRS } from './vault.js';
 import { helpfulCountOf, staleCountOf, isFlaggedStale } from './salience.js';
 import { getVaultAiStatus } from './ai/index.js';
+import { inspectVaultGitLive } from './vault-git-inspect.js';
+import { scanSpecLifecycleDrift } from './spec-lifecycle.js';
+import { summarizeTelemetry, type TelemetrySummary } from './telemetry.js';
 
 export const DEFAULT_HEALTH_TIMEOUT_MS = 10000;
 
@@ -132,16 +135,83 @@ function scanPotentiallyObsoleteRecords(
  * `config.json` `projects.{id}.ignorePaths` via `evaluatePathIgnore`). Ignored
  * candidates never appear in `items`; they are counted in `excludedByIgnoreCount`.
  */
+function isGitWorkTree(rootPath: string): boolean {
+  try {
+    const out = execFileSync('git', ['-C', rootPath, 'rev-parse', '--is-inside-work-tree'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    });
+    return out.trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function listGitIgnoredRelPaths(rootPath: string, rels: string[]): Set<string> {
+  const ignored = new Set<string>();
+  if (rels.length === 0 || !isGitWorkTree(rootPath)) {
+    return ignored;
+  }
+  for (const rel of rels) {
+    try {
+      execFileSync('git', ['-C', rootPath, 'check-ignore', '-q', '--', rel], {
+        stdio: ['ignore', 'ignore', 'ignore']
+      });
+      ignored.add(rel.replace(/\\/g, '/'));
+    } catch (err: unknown) {
+      const status = err && typeof err === 'object' && 'status' in err ? Number((err as { status?: number }).status) : 1;
+      if (status === 0) {
+        ignored.add(rel.replace(/\\/g, '/'));
+      }
+    }
+  }
+  return ignored;
+}
+
+function countMarkdownRecordIds(vaultRoot: string): { ids: Set<string>; files: number } {
+  const ids = new Set<string>();
+  let files = 0;
+  const projectsDir = path.join(vaultRoot, 'projects');
+  if (!fs.existsSync(projectsDir)) return { ids, files };
+  for (const project of fs.readdirSync(projectsDir, { withFileTypes: true })) {
+    if (!project.isDirectory()) continue;
+    for (const sub of RECORD_SUBDIRS) {
+      const dir = path.join(projectsDir, project.name, sub);
+      if (!fs.existsSync(dir)) continue;
+      for (const file of fs.readdirSync(dir)) {
+        if (!file.endsWith('.md') || file.includes('.conflict.')) continue;
+        files++;
+        try {
+          const record = parseRecord(fs.readFileSync(path.join(dir, file), 'utf8'));
+          if (record.frontmatter.id) ids.add(String(record.frontmatter.id));
+        } catch {
+          // skip malformed
+        }
+      }
+    }
+  }
+  return { ids, files };
+}
+
 export function scanForRepoPollution(
   rootPath: string,
   vaultRoot?: string,
   opts: { projectId?: string } = {}
-): { items: DoctorPollutionItem[]; excludedByIgnoreCount: number } {
+): {
+  items: DoctorPollutionItem[];
+  excludedByIgnoreCount: number;
+  gitignoredCount: number;
+  classifiedResidue: DoctorPollutionItem[];
+} {
   const pollution: DoctorPollutionItem[] = [];
+  const classifiedResidue: DoctorPollutionItem[] = [];
   let excludedByIgnoreCount = 0;
-  const empty = (): { items: DoctorPollutionItem[]; excludedByIgnoreCount: number } => ({
+  let gitignoredCount = 0;
+  const empty = () => ({
     items: pollution,
-    excludedByIgnoreCount
+    excludedByIgnoreCount,
+    gitignoredCount,
+    classifiedResidue
   });
   if (!fs.existsSync(rootPath)) {
     return empty();
@@ -158,10 +228,10 @@ export function scanForRepoPollution(
   loadIgnoreRules(resolvedRoot, ignoreCtx);
 
   const allFiles = findFilesRecursive(rootPath);
+  const pending: DoctorPollutionItem[] = [];
 
   /**
-   * Push a residue item unless the path is excluded by the ignore boundary.
-   * At most one boundary evaluation runs per file (callers `continue` after a push).
+   * Queue a residue item unless the path is excluded by the spec-memo ignore boundary.
    */
   const tryPush = (
     filePath: string,
@@ -173,7 +243,7 @@ export function scanForRepoPollution(
       excludedByIgnoreCount++;
       return false;
     }
-    pollution.push({
+    pending.push({
       path: rel,
       absolutePath: filePath,
       type,
@@ -260,7 +330,23 @@ export function scanForRepoPollution(
     }
   }
 
-  return { items: pollution, excludedByIgnoreCount };
+  const gitIgnored = listGitIgnoredRelPaths(
+    resolvedRoot,
+    pending.map((p) => p.path)
+  );
+  for (const item of pending) {
+    if (gitIgnored.has(item.path) || gitIgnored.has(item.path.toLowerCase())) {
+      gitignoredCount++;
+      classifiedResidue.push({
+        ...item,
+        description: `${item.description} (gitignored; classified, not deleted)`
+      });
+      continue;
+    }
+    pollution.push(item);
+  }
+
+  return { items: pollution, excludedByIgnoreCount, gitignoredCount, classifiedResidue };
 }
 
 /**
@@ -393,6 +479,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
   });
   let pollutionItems = scan.items;
   let excludedByIgnoreCount = scan.excludedByIgnoreCount;
+  let gitignoredCount = scan.gitignoredCount;
+  let classifiedResidue = scan.classifiedResidue;
   let skippedTracked: string[] = [];
   let fixedCount = 0;
 
@@ -443,6 +531,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       });
       pollutionItems = scan.items;
       excludedByIgnoreCount = scan.excludedByIgnoreCount;
+      gitignoredCount = scan.gitignoredCount;
+      classifiedResidue = scan.classifiedResidue;
     }
 
     try {
@@ -486,6 +576,11 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       `Detected ${pollutionItems.length} in-tree workflow pollution file${pollutionItems.length === 1 ? '' : 's'} in ${identity.rootPath}`
     );
   }
+  if (classifiedResidue.length > 0) {
+    warnings.push(
+      `Classified ${classifiedResidue.length} gitignored workflow residue file${classifiedResidue.length === 1 ? '' : 's'} (not deleted; doctor remains healthy).`
+    );
+  }
 
   // Deployment mode diagnostics (AC11, AC12, AC13)
   const config = ensureVaultStructure(vaultRoot);
@@ -526,6 +621,62 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
     if (!tokenConfigured) {
       warnings.push(`Remote mode requires SPEC_MEMO_AUTH_TOKEN or SPEC_MEMO_SSE_TOKEN in the environment.`);
     }
+  }
+
+  const packageVersion = getPackageVersion();
+  const configVersion = typeof config.version === 'string' ? config.version : undefined;
+  if (configVersion && configVersion !== packageVersion) {
+    warnings.push(
+      `Vault config.json version ${configVersion} differs from running package ${packageVersion}.`
+    );
+  }
+
+  let ftsMarkdownFiles = 0;
+  let ftsMarkdownIds = 0;
+  let ftsIndexIds = indexedRecordsCount;
+  let ftsConsistent = true;
+  if (ftsHealthy && vaultExists) {
+    try {
+      const md = countMarkdownRecordIds(vaultRoot);
+      ftsMarkdownFiles = md.files;
+      ftsMarkdownIds = md.ids.size;
+      const db = openIndex(vaultRoot);
+      const rows = db.prepare('SELECT id FROM records_fts').all() as Array<{ id: string }>;
+      const indexed = new Set(rows.map((r) => String(r.id)));
+      ftsIndexIds = indexed.size;
+      ftsConsistent = ftsMarkdownIds === indexed.size;
+      if (!ftsConsistent) {
+        warnings.push(
+          `FTS index id count (${indexed.size}) does not match markdown record ids (${md.ids.size} ids / ${md.files} files). Run memo doctor --rebuild.`
+        );
+      }
+    } catch {
+      // fail-open
+    }
+  }
+
+  const gitPersisted = readVaultGitState(vaultRoot);
+  const vaultGitLive = inspectVaultGitLive(vaultRoot, gitPersisted, Boolean(config.vaultGit?.enabled));
+  if (vaultGitLive.enabled && !vaultGitLive.author.configured) {
+    warnings.push(
+      'Vault Git has no configured author (user.email). Commits will fail with Author identity unknown until git user.name/email is set.'
+    );
+  }
+  if (vaultGitLive.persistedStale) {
+    warnings.push(
+      `Vault Git persisted dirty=${vaultGitLive.persistedDirty} but live porcelain dirty=${vaultGitLive.liveDirty} (${vaultGitLive.porcelainPaths.length} path(s)).`
+    );
+  }
+
+  let telemetrySummary: TelemetrySummary | undefined;
+  try {
+    telemetrySummary = summarizeTelemetry(vaultRoot, { maxEvents: 5000 });
+  } catch {
+    telemetrySummary = undefined;
+  }
+
+  for (const drift of scanSpecLifecycleDrift(identity.rootPath)) {
+    warnings.push(`Spec lifecycle: ${drift.slug} — ${drift.reason}`);
   }
 
   let healthy = vaultExists && ftsHealthy && pollutionItems.length === 0;
@@ -598,10 +749,28 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       enabled: Boolean(config.vaultGit?.enabled),
       atomic: resolveVaultGitAtomic(config),
       remoteUrl: redactVaultGitRemoteUrl(config.vaultGit?.remoteUrl),
-      dirty: readVaultGitState(vaultRoot).dirty,
-      lastError: readVaultGitState(vaultRoot).lastError,
-      lastSyncAt: readVaultGitState(vaultRoot).lastSyncAt
+      dirty: vaultGitLive.liveDirty || gitPersisted.dirty,
+      lastError: gitPersisted.lastError,
+      lastSyncAt: gitPersisted.lastSyncAt,
+      liveDirty: vaultGitLive.liveDirty,
+      persistedDirty: gitPersisted.dirty,
+      persistedStale: vaultGitLive.persistedStale,
+      authorConfigured: vaultGitLive.author.configured,
+      authorSource: vaultGitLive.author.source,
+      porcelainCount: vaultGitLive.porcelainPaths.length
     },
+    configVersion,
+    packageVersion,
+    telemetry: telemetrySummary
+      ? {
+          enabled: Boolean(config.enableTelemetry),
+          logFile: telemetrySummary.logFile,
+          eventCount: telemetrySummary.eventCount,
+          failureCount: telemetrySummary.failureCount,
+          productFaults: telemetrySummary.productFaults,
+          expectedFaults: telemetrySummary.expectedFaults
+        }
+      : undefined,
     // Spec 0056 AC28: AI provider, enabled flag, queue depth, redacted error.
     ai: getVaultAiStatus(vaultRoot),
     remoteHealth,
@@ -617,14 +786,20 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       dbExists,
       indexedRecordsCount,
       healthy: ftsHealthy,
-      rebuilt
+      rebuilt,
+      markdownRecordFiles: ftsMarkdownFiles,
+      markdownRecordIds: ftsMarkdownIds,
+      indexedDistinctIds: ftsIndexIds,
+      consistent: ftsConsistent
     },
     pollution: {
       detected: pollutionItems.length > 0,
       fixedCount,
       items: pollutionItems,
       skippedTracked,
-      excludedByIgnoreCount
+      excludedByIgnoreCount,
+      gitignoredCount,
+      classifiedResidue
     },
     agentHooks,
     exclusionBoundary: {

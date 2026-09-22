@@ -128,7 +128,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] memo shutdown command for stopping orphaned MCP servers (`spec: 0053-memo-shutdown.spec.md`)
 - [x] Vault log sweep bugfix: atomic compiled-view writes, log source values, favicon silence, hybrid-offline severity (`spec: 0054-vault-log-sweep-bugfix.spec.md`)
 - [x] Vault AI assistance: agent interface, Cursor SDK adapter, refine-on-write, semantic retrieve, status (`spec: 0056-vault-ai-assistance.spec.md`)
-- [ ] Status monitor AI ops log UI and durable analysis journal (`spec: 0057-status-ai-ops-logs.spec.md`)
+- [x] Status monitor AI ops log UI and durable analysis journal (`spec: 0057-status-ai-ops-logs.spec.md`)
  - [x] Status monitor left nav, home dashboard, error logs viewer, and AI config save (`spec: 0058-status-monitor-nav-ai-config.spec.md`)
 - [x] MCP I/O guard: untrusted vault data, prompt-intent refuse, always-on skill harness (`spec: 0059-mcp-io-guard.spec.md`)
 - [x] Status Error Logs: row selection, delete with confirm, New Issue copy draft (`spec: 0061-status-error-logs-actions.spec.md`)
@@ -218,7 +218,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 53 | [`retrieval-lens-resume`](0055-retrieval-lens-resume.spec.md) | `[x] done` | Phase 8 | Intent-aware search/bootstrap lenses, omittedIds, `memo resume` / `continuation`; v0.29.0 |
 | 54 | `vault-ai-assistance` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Vault AI assistance: agent interface, Cursor SDK adapter, refine-on-write, semantic retrieve, status; v0.30.0 |
 
-| 55 | `status-ai-ops-logs` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Status monitor AI ops log UI and durable analysis journal |
+| 55 | `status-ai-ops-logs` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status monitor AI ops log UI and durable analysis journal |
 
 | 56 | `status-monitor-nav-ai-config` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status monitor left nav, home dashboard, error logs viewer, and AI config save |
 
@@ -327,6 +327,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-14 | cli-background-lifecycle | HTTP lifecycle commands background by default with readiness status and clean exit; stdio MCP remains host-attached | v0.36.1; npm test 868 pass |
 | 2026-09-13 | status-error-logs-actions | Status Error Logs: row selection, delete with confirm, New Issue copy draft | `9739c98`; npm test 828 pass |
 | 2026-09-15 | wiki-ai-refine | AI-assisted wiki refine from knowledge snapshot + index/topic progressive disclosure (ws-wiki inspired); v0.37.0 | npm test 875 pass |
+| 2026-09-22 | vault-stability-audit | Doctor/status live Git + gitignored plan classification, dual-sync per-channel telemetry, telemetry rolling-file path, error-log rotation, spec lifecycle coherence; 0027 VFS remains deferred | v0.37.3 |
 
 ## Archive
 

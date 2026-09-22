@@ -451,7 +451,8 @@ Options:
 Manage vault projects.
 
 Subcommands:
-  list                        List vault projects
+  list [--audit]              List vault projects (add --audit for alias/fallback classification)
+
   alias --from <id> --to <id> Set a project alias
   unalias --from <id>         Remove a project alias
   merge --source <id> --target <id> [--copy-records] [--no-dedup] [--delete-sources]
@@ -508,7 +509,7 @@ Options:
   if (cmd === 'sync') {
     console.log(`Usage: memo sync [options]
 
-Synchronize vault records against remote daemon (hybrid), git remote (vaultGit), or both in parallel when dual-mode is enabled.
+Synchronize vault records against remote daemon (hybrid), git remote (vaultGit), or both sequentially (hybrid HTTP first, then vault-git) when dual-mode is enabled.
 
 Default vault-git cadence is batched (vaultGit.atomic false): mutations do not commit until memo sync, session_end, or graceful memo serve shutdown. Set atomic true for per-mutation commit+push.
 
@@ -2200,9 +2201,10 @@ async function runCliInner(
   }
 
   if (parsed.command === 'vault') {
-    const {
+        const {
       VaultManagerError,
       getVaultProjectListEnriched,
+      auditVaultProjects,
       setProjectAlias,
       removeProjectAlias,
       mergeVaultProjects,
@@ -2227,13 +2229,18 @@ async function runCliInner(
 
     try {
       if (sub === 'list') {
-        const projects = getVaultProjectListEnriched(vaultRoot);
+        const audit = parsed.options.audit === true || parsed.options.audit === 'true';
+        const projects = audit ? auditVaultProjects(vaultRoot) : getVaultProjectListEnriched(vaultRoot);
         if (parsed.isJson) {
           printJson(projects);
         } else {
           for (const p of projects) {
             const alias = p.aliasOf ? ` aliasOf=${p.aliasOf}` : '';
-            console.log(`${p.id}\t${p.displayName || p.id}\trecords=${p.recordCount}${alias}`);
+            const extra =
+              'notes' in p && Array.isArray((p as { notes?: string[] }).notes) && (p as { notes: string[] }).notes.length
+                ? ` notes=${(p as { notes: string[] }).notes.join('; ')}`
+                : '';
+            console.log(`${p.id}\t${p.displayName || p.id}\trecords=${p.recordCount}${alias}${extra}`);
           }
         }
         return 0;
@@ -2920,6 +2927,11 @@ async function runCliInner(
         }
 
         console.log(`\nRepository Pollution Scan:`);
+        if ((result.pollution.gitignoredCount || 0) > 0 || (result.pollution.classifiedResidue || []).length > 0) {
+          console.log(
+            `  Classified gitignored residue: ${result.pollution.gitignoredCount || (result.pollution.classifiedResidue || []).length} file(s) (not deleted).`
+          );
+        }
         if (!result.pollution.detected) {
           console.log(`  [CLEAN] No in-repo workflow residue found.`);
         } else {

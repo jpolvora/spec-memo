@@ -1,12 +1,14 @@
 ---
 id: null
 slug: vault-git-hybrid-sync
-title: "Batched vault-git sync with dual-mode hybrid parallel dispatch"
+title: "Batched vault-git sync with dual-mode hybrid sequential dispatch"
 source: local
 specDate: 2026-09-01
 ---
 
-# Specification — Batched vault-git sync with dual-mode hybrid parallel dispatch
+# Specification — Batched vault-git sync with dual-mode hybrid sequential dispatch
+
+Implementation note (2026-09-22): dual-mode `memo sync` runs hybrid HTTP first, then vault-git. Parallel `Promise.allSettled` was withdrawn after autostash pile-up (issue #55 follow-up).
 
 ## Description
 

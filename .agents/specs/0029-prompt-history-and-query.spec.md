@@ -4,7 +4,7 @@ slug: prompt-history-and-query
 title: "Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer"
 source: local
 specDate: 2026-08-28
-status: draft
+status: completed
 target_phase: Phase 7
 ---
 

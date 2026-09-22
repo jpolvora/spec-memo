@@ -13,6 +13,9 @@ import {
 } from './types.js';
 import { getVaultRoot, readVaultConfig, resolveVaultGitAtomic, redactVaultGitRemoteUrl } from './vault.js';
 import { readVaultGitState } from './vault-git-state.js';
+import { inspectVaultGitLive } from './vault-git-inspect.js';
+import { latestTelemetryFile, summarizeTelemetry } from './telemetry.js';
+import { auditVaultProjects } from './vault-manager.js';
 import { listBackups } from './backup.js';
 import { getLocalConfigOverrideKeys, resolveProjectIdentity } from './identity.js';
 import { isTokenConfigured, getResolvedAuthToken } from './setup.js';
@@ -295,6 +298,15 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
 
   // 6. Operational Settings
   const gitState = readVaultGitState(root);
+  const gitLive = inspectVaultGitLive(root, gitState, Boolean(config.vaultGit?.enabled));
+  if (gitLive.enabled && gitLive.persistedStale) {
+    issues.push(
+      `Vault Git persisted dirty=${gitLive.persistedDirty} but live porcelain dirty=${gitLive.liveDirty}`
+    );
+  }
+  if (gitLive.enabled && !gitLive.author.configured) {
+    issues.push('Vault Git author identity is not configured (user.email missing)');
+  }
   // AC22: conflict reconciliation visibility (best-effort; never fails status).
   let hybridDirty = false;
   let dirtyProjects: Record<string, boolean> | undefined;
@@ -314,10 +326,31 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
   } catch {
     // ignore sidecar scan errors
   }
+  const telemetryEnabled = Boolean(config.enableTelemetry);
+  const telemetryFile = telemetryEnabled ? latestTelemetryFile(root) : undefined;
+  let telemetrySummary;
+  try {
+    telemetrySummary = telemetryEnabled ? summarizeTelemetry(root, { maxEvents: 4000 }) : undefined;
+  } catch {
+    telemetrySummary = undefined;
+  }
+  let vaultAudit;
+  try {
+    vaultAudit = auditVaultProjects(root).map((e) => ({
+      id: e.id,
+      aliasOf: e.aliasOf,
+      recordCount: e.recordCount,
+      isFallback: e.isFallback,
+      lastSeenRoot: e.lastSeenRoot,
+      quarantine: e.quarantine
+    }));
+  } catch {
+    vaultAudit = undefined;
+  }
   const operational: OperationalStatus = {
     telemetry: {
-      enabled: Boolean(config.enableTelemetry),
-      logFile: config.telemetry ? path.join(root, 'telemetry', 'usage.jsonl') : undefined,
+      enabled: telemetryEnabled,
+      logFile: telemetryFile,
       maxFileSizeMb: config.telemetry?.maxFileSizeMb
     },
     ttl: {
@@ -329,9 +362,15 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
       enabled: Boolean(config.vaultGit?.enabled),
       atomic: resolveVaultGitAtomic(config),
       remoteUrl: redactVaultGitRemoteUrl(config.vaultGit?.remoteUrl),
-      dirty: gitState.dirty,
+      dirty: gitLive.liveDirty || gitState.dirty,
       lastError: gitState.lastError,
-      lastSyncAt: gitState.lastSyncAt
+      lastSyncAt: gitState.lastSyncAt,
+      liveDirty: gitLive.liveDirty,
+      persistedDirty: gitState.dirty,
+      persistedStale: gitLive.persistedStale,
+      authorConfigured: gitLive.author.configured,
+      authorSource: gitLive.author.source,
+      porcelainCount: gitLive.porcelainPaths.length
     },
     sync: {
       conflictStrategy: config.sync?.conflictStrategy ?? config.sync?.defaultStrategy ?? 'smart-merge',
@@ -358,6 +397,18 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
       remote: remoteStatus
     },
     operational,
+    telemetrySummary: telemetrySummary
+      ? {
+          eventCount: telemetrySummary.eventCount,
+          failureCount: telemetrySummary.failureCount,
+          productFaults: telemetrySummary.productFaults,
+          expectedFaults: telemetrySummary.expectedFaults,
+          p50Ms: telemetrySummary.p50Ms,
+          p95Ms: telemetrySummary.p95Ms,
+          p99Ms: telemetrySummary.p99Ms
+        }
+      : undefined,
+    vaultAudit,
     // Spec 0056 AC29: same read-only `ai` object as doctor --json.
     ai: getVaultAiStatus(root),
     issues
@@ -430,7 +481,9 @@ export function formatStatusDashboard(result: StatusResult, options: StatusOptio
 
   // Operational Settings
   lines.push(`\nOperational Policies:`);
-  lines.push(`  Telemetry:          ${result.operational.telemetry.enabled ? 'Enabled' : 'Disabled'}`);
+  lines.push(`  Telemetry:          ${result.operational.telemetry.enabled ? 'Enabled' : 'Disabled'}${
+    result.operational.telemetry.logFile ? ` (${result.operational.telemetry.logFile})` : ''
+  }`);
   lines.push(
     `  TTL Retention:      scratch=${result.operational.ttl.scratchDays}d, review=${result.operational.ttl.reviewDays}d, logCompaction=${result.operational.ttl.logCompactMonths}mo`
   );

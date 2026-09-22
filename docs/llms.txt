@@ -1,4 +1,4 @@
-# spec-memo v0.37.2
+# spec-memo v0.37.3
 > Local working memory for coding agents outside the product repository.
 
 ## Summary

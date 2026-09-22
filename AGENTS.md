@@ -145,7 +145,7 @@ node --test dist/hook.test.js
 # Multi-Machine Sync & Delta Engine
 node --test dist/sync.test.js
 
-# Batched vault-git + dual-mode hybrid parallel dispatch
+# Batched vault-git + dual-mode hybrid sequential dispatch
 node --test dist/vault-git-hybrid-sync.test.js
 
 # Vault sync conflict reconciliation, semantic auto-merge & rollback journal

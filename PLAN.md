@@ -262,4 +262,5 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 | 2026-09-14 | status-details-drawer-errors-aiops | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0; npm test 862 pass |
 | 2026-09-14 | cli-background-lifecycle | HTTP `memo start` / `restart` services now daemonize by default, report status, and exit cleanly; `stop` lifecycle coverage hardened; v0.36.1; npm test 868 pass |
 | 2026-09-15 | wiki-ai-refine | AI snapshot polish when `ai.enabled` + index-first Topic catalog + Wiki left-nav progressive disclosure; v0.37.0; npm test 875 pass |
+| 2026-09-22 | vault-stability-audit | Doctor/status live Git vs persisted, gitignored `.agents/plans` classified not unhealthy, dual-sync per-channel telemetry, telemetry part-file path, error-log rotation, shipped spec metadata closed; 0027 VFS still deferred; v0.37.3 |
 

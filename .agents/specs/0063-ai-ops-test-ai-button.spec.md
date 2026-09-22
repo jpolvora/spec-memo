@@ -4,7 +4,7 @@ slug: ai-ops-test-ai-button
 title: 'AI Ops "Test AI" connectivity probe'
 source: github
 specDate: 2026-09-14
-issueState: open
+issueState: closed
 labels:
 ---
 
