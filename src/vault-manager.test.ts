@@ -124,6 +124,7 @@ describe('vault-manager', () => {
       sources: ['src-a'],
       target: 'target',
       copyRecords: true,
+      confirm: true,
       vaultRoot: tempVault
     });
     assert.equal(result.copied, 1);
@@ -148,6 +149,7 @@ describe('vault-manager', () => {
       sources: ['src-only'],
       target: 'tgt-only',
       copyRecords: false,
+      confirm: true,
       vaultRoot: tempVault
     });
     assert.equal(result.copied, 0);
@@ -252,7 +254,7 @@ describe('vault-manager', () => {
       frontmatter: { id: 'src-trap-1', title: 'Same Trap', severity: 'high', pathPatterns: ['src/a.ts'], occurrences: 5, hits: 7 },
       body: 'Close SQLite before unlink on Windows to avoid WAL lock errors alpha beta gamma delta'
     });
-    const result = await mergeVaultProjects({ sources: ['dedup-src'], target: 'dedup-tgt', copyRecords: true, vaultRoot: tempVault });
+    const result = await mergeVaultProjects({ confirm: true, sources: ['dedup-src'], target: 'dedup-tgt', copyRecords: true, vaultRoot: tempVault });
     assert.equal(result.copied, 0);
     assert.equal(result.deduplicated, 1);
     const { listProjectRecords } = await import('./store.js');
@@ -281,7 +283,7 @@ describe('vault-manager', () => {
       frontmatter: { title: '  sqlite   wal  lock ', severity: 'high', pathPatterns: ['src/db.ts'] },
       body: 'Close SQLite before unlink on Windows alpha beta gamma delta epsilon zeta'
     });
-    const result = await mergeVaultProjects({ sources: ['sem-src'], target: 'sem-tgt', copyRecords: true, vaultRoot: tempVault });
+    const result = await mergeVaultProjects({ confirm: true, sources: ['sem-src'], target: 'sem-tgt', copyRecords: true, vaultRoot: tempVault });
     assert.equal(result.deduplicated, 1);
     assert.equal(result.copied, 0);
   });
@@ -305,7 +307,7 @@ describe('vault-manager', () => {
       frontmatter: { title: '  CHOOSE   postgres ' },
       body: 'We chose Postgres for durability v2'
     });
-    const result = await mergeVaultProjects({ sources: ['nt-src'], target: 'nt-tgt', copyRecords: true, vaultRoot: tempVault });
+    const result = await mergeVaultProjects({ confirm: true, sources: ['nt-src'], target: 'nt-tgt', copyRecords: true, vaultRoot: tempVault });
     assert.equal(result.deduplicated, 1);
     assert.equal(result.copied, 0);
   });
@@ -337,7 +339,7 @@ describe('vault-manager', () => {
       frontmatter: { title: 'Fresh', severity: 'low' },
       body: 'entirely fresh trap body unique tokens qzxw'
     });
-    const result = await mergeVaultProjects({ sources: ['cnt-src'], target: 'cnt-tgt', copyRecords: true, vaultRoot: tempVault });
+    const result = await mergeVaultProjects({ confirm: true, sources: ['cnt-src'], target: 'cnt-tgt', copyRecords: true, vaultRoot: tempVault });
     assert.equal(typeof result.copied, 'number');
     assert.equal(typeof result.deduplicated, 'number');
     assert.equal(typeof result.skipped, 'number');
@@ -356,11 +358,13 @@ describe('vault-manager', () => {
       frontmatter: { title: 'Del', severity: 'low' },
       body: 'delete me body'
     });
-    const result = await mergeVaultProjects({ sources: ['del-src'], target: 'del-tgt', copyRecords: true, deleteSources: true, vaultRoot: tempVault });
+    const { persistVaultBackup } = await import('./backup.js');
+    const bk = await persistVaultBackup({ vaultRoot: tempVault });
+    const result = await mergeVaultProjects({ confirm: true, sources: ['del-src'], target: 'del-tgt', copyRecords: true, deleteSources: true, vaultRoot: tempVault, backupId: bk.filename, manifestReviewed: true });
     assert.ok(result.copied >= 1 || result.deduplicated >= 1);
     assert.ok(!fs.existsSync(path.join(tempVault, 'projects', 'del-src')));
     assert.equal(readProjectAliases(tempVault)['del-src'], 'del-tgt');
-    const again = await mergeVaultProjects({ sources: ['del-src'], target: 'del-tgt', copyRecords: true, vaultRoot: tempVault });
+    const again = await mergeVaultProjects({ confirm: true, sources: ['del-src'], target: 'del-tgt', copyRecords: true, vaultRoot: tempVault });
     assert.equal(again.copied, 0);
   });
 
@@ -383,7 +387,7 @@ describe('vault-manager', () => {
       frontmatter: { title: 'A trap', severity: 'low', pathPatterns: ['src/x.ts'] },
       body: 'alpha beta gamma delta epsilon zeta eta theta'
     });
-    const result = await mergeVaultProjects({ sources: ['nd-src'], target: 'nd-tgt', copyRecords: true, dedup: false, vaultRoot: tempVault });
+    const result = await mergeVaultProjects({ confirm: true, sources: ['nd-src'], target: 'nd-tgt', copyRecords: true, dedup: false, vaultRoot: tempVault });
     assert.equal(result.deduplicated, 0);
     assert.equal(result.copied, 1);
   });
@@ -391,7 +395,7 @@ describe('vault-manager', () => {
   it('merge deleteSources without copyRecords fails closed (review thread)', async () => {
     scaffoldProject('guard-src');
     scaffoldProject('guard-tgt');
-    await assert.rejects(() => mergeVaultProjects({ sources: ['guard-src'], target: 'guard-tgt', deleteSources: true, vaultRoot: tempVault }), /deleteSources.*copyRecords/);
+    await assert.rejects(() => mergeVaultProjects({ confirm: true, sources: ['guard-src'], target: 'guard-tgt', deleteSources: true, vaultRoot: tempVault }), /deleteSources.*copyRecords/);
     assert.ok(fs.existsSync(path.join(tempVault, 'projects', 'guard-src')));
   });
 
@@ -403,10 +407,72 @@ describe('vault-manager', () => {
     assert.equal(aliasesBefore['prev-tgt'], 'prev-src');
 
     // Merging prev-src into prev-tgt should succeed and clear the alias on prev-tgt
-    const result = await mergeVaultProjects({ sources: ['prev-src'], target: 'prev-tgt', copyRecords: true, vaultRoot: tempVault });
+    const result = await mergeVaultProjects({ confirm: true, sources: ['prev-src'], target: 'prev-tgt', copyRecords: true, vaultRoot: tempVault });
     assert.equal(result.ok, true);
     const aliasesAfter = readProjectAliases(tempVault);
     assert.equal(aliasesAfter['prev-tgt'], undefined);
     assert.equal(aliasesAfter['prev-src'], 'prev-tgt');
   });
+  it('AC17: merge refuses quarantined projects', async () => {
+    fs.mkdirSync(path.join(tempVault, 'projects', 'MarchanteERP', 'traps'), { recursive: true });
+    await assert.rejects(
+      () => mergeVaultProjects({ confirm: true, sources: ['MarchanteERP'], target: 'some-target', vaultRoot: tempVault }),
+      /quarantined/
+    );
+  });
+
+  it('AC17: merge requires explicit confirmation', async () => {
+    fs.mkdirSync(path.join(tempVault, 'projects', 'nc-src'), { recursive: true });
+    await assert.rejects(
+      () => mergeVaultProjects({ sources: ['nc-src'], target: 'nc-tgt', vaultRoot: tempVault }),
+      /confirm/
+    );
+  });
+
+  it('AC17: deleteSources requires fresh backup plus reviewed manifest', async () => {
+    fs.mkdirSync(path.join(tempVault, 'projects', 'ds-src'), { recursive: true });
+    await assert.rejects(
+      () => mergeVaultProjects({ confirm: true, sources: ['ds-src'], target: 'ds-tgt', copyRecords: true, deleteSources: true, vaultRoot: tempVault }),
+      /backupId/
+    );
+    await assert.rejects(
+      () => mergeVaultProjects({ confirm: true, sources: ['ds-src'], target: 'ds-tgt', copyRecords: true, deleteSources: true, vaultRoot: tempVault, backupId: 'nope.zip', manifestReviewed: true }),
+      /not found/
+    );
+    const { persistVaultBackup: persist } = await import('./backup.js');
+    const bk2 = await persist({ vaultRoot: tempVault });
+    await assert.rejects(
+      () => mergeVaultProjects({ confirm: true, sources: ['ds-src'], target: 'ds-tgt', copyRecords: true, deleteSources: true, vaultRoot: tempVault, backupId: bk2.filename }),
+      /manifestReviewed/
+    );
+  });
+
+  it('AC18: rename migrates cursors and dirty flags without leftovers', async () => {
+    fs.mkdirSync(path.join(tempVault, 'projects', 'old-proj'), { recursive: true });
+    const { writeHybridState, readHybridState } = await import('./hybrid-state.js');
+    writeHybridState(tempVault, { cursors: { 'old-proj': '2026-01-01T00:00:00.000Z' }, dirtyProjects: { 'old-proj': true } });
+    await renameVaultProject('old-proj', 'new-proj', tempVault);
+    const after = readHybridState(tempVault);
+    assert.equal((after.cursors || {})['new-proj'], '2026-01-01T00:00:00.000Z');
+    assert.equal((after.dirtyProjects || {})['new-proj'], true);
+    assert.ok(!(after.cursors && 'old-proj' in after.cursors));
+    assert.ok(!(after.dirtyProjects && 'old-proj' in after.dirtyProjects));
+  });
+
+  it('AC18: merge combines cursors max-wins and ORs dirty flags', async () => {
+    fs.mkdirSync(path.join(tempVault, 'projects', 'm-src'), { recursive: true });
+    fs.mkdirSync(path.join(tempVault, 'projects', 'm-tgt'), { recursive: true });
+    const { writeHybridState, readHybridState } = await import('./hybrid-state.js');
+    writeHybridState(tempVault, {
+      cursors: { 'm-src': '2026-01-01T00:00:00.000Z', 'm-tgt': '2026-06-01T00:00:00.000Z' },
+      dirtyProjects: { 'm-src': true }
+    });
+    await mergeVaultProjects({ confirm: true, sources: ['m-src'], target: 'm-tgt', vaultRoot: tempVault });
+    const after = readHybridState(tempVault);
+    assert.equal((after.cursors || {})['m-tgt'], '2026-06-01T00:00:00.000Z');
+    assert.equal((after.dirtyProjects || {})['m-tgt'], true);
+    assert.ok(!(after.cursors && 'm-src' in after.cursors));
+    assert.ok(!(after.dirtyProjects && 'm-src' in after.dirtyProjects));
+  });
+
 });

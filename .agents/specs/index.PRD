@@ -109,7 +109,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`prompt-history-and-query`](0029-prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
 - [x] [`vault-reset-and-proxy-monitor`](0030-vault-reset-and-proxy-monitor.spec.md): Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI
 - [x] [`status-backup-page`](0032-status-backup-page.spec.md): Dedicated status-monitor backup page with complete archives and inventory management
-- [x] Batched vault-git sync with dual-mode hybrid parallel dispatch (`spec: 0033-vault-git-hybrid-sync.spec.md`)
+- [x] Batched vault-git sync with dual-mode hybrid sequential dispatch (`spec: 0033-vault-git-hybrid-sync.spec.md`)
 - [x] Memory retrieval hit count and status-monitor list (`spec: 0034-memory-hit-count.spec.md`)
 - [x] [`sync-conflict-reconciliation`](0035-sync-conflict-reconciliation.spec.md): Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience
 
@@ -194,7 +194,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 33 | `configurable-daemon-ports` | `[x]` done | Phase 7: Deployment modes | Configurable daemon ports via config.json with new default ports (3123 SSE, 3124 Status, 3125 Canvas) and CLI fallback |
 | 34 | [`memo-status`](0031-memo-status.spec.md) | `[x]` done | Phase 7: Deployment modes | Dedicated read-only CLI status query, live daemon probes, config inspector, and storage inventory dashboard |
 | 35 | [`status-backup-page`](0032-status-backup-page.spec.md) | `[x]` done | Phase 7 | Dedicated status-monitor backup page with complete archives and inventory management |
-| 36 | [`vault-git-hybrid-sync`](0033-vault-git-hybrid-sync.spec.md) | `[x] done` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
+| 36 | [`vault-git-hybrid-sync`](0033-vault-git-hybrid-sync.spec.md) | `[x] done` | Phase 7 | Batched vault-git sync with dual-mode hybrid sequential dispatch |
 | 37 | `memory-hit-count` | `[x]` done | Phase 7: Deployment modes | Memory retrieval hit count and status-monitor list |
 | 38 | [`sync-conflict-reconciliation`](0035-sync-conflict-reconciliation.spec.md) | `[x] done` | Phase 7: Deployment modes | Vault Sync Conflict Reconciliation, Atomic Changesets, and Automated Background Resilience |
 | 39 | [`session-handoff-baton`](0036-session-handoff-baton.spec.md) | `[x] done` | Phase 8 | Cross-Agent Session Handoff Baton via Prompt and Bootstrap |
@@ -226,7 +226,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 57 | `mcp-io-guard` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | MCP I/O guard: untrusted vault data, prompt-intent refuse, always-on skill harness; v0.33.0 |
 
-| 58 | `open-github-issues-batch` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Fix open GitHub bugs: AI Ops journal wiring (#66), test vault isolation (#67), silent Chrome probes (#68) |
+| 58 | [`open-github-issues-batch`](0060-open-github-issues-batch.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Fix open GitHub bugs: AI Ops journal wiring (#66), test vault isolation (#67), silent Chrome probes (#68) |
 
 | 59 | `status-error-logs-actions` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Error Logs: row selection, delete with confirm, New Issue copy draft |
 
@@ -303,7 +303,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` opt-in status companion; local status probes send Bearer | 0.14.2 |
 | 2026-08-31 | release-0.14.2 | Stop stdio serve from binding status `:3124` by default | 0.14.2 |
 | 2026-08-31 | status-backup-page | Dedicated Backups tab: full-backup confirm, complete kinds, inventory filters, restore/delete/download | npm test 380 pass |
-| 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode parallel hybrid+git sync, fail-open logging | npm test 406 pass |
+| 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode sequential hybrid+git sync, fail-open logging | npm test 406 pass |
 | 2026-09-02 | memory-hit-count | Retrieval hits/lastHit, status Memory list+drawer, canvas Hits; package 0.17.0 | npm test 435 pass |
 | 2026-09-04 | sync-conflict-reconciliation | Semantic auto-merge, memo reconcile, rollback journal, single conflict cap, dual-sync report.ok | npm test 451 pass |
 | 2026-09-04 | project-wiki | Per-project vault WIKI.md, status Wiki tab, CLI memo wiki | implement |
@@ -327,7 +327,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-13 | vault-ai-assistance | Vault AI assistance: agent interface, Noop + Cursor SDK adapter, background refine-on-write, post-FTS top-K rank, doctor/status ai; v0.30.0 | npm test 742 pass + 1 environmental (operator daemon holds :3123) |
 | 2026-09-13 | status-monitor-nav-ai-config | Status monitor left sidebar nav, Home dashboard, error-logs viewer, AI config save (`/api/error-logs`, `/api/config/ai`, `/api/dashboard`); v0.32.0 | npm test 769 pass + 2 environmental (operator daemon holds :3123) |
 | 2026-09-13 | mcp-io-guard | MCP I/O guard: closed-table prompt-intent scan, IO_GUARD inbound refuse, query drop-not-fail, outbound untrusted fences + SHA-256 ioGuard/ioChecksum, hybrid skip-and-log, ws-memo Agent I/O, bootstrap over-budget handoff claim fix; v0.33.0 | npm test 809 pass |
-| 2026-09-14 | open-github-issues-batch | Fix open GitHub bugs #66/#67/#68: AI Ops journal wired at resolveVaultAiAgent, version-skills test vault isolation + regression, silent Chrome probes on status + SSE; v0.33.1 | npm test 824 pass + 2 environmental (operator daemon holds :3123) |
+| 2026-09-14 | 0060-open-github-issues-batch | Fix open GitHub bugs #66/#67/#68: AI Ops journal wired at resolveVaultAiAgent, version-skills test vault isolation + regression, silent Chrome probes on status + SSE; v0.33.1 | npm test 824 pass + 2 environmental (operator daemon holds :3123) |
 | 2026-09-14 | ai-ops-test-ai-button | AI Ops "Test AI" connectivity probe (issue #69): operation `test` journal row, `POST /api/ai-ops/test` force-logged raw agent, **Test AI** button + operation filter option; v0.34.0 | npm test 837 pass + issue #70 slice in same tree |
 | 2026-09-14 | ai-timeout-config | AI cursor-sdk timeout (issue #70): `timeoutMs` default 30s, shared constant replaces `15000` fallbacks, vault seed + README; v0.34.0 | npm test 837 pass |
 | 2026-09-14 | cli-start-shortcuts | CLI lifecycle commands (start, stop, restart) and shortcuts for monitor, canvas, server, mcp; v0.35.0 | npm test 851 pass |

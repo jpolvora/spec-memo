@@ -3,7 +3,9 @@ import {
   getVaultRoot,
   flushVaultGit,
   getShutdownFlushMs,
-  type VaultGitChannelResult
+  type VaultGitChannelResult,
+  type ChannelDirtyTransition,
+  type ChannelCursorImpact
 } from './vault.js';
 import { flushDebouncedPushes, syncHybrid, isHybridUnreachable, type HybridSyncReport } from './hybrid-sync.js';
 import { readHybridState } from './hybrid-state.js';
@@ -29,9 +31,30 @@ export interface DualSyncOptions {
 export interface DualSyncHybridChannel {
   ok: boolean;
   error?: string;
+  errorCode?: string;
+  durationMs?: number;
+  dirtyTransition?: ChannelDirtyTransition;
+  cursorImpact?: ChannelCursorImpact;
   report?: HybridSyncReport;
 }
 
+/**
+ * Diff hybrid sync cursors into acknowledged vs preserved scopes (AC14/NS8).
+ * A project whose cursor is unchanged (skipped/conflicted records stay
+ * unacknowledged) lands in preserved, never advanced.
+ */
+export function diffHybridCursors(
+  before: Record<string, string>,
+  after: Record<string, string>
+): ChannelCursorImpact {
+  const advanced: string[] = [];
+  const preserved: string[] = [];
+  for (const [k, v] of Object.entries(after)) {
+    if (!(k in before) || before[k] !== v) advanced.push(k);
+    else preserved.push(k);
+  }
+  return { advanced: advanced.sort(), preserved: preserved.sort() };
+}
 export interface DualSyncReport {
   trigger: DualSyncTrigger;
   ok: boolean;
@@ -104,7 +127,22 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
   }
 
   let hybrid: DualSyncHybridChannel | undefined;
+  const snapshotHybridCursors = () => {
+    try {
+      const s = readHybridState(vaultRoot);
+      return { cursors: { ...(s.cursors || {}) } as Record<string, string>, dirty: Boolean(s.dirty) };
+    } catch {
+      return { cursors: {} as Record<string, string>, dirty: false };
+    }
+  };
   if (hybridEnabled) {
+    const hybridBefore = snapshotHybridCursors();
+    const tHybrid = performance.now();
+    const hybridDurationMs = () => Math.max(0, Math.round((performance.now() - tHybrid) * 10) / 10);
+    const hybridCursorImpact = (): ChannelCursorImpact =>
+      diffHybridCursors(hybridBefore.cursors, snapshotHybridCursors().cursors);
+    const hybridDirtyTransition = (): ChannelDirtyTransition =>
+      ({ before: hybridBefore.dirty, after: snapshotHybridCursors().dirty });
     try {
       if (trigger === 'session_end' || trigger === 'shutdown') {
         await flushDebouncedPushes();
@@ -121,13 +159,21 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
       });
       const ok = isHybridReportSuccessful(report, vaultRoot);
       if (ok) {
-        hybrid = { ok, report };
+        hybrid = { ok, report, durationMs: hybridDurationMs(), dirtyTransition: hybridDirtyTransition(), cursorImpact: hybridCursorImpact() };
       } else {
         const dirtyMsg = describeHybridDirty(vaultRoot);
         const conflictCount = (report.pulled?.conflicts ?? 0) + (report.pushed?.conflicts ?? 0);
         const fallback =
           conflictCount > 0 ? `Hybrid sync reported ${conflictCount} conflict(s)` : undefined;
-        hybrid = { ok, report, ...(dirtyMsg || fallback ? { error: dirtyMsg ?? fallback } : {}) };
+        const conflictCount0 = (report.pulled?.conflicts ?? 0) + (report.pushed?.conflicts ?? 0);
+        hybrid = {
+          ok, report,
+          durationMs: hybridDurationMs(),
+          dirtyTransition: hybridDirtyTransition(),
+          cursorImpact: hybridCursorImpact(),
+          errorCode: conflictCount0 > 0 ? 'HYBRID_CONFLICTS' : 'HYBRID_FAILED',
+          ...(dirtyMsg || fallback ? { error: dirtyMsg ?? fallback } : {})
+        };
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -142,7 +188,13 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
         },
         { vaultRoot }
       );
-      hybrid = { ok: false, error: msg, report: buildEmptyHybrid(options.all) };
+      hybrid = {
+        ok: false, error: msg, report: buildEmptyHybrid(options.all),
+        durationMs: hybridDurationMs(),
+        dirtyTransition: hybridDirtyTransition(),
+        cursorImpact: hybridCursorImpact(),
+        errorCode: isHybridUnreachable(err) ? 'HYBRID_UNREACHABLE' : 'HYBRID_FAILED'
+      };
     }
   }
 
@@ -205,6 +257,19 @@ export async function syncDual(options: DualSyncOptions): Promise<DualSyncReport
       vaultGitOk: vaultGit?.ok,
       hybridError: hybrid?.error,
       vaultGitError: vaultGit?.error,
+      hybridErrorCode: hybrid?.errorCode,
+      hybridDurationMs: hybrid?.durationMs,
+      hybridDirtyBefore: hybrid?.dirtyTransition?.before,
+      hybridDirtyAfter: hybrid?.dirtyTransition?.after,
+      hybridCursorAdvanced: hybrid?.cursorImpact?.advanced,
+      hybridCursorPreserved: hybrid?.cursorImpact?.preserved,
+      vaultGitErrorCode: vaultGit?.errorCode,
+      pulledConflicts: hybrid?.report?.pulled?.conflicts,
+      pushedConflicts: hybrid?.report?.pushed?.conflicts,
+      pulledSkipped: hybrid?.report?.pulled?.skipped,
+      pushedSkipped: hybrid?.report?.pushed?.skipped,
+      vaultGitDirtyBefore: vaultGit?.dirtyTransition?.before,
+      vaultGitDirtyAfter: vaultGit?.dirtyTransition?.after,
       vaultGitPhase: vaultGit?.lastPhase,
       vaultGitDurationMs: vaultGit?.durationMs,
       vaultGitPhases: vaultGit?.phases

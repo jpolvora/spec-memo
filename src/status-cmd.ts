@@ -401,11 +401,15 @@ export async function runStatusCheck(options: StatusOptions = {}): Promise<Statu
       ? {
           eventCount: telemetrySummary.eventCount,
           failureCount: telemetrySummary.failureCount,
+          failureRate: telemetrySummary.failureRate,
           productFaults: telemetrySummary.productFaults,
           expectedFaults: telemetrySummary.expectedFaults,
           p50Ms: telemetrySummary.p50Ms,
           p95Ms: telemetrySummary.p95Ms,
-          p99Ms: telemetrySummary.p99Ms
+          p99Ms: telemetrySummary.p99Ms,
+          topErrorCodes: telemetrySummary.topErrorCodes,
+          perProject: telemetrySummary.perProject,
+          counters: telemetrySummary.counters
         }
       : undefined,
     vaultAudit,

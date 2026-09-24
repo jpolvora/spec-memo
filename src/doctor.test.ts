@@ -349,5 +349,74 @@ describe('Doctor & Pollution Diagnostics (runDoctor)', () => {
     assert.equal(doc.healthy, true);
     assert.ok((doc.pollution.classifiedResidue || []).length > 0);
   });
+  it('AC9: diagnosis on a missing vault performs zero filesystem writes', async () => {
+    const missing = path.join(tempDir, 'missing-vault');
+    const before = fs.readdirSync(tempDir).sort();
+    const doc = await runDoctor({ cwd: tempProductRepo, vaultRoot: missing });
+    assert.equal(doc.vaultExists, false);
+    assert.equal(doc.healthy, false);
+    assert.ok(!fs.existsSync(missing));
+    assert.deepEqual(fs.readdirSync(tempDir).sort(), before);
+  });
+
+  it('AC9: malformed config degrades to defaults without scaffolding or mutation', async () => {
+    const badVault = path.join(tempDir, 'bad-vault');
+    fs.mkdirSync(badVault, { recursive: true });
+    const cfgPath = path.join(badVault, 'config.json');
+    fs.writeFileSync(cfgPath, '{ not json', 'utf8');
+    const before = fs.readdirSync(badVault).sort();
+    const doc = await runDoctor({ cwd: tempProductRepo, vaultRoot: badVault });
+    assert.ok(doc.warnings.some((w) => w.includes('Vault config:')));
+    assert.equal(fs.readFileSync(cfgPath, 'utf8'), '{ not json');
+    assert.deepEqual(fs.readdirSync(badVault).sort(), before);
+  });
+
+  it('AC5: live git inspection is bounded and side-effect free without a git repo', async () => {
+    const { inspectVaultGitLive } = await import('./vault-git-inspect.js');
+    const plain = path.join(tempDir, 'plain-dir');
+    fs.mkdirSync(plain, { recursive: true });
+    const live = inspectVaultGitLive(plain, {}, true);
+    assert.equal(live.gitRepo, false);
+    assert.deepEqual(live.porcelainPaths, []);
+    assert.equal(live.liveDirty, false);
+    assert.equal(typeof live.author.configured, 'boolean');
+    assert.deepEqual(fs.readdirSync(plain), []);
+  });
+
+  it('AC8: FTS identity mismatch names missing and unexpected ids, not just counts', async () => {
+    const { upsertRecord } = await import('./store.js');
+    await upsertRecord({
+      vaultRoot: tempVaultRoot,
+      projectId: 'ac8proj',
+      kind: 'trap',
+      slug: 'ac8-trap',
+      frontmatter: { id: 'ac8-trap', title: 'AC8 Trap' },
+      body: 'AC8 body'
+    });
+    const dir = path.join(tempVaultRoot, 'projects', 'ac8proj', 'traps');
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
+    assert.ok(files.length >= 1);
+    const seedPath = path.join(dir, files[0]);
+    const seed = fs.readFileSync(seedPath, 'utf8');
+    // Unexpected: indexed id with no markdown source.
+    fs.unlinkSync(seedPath);
+    // Missing: markdown id with no index row.
+    fs.writeFileSync(path.join(dir, 'ac8-manual.md'), seed.replace(/ac8-trap/g, 'ac8-manual'), 'utf8');
+    const doc = await runDoctor({ cwd: tempProductRepo, vaultRoot: tempVaultRoot });
+    assert.equal(doc.fts.consistent, false);
+    assert.ok((doc.fts.missingIds || []).includes('ac8-manual'));
+    assert.ok((doc.fts.unexpectedIds || []).includes('ac8-trap'));
+    assert.ok(doc.warnings.some((w) => w.includes('identity mismatch')));
+  });
+
+  it('AC7: config-vs-package version drift warns without mutation', async () => {
+    const cfgPath = path.join(tempVaultRoot, 'config.json');
+    fs.writeFileSync(cfgPath, JSON.stringify({ version: '0.0.0-drift-test' }), 'utf8');
+    const before = fs.readFileSync(cfgPath, 'utf8');
+    const doc = await runDoctor({ cwd: tempProductRepo, vaultRoot: tempVaultRoot });
+    assert.ok(doc.warnings.some((w) => w.includes('differs from running package')));
+    assert.equal(fs.readFileSync(cfgPath, 'utf8'), before);
+  });
+
 });
 

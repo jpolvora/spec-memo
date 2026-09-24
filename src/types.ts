@@ -266,6 +266,15 @@ export interface TelemetryEvent {
   metadata?: Record<string, unknown>;
 }
 
+/** Bounded observable counters derived from stored telemetry events (AC21). */
+export interface TelemetryCounters {
+  probeNoise: number;
+  testOriginated: number;
+  syncConflicts: number;
+  skippedRecords: number;
+  rebuildSkips: number;
+  dirtyTransitions: number;
+}
 export interface TelemetryEventInput {
   category: TelemetryCategory;
   operation: string;
@@ -274,6 +283,8 @@ export interface TelemetryEventInput {
   errorCode?: string;
   projectId?: string;
   metadata?: Record<string, unknown>;
+  /** Event origin tag (e.g. 'test' for harness-originated writes, AC21). */
+  origin?: string;
   vaultRoot?: string;
   timestamp?: string;
   eventId?: string;
@@ -1117,11 +1128,15 @@ export interface StatusResult {
   telemetrySummary?: {
     eventCount: number;
     failureCount: number;
+    failureRate?: number;
     productFaults: number;
     expectedFaults: number;
     p50Ms?: number;
     p95Ms?: number;
     p99Ms?: number;
+    topErrorCodes?: Array<{ code: string; count: number }>;
+    perProject?: Array<{ projectId: string; eventCount: number; failureCount: number }>;
+    counters?: TelemetryCounters;
   };
   vaultAudit?: Array<{
     id: string;
@@ -1165,8 +1180,15 @@ export interface DoctorResult {
     logFile?: string;
     eventCount: number;
     failureCount: number;
+    failureRate?: number;
     productFaults: number;
     expectedFaults: number;
+    p50Ms?: number;
+    p95Ms?: number;
+    p99Ms?: number;
+    topErrorCodes?: Array<{ code: string; count: number }>;
+    perProject?: Array<{ projectId: string; eventCount: number; failureCount: number }>;
+    counters?: TelemetryCounters;
   };
   remoteHealth?: {
     reachable: boolean;
@@ -1190,6 +1212,10 @@ export interface DoctorResult {
     markdownRecordIds?: number;
     indexedDistinctIds?: number;
     consistent?: boolean;
+    missingIds?: string[];
+    unexpectedIds?: string[];
+    missingCount?: number;
+    unexpectedCount?: number;
   };
   pollution: {
     detected: boolean;
