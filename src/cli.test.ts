@@ -7,7 +7,7 @@ import * as net from 'node:net';
 import * as http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { isCliMainEntry, parseServicePort, runCli, stdioServeEnablesStatus } from './cli.js';
+import { BACKGROUND_DAEMON_PROBE_TIMEOUT_MS, isCliMainEntry, parseServicePort, runCli, stdioServeEnablesStatus } from './cli.js';
 import { TOOL_NAMES } from './types.js';
 import { probeHttpService } from './status-cmd.js';
 import { closeIndex } from './indexer.js';
@@ -2142,6 +2142,28 @@ describe('CLI start, stop, restart, and service shortcuts (spec 0065)', () => {
         assert.match(out, /-f, --foreground/);
       } finally {
         console.log = origLog;
+      }
+    });
+
+    it('background readiness probe tolerates slow authenticated /api/status responses', async () => {
+      const server = http.createServer((_req, res) => {
+        setTimeout(() => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('{"status":"ok"}');
+        }, 400);
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      const port = (server.address() as net.AddressInfo).port;
+      try {
+        const url = `http://127.0.0.1:${port}/api/status`;
+        const tolerant = await probeHttpService(url, BACKGROUND_DAEMON_PROBE_TIMEOUT_MS, 'token');
+        assert.equal(tolerant.statusCode, 200);
+        const tooShort = await probeHttpService(url, 150, 'token');
+        assert.notEqual(tooShort.statusCode, 200);
+      } finally {
+        await new Promise<void>((resolve, reject) =>
+          server.close((err) => (err ? reject(err) : resolve()))
+        );
       }
     });
   });

@@ -1188,6 +1188,8 @@ async function runInstallSkillsCommand(parsed: ParsedCliArgs): Promise<number> {
   }
 }
 
+export const BACKGROUND_DAEMON_PROBE_TIMEOUT_MS = 1500;
+
 export function parseServicePort(raw: unknown, fallback?: number, flagName = 'port'): number | undefined {
   if (raw === undefined || raw === null) return fallback;
   if (typeof raw === 'boolean' || typeof raw === 'object') {
@@ -1295,13 +1297,14 @@ async function startBackgroundDaemon(
 
   const startTime = Date.now();
   const timeoutMs = 8000;
+  const probeTimeoutMs = BACKGROUND_DAEMON_PROBE_TIMEOUT_MS;
   let running = false;
 
   while (Date.now() - startTime < timeoutMs) {
     if (childExited) {
       break;
     }
-    const probe = await probeHttpService(details.probeUrl, 150, details.authToken);
+    const probe = await probeHttpService(details.probeUrl, probeTimeoutMs, details.authToken);
     if (probe.statusCode === 200 || probe.statusCode === 401 || probe.statusCode === 403) {
       running = true;
       break;
