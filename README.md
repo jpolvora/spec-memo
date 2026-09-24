@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.37.4**.
+**Local working memory for coding agents outside the product repository.** Version **0.37.5**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -519,7 +519,7 @@ Consumers can pin a repository to a vault partition with a project-root `.spec-m
 - `memo init [--project-id <id>] [--force] [--json]` scaffolds `.spec-memo.json` with an auto-detected default (normalized git remote or folder basename).
 - `memo status` reports the active project ID and its source (`.spec-memo.json`, git remote, or local path fallback) plus active override keys; strictly read-only.
 - `memo vault rename --from <id> --to <id>` renames a vault project (dir, `project.json`, aliases, FTS index). REST `POST /api/vaults/rename` returns 200/400/404/409/401. The Vaults tab has a Rename modal.
-- `memo vault merge --source <id> --target <id> [--no-dedup] [--delete-sources]` smart-merges with trap/decision/spec/plan deduplication (`{copied,deduplicated,skipped}`). REST `POST /api/vaults/merge` accepts `dedup`/`deleteSources`. The Vaults tab merge modal has dedup/delete controls and a results banner.
+- `memo vault merge --source <id> --target <id> [--no-dedup] [--delete-sources --confirm --backup-id <file> --manifest-reviewed]` smart-merges with trap/decision/spec/plan deduplication (`{copied,deduplicated,skipped}`). REST `POST /api/vaults/merge` accepts `dedup`/`deleteSources`/`confirm`/`backupId`/`manifestReviewed` (merge requires `confirm`; deleting sources additionally requires a fresh inventoried backup plus a reviewed manifest; quarantined projects are refused). The Vaults tab merge modal has dedup/delete controls and a results banner.
 
 The **Wiki** tab (`?tab=wiki`, `?tab=wiki&project={id}`, optional `&section={slug}`) shows the vault file `projects/{projectId}/WIKI.md`. It is not the consumer product README.
 
@@ -941,7 +941,7 @@ memo reconcile --clean-sidecars
 | `reset` | Reset vault database and clear files with mandatory pre-wipe backup | `--all`, `--project`, `--force`, `--password` |
 | `hook install` | Install pre-commit write-block hook | `--productRoot` |
 | `wiki` | Print or regenerate vault `projects/{id}/WIKI.md` (CLI extra; not an MCP tool) | `--project`, `--regenerate`, `--json` |
-| `vault` | Manage vault projects (alias redirect, merge, CRUD; CLI extra; not an MCP tool) | `list`, `alias --from --to`, `unalias --from`, `merge --source --target [--copy-records]`, `create`, `update`, `delete --confirm` |
+| `vault` | Manage vault projects (alias redirect, merge, CRUD; CLI extra; not an MCP tool) | `list`, `alias --from --to`, `unalias --from`, `merge --source --target [--copy-records] [--confirm]`, `create`, `update`, `delete --confirm` |
 | `serve` | Run stdio or SSE MCP server for agent hosts (SSE co-starts status on :3124; stdio opt-in via `--status`) | `--sse`, `--port`, `--status`, `--status-port`, `--no-status`, `--auth-token` |
 
 ### Operator Q&A

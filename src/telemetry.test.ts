@@ -497,4 +497,41 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
     assert.equal(summary.productFaults, 1);
     assert.ok(latestTelemetryFile(tempVault)?.endsWith('telemetry-2026-09-22.part-1.jsonl'));
   });
+  it('AC19/AC21: summary exposes failure rate, per-project health and observable counters', () => {
+    process.env.SPEC_MEMO_TELEMETRY_TEST = '1';
+    try {
+      recordTelemetry({ category: 'sync_operation', operation: 'sync_hybrid', durationMs: 10, success: true, projectId: 'p1', vaultRoot: tempVault, metadata: { pulledSkipped: 2, pushedConflicts: 1 } });
+      recordTelemetry({ category: 'sync_operation', operation: 'sync_dual', durationMs: 20, success: false, errorCode: 'HYBRID_FAILED', projectId: 'p1', vaultRoot: tempVault, metadata: { pulledConflicts: 1, hybridDirtyBefore: true, hybridDirtyAfter: false } });
+      recordTelemetry({ category: 'sync_operation', operation: 'view_rebuild', durationMs: 0, success: true, projectId: 'p2', vaultRoot: tempVault, metadata: { skipped: 3, rebuildSkipped: 3 } });
+      recordTelemetry({ category: 'http_endpoint', operation: 'health_check', durationMs: 1, success: true, vaultRoot: tempVault });
+      recordTelemetry({ category: 'mcp_tool', operation: 'search', durationMs: 5, success: true, projectId: 'p2', vaultRoot: tempVault });
+    } finally {
+      delete process.env.SPEC_MEMO_TELEMETRY_TEST;
+    }
+    flushTelemetrySync(tempVault);
+    const summary = summarizeTelemetry(tempVault);
+    assert.equal(summary.eventCount, 5);
+    assert.equal(summary.failureCount, 1);
+    assert.equal(summary.failureRate, 0.2);
+    const p1 = summary.perProject.find((p) => p.projectId === 'p1');
+    assert.ok(p1 && p1.eventCount === 2 && p1.failureCount === 1);
+    assert.equal(summary.counters.syncConflicts, 2);
+    assert.equal(summary.counters.skippedRecords, 5); // 2 pull-skipped + 3 view-rebuild-skipped (sync_operation)
+    assert.equal(summary.counters.rebuildSkips, 3);
+    assert.equal(summary.counters.dirtyTransitions, 1);
+    assert.equal(summary.counters.probeNoise, 1);
+    assert.equal(summary.counters.testOriginated, 5);
+  });
+
+  it('NS12: malformed telemetry history yields bounded redacted summary', () => {
+    const dir = path.join(tempVault, 'telemetry');
+    fs.mkdirSync(dir, { recursive: true });
+    const good = JSON.stringify({ timestamp: '2026-01-01T00:00:00.000Z', eventId: 'ns12', category: 'cli_command', operation: 'status', durationMs: 1, success: true });
+    fs.writeFileSync(path.join(dir, 'telemetry-2026-01-01.part-1.jsonl'), 'not json\n'.repeat(50) + good + '\n{broken', 'utf8');
+    const summary = summarizeTelemetry(tempVault);
+    assert.equal(summary.eventCount, 1);
+    assert.ok(summary.counters);
+    assert.ok(summary.logFile && summary.logFile.includes('telemetry-2026-01-01.part-1.jsonl'));
+  });
+
 });

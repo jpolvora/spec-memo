@@ -1122,6 +1122,22 @@ export async function applyChangeset(
         }
       }
 
+      const viewSkipped = recordsApplied.filter((r) => r.includes('view-rebuild-skip')).length;
+      if (viewSkipped > 0) {
+        try {
+          const { recordTelemetry: recordViewTelemetry } = await import("./telemetry.js");
+          recordViewTelemetry({
+            category: 'sync_operation',
+            operation: 'view_rebuild',
+            durationMs: 0,
+            success: true,
+            vaultRoot,
+            metadata: { skipped: viewSkipped, rebuildSkipped: viewSkipped }
+          });
+        } catch {
+          // Best-effort observability must never fail the apply
+        }
+      }
       return {
         applied,
         skipped,

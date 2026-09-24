@@ -1,6 +1,6 @@
 {
   "name": "spec-memo",
-  "version": "0.37.4",
+  "version": "0.37.5",
   "description": "Local working memory for coding agents outside the product repository",
   "type": "module",
   "main": "dist/index.js",

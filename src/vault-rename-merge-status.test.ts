@@ -154,7 +154,7 @@ test('vault rename and dedup merge REST + UI (AC18-19, AC21, AC27, AC29-31, NS2,
     const res = await fetch(`${baseUrl}/api/vaults/merge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sources: ['merge-src-rest'], target: 'merge-tgt-rest', copyRecords: true, dedup: true, deleteSources: false })
+      body: JSON.stringify({ sources: ['merge-src-rest'], target: 'merge-tgt-rest', copyRecords: true, dedup: true, deleteSources: false, confirm: true })
     });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { ok: boolean; copied: number; deduplicated: number; skipped: number };

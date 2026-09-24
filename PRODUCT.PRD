@@ -231,14 +231,13 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 26 | `mcp-version-and-skill-install` | `[x]` | Ops | check_version and install_skills MCP tools |
 | 27 | `deployment-modes` | `[x]` | Phase 7 | Local, Hybrid, Remote modes and portable stdio MCP wiring |
 | 28 | `status-vault-backup-ui` | `[x]` | UI | Status monitor vault export and import UI |
-| 29 | `virtual-file-system-over-mcp` | `[ ]` | Phase 7 | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
 | 30 | `operational-telemetry` | `[x]` | Phase 7 | Operational telemetry & rolling JSONL usage logging |
 | 31 | `prompt-history-and-query` | `[x]` | Phase 7 | Prompt, session, activity ingestion, rule derivation, and web UI explorer |
 | 32 | `vault-reset-and-proxy-monitor` | `[x]` | Ops/UI | Database reset with pre-wipe backup, full restore, proxy monitor, 3-mode topology |
 | 33 | `configurable-daemon-ports` | `[x]` | Phase 7 | Configurable daemon ports via config.json and new default ports |
 | 34 | `memo-status` | `[x]` | Phase 7 | Operational status & configuration inspector (memo status) |
 | 35 | `status-backup-page` | `[x]` | Ops/UI | Dedicated status-monitor backup page with complete archives and inventory |
-| 36 | `vault-git-hybrid-sync` | `[x]` | Phase 7 | Batched vault-git sync with dual-mode hybrid parallel dispatch |
+| 36 | `vault-git-hybrid-sync` | `[x]` | Phase 7 | Batched vault-git sync with dual-mode hybrid sequential dispatch |
 | 37 | `memory-hit-count` | `[x]` | Phase 7 | Memory retrieval hit count and status-monitor list |
 | 38 | `sync-conflict-reconciliation` | `[x]` | Phase 7 | Vault sync conflict reconciliation, semantic auto-merge, rollback journal, single conflict cap |
 | 39 | `project-wiki` | `[x]` | Phase 7 | Per-project vault wiki (`WIKI.md`), status Wiki tab, CLI `memo wiki` |
@@ -310,7 +309,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-08-31 | stdio-status-port-conflict | Stdio `memo serve` opt-in status companion; local `memo status` probes send Bearer | npm test |
 | 2026-08-31 | release-0.14.2 | Stop stdio serve from binding status `:3124` by default | 0.14.2 |
 | 2026-08-31 | status-backup-page | Dedicated Backups tab: full-backup confirm, complete kinds, inventory filters, restore/delete/download | npm test 380 pass |
-| 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode parallel hybrid+git `memo sync`, fail-open | npm test 406 pass |
+| 2026-09-01 | vault-git-hybrid-sync | Batched vault-git (`atomic` default false), dual-mode sequential hybrid+git `memo sync`, fail-open | npm test 406 pass |
 | 2026-09-02 | memory-hit-count | Retrieval hit count (`hits`/`lastHit`), status Memory list+drawer, canvas detail Hits; package 0.17.0 | npm test 435 pass |
 | 2026-09-04 | project-wiki | Per-project vault WIKI.md, status Wiki tab, CLI memo wiki; optional AI polish fail-open | implement |
 | 2026-09-04 | vault-merge-alias | Vault alias redirect + merge, status Vaults tab, memo vault CLI; package 0.20.0 | npm test 514 pass |
@@ -338,6 +337,7 @@ Split a row into `*.spec.md` only when that slice starts. Until then this table 
 | 2026-09-14 | cli-background-lifecycle | HTTP lifecycle commands daemonize by default, print readiness status, and return cleanly; stdio MCP remains host-attached | v0.36.1; npm test 868 pass |
 | 2026-09-15 | wiki-ai-refine | AI snapshot polish when `ai.enabled` + index-first Topic catalog + Wiki left-nav progressive disclosure | v0.37.0; npm test 875 pass |
 | 2026-09-22 | vault-stability-audit | Doctor/status truth (live vault-git vs persisted, gitignored residue classification, FTS id consistency, telemetry rolling files), sequential dual-sync channel telemetry, error-log rotation | v0.37.3 |
+| 2026-09-24 | vault-stability-audit | Truthful diagnostics, sequential dual-sync channel truth, backup-gated merge + cursor migration, bounded telemetry counters in doctor/status; v0.37.5; npm test 909 pass |
 | 2026-09-23 | status-monitor-start-probe | Background `memo start monitor` readiness probe timeout raised 150ms → 1500ms so authenticated `/api/status` (180-400ms) no longer aborts and falsely reports `START_TIMEOUT`; regression test | v0.37.4; npm test 887 pass |
 
 ## 12. Related docs

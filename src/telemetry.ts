@@ -4,6 +4,7 @@ import * as crypto from 'node:crypto';
 import {
   TelemetryCategory,
   TelemetryConfig,
+  TelemetryCounters,
   TelemetryEvent,
   TelemetryEventInput,
   VaultConfig
@@ -148,6 +149,11 @@ export class TelemetryRecorder {
     }
 
     try {
+      const meta = sanitizeMetadata(input.metadata) || {};
+      // AC21: harness/test-originated writes are tagged so operators can
+      // discount them. Explicit input.origin wins; the env opt-in covers suites.
+      const origin = input.origin || (process.env.SPEC_MEMO_TELEMETRY_TEST === '1' ? 'test' : undefined);
+      if (origin && meta.origin === undefined) meta.origin = origin;
       const event: TelemetryEvent = {
         timestamp: input.timestamp || new Date().toISOString(),
         eventId: input.eventId || `tel-${crypto.randomUUID()}`,
@@ -157,7 +163,7 @@ export class TelemetryRecorder {
         success: Boolean(input.success),
         errorCode: input.errorCode,
         projectId: input.projectId,
-        metadata: sanitizeMetadata(input.metadata)
+        metadata: Object.keys(meta).length > 0 ? meta : sanitizeMetadata(input.metadata)
       };
 
       this.queue.push(event);
@@ -492,12 +498,15 @@ export interface TelemetrySummary {
   logFile?: string;
   eventCount: number;
   failureCount: number;
+  failureRate: number;
   productFaults: number;
   expectedFaults: number;
   p50Ms?: number;
   p95Ms?: number;
   p99Ms?: number;
   topErrorCodes: Array<{ code: string; count: number }>;
+  perProject: Array<{ projectId: string; eventCount: number; failureCount: number }>;
+  counters: TelemetryCounters;
 }
 
 const EXPECTED_FAULT_CODES = new Set([
@@ -574,17 +583,58 @@ export function summarizeTelemetry(
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([code, count]) => ({ code, count }));
+  // AC19/AC21: per-project health plus observable counters, all derived from
+  // stored event fields (no full-history load beyond the bounded window above).
+  const byProject = new Map<string, { eventCount: number; failureCount: number }>();
+  const counters: TelemetryCounters = {
+    probeNoise: 0,
+    testOriginated: 0,
+    syncConflicts: 0,
+    skippedRecords: 0,
+    rebuildSkips: 0,
+    dirtyTransitions: 0
+  };
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+  for (const e of events) {
+    const pid = e.projectId || 'unscoped';
+    const slot = byProject.get(pid) || { eventCount: 0, failureCount: 0 };
+    slot.eventCount++;
+    if (!e.success) slot.failureCount++;
+    byProject.set(pid, slot);
+    const meta = (e.metadata || {}) as Record<string, unknown>;
+    if (/probe|health_check/i.test(e.operation || '')) counters.probeNoise++;
+    if (meta.origin === 'test') counters.testOriginated++;
+    const isSync = e.category === 'sync_operation' || /^sync/.test(e.operation || '');
+    if (isSync) {
+      counters.syncConflicts += num(meta.pulledConflicts) + num(meta.pushedConflicts) + num(meta.conflicts);
+      counters.skippedRecords += num(meta.pulledSkipped) + num(meta.pushedSkipped) + num(meta.skipped);
+      if (meta.hybridDirtyBefore !== undefined || meta.vaultGitDirtyBefore !== undefined) {
+        if (meta.hybridDirtyBefore !== meta.hybridDirtyAfter || meta.vaultGitDirtyBefore !== meta.vaultGitDirtyAfter) {
+          counters.dirtyTransitions++;
+        }
+      }
+    }
+    if (e.operation === 'view_rebuild') counters.rebuildSkips += num(meta.skipped) || (e.success ? 1 : 0);
+    else counters.rebuildSkips += num(meta.rebuildSkipped);
+  }
+  const perProject = [...byProject.entries()]
+    .map(([projectId, v]) => ({ projectId, eventCount: v.eventCount, failureCount: v.failureCount }))
+    .sort((a, b) => b.eventCount - a.eventCount)
+    .slice(0, 10);
   return {
     enabled: isTelemetryEnabled(vaultRoot),
     logFile: latestTelemetryFile(vaultRoot),
     eventCount: events.length,
     failureCount: failures.length,
+    failureRate: events.length > 0 ? failures.length / events.length : 0,
     productFaults,
     expectedFaults,
     p50Ms: percentile(durations, 50),
     p95Ms: percentile(durations, 95),
     p99Ms: percentile(durations, 99),
-    topErrorCodes
+    topErrorCodes,
+    perProject,
+    counters
   };
 }
 

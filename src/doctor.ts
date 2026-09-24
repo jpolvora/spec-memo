@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { DoctorOptions, DoctorPollutionItem, DoctorResult } from './types.js';
-import { ensureVaultStructure, getVaultRoot, resolveVaultGitAtomic, redactVaultGitRemoteUrl } from './vault.js';
+import { readVaultConfig, getVaultRoot, resolveVaultGitAtomic, redactVaultGitRemoteUrl } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 import { openIndex, rebuildIndex, findActiveSemanticContradictions } from './indexer.js';
 import { wrapSqliteOpenError } from './sqlite.js';
@@ -583,7 +583,10 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
   }
 
   // Deployment mode diagnostics (AC11, AC12, AC13)
-  const config = ensureVaultStructure(vaultRoot);
+  const { config, configValid, issues: configIssues } = readVaultConfig(vaultRoot);
+  if (!configValid) {
+    for (const issue of configIssues) warnings.push(`Vault config: ${issue}`);
+  }
   const effectiveMode = config.mode || 'local';
   const remoteUrl = config.remote?.url || null;
   const tokenConfigured = isTokenConfigured();
@@ -635,6 +638,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
   let ftsMarkdownIds = 0;
   let ftsIndexIds = indexedRecordsCount;
   let ftsConsistent = true;
+  let ftsMissingIds: string[] = [];
+  let ftsUnexpectedIds: string[] = [];
   if (ftsHealthy && vaultExists) {
     try {
       const md = countMarkdownRecordIds(vaultRoot);
@@ -644,10 +649,17 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       const rows = db.prepare('SELECT id FROM records_fts').all() as Array<{ id: string }>;
       const indexed = new Set(rows.map((r) => String(r.id)));
       ftsIndexIds = indexed.size;
-      ftsConsistent = ftsMarkdownIds === indexed.size;
+      // AC8: compare full identity sets, not counts. countMarkdownRecordIds walks only
+      // canonical RECORD_SUBDIRS and skips .conflict. sidecars, so compiled views,
+      // project metadata, and conflict sidecars are excluded by construction.
+      ftsMissingIds = [...md.ids].filter((id) => !indexed.has(id)).sort().slice(0, 20);
+      ftsUnexpectedIds = [...indexed].filter((id) => !md.ids.has(id)).sort().slice(0, 20);
+      const missingTotal = [...md.ids].filter((id) => !indexed.has(id)).length;
+      const unexpectedTotal = [...indexed].filter((id) => !md.ids.has(id)).length;
+      ftsConsistent = missingTotal === 0 && unexpectedTotal === 0;
       if (!ftsConsistent) {
         warnings.push(
-          `FTS index id count (${indexed.size}) does not match markdown record ids (${md.ids.size} ids / ${md.files} files). Run memo doctor --rebuild.`
+          `FTS index identity mismatch: ${[...md.ids].filter((id) => !indexed.has(id)).length} missing / ${[...indexed].filter((id) => !md.ids.has(id)).length} unexpected — ${md.ids.size} markdown ids / ${md.files} files vs ${indexed.size} indexed ids. Missing: ${ftsMissingIds.join(', ') || 'none listed'}. Unexpected: ${ftsUnexpectedIds.join(', ') || 'none listed'}. Run memo doctor --rebuild.`
         );
       }
     } catch {
@@ -767,8 +779,15 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
           logFile: telemetrySummary.logFile,
           eventCount: telemetrySummary.eventCount,
           failureCount: telemetrySummary.failureCount,
+          failureRate: telemetrySummary.failureRate,
           productFaults: telemetrySummary.productFaults,
-          expectedFaults: telemetrySummary.expectedFaults
+          expectedFaults: telemetrySummary.expectedFaults,
+          p50Ms: telemetrySummary.p50Ms,
+          p95Ms: telemetrySummary.p95Ms,
+          p99Ms: telemetrySummary.p99Ms,
+          topErrorCodes: telemetrySummary.topErrorCodes,
+          perProject: telemetrySummary.perProject,
+          counters: telemetrySummary.counters
         }
       : undefined,
     // Spec 0056 AC28: AI provider, enabled flag, queue depth, redacted error.
@@ -790,7 +809,11 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
       markdownRecordFiles: ftsMarkdownFiles,
       markdownRecordIds: ftsMarkdownIds,
       indexedDistinctIds: ftsIndexIds,
-      consistent: ftsConsistent
+      consistent: ftsConsistent,
+      missingIds: ftsMissingIds,
+      unexpectedIds: ftsUnexpectedIds,
+      missingCount: ftsMissingIds.length,
+      unexpectedCount: ftsUnexpectedIds.length
     },
     pollution: {
       detected: pollutionItems.length > 0,

@@ -2282,7 +2282,20 @@ async function runCliInner(
           parsed.options['delete-sources'] === true ||
           parsed.options['delete-sources'] === 'true' ||
           parsed.options.deleteSources === true;
-        const result = await mergeVaultProjects({ sources, target, copyRecords, dedup, deleteSources, vaultRoot });
+        const confirm =
+          parsed.options['confirm'] === true ||
+          parsed.options['confirm'] === 'true';
+        const backupId =
+          parsed.options['backup-id'] !== undefined
+            ? String(parsed.options['backup-id'])
+            : parsed.options.backupId !== undefined
+              ? String(parsed.options.backupId)
+              : undefined;
+        const manifestReviewed =
+          parsed.options['manifest-reviewed'] === true ||
+          parsed.options['manifest-reviewed'] === 'true' ||
+          parsed.options.manifestReviewed === true;
+        const result = await mergeVaultProjects({ sources, target, copyRecords, dedup, deleteSources, vaultRoot, confirm, backupId, manifestReviewed });
         if (parsed.isJson) printJson(result);
         else {
           console.log(

@@ -787,6 +787,27 @@ export interface CommitVaultChangeOptions {
   skipRemote?: boolean;
 }
 
+/** Per-channel dirty-state transition (AC11): tree state before vs after the channel ran. */
+export interface ChannelDirtyTransition { before: boolean; after: boolean; }
+/** Per-channel cursor impact (AC11): scopes acknowledged vs left for a later run. */
+export interface ChannelCursorImpact { advanced: string[]; preserved: string[]; }
+/**
+ * Stable machine-readable error code for a vault-git channel failure (AC11/AC13).
+ * Names the failing phase plus known failure classes (identity, lock, timeout,
+ * rebase conflict); falls back to phase-scoped codes.
+ */
+export function vaultGitErrorCode(phase: string, message?: string): string {
+  const m = String(phase + ' ' + (message || '')).toLowerCase();
+  if (/author identity unknown|user\.email|identity/.test(m) && /identity|author|user\.email/.test(m)) return 'GIT_IDENTITY_MISSING';
+  if (/timeout|timed out|etimedout|econnaborted/.test(m)) return 'GIT_TIMEOUT';
+  if (/eperm|ebusy|lock|locked|access denied/.test(m)) return 'FILE_LOCK';
+  if (/conflict|rebase|stash/.test(m)) return 'REBASE_CONFLICT';
+  if (phase === 'pull') return 'PULL_FAILED';
+  if (phase === 'push') return 'PUSH_FAILED';
+  if (phase === 'commit') return 'COMMIT_FAILED';
+  if (phase === 'status') return 'STATUS_FAILED';
+  return 'VAULT_GIT_FAILED';
+}
 export interface VaultGitChannelResult {
   ok: boolean;
   committed: boolean;
@@ -799,6 +820,9 @@ export interface VaultGitChannelResult {
   durationMs?: number;
   lastPhase?: string;
   phases?: Record<string, number>;
+  errorCode?: string;
+  dirtyTransition?: ChannelDirtyTransition;
+  cursorImpact?: ChannelCursorImpact;
 }
 
 export interface FlushVaultGitOptions {
@@ -1207,7 +1231,9 @@ export async function flushVaultGit(
       pulled: false,
       pushed: false,
       message: 'Vault config.json not found.',
-      error: 'Vault config.json not found.'
+      error: 'Vault config.json not found.',
+      errorCode: 'CONFIG_MISSING',
+      cursorImpact: { advanced: [], preserved: [] }
     };
   }
   const started = performance.now();
@@ -1215,6 +1241,14 @@ export async function flushVaultGit(
   const mark = (phase: string, from: number) => {
     phases[phase] = Math.max(0, Math.round((performance.now() - from) * 10) / 10);
   };
+  const scopeLabel = (() => {
+    try {
+      const b = resolveVaultGitBranch(config, vaultRoot);
+      return typeof b === 'string' && b ? b : 'vault-tree';
+    } catch {
+      return 'vault-tree';
+    }
+  })();
   if (!config.vaultGit?.enabled || config.mode === 'remote') {
     return {
       ok: true,
@@ -1225,7 +1259,8 @@ export async function flushVaultGit(
       message: 'Vault git sync is disabled in config.json.',
       durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
       lastPhase: 'skip',
-      phases
+      phases,
+      cursorImpact: { advanced: [], preserved: [] }
     };
   }
 
@@ -1244,9 +1279,11 @@ export async function flushVaultGit(
         pushed: false,
         message: `Sync failed: ${identityErr}`,
         error: identityErr,
+        errorCode: vaultGitErrorCode('identity', identityErr),
         durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
         lastPhase: 'identity',
-        phases
+        phases,
+        cursorImpact: { advanced: [], preserved: [scopeLabel] }
       };
     }
     const tStatus = performance.now();
@@ -1261,7 +1298,12 @@ export async function flushVaultGit(
         pulled: false,
         pushed: false,
         message: `Sync failed: ${err}`,
-        error: err
+        error: err,
+        errorCode: vaultGitErrorCode('status', err),
+        durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
+        lastPhase: 'status',
+        phases,
+        cursorImpact: { advanced: [], preserved: [scopeLabel] }
       };
     }
     const porcelain = statusRes.porcelain;
@@ -1282,7 +1324,9 @@ export async function flushVaultGit(
         message: `Dry-run: ${wouldCommit.length} path(s) would commit`,
         durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
         lastPhase: 'dry-run',
-        phases
+        phases,
+        dirtyTransition: { before: wouldCommit.length > 0, after: wouldCommit.length > 0 },
+        cursorImpact: { advanced: [], preserved: wouldCommit.length > 0 ? [scopeLabel] : [] }
       };
     }
 
@@ -1308,9 +1352,12 @@ export async function flushVaultGit(
           pushed: false,
           message: `Sync failed: ${localErr}`,
           error: localErr,
+          errorCode: vaultGitErrorCode('commit', localErr),
           durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
           lastPhase: 'commit',
-          phases
+          phases,
+          dirtyTransition: { before: true, after: true },
+          cursorImpact: { advanced: [], preserved: [scopeLabel] }
         };
       }
     }
@@ -1381,9 +1428,15 @@ export async function flushVaultGit(
       pushed,
       message: `Sync complete (pulled: ${pulled}, pushed: ${pushed})`,
       error: safeVaultGitError(remoteError),
+      errorCode: remoteError ? vaultGitErrorCode(pulled ? 'push' : 'pull', remoteError) : undefined,
       durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
       lastPhase: remoteError ? (pulled ? 'push' : 'pull') : 'flush',
-      phases
+      phases,
+      dirtyTransition: { before: porcelain.length > 0, after: stillDirty },
+      cursorImpact: {
+        advanced: !stillDirty && (pushed || (committed && !hasRemote)) ? [scopeLabel] : [],
+        preserved: stillDirty ? [scopeLabel] : []
+      }
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -1402,7 +1455,15 @@ export async function flushVaultGit(
       // ignore
     }
     const safeMsg = safeVaultGitError(msg)!;
-    return { ok: false, committed: false, pulled: false, pushed: false, message: `Sync failed: ${safeMsg}`, error: safeMsg };
+    return {
+      ok: false, committed: false, pulled: false, pushed: false,
+      message: `Sync failed: ${safeMsg}`, error: safeMsg,
+      errorCode: vaultGitErrorCode('flush', safeMsg),
+      durationMs: Math.max(0, Math.round((performance.now() - started) * 10) / 10),
+      lastPhase: 'flush',
+      phases,
+      cursorImpact: { advanced: [], preserved: ['vault-tree'] }
+    };
   }
 }
 

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { matchesPathPattern } from './indexer.js';
 import { isPathInside } from './safety.js';
-import { ensureVaultStructure, getVaultRoot, getProjectMetadata } from './vault.js';
+import { readVaultConfig, getVaultRoot, getProjectMetadata } from './vault.js';
 import { resolveProjectIdentity } from './identity.js';
 
 export type IgnoreRuleSource = 'builtin' | '.spec-memo-ignore' | 'config.json';
@@ -160,7 +160,7 @@ function loadConfigIgnorePaths(projectId: string | undefined, vaultRoot: string)
     return [];
   }
   try {
-    const config = ensureVaultStructure(vaultRoot);
+    const { config } = readVaultConfig(vaultRoot);
     const projectCfg = config.projects?.[projectId];
     const ignorePaths = projectCfg?.ignorePaths;
     if (!Array.isArray(ignorePaths)) {

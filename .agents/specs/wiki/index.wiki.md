@@ -46,7 +46,6 @@ Agent- and human-facing entry points and adapters: the `memo` CLI, `doctor`/`sta
 - [Agent Adapters and Installers](interfaces/agent-adapters.md): Relocatable memory adapter, write-block pre-commit hook, install-hooks/install-skills wizard with scope/hosts/conflictPolicy/confirm, and Codex support.
 - [Human Viewer Compatibility](interfaces/viewer.md): Passive Markdown and Obsidian compatibility: vault layout, frontmatter, compiled-view relative links and id tokens, with no runtime viewer dependency.
 - [MCP Version and Skill Installation Tools](interfaces/mcp-tooling.md): check_version soft-fail semver compare and install_skills permission gate, allow-list, scopes, conflict policies, and vault-overlap deny.
-- [Virtual File System over MCP](interfaces/virtual-file-system.md): Draft/unimplemented VFS: documents the absence of originRelPath, MCP resources, and --cleanup plus the planned ACs and open questions.
 
 ### connectivity
 

@@ -1707,11 +1707,13 @@ describe('CLI init and vault rename/merge (AC6-AC10, AC20, AC28, NS1)', () => {
     ensureVaultStructure(vault);
     const { upsertRecord } = await import('./store.js');
     await upsertRecord({ vaultRoot: vault, projectId: 'm-src', kind: 'trap', slug: 't1', frontmatter: { title: 'T1', severity: 'low' }, body: 'merge flags body unique qzxw' });
+    const { persistVaultBackup } = await import('./backup.js');
+    const bk = await persistVaultBackup({ vaultRoot: vault });
     let out = '';
     const orig = console.log;
     console.log = (...a) => { out += a.join(' ') + '\n'; };
     try {
-      const code = await runCli(['vault', 'merge', '--source', 'm-src', '--target', 'm-tgt', '--copy-records', '--no-dedup', '--delete-sources', '--vaultRoot', vault]);
+      const code = await runCli(['vault', 'merge', '--source', 'm-src', '--target', 'm-tgt', '--copy-records', '--no-dedup', '--delete-sources', '--confirm', '--backup-id', bk.filename, '--manifest-reviewed', '--vaultRoot', vault]);
       assert.equal(code, 0);
       assert.ok(out.includes('deduplicated='));
       assert.ok(!fs.existsSync(path.join(vault, 'projects', 'm-src')));

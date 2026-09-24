@@ -2224,6 +2224,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
         <label><input type="checkbox" id="vault-merge-copy" checked> Copy records from sources</label>
         <label><input type="checkbox" id="vault-merge-dedup" checked> Smart deduplication</label>
         <label><input type="checkbox" id="vault-merge-delete-sources"> Delete sources after merge</label>
+        <label for=\"vault-merge-backup-id\">Fresh backup filename (required to delete sources)</label>
+        <input type=\"text\" id=\"vault-merge-backup-id\" autocomplete=\"off\" placeholder=\"Optional unless deleting sources\">
+        <label><input type=\"checkbox\" id=\"vault-merge-manifest-reviewed\"> Operator reviewed the comparison manifest</label>
       </div>
       <div id="vault-fields-rename" class="vault-modal-fields" style="display:none;">
         <label for="vault-rename-from">Source id</label>
@@ -5627,7 +5630,9 @@ export function generateStatusHtml(version = getPackageVersion()): string {
           const delEl = document.getElementById("vault-merge-delete-sources");
           const dedup = dedupEl ? dedupEl.checked === true : true;
           const deleteSources = delEl ? delEl.checked === true : false;
-          const mergeResult = await vaultManagerApi("/api/vaults/merge", { sources, target: id, copyRecords, dedup, deleteSources });
+          const backupEl = document.getElementById(\"vault-merge-backup-id\");
+          const manifestEl = document.getElementById(\"vault-merge-manifest-reviewed\");
+          const mergeResult = await vaultManagerApi("/api/vaults/merge", { sources, target: id, copyRecords, dedup, deleteSources, confirm: true, backupId: backupEl && backupEl.value.trim() ? backupEl.value.trim() : undefined, manifestReviewed: manifestEl ? manifestEl.checked === true : false });
           const copied = mergeResult && mergeResult.copied != null ? mergeResult.copied : 0;
           const deduplicated = mergeResult && mergeResult.deduplicated != null ? mergeResult.deduplicated : 0;
           const skipped = mergeResult && mergeResult.skipped != null ? mergeResult.skipped : 0;
@@ -6168,7 +6173,7 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
         const startTime = Date.now();
         try {
           const rawBody = await readBodyBuffer(req, 256 * 1024);
-          let parsed: { sources?: string[]; target?: string; copyRecords?: boolean; dedup?: boolean; deleteSources?: boolean } = {};
+          let parsed: { sources?: string[]; target?: string; copyRecords?: boolean; dedup?: boolean; deleteSources?: boolean; confirm?: boolean; backupId?: string; manifestReviewed?: boolean } = {};
           if (rawBody.length > 0) {
             try {
               parsed = JSON.parse(rawBody.toString("utf8"));
@@ -6186,7 +6191,10 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
             copyRecords,
             dedup,
             deleteSources,
-            vaultRoot
+            vaultRoot,
+            confirm: parsed.confirm === true,
+            backupId: typeof parsed.backupId === "string" ? parsed.backupId : undefined,
+            manifestReviewed: parsed.manifestReviewed === true
           });
           bus.capture({
             type: "system",

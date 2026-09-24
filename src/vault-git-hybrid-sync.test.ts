@@ -11,6 +11,7 @@ import {
   resolveVaultGitAtomic,
   redactVaultGitRemoteUrl,
   flushVaultGit,
+  vaultGitErrorCode,
   flushScheduledVaultGit,
   withVaultLockSync,
   parseAutostashRefs,
@@ -605,4 +606,105 @@ describe('vault-git-hybrid-sync', () => {
     assert.deepEqual(parseAutostashRefs('stash@{0}: WIP on master: user work\n'), []);
     assert.deepEqual(parseAutostashRefs(''), []);
   });
+  it('AC11: vaultGitErrorCode names failure classes', async () => {
+    const { vaultGitErrorCode: code } = await import('./vault.js');
+    assert.equal(code('identity', 'Author identity unknown'), 'GIT_IDENTITY_MISSING');
+    assert.equal(code('pull', 'rebase conflict'), 'REBASE_CONFLICT');
+    assert.equal(code('flush', 'EBUSY resource busy'), 'FILE_LOCK');
+    assert.equal(code('push', 'operation timed out after 30000ms'), 'GIT_TIMEOUT');
+    assert.equal(code('pull', 'remote hung up'), 'PULL_FAILED');
+    assert.equal(code('push', 'denied'), 'PUSH_FAILED');
+    assert.equal(code('commit', 'x'), 'COMMIT_FAILED');
+    assert.equal(code('mystery', 'x'), 'VAULT_GIT_FAILED');
+  });
+
+  it('AC11: dry-run flush exposes dirty transition and cursor impact', async () => {
+    enableVaultGit(tempVault);
+    initVaultGit(tempVault);
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'scratch',
+      slug: 'ac11-dry-run',
+      body: 'dirty'
+    });
+    const flush = await flushVaultGit(tempVault, { dryRun: true, trigger: 'sync' });
+    assert.equal(flush.ok, true);
+    assert.equal(flush.errorCode, undefined);
+    assert.deepEqual(flush.dirtyTransition, { before: true, after: true });
+    assert.deepEqual(flush.cursorImpact?.advanced, []);
+    assert.equal((flush.cursorImpact?.preserved || []).length, 1);
+    assert.equal(typeof flush.durationMs, 'number');
+    assert.equal(flush.lastPhase, 'dry-run');
+  });
+
+  it('AC11: syncDual exposes per-channel ok, code, phase, duration, dirty and cursor truth', async () => {
+    const configPath = path.join(tempVault, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.mode = 'hybrid';
+    config.remote = { url: 'http://127.0.0.1:1' };
+    config.vaultGit = { enabled: true };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    initVaultGit(tempVault);
+    const report = await syncDual({ vaultRoot: tempVault, trigger: 'sync', dryRun: true });
+    assert.ok(report.hybrid);
+    assert.equal(typeof report.hybrid?.durationMs, 'number');
+    assert.equal(report.hybrid?.errorCode, 'HYBRID_UNREACHABLE');
+    assert.ok(report.hybrid?.dirtyTransition);
+    assert.ok(report.hybrid?.cursorImpact);
+    assert.ok(report.vaultGit);
+    assert.equal(typeof report.vaultGit?.durationMs, 'number');
+    assert.ok(report.vaultGit?.dirtyTransition);
+    assert.ok(report.vaultGit?.cursorImpact);
+    assert.equal(report.ok, false);
+  });
+
+  it('NS4: missing git identity fails closed with lastError and no clean transition', async () => {
+    enableVaultGit(tempVault);
+    initVaultGit(tempVault);
+    try {
+      execFileSync('git', ['config', '--unset', 'user.email'], { cwd: tempVault, stdio: 'ignore' });
+    } catch { /* already unset */ }
+    try {
+      execFileSync('git', ['config', '--unset', 'user.name'], { cwd: tempVault, stdio: 'ignore' });
+    } catch { /* already unset */ }
+    const emptyCfg = path.join(tempVault, 'empty-gitconfig');
+    fs.writeFileSync(emptyCfg, '', 'utf8');
+    const prevGlobal = process.env.GIT_CONFIG_GLOBAL;
+    const prevNoSystem = process.env.GIT_CONFIG_NOSYSTEM;
+    process.env.GIT_CONFIG_GLOBAL = emptyCfg;
+    process.env.GIT_CONFIG_NOSYSTEM = '1';
+    try {
+      const flush = await flushVaultGit(tempVault, { trigger: 'sync' });
+      assert.equal(flush.ok, false);
+      assert.equal(flush.lastPhase, 'identity');
+      assert.equal(flush.errorCode, 'GIT_IDENTITY_MISSING');
+      const { readVaultGitState: readState } = await import('./vault-git-state.js');
+      const st = readState(tempVault);
+      assert.equal(st.dirty, true);
+      assert.ok((st.lastError || '').toLowerCase().includes('identity'));
+    } finally {
+      if (prevGlobal === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = prevGlobal;
+      if (prevNoSystem === undefined) delete process.env.GIT_CONFIG_NOSYSTEM;
+      else process.env.GIT_CONFIG_NOSYSTEM = prevNoSystem;
+    }
+  });
+
+  it('AC14/NS8: cursor diff keeps unacknowledged projects preserved', async () => {
+    const { diffHybridCursors } = await import('./dual-sync.js');
+    const impact = diffHybridCursors({ a: 't1', b: 't1' }, { a: 't2', b: 't1', c: 't1' });
+    assert.deepEqual(impact.advanced, ['a', 'c']);
+    assert.deepEqual(impact.preserved, ['b']);
+  });
+
+  it('AC10/NS17: user-facing surfaces describe sequential dual sync', () => {
+    const files = ['README.md', 'PRODUCT.PRD', 'PLAN.md', '.agents/specs/index.PRD', 'docs/index.html'];
+    const re = /parallel[^.\n]{0,40}(sync|dispatch)|(sync|dispatch)[^.\n]{0,40}parallel/i;
+    for (const f of files) {
+      const text = fs.readFileSync(path.join(process.cwd(), f), 'utf8');
+      assert.ok(!re.test(text), f + ' still describes parallel sync');
+    }
+  });
+
 });

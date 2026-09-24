@@ -1,3 +1,13 @@
+### [2026-09-23 21:41] Agent: opencode (space-bunny-free)
+- **Prompt**: Improve spec 0067 using the full vault stability plan
+- **Done**: Expanded 0067 to 29 ACs across all six phases and verification gates, marked delivery partial/in progress, aligned its index records, accepted `0027` VFS removal, and resolved error-log retention as 8 MiB rotation with eight retained backups
+- **Result**: `validate_spec.cjs --mode=authoring` PASS (29 ACs); `tsc --noEmit` PASS; `npm run check:site` PASS; no product-code changes
+
+### [2026-09-23 21:32] Agent: opencode (deepseek-v4.1-flash)
+- **Prompt**: /ws-spec-sync (ws-spec-index); track specs not tracked; remove 0027 will not implement; commit
+- **Done**: Tracked the two untracked specs (`us-36` #37 v0.17.1; `vault-dedup-merge-and-local-config` #52 v0.28.0) into Feature map + Next specs with Done-log rows; enriched v0.37.3/v0.37.4 Done-log PR refs; archived `virtual-file-system-over-mcp` (0027) as wont-implement and deleted its spec + wiki page, fixing the dead link in wiki `import.md` and regenerating the site (29 → 28 pages)
+- **Result**: `npm test` 887 pass; `npm run check:site` pass (v0.37.4); 0 untracked specs
+
 ### [2026-09-23 20:37] Agent: opencode (deepseek-v4.1-flash)
 - **Prompt**: check spec-memo status (cannot start spec-memo status monitor); check startup error memo start monitor; commit, push, /ws-ship-pr
 - **Done**: Diagnosed false `START_TIMEOUT` on `memo start monitor` — background readiness probe used a 150ms timeout while authenticated `/api/status` takes ~180-400ms, so every probe aborted and the child was SIGKILLed; raised probe timeout to 1500ms via exported `BACKGROUND_DAEMON_PROBE_TIMEOUT_MS`, added slow-response regression test; bumped v0.37.4

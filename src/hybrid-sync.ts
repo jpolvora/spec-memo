@@ -458,7 +458,11 @@ export async function syncHybrid(
           all: isAll,
           dryRun: Boolean(options.dryRun),
           pulledApplied: report.pulled.applied,
-          pushedApplied: report.pushed.applied
+          pushedApplied: report.pushed.applied,
+          pulledSkipped: report.pulled.skipped,
+          pushedSkipped: report.pushed.skipped,
+          pulledConflicts: report.pulled.conflicts,
+          pushedConflicts: report.pushed.conflicts
         }
       });
     }

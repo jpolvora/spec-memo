@@ -89,3 +89,51 @@ export function writeHybridState(
     return merged;
   });
 }
+
+/**
+ * Migrate per-project sync state across rename/merge (AC18): moves hybrid
+ * cursors (max-wins when the target already has one) and OR-combines
+ * per-project dirty flags from each source id to its target id, deleting the
+ * source keys so no split cursors, split dirty flags, or split ownership can
+ * survive the operation. Top-level dirty is never cleared here.
+ */
+export function migrateProjectSyncState(
+  vaultRootInput: string | undefined,
+  moves: Record<string, string>
+): { movedCursors: number; movedDirty: number } {
+  const vaultRoot = getVaultRoot(vaultRootInput);
+  return withVaultLockSync(vaultRoot, () => {
+    const filePath = getHybridStatePath(vaultRoot);
+    if (!fs.existsSync(filePath)) return { movedCursors: 0, movedDirty: 0 };
+    let parsed: { cursors?: Record<string, string>; dirtyProjects?: Record<string, boolean> };
+    try {
+      parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch {
+      return { movedCursors: 0, movedDirty: 0 };
+    }
+    const cursors: Record<string, string> = { ...(parsed.cursors || {}) };
+    const dirtyProjects: Record<string, boolean> = { ...(parsed.dirtyProjects || {}) };
+    let movedCursors = 0;
+    let movedDirty = 0;
+    for (const [from, to] of Object.entries(moves)) {
+      if (!from || !to || from === to) continue;
+      if (from in cursors) {
+        const sv = String(cursors[from]);
+        delete cursors[from];
+        movedCursors++;
+        if (!(to in cursors) || sv > String(cursors[to])) cursors[to] = sv;
+      }
+      if (from in dirtyProjects) {
+        const dv = Boolean(dirtyProjects[from]);
+        delete dirtyProjects[from];
+        movedDirty++;
+        dirtyProjects[to] = Boolean(dirtyProjects[to]) || dv;
+      }
+    }
+    parsed.cursors = cursors;
+    parsed.dirtyProjects = dirtyProjects;
+    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), 'utf8');
+    return { movedCursors, movedDirty };
+  });
+}
+
