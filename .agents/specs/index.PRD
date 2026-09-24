@@ -136,7 +136,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] AI cursor-sdk timeout: configurable `timeoutMs`, 30s default, honored everywhere (`spec: 0064-ai-timeout-config.spec.md`)
 - [x] CLI lifecycle shortcuts: start, stop, restart, and direct shortcuts for monitor, canvas, server, mcp (`spec: 0065-cli-start-shortcuts.spec.md`)
 - [x] Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops (`spec: 0066-status-details-drawer-errors-aiops.spec.md`)
-- [~] Vault stability: truthful diagnostics, reliable multi-vault sync, bounded observability, and release coherence (`spec: 0067-vault-stability-audit.spec.md`)
+- [x] Vault stability: truthful diagnostics, reliable multi-vault sync, bounded observability, and release coherence (`spec: 0067-vault-stability-audit.spec.md`)
 - [x] us-36: `memo setup --host opencode` MCP config shape (`spec: 0045-us-36.spec.md`)
 - [x] Vault dedup merge, vault rename, and consumer .spec-memo.json local config (`spec: 0050-vault-dedup-merge-and-local-config.spec.md`)
 
@@ -240,7 +240,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 64 | [`status-details-drawer-errors-aiops`](0066-status-details-drawer-errors-aiops.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0 |
 
-| 65 | [`vault-stability-audit`](0067-vault-stability-audit.spec.md) | `[~]` partial / in progress | Phase 8: Agent Continuity & Knowledge Lifecycle | Full original vault-stability plan: truthful diagnostics, sync and cursor integrity, canonical multi-vault identity, bounded observability, release coherence, and operator verification; v0.37.3 is a partial baseline |
+| 65 | [`vault-stability-audit`](0067-vault-stability-audit.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Full original vault-stability plan: truthful diagnostics, sync and cursor integrity, canonical multi-vault identity, bounded observability, release coherence, and operator verification; v0.37.3 is a partial baseline |
 
 | 66 | [`us-36`](0045-us-36.spec.md) | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | `memo setup --host opencode` emits valid MCP config (type `local`, command array); v0.17.1; PR #37 |
 
@@ -339,6 +339,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-23 | status-monitor-start-probe | `memo start monitor` / canvas background readiness probe timeout raised 150ms → 1500ms (authenticated `/api/status` takes 180-400ms), fixing false `START_TIMEOUT`; regression test | v0.37.4; PR #82 (merged `ab11936`); npm test 887 pass |
 | 2026-09-03 | us-36 | `memo setup --host opencode` emits valid MCP config (type `local`, command array) | v0.17.1; PR #37 |
 | 2026-09-08 | vault-dedup-merge-and-local-config | Vault dedup merge, vault rename, and consumer `.spec-memo.json` local config | v0.28.0; PR #52 |
+| 2026-09-24 | vault-stability-audit | Truthful diagnostics, sequential dual-sync channel truth, backup-gated merge + cursor migration, bounded telemetry counters | v0.37.5; npm test 909 pass |
 
 ## Archive
 
@@ -353,7 +354,7 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 
 - [x] All completed features logged in Done log.
 - [x] Linked `*.spec.md` files exist for all Next specs.
-- [~] Canonical authoring validation is current for revised spec 0067; repository-wide validation must be rerun after the VFS removal and full-plan scope change.
+- [x] Canonical authoring validation passes for shipped spec 0067 (29 ACs); VFS removal recorded as wont-implement in the Archive.
 - [x] Phase 7 in progress — vault-reset-and-proxy-monitor shipped.
 
 ## 12. Related docs

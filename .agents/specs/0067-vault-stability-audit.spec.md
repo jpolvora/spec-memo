@@ -4,8 +4,8 @@ slug: vault-stability-audit
 title: "Vault stability: truthful diagnostics, reliable multi-vault sync, bounded observability, and release coherence"
 source: local
 specDate: 2026-09-22
-updated: 2026-09-23
-status: active
+updated: 2026-09-24
+status: shipped
 ---
 
 # Specification - Vault stability: truthful diagnostics, reliable multi-vault sync, bounded observability, and release coherence

@@ -263,5 +263,6 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 | 2026-09-14 | cli-background-lifecycle | HTTP `memo start` / `restart` services now daemonize by default, report status, and exit cleanly; `stop` lifecycle coverage hardened; v0.36.1; npm test 868 pass |
 | 2026-09-15 | wiki-ai-refine | AI snapshot polish when `ai.enabled` + index-first Topic catalog + Wiki left-nav progressive disclosure; v0.37.0; npm test 875 pass |
 | 2026-09-22 | vault-stability-audit | Doctor/status live Git vs persisted, gitignored `.agents/plans` classified not unhealthy, dual-sync per-channel telemetry, telemetry part-file path, error-log rotation, shipped spec metadata closed; 0027 VFS still deferred; v0.37.3 |
+| 2026-09-24 | vault-stability-audit | Truthful diagnostics (FTS identity sets, read-only doctor, generic lifecycle scan), sequential dual-sync channel truth (codes/dirty/cursors), backup-gated merge + cursor migration, bounded telemetry counters in doctor/status; 0060 tracking reconciled; authoring validator PASS (29 ACs); v0.37.5; npm test 909 pass |
 | 2026-09-23 | status-monitor-start-probe | `memo start monitor` background readiness probe timeout raised 150ms → 1500ms (authenticated `/api/status` responses take 180-400ms), fixing false `START_TIMEOUT` on start/restart; regression test; v0.37.4; npm test 887 pass |
 
