@@ -335,7 +335,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-14 | cli-background-lifecycle | HTTP lifecycle commands background by default with readiness status and clean exit; stdio MCP remains host-attached | v0.36.1; npm test 868 pass |
 | 2026-09-13 | status-error-logs-actions | Status Error Logs: row selection, delete with confirm, New Issue copy draft | `9739c98`; npm test 828 pass |
 | 2026-09-15 | wiki-ai-refine | AI-assisted wiki refine from knowledge snapshot + index/topic progressive disclosure (ws-wiki inspired); v0.37.0 | npm test 875 pass |
-| 2026-09-22 | vault-stability-audit | Doctor/status live Git + gitignored plan classification, dual-sync per-channel telemetry, telemetry rolling-file path, error-log rotation, spec lifecycle coherence; 0027 VFS remains deferred | v0.37.3; PR #81 |
+| 2026-09-22 | vault-stability-audit | Partial v0.37.3 baseline: doctor/status live Git + gitignored plan classification, dual-sync telemetry, telemetry rolling-file path, error-log rotation, and spec lifecycle coherence; full original plan remains in progress; 0027 VFS was later removed as wont-implement | v0.37.3; PR #81 |
 | 2026-09-23 | status-monitor-start-probe | `memo start monitor` / canvas background readiness probe timeout raised 150ms → 1500ms (authenticated `/api/status` takes 180-400ms), fixing false `START_TIMEOUT`; regression test | v0.37.4; PR #82 (merged `ab11936`); npm test 887 pass |
 | 2026-09-03 | us-36 | `memo setup --host opencode` emits valid MCP config (type `local`, command array) | v0.17.1; PR #37 |
 | 2026-09-08 | vault-dedup-merge-and-local-config | Vault dedup merge, vault rename, and consumer `.spec-memo.json` local config | v0.28.0; PR #52 |
@@ -353,7 +353,7 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 
 - [x] All completed features logged in Done log.
 - [x] Linked `*.spec.md` files exist for all Next specs.
-- [x] All 29 canonical specifications validated against schema.
+- [~] Canonical authoring validation is current for revised spec 0067; repository-wide validation must be rerun after the VFS removal and full-plan scope change.
 - [x] Phase 7 in progress — vault-reset-and-proxy-monitor shipped.
 
 ## 12. Related docs

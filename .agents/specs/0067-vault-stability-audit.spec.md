@@ -16,7 +16,7 @@ The hybrid multi-vault environment can report healthy persisted state while the 
 
 The original Cursor plan at `.cursor/plans/vault_stability_audit_10848123.plan.md` covers six implementation phases plus verification gates: containment and baseline, truthful doctor/status, synchronization reliability, multi-vault identity and alias hygiene, bounded observability, and spec/release coherence.
 
-Delivery status is **partial / in progress**. Commit `5693fea` and the v0.37.3 release provide a useful baseline for live vault-Git fields, sequential dual dispatch, basic telemetry summaries, error-log rotation, vault audit output, and spec-lifecycle checks. Passing tests or the earlier `completed` marker do not waive any acceptance criterion in this full-plan specification.
+Delivery status is **partial / in progress**. Commit `5693fea` and the v0.37.3 release provide a useful baseline for live vault-Git fields, sequential dual dispatch, basic telemetry summaries, error-log rotation, vault audit output, and spec-lifecycle checks. Passing tests or the earlier `completed` marker do not waive any acceptance criterion in this full-plan specification. The source plan's `completed` frontmatter markers are historical claims and non-normative; this specification and its index status are authoritative for current delivery.
 
 Language: en-us. The MCP surface remains exactly 11 tools. Vault records and workflow plans are preserved. Diagnosis is read-only. Cleanup, merge, purge, and deletion operations require the explicit gates in this specification.
 
@@ -161,7 +161,7 @@ The product must expose operational truth before it attempts cleanup or reconcil
    - `dist/status.test.js`
    - `dist/multi-clone.test.js`
    - `dist/vault-stability.test.js`
-5. Run Windows fixtures for missing Git identity, dirty-tree rebase, lock contention, timeout, remote 4xx and 5xx, alias comparison, stale cursor, partial changeset skip, malformed config, and read-only doctor or status behavior.
+5. Run Windows fixtures for missing Git identity, dirty-tree rebase, lock contention, timeout, remote 4xx and 5xx, alias comparison, successful backup-gated alias merge, refusal of non-equivalent merge, stale cursor, partial changeset skip, malformed config, and read-only doctor or status behavior.
 6. Run `node {skillsRoot}/ws-spec-format/scripts/validate_spec.cjs --mode=authoring .agents/specs/0067-vault-stability-audit.spec.md`.
 7. Record commands, exit codes, and relevant test counts. A skipped or unrecorded gate is not a pass.
 
