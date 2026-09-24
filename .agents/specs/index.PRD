@@ -137,6 +137,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] AI cursor-sdk timeout: configurable `timeoutMs`, 30s default, honored everywhere (`spec: 0064-ai-timeout-config.spec.md`)
 - [x] CLI lifecycle shortcuts: start, stop, restart, and direct shortcuts for monitor, canvas, server, mcp (`spec: 0065-cli-start-shortcuts.spec.md`)
 - [x] Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops (`spec: 0066-status-details-drawer-errors-aiops.spec.md`)
+- [x] Vault stability: truthful doctor/status, dual-sync observability, telemetry and error-log lifecycle (`spec: 0067-vault-stability-audit.spec.md`)
+
 
 
 
@@ -238,6 +240,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 64 | [`status-details-drawer-errors-aiops`](0066-status-details-drawer-errors-aiops.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0 |
 
+| 65 | [`vault-stability-audit`](0067-vault-stability-audit.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Vault stability: truthful doctor/status, dual-sync observability, telemetry and error-log lifecycle; v0.37.3; PR #81 |
+
 ## 9. Inbox (unscheduled ideas)
 
 - Mobile companion web dashboard.
@@ -328,6 +332,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-13 | status-error-logs-actions | Status Error Logs: row selection, delete with confirm, New Issue copy draft | `9739c98`; npm test 828 pass |
 | 2026-09-15 | wiki-ai-refine | AI-assisted wiki refine from knowledge snapshot + index/topic progressive disclosure (ws-wiki inspired); v0.37.0 | npm test 875 pass |
 | 2026-09-22 | vault-stability-audit | Doctor/status live Git + gitignored plan classification, dual-sync per-channel telemetry, telemetry rolling-file path, error-log rotation, spec lifecycle coherence; 0027 VFS remains deferred | v0.37.3 |
+| 2026-09-23 | status-monitor-start-probe | `memo start monitor` / canvas background readiness probe timeout raised 150ms → 1500ms (authenticated `/api/status` takes 180-400ms), fixing false `START_TIMEOUT`; regression test | v0.37.4; npm test 887 pass |
 
 ## Archive
 

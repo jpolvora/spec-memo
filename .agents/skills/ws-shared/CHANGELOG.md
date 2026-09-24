@@ -1,3 +1,13 @@
+### [2026-09-23 20:37] Agent: opencode (deepseek-v4.1-flash)
+- **Prompt**: check spec-memo status (cannot start spec-memo status monitor); check startup error memo start monitor; commit, push, /ws-ship-pr
+- **Done**: Diagnosed false `START_TIMEOUT` on `memo start monitor` — background readiness probe used a 150ms timeout while authenticated `/api/status` takes ~180-400ms, so every probe aborted and the child was SIGKILLed; raised probe timeout to 1500ms via exported `BACKGROUND_DAEMON_PROBE_TIMEOUT_MS`, added slow-response regression test; bumped v0.37.4
+- **Result**: `memo start monitor` exits 0, status shows `● RUNNING`; `npm test` 887 pass; `npm run check:site` pass (v0.37.4)
+
+### [2026-09-22 13:40] Agent: Cursor Grok 4.6
+- **Prompt**: Convert vault stability Cursor plan to spec; track + sync index.PRD; commit
+- **Done**: Wrote `.agents/specs/0067-vault-stability-audit.spec.md` (20 ACs, authoring PASS); tracked row 65; synced `[x] done` with existing v0.37.3 Done-log evidence (PR #81)
+- **Result**: Spec of record on disk; index Feature map + Next-specs done; vault spec upserted
+
 ### [2026-09-22 12:50] Agent: Cursor Grok 4.6
 - **Prompt**: Implement Vault Stability and Spec-Write Remediation Plan (doctor/status truth, sync reliability, multi-vault audit, observability, spec/release coherence)
 - **Done**: Gitignored `.agents/plans` classified without failing doctor; live vs persisted vault-git; FTS markdown/id consistency; dual-sync per-channel telemetry + sequential docs; hybrid cursor only on full ack; error-log rotation; telemetry rolling-file summaries; `memo vault list --audit`; shipped spec metadata closed; 0027 VFS left deferred
