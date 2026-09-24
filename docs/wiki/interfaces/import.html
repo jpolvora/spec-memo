@@ -105,7 +105,7 @@
         </ul>
       </div>
       <div class="wiki-domain-section" data-domain="interfaces">
-        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">7</span></div>
+        <div class="wiki-domain-header"><span class="wiki-domain-name">INTERFACES</span><span class="wiki-domain-badge">6</span></div>
         <ul class="wiki-domain-topics">
         <li class="wiki-nav-item"><a href="agent-adapters.html" class="wiki-nav-link" title="Agent Adapters &amp; Installers"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Agent Adapters &amp; Installers</span></a></li>
         <li class="wiki-nav-item"><a href="cli.html" class="wiki-nav-link" title="CLI Surface (`memo`)"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">CLI Surface (`memo`)</span></a></li>
@@ -113,7 +113,6 @@
         <li class="wiki-nav-item active"><a href="import.html" class="wiki-nav-link active" title="Legacy Workflow Tree Import"><span class="wiki-topic-marker">▸</span><span class="wiki-nav-text">Legacy Workflow Tree Import</span></a></li>
         <li class="wiki-nav-item"><a href="mcp-tooling.html" class="wiki-nav-link" title="MCP Version &amp; Skill Installation Tools"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">MCP Version &amp; Skill Installation Tools</span></a></li>
         <li class="wiki-nav-item"><a href="viewer.html" class="wiki-nav-link" title="Human Viewer Compatibility"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Human Viewer Compatibility</span></a></li>
-        <li class="wiki-nav-item"><a href="virtual-file-system.html" class="wiki-nav-link" title="Virtual File System over MCP"><span class="wiki-topic-marker">•</span><span class="wiki-nav-text">Virtual File System over MCP</span></a></li>
         </ul>
       </div>
       <div class="wiki-domain-section" data-domain="connectivity">
@@ -250,7 +249,7 @@
 <p><code>importWorkflowTree(options)</code> resolves the vault root (<code>options.vaultRoot</code> else <code>getVaultRoot()</code>), the source root (<code>options.from</code> else <code>productRoot</code> else <code>cwd</code> else <code>process.cwd()</code>), and the project identity (<code>resolveProjectIdentity</code>), calling <code>ensureProjectVault</code> before any writes. It wraps <code>importWorkflowTreeDirect</code> and records <code>importer</code>/<code>memo_import</code> telemetry with duration, success, and counts (<code>totalImported</code>, <code>skippedFilesCount</code>, <code>skippedIdenticalCount</code>) on both success and failure.</p>
 <p>Result shape (<code>ImportResult</code>): <code>projectId</code>, <code>vaultRoot</code>, <code>importedSpecsCount</code>, <code>importedTrapsCount</code>, <code>importedDecisionsCount</code>, <code>importedPlansCount</code>, <code>importedLogsCount</code>, <code>importedStateCount</code>, <code>skippedFilesCount</code>, <code>skippedIdenticalCount</code>, <code>totalImported</code>, <code>records</code> (imported <code>ImportItem[]</code> with status <code>imported</code>), <code>skippedRecords</code> (status <code>skipped-identical</code>), and <code>skippedPaths</code>.</p>
 <p>Hash inputs are constrained by <code>IMPORT_HASH_FM_KEYS = [&#39;severity&#39;, &#39;decisionStatus&#39;, &#39;pathPatterns&#39;, &#39;linkedPaths&#39;]</code>; vault-managed keys (id, tags, occurrences, hits, timestamps) are deliberately excluded so a vault round-trip does not look like a content change.</p>
-<p>The importer writes through <code>upsertRecord({ cwd, projectId, vaultRoot, kind, slug, frontmatter, body, source: &#39;imported&#39; })</code>. It does not persist an <code>originRelPath</code>; the original repository-relative path is not recorded on the record (see <a href="virtual-file-system.html">Virtual File System</a>).</p>
+<p>The importer writes through <code>upsertRecord({ cwd, projectId, vaultRoot, kind, slug, frontmatter, body, source: &#39;imported&#39; })</code>. It does not persist an <code>originRelPath</code>; the original repository-relative path is not recorded on the record.</p>
 <p>Provenance: <code>0005-import-and-doctor.spec.md</code>, <code>0052-us-54.spec.md</code>.</p>
       <div class="wiki-catlinks">
         <span class="wiki-catlinks-title">Categories:</span>

@@ -40,6 +40,6 @@ Result shape (`ImportResult`): `projectId`, `vaultRoot`, `importedSpecsCount`, `
 
 Hash inputs are constrained by `IMPORT_HASH_FM_KEYS = ['severity', 'decisionStatus', 'pathPatterns', 'linkedPaths']`; vault-managed keys (id, tags, occurrences, hits, timestamps) are deliberately excluded so a vault round-trip does not look like a content change.
 
-The importer writes through `upsertRecord({ cwd, projectId, vaultRoot, kind, slug, frontmatter, body, source: 'imported' })`. It does not persist an `originRelPath`; the original repository-relative path is not recorded on the record (see [Virtual File System](virtual-file-system.md)).
+The importer writes through `upsertRecord({ cwd, projectId, vaultRoot, kind, slug, frontmatter, body, source: 'imported' })`. It does not persist an `originRelPath`; the original repository-relative path is not recorded on the record.
 
 Provenance: `0005-import-and-doctor.spec.md`, `0052-us-54.spec.md`.

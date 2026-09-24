@@ -231,7 +231,6 @@ Does not relocate `{sharedDir}`. Proves “outside the tree” for plans only. N
 | 26 | `mcp-version-and-skill-install` | `[x]` | Ops | check_version and install_skills MCP tools |
 | 27 | `deployment-modes` | `[x]` | Phase 7 | Local, Hybrid, Remote modes and portable stdio MCP wiring |
 | 28 | `status-vault-backup-ui` | `[x]` | UI | Status monitor vault export and import UI |
-| 29 | `virtual-file-system-over-mcp` | `[ ]` | Phase 7 | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
 | 30 | `operational-telemetry` | `[x]` | Phase 7 | Operational telemetry & rolling JSONL usage logging |
 | 31 | `prompt-history-and-query` | `[x]` | Phase 7 | Prompt, session, activity ingestion, rule derivation, and web UI explorer |
 | 32 | `vault-reset-and-proxy-monitor` | `[x]` | Ops/UI | Database reset with pre-wipe backup, full restore, proxy monitor, 3-mode topology |

@@ -106,7 +106,6 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] [`deployment-modes`](0025-deployment-modes.spec.md): Local, hybrid, and remote deployment modes with portable MCP wiring
 - [x] [`status-vault-backup-ui`](0026-status-vault-backup-ui.spec.md): Status monitor vault export and import UI
 - [x] [`operational-telemetry`](0028-operational-telemetry.spec.md): Operational Telemetry & Structured Rolling Usage Logging
-- [ ] Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) (`spec: 0027-virtual-file-system-over-mcp.spec.md`)
 - [x] [`prompt-history-and-query`](0029-prompt-history-and-query.spec.md): Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer
 - [x] [`vault-reset-and-proxy-monitor`](0030-vault-reset-and-proxy-monitor.spec.md): Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI
 - [x] [`status-backup-page`](0032-status-backup-page.spec.md): Dedicated status-monitor backup page with complete archives and inventory management
@@ -189,7 +188,6 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 26 | `mcp-version-and-skill-install` | `[x]` done | Phase 6: Recurrence learning | MCP tools: check_version and install_skills (+ docs surface) |
 | 27 | [`deployment-modes`](0025-deployment-modes.spec.md) | `[x] done` | Phase 7 | Local, hybrid, and remote deployment modes with portable MCP wiring |
 | 28 | [`status-vault-backup-ui`](0026-status-vault-backup-ui.spec.md) | `[x] done` | Phase 7 | Status monitor vault export and import UI |
-| 29 | `virtual-file-system-over-mcp` | `[ ]` todo | Phase 7: Deployment modes | Virtual File System over MCP (Repo Ingest, Cleanup & Path-Mapped Memory) |
 | 30 | [`operational-telemetry`](0028-operational-telemetry.spec.md) | `[x] done` | Phase 7 | Operational Telemetry & Structured Rolling Usage Logging |
 | 31 | [`prompt-history-and-query`](0029-prompt-history-and-query.spec.md) | `[x]` done | Phase 7 | Prompt, Session, Activity Ingestion, Rule Derivation, and Web UI Explorer |
 | 32 | [`vault-reset-and-proxy-monitor`](0030-vault-reset-and-proxy-monitor.spec.md) | `[x]` done | Phase 7: Deployment modes | Vault reset with pre-wipe timestamped backup, full backup restoration, and proxy status monitor with 3-mode topology UI |
@@ -349,6 +347,7 @@ Durable delivery records harvested from `{plansDir}` so plan folders can be remo
 | Slug | Outcome | Last state | PR / Commit | Summary |
 |------|---------|------------|-------------|---------|
 | live-crdt-collaboration | wont-implement | cancelled (Step 2) | — | Inbox idea rejected: WILL NOT IMPLEMENT / out of scope (live CRDT team vaults). Draft spec + workflow discarded. |
+| virtual-file-system-over-mcp | wont-implement | deferred → will not implement | — | Virtual File System over MCP (repo ingest, cleanup, path-mapped memory) — decided not to implement; draft spec `0027-virtual-file-system-over-mcp.spec.md` deleted. |
 
 ## 11. Maintenance checklist
 
