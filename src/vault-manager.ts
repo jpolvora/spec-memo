@@ -20,6 +20,8 @@ import {
 } from './store.js';
 import { indexRecord, openIndex, rebuildIndex } from './indexer.js';
 import { rebuildCompiledViews } from './compiler.js';
+import { migrateProjectSyncState } from './hybrid-state.js';
+import { listBackups } from './backup.js';
 import { serializeRecord } from './schema.js';
 import { hitCountOf, occurrenceOf } from './recurrence.js';
 import { MemoRecord, MergeMetrics, ProjectIdentity } from './types.js';
@@ -687,6 +689,8 @@ export async function renameVaultProject(
       }
     }
     writeProjectAliases(vaultRoot, next, `rename ${source} -> ${dest}`);
+    // AC18: move source cursors/dirty flags to the new id; no split state survives.
+    migrateProjectSyncState(vaultRoot, { [source]: dest });
     await rebuildIndex(vaultRoot);
     try {
       rebuildCompiledViews(dest, vaultRoot);
@@ -705,6 +709,12 @@ export async function mergeVaultProjects(options: {
   dedup?: boolean;
   deleteSources?: boolean;
   vaultRoot?: string;
+  /** Existing backup filename in vault inventory (required with deleteSources). */
+  backupId?: string;
+  /** Operator-reviewed record-count/content comparison manifest (required with deleteSources). */
+  manifestReviewed?: boolean;
+  /** Explicit destructive-operation confirmation (always required). */
+  confirm?: boolean;
 }): Promise<{
   ok: true;
   target: string;
@@ -742,6 +752,39 @@ export async function mergeVaultProjects(options: {
     }
     if (!projectDirExists(vaultRoot, src) && !isAliasKey(vaultRoot, src)) {
       throw new VaultManagerError(`Unknown source project id "${src}"`, 404);
+    }
+  }
+  // AC17: backup-gated alias reconciliation. Quarantined projects are never
+  // merged in-function; every merge needs explicit confirmation; destroying
+  // sources additionally needs a fresh inventoried backup plus a reviewed
+  // comparison manifest. Non-equivalent content must not reach this call.
+  const involved = [target, ...sources];
+  const audit = auditVaultProjects(vaultRoot);
+  for (const id of involved) {
+    const entry = audit.find((e) => e.id.toLowerCase() === id.toLowerCase());
+    if (entry?.quarantine) {
+      throw new VaultManagerError(
+        `"${id}" is quarantined until proven duplicate or intentionally distinct; merge refused`
+      );
+    }
+  }
+  if (options.confirm !== true) {
+    throw new VaultManagerError('Merge requires explicit confirmation (confirm: true)');
+  }
+  if (deleteSources) {
+    if (!options.backupId) {
+      throw new VaultManagerError('deleteSources requires a fresh backup (backupId)');
+    }
+    const known = listBackups(vaultRoot).find((b) => b.filename === options.backupId);
+    if (!known) {
+      throw new VaultManagerError(`backup "${options.backupId}" not found in vault backup inventory`);
+    }
+    const ageMs = Date.now() - Date.parse(known.createdAt);
+    if (!(ageMs >= 0) || ageMs > 7 * 24 * 60 * 60 * 1000) {
+      throw new VaultManagerError(`backup "${options.backupId}" is stale (>7d); take a fresh backup before deleteSources`);
+    }
+    if (options.manifestReviewed !== true) {
+      throw new VaultManagerError('deleteSources requires an operator-reviewed manifest (manifestReviewed: true)');
     }
   }
 
@@ -797,6 +840,8 @@ export async function mergeVaultProjects(options: {
       }
     }
     writeProjectAliases(vaultRoot, aliases, `merge -> ${target}`);
+    // AC18: fold source cursors/dirty flags into the target; no split state survives.
+    migrateProjectSyncState(vaultRoot, Object.fromEntries(sources.map((s) => [s, target])));
 
     if (deleteSources) {
       for (const src of sources) {
