@@ -31,17 +31,17 @@
         },
         {
           "name": "store",
-          "path": "src/store",
+          "path": "src",
           "role": "Vault layout, frontmatter, compiled indexes"
         },
         {
           "name": "index",
-          "path": "src/index",
+          "path": "src",
           "role": "SQLite FTS rebuild and query"
         },
         {
           "name": "policy",
-          "path": "src/policy",
+          "path": "src",
           "role": "Schema, TTL, refuse-in-repo-write, redaction"
         }
       ],
@@ -50,15 +50,15 @@
       "apiPort": 0
     },
     "frontend": {
-      "framework": "<e.g. React 19 + Vite, Next.js 14, Vue 3>",
-      "language": "<e.g. TypeScript, JavaScript>",
-      "sourceDir": "<e.g. web/src, src/app>",
-      "buildDir": "<e.g. web>",
+      "framework": "",
+      "language": "",
+      "sourceDir": "",
+      "buildDir": "",
       "devHost": "http://localhost:3000",
       "devPort": 0,
       "i18n": {
         "framework": "none",
-        "localesDir": "<path to locale files>",
+        "localesDir": "",
         "locales": [
           "en-US"
         ]
@@ -67,15 +67,15 @@
     "database": {
       "type": "SQLite",
       "orm": "none (better-sqlite3 FTS5)",
-      "migrationsProject": "<path>",
-      "startupProject": "<path>",
-      "seedScript": "<e.g. scripts/seed.sh>"
+      "migrationsProject": "",
+      "startupProject": "",
+      "seedScript": ""
     },
     "orchestration": {
-      "devCommand": "<e.g. npm run dev>",
-      "startCommand": "<e.g. npm start>",
-      "stopCommand": "<e.g. npm stop>",
-      "composeCommand": "<e.g. docker compose up --build>"
+      "devCommand": "",
+      "startCommand": "npm start",
+      "stopCommand": "",
+      "composeCommand": ""
     }
   },
   "domain": {
@@ -112,11 +112,11 @@
   "verification": {
     "backendBuild": "npm run build",
     "backendTest": "npm test",
-    "backendFormat": "<e.g. dotnet format MyApp.slnx --verify-no-changes, npm run lint>",
-    "frontendBuild": "<e.g. cd web && npm run build>",
-    "frontendTest": "<e.g. cd web && npm test>",
-    "migrationsAdd": "<e.g. dotnet ef migrations add {Name} -p src/Infrastructure -s src/Api>",
-    "migrationsApply": "<e.g. dotnet ef database update -p src/Infrastructure -s src/Api>",
+    "backendFormat": "",
+    "frontendBuild": "",
+    "frontendTest": "",
+    "migrationsAdd": "",
+    "migrationsApply": "",
     "mutationTest": "",
     "mutationThreshold": 80,
     "_comment_mutationThreshold": "Minimum mutation score percent (killed/(killed+survived)*100). Used when mutationTest is set and skipMutationTesting is false.",
@@ -320,7 +320,7 @@
     "viewPatterns": "",
     "efMigrations": "",
     "stackFile": ".ws/STACK.md",
-    "changelogFile": ".agents/skills/ws-shared/CHANGELOG.md",
+    "changelogFile": ".ws/CHANGELOG.md",
     "memoryDir": "."
   },
   "invariants": {
