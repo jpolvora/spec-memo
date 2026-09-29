@@ -1,3 +1,8 @@
+### [2026-09-25] Agent: Cursor Grok 4.7
+- **Prompt**: Fix vault-stability spec status according to current code
+- **Done**: Spec 0067 body and Next-specs row 65 now say shipped at v0.37.5, matching frontmatter, the 2026-09-24 Done log, and the implemented doctor/sync/telemetry/lifecycle code
+- **Result**: Status alignment only; no product-code change
+
 ### [2026-09-23 21:41] Agent: opencode (space-bunny-free)
 - **Prompt**: Improve spec 0067 using the full vault stability plan
 - **Done**: Expanded 0067 to 29 ACs across all six phases and verification gates, marked delivery partial/in progress, aligned its index records, accepted `0027` VFS removal, and resolved error-log retention as 8 MiB rotation with eight retained backups
