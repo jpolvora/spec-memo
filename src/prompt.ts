@@ -268,8 +268,11 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
 
   let sessionId = options.sessionId;
   if (!sessionId) {
-    const listed = listSessions({ vaultRoot, projectId, cwd, limit: 100 });
-    const active = listed.items.filter((s) => s.frontmatter.status === 'active');
+    // Scan all session records (not a truncated listSessions page) so sole-active
+    // inference stays correct on vaults with >100 historical sessions.
+    const active = listProjectRecords(vaultRoot, projectId!).filter(
+      (s) => s.frontmatter.kind === 'session' && s.frontmatter.status === 'active'
+    );
     if (active.length === 1) {
       const inferred =
         (typeof active[0].frontmatter.sessionId === 'string' && active[0].frontmatter.sessionId) ||

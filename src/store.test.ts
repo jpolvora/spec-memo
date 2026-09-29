@@ -793,6 +793,33 @@ describe('Store Engine (upsert and get)', () => {
     );
   });
 
+  it('us-85: non-string array elements reject without TypeError', async () => {
+    await assert.rejects(
+      () =>
+        upsertRecord({
+          cwd: tempProject,
+          vaultRoot: tempVault,
+          kind: 'trap',
+          slug: 'numeric-array-elements',
+          frontmatter: {
+            id: 'trap-numeric-elements',
+            title: 'Numeric array elements',
+            pathPatterns: [123] as unknown as string[],
+            linkedPaths: [true] as unknown as string[]
+          },
+          body: '## DO NOT\nPass non-string array elements.\n\n## INSTEAD DO\nReject with Invalid record frontmatter.'
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(!/TypeError|\.replace is not a function|\.slice is not a function/i.test(err.message));
+        assert.match(err.message, /Invalid record frontmatter/);
+        assert.match(err.message, /pathPatterns: Expected array of strings/);
+        assert.match(err.message, /linkedPaths: Expected array of strings/);
+        return true;
+      }
+    );
+  });
+
   it('us-85: string scalar pathPatterns coerces to one-element array', async () => {
     const res = await upsertRecord({
       cwd: tempProject,

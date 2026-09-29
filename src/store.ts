@@ -178,7 +178,11 @@ export function normalizeArrayFrontmatterFields(
   for (const key of keys) {
     const val = fm[key];
     if (val === undefined || val === null) continue;
-    if (Array.isArray(val)) continue;
+    if (Array.isArray(val)) {
+      const bad = (val as unknown[]).some((el) => typeof el !== 'string');
+      if (bad) errors.push(`${key}: Expected array of strings`);
+      continue;
+    }
     if (typeof val === 'string') {
       fm[key] = [val];
       continue;
