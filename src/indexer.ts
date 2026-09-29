@@ -182,8 +182,21 @@ export function indexRecord(
   const body = ftsBodyForRecord(record);
   const updated = fm.updated || new Date().toISOString();
 
-  const del = db.prepare('DELETE FROM records_fts WHERE id = ? AND projectId = ?');
-  del.run(id, projectId);
+  // Filepath is the stable on-disk identity; frontmatter id can change on rename /
+  // re-slug / import. Delete by filepath so the previous id row cannot linger.
+  const prevRows = db
+    .prepare('SELECT id FROM records_fts WHERE projectId = ? AND filepath = ?')
+    .all(projectId, filepath) as Array<{ id: string }>;
+  db.prepare('DELETE FROM records_fts WHERE projectId = ? AND filepath = ?').run(projectId, filepath);
+
+  for (const row of prevRows) {
+    if (String(row.id) !== String(id)) {
+      db.prepare('DELETE FROM record_links WHERE source_id = ? AND source_project = ?').run(
+        String(row.id),
+        projectId
+      );
+    }
+  }
 
   const ins = db.prepare(`
     INSERT INTO records_fts (id, projectId, kind, status, title, tags, pathPatterns, body, filepath, updated)

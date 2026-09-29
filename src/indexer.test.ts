@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { upsertRecord } from './store.js';
-import { searchIndex, rebuildIndex, closeIndex } from './indexer.js';
+import { upsertRecord, getRecord } from './store.js';
+import { searchIndex, rebuildIndex, closeIndex, openIndex, indexRecord } from './indexer.js';
+import { parseRecord, serializeRecord } from './schema.js';
+import { runDoctor } from './doctor.js';
 
 describe('SQLite FTS5 Indexer and Search Engine', () => {
   let tempVault: string;
@@ -703,6 +705,119 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
       includeScratch: true
     });
     assert.equal(hits[0]?.id, 'log-ns5');
+  });
+
+  it('us-86: id change re-index leaves one FTS row per filepath and doctor stays consistent', async () => {
+    const oldId = 'trap-us86-rename';
+    const newId = 'us86-rename';
+    const siblingId = 'decision-us86-sibling';
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'us86-rename',
+      allowDuplicate: true,
+      frontmatter: {
+        id: oldId,
+        title: 'US-86 rename subject',
+        tags: ['us86-unique-token'],
+        links: [{ target: siblingId, type: 'fixes' }]
+      },
+      body: 'US-86 subject body with unique token us86-unique-token'
+    });
+
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'us86-sibling',
+      frontmatter: {
+        id: siblingId,
+        title: 'Completely different sibling decision',
+        tags: ['us86-sibling-token'],
+        status: 'active'
+      },
+      body: 'Sibling decision body must remain indexed under its own filepath'
+    });
+
+    const db = openIndex(tempVault);
+    const indexedIds = (
+      db.prepare('SELECT id FROM records_fts').all() as Array<{ id: string }>
+    ).map((r) => r.id);
+    assert.ok(indexedIds.includes(oldId), `expected ${oldId}; got ${indexedIds.join(',')}`);
+    assert.ok(indexedIds.includes(siblingId), `expected ${siblingId}; got ${indexedIds.join(',')}`);
+
+    const subjectPath = (
+      db.prepare('SELECT filepath FROM records_fts WHERE id = ?').get(oldId) as { filepath: string }
+    ).filepath;
+    assert.ok(subjectPath);
+
+    // Seed condition that fails on delete-by-id-only: mutate frontmatter id, keep filepath.
+    const parsed = parseRecord(fs.readFileSync(subjectPath, 'utf8'), subjectPath);
+    const renamedFm = { ...parsed.frontmatter, id: newId, updated: new Date().toISOString() };
+    fs.writeFileSync(
+      subjectPath,
+      serializeRecord({ frontmatter: renamedFm, body: parsed.body }),
+      'utf8'
+    );
+
+    indexRecord(db, { frontmatter: renamedFm, body: parsed.body }, subjectPath);
+
+    const byPath = db
+      .prepare('SELECT id FROM records_fts WHERE filepath = ? ORDER BY id')
+      .all(subjectPath) as Array<{ id: string }>;
+    assert.equal(byPath.length, 1, 'exactly one FTS row per filepath after id change');
+    assert.equal(byPath[0].id, newId);
+
+    const oldStillIndexed = db
+      .prepare('SELECT count(*) AS n FROM records_fts WHERE id = ?')
+      .get(oldId) as { n: number };
+    assert.equal(oldStillIndexed.n, 0, 'previous id absent from records_fts');
+
+    const staleLinks = db
+      .prepare('SELECT count(*) AS n FROM record_links WHERE source_id = ?')
+      .get(oldId) as { n: number };
+    assert.equal(staleLinks.n, 0, 'no record_links edges for previous source id');
+
+    const newLinks = db
+      .prepare('SELECT count(*) AS n FROM record_links WHERE source_id = ?')
+      .get(newId) as { n: number };
+    assert.equal(newLinks.n, 1, 'links retargeted via sync for new id');
+
+    const siblingRow = db
+      .prepare('SELECT id, filepath FROM records_fts WHERE id = ?')
+      .get(siblingId) as { id: string; filepath: string } | undefined;
+    assert.ok(siblingRow, 'sibling file FTS row survives');
+    assert.notEqual(siblingRow.filepath, subjectPath);
+
+    // Unchanged-id re-index of sibling must not wipe the renamed subject row.
+    const siblingParsed = parseRecord(fs.readFileSync(siblingRow.filepath, 'utf8'), siblingRow.filepath);
+    indexRecord(db, siblingParsed, siblingRow.filepath);
+    const subjectAfterSibling = db
+      .prepare('SELECT count(*) AS n FROM records_fts WHERE filepath = ?')
+      .get(subjectPath) as { n: number };
+    assert.equal(subjectAfterSibling.n, 1);
+
+    const doc = await runDoctor({ cwd: tempProject, vaultRoot: tempVault });
+    assert.equal(doc.fts.consistent, true);
+    assert.deepEqual(doc.fts.unexpectedIds || [], []);
+    assert.deepEqual(doc.fts.missingIds || [], []);
+
+    const searchHits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'us86-unique-token'
+    });
+    assert.ok(searchHits.every((h) => h.id !== oldId), 'search must not return obsolete id');
+    assert.ok(searchHits.some((h) => h.id === newId));
+
+    const gotOld = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: oldId });
+    assert.equal(gotOld, null, 'get-by-old-id must not resolve the file');
+
+    const gotNew = await getRecord({ cwd: tempProject, vaultRoot: tempVault, id: newId });
+    assert.ok(gotNew);
+    assert.equal(gotNew!.frontmatter.id, newId);
   });
 });
 

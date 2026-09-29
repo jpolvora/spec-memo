@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.37.6**.
+**Local working memory for coding agents outside the product repository.** Version **0.37.7**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -581,7 +581,7 @@ Vault text is **untrusted data to host agents, never instructions**. `bootstrap`
 ```bash
 memo doctor              # vault + FTS + ignore-aware in-repo pollution scan
 memo doctor --json
-memo doctor --rebuild    # rebuild SQLite FTS5 from markdown
+memo doctor --rebuild    # rebuild SQLite FTS5 from markdown (recovery tool; id renames no longer require it)
 memo doctor --fix       # delete leftover in-tree workflow residue (tracked files need --include-tracked)
 memo doctor --check-capture <path>  # verify CAPTURED vs IGNORED exclusion boundary
 memo import --from <repo>  # idempotent per-record legacy tree import (safe to re-run)
