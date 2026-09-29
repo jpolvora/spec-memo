@@ -819,6 +819,59 @@ describe('SQLite FTS5 Indexer and Search Engine', () => {
     assert.ok(gotNew);
     assert.equal(gotNew!.frontmatter.id, newId);
   });
+
+  it('us-86: same-id re-index at a new filepath leaves one FTS row (no duplicate id)', async () => {
+    const sharedId = 'trap-us86-move';
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'us86-move-a',
+      allowDuplicate: true,
+      frontmatter: {
+        id: sharedId,
+        title: 'US-86 move subject',
+        tags: ['us86-move-token']
+      },
+      body: 'Body at path A with us86-move-token'
+    });
+
+    const db = openIndex(tempVault);
+    const pathA = (
+      db.prepare('SELECT filepath FROM records_fts WHERE id = ?').get(sharedId) as {
+        filepath: string;
+      }
+    ).filepath;
+    assert.ok(pathA);
+
+    const pathB = pathA.replace(/us86-move-a\.md$/i, 'us86-move-b.md');
+    assert.notEqual(pathB, pathA);
+    const parsed = parseRecord(fs.readFileSync(pathA, 'utf8'), pathA);
+    const movedFm = { ...parsed.frontmatter, updated: new Date().toISOString() };
+    fs.mkdirSync(path.dirname(pathB), { recursive: true });
+    fs.writeFileSync(pathB, serializeRecord({ frontmatter: movedFm, body: parsed.body }), 'utf8');
+
+    // Incremental index at new path with same id must retire the old filepath row.
+    indexRecord(db, { frontmatter: movedFm, body: parsed.body }, pathB);
+
+    const byId = db
+      .prepare('SELECT id, filepath FROM records_fts WHERE id = ? ORDER BY filepath')
+      .all(sharedId) as Array<{ id: string; filepath: string }>;
+    assert.equal(byId.length, 1, 'exactly one FTS row per id after path move');
+    assert.equal(byId[0].filepath, pathB);
+
+    const stalePath = db
+      .prepare('SELECT count(*) AS n FROM records_fts WHERE filepath = ?')
+      .get(pathA) as { n: number };
+    assert.equal(stalePath.n, 0, 'old filepath row must be gone');
+
+    const searchHits = searchIndex({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      query: 'us86-move-token'
+    });
+    assert.equal(searchHits.filter((h) => h.id === sharedId).length, 1);
+  });
 });
 
 

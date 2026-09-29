@@ -182,12 +182,16 @@ export function indexRecord(
   const body = ftsBodyForRecord(record);
   const updated = fm.updated || new Date().toISOString();
 
-  // Filepath is the stable on-disk identity; frontmatter id can change on rename /
-  // re-slug / import. Delete by filepath so the previous id row cannot linger.
+  // Converge on one FTS row for this logical write: delete by filepath (id rename
+  // at same path) OR by id (same id indexed at a new filepath / file move).
   const prevRows = db
-    .prepare('SELECT id FROM records_fts WHERE projectId = ? AND filepath = ?')
-    .all(projectId, filepath) as Array<{ id: string }>;
-  db.prepare('DELETE FROM records_fts WHERE projectId = ? AND filepath = ?').run(projectId, filepath);
+    .prepare(
+      'SELECT id FROM records_fts WHERE projectId = ? AND (id = ? OR filepath = ?)'
+    )
+    .all(projectId, id, filepath) as Array<{ id: string }>;
+  db.prepare(
+    'DELETE FROM records_fts WHERE projectId = ? AND (id = ? OR filepath = ?)'
+  ).run(projectId, id, filepath);
 
   for (const row of prevRows) {
     if (String(row.id) !== String(id)) {
