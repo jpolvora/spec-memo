@@ -267,4 +267,5 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 | 2026-09-23 | status-monitor-start-probe | `memo start monitor` background readiness probe timeout raised 150ms → 1500ms (authenticated `/api/status` responses take 180-400ms), fixing false `START_TIMEOUT` on start/restart; regression test; v0.37.4; npm test 887 pass |
 | 2026-09-29 | us-87-probe-noise | Bounded unauthorized WARN logging (first + rollup / client / 60s), status companion `GET /health`, product `failureRate` excludes expected `HTTP_401`; v0.37.6; npm test 913 pass |
 | 2026-09-29 | us-86-fts-id-rename | `indexRecord` deletes FTS by filepath + reconciles `record_links` on frontmatter id change; doctor consistent without rebuild; regression test; v0.37.7; npm test 919 pass |
+| 2026-09-29 | us-85-tool-input-harden | Upsert rejects object-shaped `pathPatterns`/`tags`/`linkedPaths` with structured frontmatter error (no TypeError); `session_end` soft-skips missing sessions and infers single active `sessionId`; v0.37.8; npm test 926 pass |
 

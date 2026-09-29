@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.37.7**.
+**Local working memory for coding agents outside the product repository.** Version **0.37.8**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -918,7 +918,7 @@ memo reconcile --clean-sidecars
 | `bootstrap` | Compile token-budgeted session brief (dump-free by default; no session history unless `continuation`) | `--maxBytes` (overrides `config.json` `bootstrap.maxBytes`, default 8192), `--query`, `--path`, `--slug`, `--session-id`, `--explain`, MCP `continuation` (alias `resume`, default `false`) |
 | `search` | Filtered FTS5 retrieval across records | `--kind`, `--tags`, `--path`, `--all`, `--sort` (`relevance`\|`occurrences`\|`updated`\|`hits`), `--hit-ids`, `--session-id`, `--explain`, `--include-expired`, `--as-of` |
 | `get` | Read one record by id or kind+slug (eligible kinds bump `hits`) | `--id` or `--kind`+`--slug`, `--session-id` |
-| `upsert` | Create or update typed memory record | `--kind`, `--title`, `--severity`, `--path-patterns`, `--body` |
+| `upsert` | Create or update typed memory record. Object-shaped `pathPatterns`/`tags`/`linkedPaths` return `Invalid record frontmatter` (never a raw `TypeError`); string scalars coerce to one-element arrays | `--kind`, `--title`, `--severity`, `--path-patterns`, `--body` |
 | `append` | Append chronological event log | `--event`, `--kind` |
 | `forget` | Archive or permanently delete record | `--id`, `--purge` |
 | `gc` | Apply TTL retention and compact plans | `--dry-run`, `--project`, `--purge` |
@@ -927,7 +927,7 @@ memo reconcile --clean-sidecars
 | `install_skills` / `install-skills` | Install `ws-memo` / `ws-session-tracking` into selected local or global host roots | `--scope`, `--host`, `--conflictPolicy`, `--yes`, `--dry-run`, `--json` |
 | `install_hooks` / `install-hooks` | Optional agent lifecycle hooks for Antigravity, OpenCode, Cursor, Codex, Claude (CLI-only) | `--scope`, `--host`, `--conflictPolicy`, `--yes`, `--apply`, `--dry-run`, `--remove`, `--json` |
 | `prompt` / `prompts` | Ingest & query prompt history; derive rules; export stories; record memory feedback | `record`/`list`/`search`/`show`/`session`/`export`/`derive-rules`/`feedback` |
-| `session` | Start/end/inspect work sessions (alias into `prompt`) | `start`/`end`/`handoff`/`show`/`export`, `--summary`, `--pr`, `--handoff-steps`, `--shared`, `--objective` |
+| `session` | Start/end/inspect work sessions (alias into `prompt`). `session_end` soft-skips missing sessions (`skipped: no-session`); omits `sessionId` only when exactly one active session exists | `start`/`end`/`handoff`/`show`/`export`, `--summary`, `--pr`, `--handoff-steps`, `--shared`, `--objective` |
 | `activity` | Timesheet / invoicing activity report | `--since`, `--until`, `--client`, `--json` |
 | `feedback` | Submit helpful/stale/wrong feedback on a memory record (CLI extra) | `<id>`, `--helpful`/`--stale`/`--wrong`, `--comment` |
 | `rank` | List traps by recurrence (CLI-only) | `--layer`, `--limit`, `--backfill`, `--json` |

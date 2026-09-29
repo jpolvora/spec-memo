@@ -781,19 +781,145 @@ test('auto turn allocation uses max(turn)+1 after gaps', async () => {
   }
 });
 
-test('endSessionRecord rejects sessions that were never started', async () => {
+test('endSessionRecord soft-skips sessions that were never started', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    const result = await endSessionRecord({
+      vaultRoot,
+      projectId,
+      sessionId: 'orphan-never-started',
+      body: 'should soft-skip'
+    });
+    assert.strictEqual(result.skipped, 'no-session');
+    assert.match(String(result.summary || ''), /skipped:\s*no-session/);
+    assert.strictEqual(result.sessionId, 'orphan-never-started');
+  } finally {
+    cleanup();
+  }
+});
+
+test('endSessionRecord infers sessionId when exactly one active session', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    await startSessionRecord({
+      vaultRoot,
+      projectId,
+      sessionId: 'only-active',
+      client: 'acme'
+    });
+    const ended = await endSessionRecord({
+      vaultRoot,
+      projectId,
+      body: 'inferred close'
+    });
+    assert.strictEqual(ended.sessionId, 'only-active');
+    assert.strictEqual(ended.status, 'completed');
+    assert.notStrictEqual(ended.skipped, 'no-session');
+  } finally {
+    cleanup();
+  }
+});
+
+test('endSessionRecord infers sole active session beyond listSessions page of 100', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    const sessionsDir = path.join(vaultRoot, 'projects', projectId, 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    // 101 completed sessions with newer created stamps would bury the sole active
+    // past listSessions({limit:100}) if inference still used a truncated page.
+    for (let i = 0; i < 101; i++) {
+      const id = `session-hist-${String(i).padStart(3, '0')}`;
+      const created = `2026-09-29T12:${String(i % 60).padStart(2, '0')}:00.000Z`;
+      fs.writeFileSync(
+        path.join(sessionsDir, `${id}.md`),
+        `---\nid: ${id}\nkind: session\nproject: ${projectId}\nstatus: completed\nsessionId: hist-${String(i).padStart(3, '0')}\ncreated: ${created}\nupdated: ${created}\nsource: agent\n---\n# Session hist-${i}\n`,
+        'utf8'
+      );
+    }
+    await startSessionRecord({
+      vaultRoot,
+      projectId,
+      sessionId: 'buried-active',
+      client: 'acme'
+    });
+    // Force the active session older than the 101 completed ones so a newest-100
+    // page would exclude it (regression for truncated inference).
+    const activePath = path.join(sessionsDir, 'session-buried-active.md');
+    let activeMd = fs.readFileSync(activePath, 'utf8');
+    activeMd = activeMd
+      .replace(/created: .*/, 'created: 2026-01-01T00:00:00.000Z')
+      .replace(/updated: .*/, 'updated: 2026-01-01T00:00:00.000Z');
+    fs.writeFileSync(activePath, activeMd, 'utf8');
+
+    const listed = listSessions({ vaultRoot, projectId, limit: 100 });
+    const activeOnPage = listed.items.filter((s) => s.frontmatter.status === 'active');
+    assert.strictEqual(
+      activeOnPage.length,
+      0,
+      'precondition: sole active must sit outside the newest-100 page'
+    );
+
+    const ended = await endSessionRecord({
+      vaultRoot,
+      projectId,
+      body: 'inferred beyond page'
+    });
+    assert.strictEqual(ended.sessionId, 'buried-active');
+    assert.strictEqual(ended.status, 'completed');
+  } finally {
+    cleanup();
+  }
+});
+
+test('endSessionRecord errors when sessionId omitted and zero or multiple active', async () => {
   const { vaultRoot, projectId, cleanup } = createTempVault();
   try {
     await assert.rejects(
-      () =>
-        endSessionRecord({
-          vaultRoot,
-          projectId,
-          sessionId: 'orphan-never-started',
-          body: 'should fail'
-        }),
-      /no session record found|session_start first/
+      () => endSessionRecord({ vaultRoot, projectId, body: 'none active' }),
+      /sessionId.*required.*no active session/i
     );
+
+    await startSessionRecord({ vaultRoot, projectId, sessionId: 'a1' });
+    await startSessionRecord({ vaultRoot, projectId, sessionId: 'a2' });
+    await assert.rejects(
+      () => endSessionRecord({ vaultRoot, projectId, body: 'many active' }),
+      /sessionId.*required.*multiple active/i
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('prompt record without body returns INVALID_ARGUMENTS naming body', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    const res = await executeTool('prompt', {
+      action: 'record',
+      vaultRoot,
+      projectId,
+      sessionId: 'body-req'
+    });
+    assert.strictEqual(res.isError, true);
+    const text = JSON.stringify(res);
+    assert.match(text, /body/i);
+    assert.match(text, /INVALID_ARGUMENTS|required/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test('prompt session_end soft-skips missing session via tool boundary', async () => {
+  const { vaultRoot, projectId, cleanup } = createTempVault();
+  try {
+    const res = await executeTool('prompt', {
+      action: 'session_end',
+      vaultRoot,
+      projectId,
+      sessionId: 'never-started-tool'
+    });
+    assert.strictEqual(res.isError, undefined);
+    assert.strictEqual((res.data as any).skipped, 'no-session');
+    assert.ok(!/PROMPT_TOOL_FAILED|Cannot end session/i.test(JSON.stringify(res)));
   } finally {
     cleanup();
   }

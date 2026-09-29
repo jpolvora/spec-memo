@@ -750,5 +750,96 @@ describe('Store Engine (upsert and get)', () => {
       fs.rmSync(gammaProject, { recursive: true, force: true });
     }
   });
+
+  it('us-85: object-shaped pathPatterns/tags/linkedPaths reject without TypeError', async () => {
+    await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'trap',
+      slug: 'existing-slice-trap',
+      frontmatter: {
+        id: 'trap-existing-slice',
+        title: 'Existing trap for recurrence path',
+        pathPatterns: ['src/**']
+      },
+      body: '## DO NOT\nCall .slice on non-arrays.\n\n## INSTEAD DO\nValidate frontmatter arrays first.'
+    });
+
+    await assert.rejects(
+      () =>
+        upsertRecord({
+          cwd: tempProject,
+          vaultRoot: tempVault,
+          kind: 'trap',
+          slug: 'object-shaped-fm',
+          frontmatter: {
+            id: 'trap-object-shaped',
+            title: 'Object shaped arrays',
+            pathPatterns: { '0': 'src/**' } as unknown as string[],
+            tags: { '0': 'hardening' } as unknown as string[],
+            linkedPaths: { '0': 'src/store.ts' } as unknown as string[]
+          },
+          body: '## DO NOT\nCall .slice on non-arrays.\n\n## INSTEAD DO\nValidate frontmatter arrays first.'
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(!/TypeError|\.slice is not a function/i.test(err.message));
+        assert.match(err.message, /Invalid record frontmatter/);
+        assert.match(err.message, /pathPatterns/);
+        assert.match(err.message, /tags/);
+        assert.match(err.message, /linkedPaths/);
+        return true;
+      }
+    );
+  });
+
+  it('us-85: non-string array elements reject without TypeError', async () => {
+    await assert.rejects(
+      () =>
+        upsertRecord({
+          cwd: tempProject,
+          vaultRoot: tempVault,
+          kind: 'trap',
+          slug: 'numeric-array-elements',
+          frontmatter: {
+            id: 'trap-numeric-elements',
+            title: 'Numeric array elements',
+            pathPatterns: [123] as unknown as string[],
+            linkedPaths: [true] as unknown as string[]
+          },
+          body: '## DO NOT\nPass non-string array elements.\n\n## INSTEAD DO\nReject with Invalid record frontmatter.'
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(!/TypeError|\.replace is not a function|\.slice is not a function/i.test(err.message));
+        assert.match(err.message, /Invalid record frontmatter/);
+        assert.match(err.message, /pathPatterns: Expected array of strings/);
+        assert.match(err.message, /linkedPaths: Expected array of strings/);
+        return true;
+      }
+    );
+  });
+
+  it('us-85: string scalar pathPatterns coerces to one-element array', async () => {
+    const res = await upsertRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      kind: 'decision',
+      slug: 'scalar-path-patterns',
+      frontmatter: {
+        id: 'decision-scalar-pp',
+        title: 'Scalar pathPatterns',
+        pathPatterns: 'src/store.ts' as unknown as string[]
+      },
+      body: 'String scalar must coerce or structured-reject, never TypeError.'
+    });
+    const rec = await getRecord({
+      cwd: tempProject,
+      vaultRoot: tempVault,
+      id: res.id
+    });
+    assert.ok(rec);
+    assert.deepEqual(rec!.frontmatter.pathPatterns, ['src/store.ts']);
+  });
 });
 

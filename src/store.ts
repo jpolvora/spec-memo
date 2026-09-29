@@ -163,6 +163,39 @@ export function slugKeyForRecord(frontmatter: { id?: unknown; slug?: unknown }):
   return slug;
 }
 
+/**
+ * Coerce/reject array-typed frontmatter before any `.slice` / length ops.
+ * String scalars → one-element arrays. Plain objects and other non-arrays →
+ * structured `Invalid record frontmatter` (never a raw TypeError).
+ */
+export function normalizeArrayFrontmatterFields(
+  frontmatter: Record<string, unknown> | Partial<RecordFrontmatter> | undefined
+): void {
+  if (!frontmatter) return;
+  const keys = ['pathPatterns', 'tags', 'linkedPaths'] as const;
+  const errors: string[] = [];
+  const fm = frontmatter as Record<string, unknown>;
+  for (const key of keys) {
+    const val = fm[key];
+    if (val === undefined || val === null) continue;
+    if (Array.isArray(val)) {
+      const bad = (val as unknown[]).some((el) => typeof el !== 'string');
+      if (bad) errors.push(`${key}: Expected array of strings`);
+      continue;
+    }
+    if (typeof val === 'string') {
+      fm[key] = [val];
+      continue;
+    }
+    const received =
+      val === null ? 'null' : typeof val === 'object' ? 'object' : typeof val;
+    errors.push(`${key}: Expected array, received ${received}`);
+  }
+  if (errors.length > 0) {
+    throw new Error(`Invalid record frontmatter: ${errors.join(', ')}`);
+  }
+}
+
 export function findMatchingTrap(
   projectDir: string,
   recordId: string,
@@ -170,7 +203,7 @@ export function findMatchingTrap(
   pathPatterns: string[] | undefined,
   body: string
 ): MemoRecord | null {
-  const newPatterns = (pathPatterns || []).slice().sort();
+  const newPatterns = (Array.isArray(pathPatterns) ? pathPatterns : []).slice().sort();
   const trapsDir = path.join(projectDir, 'traps');
   if (!fs.existsSync(trapsDir)) return null;
   const files = fs.readdirSync(trapsDir);
@@ -186,7 +219,8 @@ export function findMatchingTrap(
       ) {
         continue;
       }
-      const existingPatterns = (existing.frontmatter.pathPatterns || []).slice().sort();
+      const existingRaw = existing.frontmatter.pathPatterns;
+      const existingPatterns = (Array.isArray(existingRaw) ? existingRaw : []).slice().sort();
       const samePatterns =
         newPatterns.length === existingPatterns.length &&
         newPatterns.every((p, idx) => p === existingPatterns[idx]);
@@ -331,6 +365,9 @@ export async function upsertRecord(options: UpsertOptions): Promise<UpsertResult
   if (options.frontmatter) {
     assertNoSecrets(options.frontmatter, 'record frontmatter');
   }
+
+  // us-85: array frontmatter must be narrowed before findMatchingTrap `.slice`
+  normalizeArrayFrontmatterFields(options.frontmatter as Record<string, unknown> | undefined);
 
   if (
     options.kind === 'trap' &&
