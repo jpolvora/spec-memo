@@ -142,7 +142,6 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] Probe noise: unauthenticated local health checks flood error.logs and failure telemetry; status companion has no /health (`spec: 0068-us-87.spec.md`)
 - [x] Indexer leaves stale FTS row when a record id changes (duplicate hits + doctor consistent:false) (`spec: 0069-us-86.spec.md`)
 - [x] Harden tool inputs: UPSERT_FAILED raw TypeError on object-shaped frontmatter arrays + session_end without session_start (`spec: 0070-us-85.spec.md`)
-- [ ] autoMode should mean unattended: no yield at internal checkpoints (`spec: 0071-us-83.spec.md`)
 
 
 
@@ -259,8 +258,6 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 69 | [`us-86`](0069-us-86.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Indexer deletes FTS by filepath + reconciles record_links on id change; doctor consistent without rebuild; v0.37.7 |
 
 | 70 | [`us-85`](0070-us-85.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Upsert array frontmatter hardening + idempotent session_end; v0.37.8 |
-
-| 71 | `us-83` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | autoMode should mean unattended: no yield at internal checkpoints |
 
 ## 9. Inbox (unscheduled ideas)
 
