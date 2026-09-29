@@ -17,6 +17,7 @@ import { exportVault } from "./backup.js";
 import { upsertRecord } from "./store.js";
 import { readErrorLogs, logErrorReport, clearErrorLogs } from "./error-logger.js";
 import { readVaultConfig } from "./vault.js";
+import { resetUnauthorizedLogStateForTests } from "./auth-noise.js";
 
 function countTrapFiles(vaultRoot: string, projectId: string): number {
   const dir = path.join(vaultRoot, "projects", projectId, "traps");
@@ -1352,6 +1353,93 @@ test("MCP status monitor", async (t) => {
       assert.ok(!logs.includes("Bearer status-test-secret"));
     } finally {
       await errorServer.close();
+    }
+  });
+
+  await t.test("GET /health returns 200 without route-not-found or unauthorized WARN (us-87)", async () => {
+    resetUnauthorizedLogStateForTests();
+    const healthBus = createActivityBus({ capacity: 50 });
+    const healthServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "health-auth-secret",
+      activityBus: healthBus
+    });
+    try {
+      const before = readErrorLogs(vaultRoot);
+      const res = await fetch(`${healthServer.url}/health`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json() as { status: string; service: string };
+      assert.strictEqual(body.status, "ok");
+      assert.strictEqual(body.service, "spec-memo-status-monitor");
+      const after = readErrorLogs(vaultRoot);
+      assert.strictEqual(after, before);
+      assert.ok(!after.slice(before.length).includes("Route not found"));
+      assert.ok(!after.slice(before.length).includes("Unauthorized request"));
+    } finally {
+      healthBus.close();
+      await healthServer.close();
+    }
+  });
+
+  await t.test("unauthorized burst appends O(1) WARN blocks not N (us-87)", async () => {
+    resetUnauthorizedLogStateForTests();
+    const burstBus = createActivityBus({ capacity: 50 });
+    const burstServer = await startStatusServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "burst-auth-secret",
+      activityBus: burstBus
+    });
+    try {
+      clearErrorLogs(vaultRoot);
+      const N = 25;
+      for (let i = 0; i < N; i++) {
+        const res = await fetch(`${burstServer.url}/api/status`);
+        assert.strictEqual(res.status, 401);
+      }
+      const logs = readErrorLogs(vaultRoot);
+      const blocks = logs.split("================================================================================").filter((b) => b.trim());
+      const unauthBlocks = blocks.filter(
+        (b) =>
+          b.includes("Unauthorized request: missing or invalid authorization token") ||
+          b.includes("Repeated unauthorized requests:")
+      );
+      assert.ok(unauthBlocks.length >= 1, "first unauthorized WARN must remain visible");
+      assert.ok(unauthBlocks.length <= 2, `expected O(1) WARN blocks, got ${unauthBlocks.length} for ${N} requests`);
+      assert.ok(unauthBlocks.some((b) => b.includes("Unauthorized request: missing or invalid authorization token")));
+      // Spoofed X-Forwarded-For must not mint a fresh full WARN (same connecting socket).
+      const spoofed = await fetch(`${burstServer.url}/api/status`, {
+        headers: { "x-forwarded-for": "203.0.113.50" }
+      });
+      assert.strictEqual(spoofed.status, 401);
+      const afterSpoof = readErrorLogs(vaultRoot);
+      const spoofBlocks = afterSpoof
+        .split("================================================================================")
+        .filter(
+          (b) =>
+            b.includes("Unauthorized request: missing or invalid authorization token") ||
+            b.includes("Repeated unauthorized requests:")
+        );
+      assert.ok(
+        spoofBlocks.length <= 2,
+        `spoofed XFF must not amplify WARN blocks, got ${spoofBlocks.length}`
+      );
+      // AC5: first request after the rollup window still produces an observable WARN
+      resetUnauthorizedLogStateForTests();
+      clearErrorLogs(vaultRoot);
+      const afterWindow = await fetch(`${burstServer.url}/api/status`);
+      assert.strictEqual(afterWindow.status, 401);
+      const windowLogs = readErrorLogs(vaultRoot);
+      assert.ok(
+        windowLogs.includes("Unauthorized request: missing or invalid authorization token"),
+        "fresh window must produce a full unauthorized WARN"
+      );
+    } finally {
+      burstBus.close();
+      await burstServer.close();
     }
   });
 });

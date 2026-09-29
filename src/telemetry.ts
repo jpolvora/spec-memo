@@ -626,7 +626,9 @@ export function summarizeTelemetry(
     logFile: latestTelemetryFile(vaultRoot),
     eventCount: events.length,
     failureCount: failures.length,
-    failureRate: events.length > 0 ? failures.length / events.length : 0,
+    // Product failure rate excludes expected faults (e.g. HTTP_401 probe noise).
+    // HTTP_401 remains in failureCount / topErrorCodes for queryability (us-87).
+    failureRate: events.length > 0 ? productFaults / events.length : 0,
     productFaults,
     expectedFaults,
     p50Ms: percentile(durations, 50),

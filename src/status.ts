@@ -18,6 +18,12 @@ import {
 import { packVaultZip, unpackVaultZip, parseMultipartFormData } from "./status-backup.js";
 import { logErrorReport, listErrorLogEntries, getErrorLogEntry, parseErrorLogListQuery, parseErrorLogDeleteBody, deleteErrorLogEntries } from "./error-logger.js";
 import { recordTelemetry } from "./telemetry.js";
+import {
+  clientIpFromRequest,
+  decideUnauthorizedLog,
+  unauthorizedClientKey,
+  UNAUTH_LOG_WINDOW_MS
+} from "./auth-noise.js";
 import { getRecord } from "./store.js";
 import { sanitizeToolOutput, isPathInside } from "./safety.js";
 import { fenceStatusPayload } from "./io-guard.js";
@@ -5964,22 +5970,51 @@ export function startStatusServer(options: StatusServerOptions): Promise<StatusS
 
       if (pathname.startsWith("/api/")) {
         if (!isAuthorized(req, url, authToken)) {
-          logErrorReport({
-            subsystem: "status-server",
-            port,
-            host,
-            method: req.method,
-            endpoint: pathname,
-            error: "Unauthorized request: missing or invalid authorization token",
-            level: "WARN",
-            context: {
-              headers: req.headers,
-              query: Object.fromEntries(url.searchParams.entries())
-            }
-          }, { vaultRoot, logPath: errorLogPath });
+          const clientIp = clientIpFromRequest(req);
+          const decision = decideUnauthorizedLog(unauthorizedClientKey("status-server", clientIp));
+          if (decision.action === "full") {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: req.method,
+              endpoint: pathname,
+              error: "Unauthorized request: missing or invalid authorization token",
+              level: "WARN",
+              context: {
+                headers: req.headers,
+                query: Object.fromEntries(url.searchParams.entries()),
+                clientIp
+              }
+            }, { vaultRoot, logPath: errorLogPath });
+          } else if (decision.action === "rollup") {
+            logErrorReport({
+              subsystem: "status-server",
+              port,
+              host,
+              method: req.method,
+              endpoint: pathname,
+              error: `Repeated unauthorized requests: ${decision.additionalAfterFirst} additional from ${clientIp} within ${UNAUTH_LOG_WINDOW_MS}ms`,
+              level: "WARN",
+              context: { clientIp, totalInWindow: decision.totalInWindow }
+            }, { vaultRoot, logPath: errorLogPath });
+          }
           writeJson(res, 401, { error: "Unauthorized" });
           return;
         }
+      }
+
+      // Lightweight health parity with SSE listener (us-87): unauthenticated,
+      // no route-not-found WARN, no unauthorized WARN.
+      if (req.method === "GET" && pathname === "/health") {
+        const actualPort = (server.address() as { port: number } | null)?.port || port;
+        writeJson(res, 200, {
+          status: "ok",
+          service: "spec-memo-status-monitor",
+          port: actualPort,
+          host
+        });
+        return;
       }
 
       if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {

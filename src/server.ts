@@ -10,6 +10,12 @@ import { ClientType } from "./types.js";
 import { logErrorReport } from "./error-logger.js";
 import { recordTelemetry, flushTelemetrySync, closeTelemetry } from "./telemetry.js";
 import { assertAiConfigValid, setAiActivityBus } from "./ai/index.js";
+import {
+  clientIpFromRequest,
+  decideUnauthorizedLog,
+  unauthorizedClientKey,
+  UNAUTH_LOG_WINDOW_MS
+} from "./auth-noise.js";
 
 function readJsonBody(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -62,11 +68,7 @@ export interface SseServerInstance {
 }
 
 export function getClientIp(req: http.IncomingMessage): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.socket.remoteAddress || "127.0.0.1";
+  return clientIpFromRequest(req);
 }
 
 export function parseClientInfo(
@@ -289,20 +291,34 @@ export function startSseServer(options: SseServerOptions = {}): Promise<SseServe
 
       if (!isAuthorized(req, url, authToken)) {
         capturedOp = "unauthorized_access";
-        logErrorReport({
-          subsystem: "sse-server",
-          port,
-          host,
-          method,
-          endpoint: pathname,
-          error: "Unauthorized request: missing or invalid authorization token",
-          level: "WARN",
-          context: {
-            headers: req.headers,
-            query: Object.fromEntries(url.searchParams.entries()),
-            clientIp
-          }
-        }, { vaultRoot, logPath: errorLogPath });
+        const decision = decideUnauthorizedLog(unauthorizedClientKey("sse-server", clientIp));
+        if (decision.action === "full") {
+          logErrorReport({
+            subsystem: "sse-server",
+            port,
+            host,
+            method,
+            endpoint: pathname,
+            error: "Unauthorized request: missing or invalid authorization token",
+            level: "WARN",
+            context: {
+              headers: req.headers,
+              query: Object.fromEntries(url.searchParams.entries()),
+              clientIp
+            }
+          }, { vaultRoot, logPath: errorLogPath });
+        } else if (decision.action === "rollup") {
+          logErrorReport({
+            subsystem: "sse-server",
+            port,
+            host,
+            method,
+            endpoint: pathname,
+            error: `Repeated unauthorized requests: ${decision.additionalAfterFirst} additional from ${clientIp} within ${UNAUTH_LOG_WINDOW_MS}ms`,
+            level: "WARN",
+            context: { clientIp, totalInWindow: decision.totalInWindow }
+          }, { vaultRoot, logPath: errorLogPath });
+        }
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Unauthorized" }));
         return;
