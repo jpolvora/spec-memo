@@ -495,7 +495,28 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
     assert.equal(summary.failureCount, 2);
     assert.equal(summary.expectedFaults, 1);
     assert.equal(summary.productFaults, 1);
+    // Product failure rate excludes expected EXIT_1 (1 product / 3 events).
+    assert.equal(summary.failureRate, 1 / 3);
     assert.ok(latestTelemetryFile(tempVault)?.endsWith('telemetry-2026-09-22.part-1.jsonl'));
+  });
+
+  it('us-87: HTTP_401 stays queryable but is excluded from product failureRate', () => {
+    const dir = getTelemetryDir(tempVault);
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'telemetry-2026-09-29.part-1.jsonl');
+    const rows = [
+      { timestamp: '2026-09-29T00:00:00.000Z', eventId: 'u1', category: 'http_endpoint', operation: 'GET /api/status', durationMs: 1, success: false, errorCode: 'HTTP_401' },
+      { timestamp: '2026-09-29T00:00:01.000Z', eventId: 'u2', category: 'http_endpoint', operation: 'GET /api/status', durationMs: 1, success: false, errorCode: 'HTTP_401' },
+      { timestamp: '2026-09-29T00:00:02.000Z', eventId: 'ok', category: 'http_endpoint', operation: 'GET /health', durationMs: 1, success: true },
+      { timestamp: '2026-09-29T00:00:03.000Z', eventId: 'bad', category: 'sync_operation', operation: 'sync_dual', durationMs: 5, success: false, errorCode: 'VAULT_GIT_SYNC_FAILED' }
+    ];
+    fs.writeFileSync(file, rows.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+    const summary = summarizeTelemetry(tempVault, { maxEvents: 100 });
+    assert.equal(summary.failureCount, 3);
+    assert.equal(summary.expectedFaults, 2);
+    assert.equal(summary.productFaults, 1);
+    assert.equal(summary.failureRate, 0.25);
+    assert.ok(summary.topErrorCodes.some((c) => c.code === 'HTTP_401' && c.count === 2));
   });
   it('AC19/AC21: summary exposes failure rate, per-project health and observable counters', () => {
     process.env.SPEC_MEMO_TELEMETRY_TEST = '1';

@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.37.5**.
+**Local working memory for coding agents outside the product repository.** Version **0.37.6**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -272,7 +272,7 @@ All daemon ports are fully configurable via `~/.spec-memo/config.json` under the
 | Service | Default URL | Shortcut | Full Command |
 |---------|-------------|----------|--------------|
 | MCP SSE transport | `http://127.0.0.1:3123` (`/sse`, `/message`, `/health`) | `memo server` | `memo start server` (or `memo serve --sse`) |
-| Status monitor | `http://127.0.0.1:3124/` | `memo monitor` | `memo start monitor` (or co-starts with `memo server`) |
+| Status monitor | `http://127.0.0.1:3124/` (`/`, `/api/*`, `/health`) | `memo monitor` | `memo start monitor` (or co-starts with `memo server`) |
 | Canvas graph viewer | `http://127.0.0.1:3125` | `memo canvas` | `memo start canvas` |
 | MCP stdio server | Stdio transport | `memo mcp` | `memo start mcp` (or `memo serve`) |
 
@@ -464,6 +464,7 @@ Quick machine checks:
 
 ```bash
 curl -s http://127.0.0.1:3123/health
+curl -s http://127.0.0.1:3124/health
 curl -s http://127.0.0.1:3124/api/status
 curl -s http://127.0.0.1:3124/api/vaults
 # JSON array of `{ id, displayName }` — the monitor sidebar and vault selectors use this array (not `{ vaults: [...] }`).
@@ -970,9 +971,9 @@ Use `force` only when intentionally overwriting a diverged destination. MCP host
 
 `agent`, `human`, or `imported` (normalized to lowercase), plus any non-empty origin slug such as a workflow skill name (e.g. `ws-configure-project`). Custom values are preserved verbatim so skill-emitted logs ingest without frontmatter rejection; empty values still fail validation.
 
-**Why is there no `/favicon.ico` noise in the logs?**
+**Why is there no `/favicon.ico` or probe noise in the logs?**
 
-The status monitor answers `GET /favicon.ico` and `GET /robots.txt` with an empty `204` before routing, so browser probes write nothing to `error.logs` and record no telemetry. Unknown `/api/*` routes still return `404` with logging intact.
+The status monitor and SSE listener answer browser well-known probes (`GET /favicon.ico`, `/robots.txt`, `/json/version`, Chrome DevTools well-known) with an empty `204` before routing, so those probes write nothing to `error.logs` and record no telemetry. The status companion also serves unauthenticated `GET /health` (200 JSON) so generic health checks do not become `Route not found` WARNs. Repeated unauthorized requests to protected routes collapse to a bounded WARN (first occurrence plus at most one rollup per client in a 60s window). `HTTP_401` stays queryable in telemetry, but expected auth faults are excluded from the product `failureRate` numerator. Real unknown `/api/*` routes still return `404` with logging intact.
 
 **How do I make the `memo` command available on my PATH (Windows / Linux / macOS)?**
 

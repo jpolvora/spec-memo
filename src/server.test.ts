@@ -11,7 +11,8 @@ import { ensureProjectVault, tryAcquireVaultLockSync, releaseVaultLockSync } fro
 import { closeIndex } from "./indexer.js";
 import { startSseServer } from "./server.js";
 import { TOOL_NAMES } from "./types.js";
-import { readErrorLogs } from "./error-logger.js";
+import { readErrorLogs, clearErrorLogs } from "./error-logger.js";
+import { resetUnauthorizedLogStateForTests } from "./auth-noise.js";
 
 test("HTTP / SSE MCP Server Transport", async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memo-server-test-"));
@@ -381,6 +382,36 @@ test("HTTP / SSE MCP Server Transport", async (t) => {
       assert.ok(!logContent.includes("Bearer test-auth-secret"));
     } finally {
       await errorLogServer.close();
+    }
+  });
+
+  await t.test("SSE unauthorized burst appends O(1) WARN blocks not N (us-87)", async () => {
+    resetUnauthorizedLogStateForTests();
+    clearErrorLogs(vaultRoot);
+    const burstServer = await startSseServer({
+      vaultRoot,
+      port: 0,
+      host: "127.0.0.1",
+      authToken: "burst-sse-secret",
+      enableStatus: false
+    });
+    try {
+      const N = 20;
+      for (let i = 0; i < N; i++) {
+        const res = await fetch(`${burstServer.url}/health`);
+        assert.strictEqual(res.status, 401);
+      }
+      const logs = readErrorLogs(vaultRoot);
+      const blocks = logs.split("================================================================================").filter((b) => b.trim());
+      const unauthBlocks = blocks.filter(
+        (b) =>
+          b.includes("Unauthorized request: missing or invalid authorization token") ||
+          b.includes("Repeated unauthorized requests:")
+      );
+      assert.ok(unauthBlocks.length >= 1);
+      assert.ok(unauthBlocks.length <= 2, `expected O(1) WARN blocks, got ${unauthBlocks.length}`);
+    } finally {
+      await burstServer.close();
     }
   });
 
