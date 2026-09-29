@@ -1375,6 +1375,8 @@ export interface SessionResult {
   sync?: unknown;
   handoff?: HandoffRecord;
   objective?: SessionObjective;
+  /** Soft-skip when session_end finds no session record (idempotent close). */
+  skipped?: 'no-session';
 }
 
 export interface ActivityReportResult {

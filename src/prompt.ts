@@ -266,9 +266,29 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
     projectId = identity.projectId;
   }
 
-  const sessionId = options.sessionId;
+  let sessionId = options.sessionId;
   if (!sessionId) {
-    throw new Error("Parameter 'sessionId' is required to end a session.");
+    const listed = listSessions({ vaultRoot, projectId, cwd, limit: 100 });
+    const active = listed.items.filter((s) => s.frontmatter.status === 'active');
+    if (active.length === 1) {
+      const inferred =
+        (typeof active[0].frontmatter.sessionId === 'string' && active[0].frontmatter.sessionId) ||
+        String(active[0].frontmatter.id || '').replace(/^session-/, '');
+      if (!inferred) {
+        throw new Error(
+          "Parameter 'sessionId' is required for session_end action: the sole active session has no sessionId. Pass sessionId explicitly."
+        );
+      }
+      sessionId = inferred;
+    } else if (active.length === 0) {
+      throw new Error(
+        "Parameter 'sessionId' is required for session_end action: no active session exists. Pass sessionId explicitly."
+      );
+    } else {
+      throw new Error(
+        "Parameter 'sessionId' is required for session_end action: multiple active sessions exist. Pass sessionId explicitly."
+      );
+    }
   }
 
   // Merge deliverables under vault lock so concurrent session_end cannot drop entries (TOCTOU).
@@ -283,9 +303,19 @@ export async function endSessionRecord(options: PromptOptions): Promise<SessionR
     });
 
     if (!existing) {
-      throw new Error(
-        `Cannot end session '${sessionId}': no session record found. Call session_start first.`
-      );
+      // us-85: idempotent close — missing session is not PROMPT_TOOL_FAILED
+      return {
+        id,
+        sessionId: sessionId!,
+        projectId: projectId!,
+        status: 'completed' as const,
+        startTime: '',
+        endTime: new Date().toISOString(),
+        billable: true,
+        path: '',
+        skipped: 'no-session' as const,
+        summary: 'skipped: no-session'
+      };
     }
 
     const now = new Date().toISOString();

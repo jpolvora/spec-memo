@@ -1488,12 +1488,17 @@ async function executeToolDirect(name: string, args: unknown): Promise<ToolRespo
       }
 
       if (action === 'session_end') {
-        if (!promptOpts.sessionId) {
-          return fail('INVALID_ARGUMENTS', "Parameter 'sessionId' is required for session_end action.");
+        try {
+          const result = await endSessionRecord(promptOpts);
+          scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
+          return ok(result);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (/Parameter 'sessionId' is required/i.test(msg)) {
+            return fail('INVALID_ARGUMENTS', msg);
+          }
+          throw err;
         }
-        const result = await endSessionRecord(promptOpts);
-        scheduleHybridPush(vaultRoot, resolveHybridPushProjectId({ cwd, vaultRoot, projectId }));
-        return ok(result);
       }
 
       if (action === 'cancel_handoff') {
