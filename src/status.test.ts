@@ -1410,16 +1410,33 @@ test("MCP status monitor", async (t) => {
       assert.ok(unauthBlocks.length >= 1, "first unauthorized WARN must remain visible");
       assert.ok(unauthBlocks.length <= 2, `expected O(1) WARN blocks, got ${unauthBlocks.length} for ${N} requests`);
       assert.ok(unauthBlocks.some((b) => b.includes("Unauthorized request: missing or invalid authorization token")));
-      // Distinct client (x-forwarded-for) still gets a fresh first WARN
-      const other = await fetch(`${burstServer.url}/api/status`, {
+      // Spoofed X-Forwarded-For must not mint a fresh full WARN (same connecting socket).
+      const spoofed = await fetch(`${burstServer.url}/api/status`, {
         headers: { "x-forwarded-for": "203.0.113.50" }
       });
-      assert.strictEqual(other.status, 401);
-      const afterOther = readErrorLogs(vaultRoot);
-      const otherBlocks = afterOther
+      assert.strictEqual(spoofed.status, 401);
+      const afterSpoof = readErrorLogs(vaultRoot);
+      const spoofBlocks = afterSpoof
         .split("================================================================================")
-        .filter((b) => b.includes("Unauthorized request: missing or invalid authorization token"));
-      assert.ok(otherBlocks.length >= 2, "distinct client must produce another full WARN");
+        .filter(
+          (b) =>
+            b.includes("Unauthorized request: missing or invalid authorization token") ||
+            b.includes("Repeated unauthorized requests:")
+        );
+      assert.ok(
+        spoofBlocks.length <= 2,
+        `spoofed XFF must not amplify WARN blocks, got ${spoofBlocks.length}`
+      );
+      // AC5: first request after the rollup window still produces an observable WARN
+      resetUnauthorizedLogStateForTests();
+      clearErrorLogs(vaultRoot);
+      const afterWindow = await fetch(`${burstServer.url}/api/status`);
+      assert.strictEqual(afterWindow.status, 401);
+      const windowLogs = readErrorLogs(vaultRoot);
+      assert.ok(
+        windowLogs.includes("Unauthorized request: missing or invalid authorization token"),
+        "fresh window must produce a full unauthorized WARN"
+      );
     } finally {
       burstBus.close();
       await burstServer.close();
