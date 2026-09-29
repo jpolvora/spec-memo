@@ -1,7 +1,20 @@
-name: Agentic Code Review (OpenCode)
+name: Agentic Code Review
 
-# Active PR reviewer (OpenCode Go). Uses OPENCODE_API_KEY repository secret.
-# cursor-code-review.yml is workflow_dispatch-only backup until re-enabled.
+# Single active PR reviewer (agentic-code-reviewers).
+# Replaces opencode-code-review.yml and cursor-code-review.yml.
+#
+# No yaml edit / commit / push is needed to switch reviewers. Change the three
+# repo Variables via GitHub UI (Settings → Secrets and variables → Actions →
+# Variables) or via gh client, and the next PR picks them up:
+#
+#   gh variable set AGENTIC_CODE_REVIEWERS_ENGINE --repo jpolvora/spec-memo --body "opencode"
+#   gh variable set AGENTIC_CODE_REVIEWERS_MODEL  --repo jpolvora/spec-memo --body "opencode-go/muse-spark-1.3-contributor"
+#   gh variable set AGENTIC_CODE_REVIEWERS_VARIANT --repo jpolvora/spec-memo --body "high"
+#
+# Engine examples: "opencode" (uses OPENCODE_API_KEY secret) or "cursor-sdk"
+# (uses CURSOR_API_KEY secret). Model/variant examples: see
+# https://github.com/jpolvora/agentic-code-reviewers (AGENTIC_CODE_REVIEWERS_MODEL
+# / _VARIANT; --engine/--model/--variant flags override env).
 on:
   pull_request:
     branches: [master, main, develop]
@@ -18,8 +31,13 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: opencode-review-${{ github.event.inputs.pr_number || github.ref }}
+  group: agentic-review-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
   cancel-in-progress: true
+
+env:
+  REVIEW_ENGINE: ${{ vars.AGENTIC_CODE_REVIEWERS_ENGINE || 'opencode' }}
+  REVIEW_MODEL: ${{ vars.AGENTIC_CODE_REVIEWERS_MODEL || 'opencode-go/muse-spark-1.3-contributor' }}
+  REVIEW_VARIANT: ${{ vars.AGENTIC_CODE_REVIEWERS_VARIANT || 'high' }}
 
 jobs:
   review:
@@ -31,10 +49,16 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: "22.13" }
 
+      - name: Show reviewer config
+        run: |
+          echo "engine=${REVIEW_ENGINE} model=${REVIEW_MODEL} variant=${REVIEW_VARIANT}"
+
       # Pre-install with an authenticated release lookup. The opencode.ai installer
       # otherwise hits unauthenticated api.github.com and fails with
       # "Failed to fetch version information" on shared CI IPs (rate limit).
+      # Skipped for cursor-sdk (no OpenCode CLI needed).
       - name: Install OpenCode CLI
+        if: ${{ env.REVIEW_ENGINE == 'opencode' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -71,24 +95,34 @@ jobs:
 
       - name: Run code reviewer
         env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_CODE_REVIEWERS_TIMEOUT_MS: "1200000"
-          # Default 100000 (~100 KB) truncates large Custom-stack diffs; raise for md+json-heavy PRs.
           AGENTIC_CODE_REVIEWERS_DIFF_MAX_BYTES: "200000"
           AGENTIC_CODE_REVIEWERS_EXTRA_EXCLUDE_PATTERNS: ".agents/plans/**,.agents/specs/**"
         run: |
           set -euo pipefail
-          if [[ -z "${OPENCODE_API_KEY:-}" ]]; then
-            echo "::error::OPENCODE_API_KEY repository secret is not set"
-            exit 1
+          if [[ "${REVIEW_ENGINE}" == "cursor-sdk" || "${REVIEW_ENGINE}" == "cursor" ]]; then
+            if [[ -z "${CURSOR_API_KEY:-}" ]]; then
+              echo "::error::REVIEW_ENGINE=${REVIEW_ENGINE} needs CURSOR_API_KEY repository secret"
+              exit 1
+            fi
+            ENGINE_ARG="cursor-sdk"
+          else
+            if [[ -z "${OPENCODE_API_KEY:-}" ]]; then
+              echo "::error::REVIEW_ENGINE=${REVIEW_ENGINE} needs OPENCODE_API_KEY repository secret"
+              exit 1
+            fi
+            ENGINE_ARG="opencode"
+            export PATH="${HOME}/.opencode/bin:${PATH}"
           fi
           curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/release/run.sh \
             -o /tmp/agentic-code-reviewers-run.sh
           bash /tmp/agentic-code-reviewers-run.sh \
-            --engine opencode \
-            --model opencode-go/muse-spark-1.3-contributor \
-            --variant high \
+            --engine "$ENGINE_ARG" \
+            --model "$REVIEW_MODEL" \
+            --variant "$REVIEW_VARIANT" \
             --gh \
             --pr-id "${{ steps.pr.outputs.number }}" \
             --stack Custom \
