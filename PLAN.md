@@ -266,4 +266,5 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 | 2026-09-24 | vault-stability-audit | Truthful diagnostics (FTS identity sets, read-only doctor, generic lifecycle scan), sequential dual-sync channel truth (codes/dirty/cursors), backup-gated merge + cursor migration, bounded telemetry counters in doctor/status; 0060 tracking reconciled; authoring validator PASS (29 ACs); v0.37.5; npm test 909 pass |
 | 2026-09-23 | status-monitor-start-probe | `memo start monitor` background readiness probe timeout raised 150ms → 1500ms (authenticated `/api/status` responses take 180-400ms), fixing false `START_TIMEOUT` on start/restart; regression test; v0.37.4; npm test 887 pass |
 | 2026-09-29 | us-87-probe-noise | Bounded unauthorized WARN logging (first + rollup / client / 60s), status companion `GET /health`, product `failureRate` excludes expected `HTTP_401`; v0.37.6; npm test 913 pass |
+| 2026-09-29 | us-86-fts-id-rename | `indexRecord` deletes FTS by filepath + reconciles `record_links` on frontmatter id change; doctor consistent without rebuild; regression test; v0.37.7; npm test 919 pass |
 

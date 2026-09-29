@@ -182,8 +182,25 @@ export function indexRecord(
   const body = ftsBodyForRecord(record);
   const updated = fm.updated || new Date().toISOString();
 
-  const del = db.prepare('DELETE FROM records_fts WHERE id = ? AND projectId = ?');
-  del.run(id, projectId);
+  // Converge on one FTS row for this logical write: delete by filepath (id rename
+  // at same path) OR by id (same id indexed at a new filepath / file move).
+  const prevRows = db
+    .prepare(
+      'SELECT id FROM records_fts WHERE projectId = ? AND (id = ? OR filepath = ?)'
+    )
+    .all(projectId, id, filepath) as Array<{ id: string }>;
+  db.prepare(
+    'DELETE FROM records_fts WHERE projectId = ? AND (id = ? OR filepath = ?)'
+  ).run(projectId, id, filepath);
+
+  for (const row of prevRows) {
+    if (String(row.id) !== String(id)) {
+      db.prepare('DELETE FROM record_links WHERE source_id = ? AND source_project = ?').run(
+        String(row.id),
+        projectId
+      );
+    }
+  }
 
   const ins = db.prepare(`
     INSERT INTO records_fts (id, projectId, kind, status, title, tags, pathPatterns, body, filepath, updated)

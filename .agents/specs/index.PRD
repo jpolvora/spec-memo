@@ -140,7 +140,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] us-36: `memo setup --host opencode` MCP config shape (`spec: 0045-us-36.spec.md`)
 - [x] Vault dedup merge, vault rename, and consumer .spec-memo.json local config (`spec: 0050-vault-dedup-merge-and-local-config.spec.md`)
 - [x] Probe noise: unauthenticated local health checks flood error.logs and failure telemetry; status companion has no /health (`spec: 0068-us-87.spec.md`)
-- [ ] Indexer leaves stale FTS row when a record id changes (duplicate hits + doctor consistent:false) (`spec: 0069-us-86.spec.md`)
+- [x] Indexer leaves stale FTS row when a record id changes (duplicate hits + doctor consistent:false) (`spec: 0069-us-86.spec.md`)
 - [ ] Harden tool inputs: UPSERT_FAILED raw TypeError on object-shaped frontmatter arrays + session_end without session_start (`spec: 0070-us-85.spec.md`)
 - [ ] autoMode should mean unattended: no yield at internal checkpoints (`spec: 0071-us-83.spec.md`)
 
@@ -256,7 +256,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 68 | [`us-87`](0068-us-87.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Probe noise: bounded unauthorized WARN logging, status companion `/health`, product failureRate excludes expected HTTP_401; v0.37.6 |
 
-| 69 | `us-86` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Indexer leaves stale FTS row when a record id changes (duplicate hits + doctor consistent:false) |
+| 69 | [`us-86`](0069-us-86.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Indexer deletes FTS by filepath + reconciles record_links on id change; doctor consistent without rebuild; v0.37.7 |
 
 | 70 | `us-85` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | Harden tool inputs: UPSERT_FAILED raw TypeError on object-shaped frontmatter arrays + session_end without session_start |
 
@@ -357,6 +357,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-08 | vault-dedup-merge-and-local-config | Vault dedup merge, vault rename, and consumer `.spec-memo.json` local config | v0.28.0; PR #52 |
 | 2026-09-24 | vault-stability-audit | Truthful diagnostics, sequential dual-sync channel truth, backup-gated merge + cursor migration, bounded telemetry counters | v0.37.5; npm test 909 pass |
 | 2026-09-29 | us-87 | Bounded unauthorized WARN logging, status companion `GET /health`, product failureRate excludes expected HTTP_401 | v0.37.6; npm test 913 pass |
+| 2026-09-29 | us-86 | Indexer deletes FTS by filepath + reconciles record_links on id change; doctor consistent without rebuild | v0.37.7; npm test 919 pass |
 
 ## Archive
 
