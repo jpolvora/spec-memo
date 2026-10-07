@@ -139,6 +139,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] Vault stability: truthful diagnostics, reliable multi-vault sync, bounded observability, and release coherence (`spec: 0067-vault-stability-audit.spec.md`)
 - [x] us-36: `memo setup --host opencode` MCP config shape (`spec: 0045-us-36.spec.md`)
 - [x] Vault dedup merge, vault rename, and consumer .spec-memo.json local config (`spec: 0050-vault-dedup-merge-and-local-config.spec.md`)
+- [ ] [`native-core-acceleration`](0071-native-core-acceleration.spec.md): Native Core Engine Acceleration: Compiled Daemon, Relational Indexing, and Fast I/O
 
 
 
@@ -245,6 +246,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 66 | [`us-36`](0045-us-36.spec.md) | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | `memo setup --host opencode` emits valid MCP config (type `local`, command array); v0.17.1; PR #37 |
 
 | 67 | [`vault-dedup-merge-and-local-config`](0050-vault-dedup-merge-and-local-config.spec.md) | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Vault dedup merge, vault rename, consumer `.spec-memo.json` local config; v0.28.0; PR #52 |
+
+| 71 | [`native-core-acceleration`](0071-native-core-acceleration.spec.md) | `[ ]` pending | Phase 9: Native Acceleration | Compiled Daemon, Relational Indexing, Fast I/O, and Sub-25ms CLI |
 
 ## 9. Inbox (unscheduled ideas)
 
