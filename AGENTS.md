@@ -15,13 +15,13 @@ This document is the operating contract for coding agents working in and with **
 1. Explicit user instructions (current turn)
 2. This root `AGENTS.md` / [`GEMINI.md`](GEMINI.md) operating contract
 3. Design & architecture constraints ([`PRODUCT.PRD`](PRODUCT.PRD), [`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), [`.agents/specs/index.PRD`](.agents/specs/index.PRD), [`.agents/specs/*.spec.md`](.agents/specs/))
-4. Autoload (Always-applied) skills ([`.agents/skills/ws-shared/autoload.md`](.agents/skills/ws-shared/autoload.md))
+4. Autoload (Always-applied) skills ([`.ws/autoload.md`](.ws/autoload.md))
 
 ---
 
 ## Autoload (Always-applied skills)
 
-Load **every** skill listed in [`.agents/skills/ws-shared/autoload.md`](.agents/skills/ws-shared/autoload.md) § Always-applied skills on every prompt. Membership SoT is that file (hybrid installs may resolve the same id under `{globalSkillsRoot}` when missing locally). `ws-karpathy-guidelines` stays shared-hub mandatory, not this table.
+Load **every** skill listed in [`.ws/autoload.md`](.ws/autoload.md) § Always-applied skills on every prompt. Membership SoT is that file (hybrid installs may resolve the same id under `{globalSkillsRoot}` when missing locally). `ws-karpathy-guidelines` stays shared-hub mandatory, not this table.
 
 | Skill | Path | Trigger | Role |
 |---|---|---|---|
@@ -41,7 +41,7 @@ Load **every** skill listed in [`.agents/skills/ws-shared/autoload.md`](.agents/
 
 ## Specs Progressive Disclosure & Router
 
-When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a skill, load **only** the matching skill (full table: [`autoload.md`](.agents/skills/ws-shared/autoload.md) § Specs skill router):
+When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a skill, load **only** the matching skill (full table: [`autoload.md`](.ws/autoload.md) § Specs skill router):
 
 | When the task means… | Load | Does not do |
 |---|---|---|

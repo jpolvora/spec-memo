@@ -1,12 +1,13 @@
 ---
-stackFingerprint: spec-memo-node22-mcp-v1
+stackFingerprint: 7ca33af41a5561d28b3c8aa224ce93d4d8665401ace61649f50ce0f760a3fb47
 stackFingerprintVersion: 1
 ---
+
 # Stack Definition
 
 Human-readable companion to `config.json`. Agents read `config.json` for machine-readable values; this doc explains structure and conventions.
 
-> **Source of truth:** `.agents/skills/ws-shared/config.json` — project identity, stack, verification, invariants.
+> **Source of truth:** `.ws/config.json` — project identity, stack, verification, invariants.
 
 ## Project Stack (from config.json)
 

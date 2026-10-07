@@ -1,6 +1,6 @@
 # Implementation Plan — Local, Hybrid, and Remote Deployment Modes (`0025-deployment-modes.spec.md`)
 
-This plan covers the implementation of **Local, Hybrid, and Remote deployment modes** with portable MCP wiring as specified in [`.agents/specs/0025-deployment-modes.spec.md`](file:///l:/source/spec-memo/.agents/specs/0025-deployment-modes.spec.md).
+This plan covers the implementation of **Local, Hybrid, and Remote deployment modes** with portable MCP wiring as specified in [`.agents/specs/0025-deployment-modes.spec.md`](../.agents/specs/0025-deployment-modes.spec.md).
 
 spec-memo will support three deployment modes without requiring agent host MCP configuration rewrites:
 1. **Local**: Default MCP stdio reading/writing local vault at `~/.spec-memo` (or `$SPEC_MEMO_ROOT`). No network required.
@@ -45,12 +45,12 @@ flowchart TD
 
 ### Phase 1: Config Schema, `memo setup`, Extended `memo doctor`, and `ws-memo` Configure
 
-#### [MODIFY] [src/types.ts](file:///l:/source/spec-memo/src/types.ts)
+#### [MODIFY] [src/types.ts](../src/types.ts)
 - Extend `VaultConfig` with `mode?: 'local' | 'hybrid' | 'remote'` (default `'local'`) and `remote?: { url: string }`.
 - Add `SetupOptions`, `SetupResult`, `HostName` types.
 - Extend `DoctorResult` with `mode`, `remoteUrl`, `tokenConfigured`, `hybridState`, `remoteHealth`.
 
-#### [NEW] [src/setup.ts](file:///l:/source/spec-memo/src/setup.ts)
+#### [NEW] [src/setup.ts](../src/setup.ts)
 - Implement `normalizeRemoteUrl(rawUrl: string): string` (strips `/sse`, `/message`, trailing slashes; validates `http://` or `https://`).
 - Implement `generateHostMcpSnippet(host: HostName, command?: string)` for `cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`.
 - Implement `runSetup(options: SetupOptions)`:
@@ -58,13 +58,13 @@ flowchart TD
   - Rejects missing URL or missing env token (`SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN`) in non-interactive hybrid/remote mode.
   - Implements `--print-mcp --host <name>` and opt-in `--write-mcp --host <name>`.
 
-#### [MODIFY] [src/doctor.ts](file:///l:/source/spec-memo/src/doctor.ts)
+#### [MODIFY] [src/doctor.ts](../src/doctor.ts)
 - Add mode reporting, remote URL validation, token presence check.
 - In `hybrid` mode: inspect hybrid state and check `GET {origin}/health` with bearer auth (warning on failure; fail-open).
 - In `remote` mode: check `GET {origin}/health` with bearer auth (failure on unreachable; fail-closed).
 - Missing/omitted `mode` is treated as `'local'` without flagging corruption.
 
-#### [MODIFY] [src/cli.ts](file:///l:/source/spec-memo/src/cli.ts)
+#### [MODIFY] [src/cli.ts](../src/cli.ts)
 - Register `memo setup` command with flags `--mode`, `--url`, `--print-mcp`, `--write-mcp`, `--host`, `--json`.
 - Update `doctor` reporting with mode and remote health information.
 
@@ -72,44 +72,44 @@ flowchart TD
 
 ### Phase 2: Daemon HTTP Changeset Sync & Hybrid Dual-Sync Engine
 
-#### [NEW] [src/hybrid-state.ts](file:///l:/source/spec-memo/src/hybrid-state.ts)
+#### [NEW] [src/hybrid-state.ts](../src/hybrid-state.ts)
 - Manage `~/.spec-memo/.sync/hybrid-state.json` (machine-local state: `dirty`, `lastSyncAt`, `lastError`, `cursors`).
 - Excluded from vault-git commits and backup archives.
 
-#### [MODIFY] [src/server.ts](file:///l:/source/spec-memo/src/server.ts)
+#### [MODIFY] [src/server.ts](../src/server.ts)
 - Add authenticated HTTP sync routes to `memo serve --sse`:
   - `POST /api/sync/pull`: exports changeset for specified `projectId` / `since`.
   - `POST /api/sync/push`: applies incoming changeset via `applyChangeset`.
   - `POST /api/sync`: two-way sync round-trip.
 - Protected by `isAuthorized` with bearer token validation.
 
-#### [NEW] [src/hybrid-sync.ts](file:///l:/source/spec-memo/src/hybrid-sync.ts)
+#### [NEW] [src/hybrid-sync.ts](../src/hybrid-sync.ts)
 - Implement `pullHybridProject(vaultRoot, projectId, remoteUrl, token)`
 - Implement `pushHybridProject(vaultRoot, projectId, remoteUrl, token)`
 - Implement `syncHybrid(vaultRoot, options: { all?: boolean, dryRun?: boolean, ... })`
 - Implement debounced push queue (`scheduleHybridPush`) coalescing rapid bursts (2000ms debounce).
 - Implement fail-open error handling (marks `dirty` and `lastError` without rolling back local mutations).
 
-#### [MODIFY] [src/bootstrap.ts](file:///l:/source/spec-memo/src/bootstrap.ts)
+#### [MODIFY] [src/bootstrap.ts](../src/bootstrap.ts)
 - In `hybrid` mode: best-effort pull for the bound `projectId` prior to brief compilation.
 - If pull fails: record warning in `brief.notices` and mark hybrid state dirty/error; fail open returning local data.
 
-#### [MODIFY] [src/tools.ts](file:///l:/source/spec-memo/src/tools.ts)
+#### [MODIFY] [src/tools.ts](../src/tools.ts)
 - On mutating operations (`upsert`, `append`, `forget`, `gc`), if mode is `hybrid`, schedule debounced push for the affected `projectId`.
 
-#### [MODIFY] [src/cli.ts](file:///l:/source/spec-memo/src/cli.ts)
+#### [MODIFY] [src/cli.ts](../src/cli.ts)
 - Route `memo sync [--all] [--dry-run] [--json]` to `syncHybrid` when mode is `hybrid`.
 
 ---
 
 ### Phase 3: Remote stdio MCP Proxy & Remote CLI Extras
 
-#### [NEW] [src/mcp-proxy.ts](file:///l:/source/spec-memo/src/mcp-proxy.ts)
+#### [NEW] [src/mcp-proxy.ts](../src/mcp-proxy.ts)
 - Create stdio MCP server proxy that forwards the 10 MCP tools to the remote daemon's SSE endpoint (`/sse` + `/message`).
 - Passes through tool results and errors faithfully.
 - Fails closed with structured errors when the daemon is unreachable.
 
-#### [MODIFY] [src/mcp.ts](file:///l:/source/spec-memo/src/mcp.ts) & [src/cli.ts](file:///l:/source/spec-memo/src/cli.ts)
+#### [MODIFY] [src/mcp.ts](../src/mcp.ts) & [src/cli.ts](../src/cli.ts)
 - If `mode === 'remote'`, `memo serve` starts the remote MCP proxy.
 - 10 CLI commands proxy to remote daemon.
 - `memo rank` proxies to remote search/rank.
@@ -120,12 +120,12 @@ flowchart TD
 
 ### Documentation & Skills Update
 
-#### [MODIFY] [.agents/skills/ws-memo/SKILL.md](file:///l:/source/spec-memo/.agents/skills/ws-memo/SKILL.md) & [references/SURFACE.md](file:///l:/source/spec-memo/.agents/skills/ws-memo/references/SURFACE.md)
+#### [MODIFY] [.agents/skills/ws-memo/SKILL.md](../.agents/skills/ws-memo/SKILL.md) & [references/SURFACE.md](../.agents/skills/ws-memo/references/SURFACE.md)
 - Add **configure** intent / step: check config, run setup interview (mode, URL, token env reminder).
 - Update session step: run doctor before bootstrap.
 - Document local, hybrid, and remote modes and token policy.
 
-#### [MODIFY] [README.md](file:///l:/source/spec-memo/README.md) & [AGENTS.md](file:///l:/source/spec-memo/AGENTS.md)
+#### [MODIFY] [README.md](../README.md) & [AGENTS.md](../AGENTS.md)
 - Document the 3 deployment modes, `memo setup`, hybrid sync, stdio proxy, and environment token requirements.
 
 ---

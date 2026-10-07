@@ -4,7 +4,7 @@ slug: vault-stability-audit
 title: "Vault stability: truthful diagnostics, reliable multi-vault sync, bounded observability, and release coherence"
 source: local
 specDate: 2026-09-22
-updated: 2026-09-24
+updated: 2026-09-25
 status: shipped
 ---
 
@@ -16,7 +16,7 @@ The hybrid multi-vault environment can report healthy persisted state while the 
 
 The original Cursor plan at `.cursor/plans/vault_stability_audit_10848123.plan.md` covers six implementation phases plus verification gates: containment and baseline, truthful doctor/status, synchronization reliability, multi-vault identity and alias hygiene, bounded observability, and spec/release coherence.
 
-Delivery status is **partial / in progress**. Commit `5693fea` and the v0.37.3 release provide a useful baseline for live vault-Git fields, sequential dual dispatch, basic telemetry summaries, error-log rotation, vault audit output, and spec-lifecycle checks. Passing tests or the earlier `completed` marker do not waive any acceptance criterion in this full-plan specification. The source plan's `completed` frontmatter markers are historical claims and non-normative; this specification and its index status are authoritative for current delivery.
+Delivery status is **shipped**. Commit `5693fea` and the v0.37.3 release were a baseline. The current tree (package `0.37.5`, Done log 2026-09-24, `npm test` 909 pass) implements AC1–AC29 in product code and tests: read-only baseline and residue classification, doctor/status truth, sequential dual-sync channel results, backup-gated alias merge, bounded telemetry and error-log retention, and generic spec-lifecycle checks. Index status and this frontmatter match that code.
 
 Language: en-us. The MCP surface remains exactly 11 tools. Vault records and workflow plans are preserved. Diagnosis is read-only. Cleanup, merge, purge, and deletion operations require the explicit gates in this specification.
 
@@ -89,8 +89,7 @@ The plan explicitly required data preservation and no destructive cleanup before
 
 - Related specifications: `0005-import-and-doctor`, `0009-cli-doctor`, `0018-vault-git`, `0025-deployment-modes`, `0028-operational-telemetry`, `0031-memo-status`, `0033-vault-git-hybrid-sync`, `0035-sync-conflict-reconciliation`, `0047-vault-merge-alias`, `0051-us-55`, and `0052-us-54`.
 - Partial implementation baseline: commit `5693fea`, merged through PR #81 as `1b20b83` for v0.37.3.
-- Current branch baseline during the 2026-09-23 review: `c1c457b` and package version 0.37.4, which supersedes the older version recorded by the original completion claim but does not close the broader plan.
-- Read-only review evidence: 235 targeted tests passed, `tsc --noEmit` passed, and the site check passed; static and runtime review still found unmet full-plan requirements.
+- Current tree: package version 0.37.5. The 2026-09-23 review at `c1c457b` / 0.37.4 still called the broader plan open; the 2026-09-24 Done log and the implementation in `src/vault-stability.ts`, `src/doctor.ts`, `src/dual-sync.ts`, `src/telemetry.ts`, `src/error-logger.ts`, `src/vault-manager.ts`, and `src/spec-lifecycle.ts` close it.
 - The concurrent VFS removal decision records `0027-virtual-file-system-over-mcp` as wont-implement. Those files are outside this slice and must not be reverted by this specification update.
 
 ### Design Intent
@@ -141,7 +140,7 @@ The product must expose operational truth before it attempts cleanup or reconcil
 | Destructive-work gate | Backup creation, comparison review, and explicit confirmation are implemented before cleanup or merge | Negative and integration tests |
 | Failure coverage | Every named failure class and negative scenario has a named automated or operator check | Test-plan review |
 | Tooling | Build, full tests, targeted suites, site check, Windows fixtures, and canonical validator are runnable | Command inventory |
-| State honesty | Spec 0067 and its index rows remain partial or in progress while any AC or gate is open | Frontmatter and index review |
+| State honesty | Spec 0067 and its index rows stay `shipped` / `[x] done` while the current code implements AC1–AC29 | Frontmatter and index review |
 
 ## Validation & Observation Notes
 
@@ -206,6 +205,11 @@ The product must expose operational truth before it attempts cleanup or reconcil
 - Parallel-sync wording in any affected user-facing surface fails documentation validation.
 
 ## Revision History
+
+### [2026-09-25] Revision: Status matches shipped code (Prompt: "fix the status according to current code")
+
+- Set delivery prose to shipped. Frontmatter was already `shipped`; the body still said partial.
+- Next-specs row 65 no longer calls v0.37.3 a partial baseline.
 
 ### [2026-09-23] Revision: Restore full-plan scope and partial delivery status (Prompt: "improve the spec based on this plan")
 

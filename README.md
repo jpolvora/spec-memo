@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.37.8**.
+**Local working memory for coding agents outside the product repository.** Version **0.37.9**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -247,7 +247,7 @@ memo install-hooks --scope global --host cursor,claude,codex \
   --conflictPolicy force --yes --apply
 ```
 
-Global Cursor and Claude hooks use `bash ./hooks/spec-memo-*.sh` from their user-level host directory; local hooks retain `.cursor/hooks/` or `.claude/hooks/` paths. Generated shell bridges are fail-open and bounded to 1500ms.
+Global Cursor and Claude hooks use `bash ./hooks/spec-memo-*.sh` from their user-level host directory; local hooks retain `.cursor/hooks/` or `.claude/hooks/` paths. Generated shell bridges are fail-open and bounded to 1500ms. The generated OpenCode plugin is a dual v1/v2 entrypoint (`{ id, setup, server }`): it loads under OpenCode v2 (`{ id, setup }` schema) and v1 object entrypoints (`server()`, `>= 1.18.29`), records prompt turns via the session prompt hook, and tears down via the cleanup function (`session_end` + sync + session-id unlink). Regenerate with `memo install-hooks --host opencode --apply --force` to replace pre-0.37.6 artifacts.
 
 ---
 

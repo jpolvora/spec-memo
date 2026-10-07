@@ -143,9 +143,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] Indexer leaves stale FTS row when a record id changes (duplicate hits + doctor consistent:false) (`spec: 0069-us-86.spec.md`)
 - [x] Harden tool inputs: UPSERT_FAILED raw TypeError on object-shaped frontmatter arrays + session_end without session_start (`spec: 0070-us-85.spec.md`)
 - [ ] autoMode should mean unattended: no yield at internal checkpoints (`spec: 0071-us-83.spec.md`)
-
-
-
+- [ ] [`native-core-acceleration`](0071-native-core-acceleration.spec.md): Native Core Engine Acceleration: Compiled Daemon, Relational Indexing, and Fast I/O
+- [ ] OpenCode v2: generated plugin fails to load — emit default { id, setup } instead of legacy { name, onInit, onPrompt, onExit } (`spec: 0072-us-91.spec.md`)
 
 
 
@@ -248,7 +247,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 64 | [`status-details-drawer-errors-aiops`](0066-status-details-drawer-errors-aiops.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Status Monitor: Right-aligned detail drawers for Error Logs and AI Ops; v0.36.0 |
 
-| 65 | [`vault-stability-audit`](0067-vault-stability-audit.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Full original vault-stability plan: truthful diagnostics, sync and cursor integrity, canonical multi-vault identity, bounded observability, release coherence, and operator verification; v0.37.3 is a partial baseline |
+| 65 | [`vault-stability-audit`](0067-vault-stability-audit.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Full vault-stability plan shipped: truthful diagnostics, sync and cursor integrity, canonical multi-vault identity, bounded observability, and release coherence; v0.37.5 |
 
 | 66 | [`us-36`](0045-us-36.spec.md) | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | `memo setup --host opencode` emits valid MCP config (type `local`, command array); v0.17.1; PR #37 |
 
@@ -261,6 +260,10 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 70 | [`us-85`](0070-us-85.spec.md) | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | Upsert array frontmatter hardening + idempotent session_end; v0.37.8 |
 
 | 71 | `us-83` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | autoMode should mean unattended: no yield at internal checkpoints |
+
+| 72 | [`native-core-acceleration`](0071-native-core-acceleration.spec.md) | `[ ]` pending | Phase 9: Native Acceleration | Compiled Daemon, Relational Indexing, Fast I/O, and Sub-25ms CLI |
+
+| 72 | `us-91` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | OpenCode v2: generated plugin fails to load — emit default { id, setup } instead of legacy { name, onInit, onPrompt, onExit } |
 
 ## 9. Inbox (unscheduled ideas)
 
