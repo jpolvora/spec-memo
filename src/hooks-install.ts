@@ -416,62 +416,118 @@ export function generateOpenCodePlugin(
   memoArgs: string[] = [],
   memoShell = process.platform === 'win32'
 ): string {
+  // OpenCode v2 requires `default: { id, effect | setup }`; v1 (>= 1.18.29) accepts an
+  // object entrypoint whose `server()` returns the v1 hooks. Emit both from one
+  // default export (documented dual-entrypoint form), without importing
+  // `@opencode/plugin` so the artifact never depends on bare-specifier resolution.
   return `${GENERATED_BY_PREFIX}${version}
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const SESSION_FILE = '${ACTIVE_SESSION_FILE}';
+const MEMO_EXECUTABLE = ${JSON.stringify(memoExecutable)};
+const MEMO_ARGS = ${JSON.stringify(memoArgs)};
+const MEMO_SHELL = ${memoShell};
 
-function readSessionId() {
+function sessionFile(directory) {
+  return path.join(directory || process.cwd(), SESSION_FILE);
+}
+
+function readSessionId(directory) {
   try {
-    return fs.readFileSync(SESSION_FILE, 'utf8').trim();
+    return fs.readFileSync(sessionFile(directory), 'utf8').trim();
   } catch {
     return \`hook-\${Date.now()}\`;
   }
 }
 
-function writeSessionId(id) {
+function writeSessionId(id, directory) {
   try {
-    fs.mkdirSync('.spec-memo', { recursive: true });
-    fs.writeFileSync(SESSION_FILE, id, 'utf8');
+    fs.mkdirSync(path.dirname(sessionFile(directory)), { recursive: true });
+    fs.writeFileSync(sessionFile(directory), id, 'utf8');
   } catch {}
 }
 
-async function runMemo(args) {
-  const { spawn } = await import('node:child_process');
-  return new Promise((resolve) => {
-    const child = spawn(
-      ${JSON.stringify(memoExecutable)},
-      [...${JSON.stringify(memoArgs)}, ...args],
-      { stdio: 'ignore', shell: ${memoShell} }
-    );
-    const timer = setTimeout(() => {
-      try { child.kill('SIGTERM'); } catch {}
-      resolve(0);
-    }, ${HOOK_TIMEOUT_MS});
-    child.on('error', () => { clearTimeout(timer); resolve(0); });
-    child.on('close', () => { clearTimeout(timer); resolve(0); });
-  });
+async function runMemo(args, directory) {
+  try {
+    const { spawn } = await import('node:child_process');
+    return await new Promise((resolve) => {
+      const child = spawn(
+        MEMO_EXECUTABLE,
+        [...MEMO_ARGS, ...args],
+        { stdio: 'ignore', shell: MEMO_SHELL, cwd: directory || process.cwd() }
+      );
+      const timer = setTimeout(() => {
+        try { child.kill('SIGTERM'); } catch {}
+        resolve(0);
+      }, ${HOOK_TIMEOUT_MS});
+      child.on('error', () => { clearTimeout(timer); resolve(0); });
+      child.on('close', () => { clearTimeout(timer); resolve(0); });
+    });
+  } catch {
+    return 0;
+  }
 }
 
-export default {
-  name: 'spec-memo',
-  async onInit() {
-    const sid = \`hook-\${Date.now()}\`;
-    writeSessionId(sid);
-    await runMemo(['bootstrap']);
-    await runMemo(['prompt', 'session_start', '--session-id', sid]);
-  },
-  async onPrompt() {
-    const sid = readSessionId();
-    await runMemo(['prompt', 'record', '--session-id', sid, '--body', '[hook-automated turn]']);
-  },
-  async onExit() {
-    const sid = readSessionId();
-    await runMemo(['prompt', 'session_end', '--session-id', sid]);
-    try { fs.unlinkSync(SESSION_FILE); } catch {}
-    await runMemo(['sync']);
-  }
-};
+async function startSession(directory) {
+  const sid = \`hook-\${Date.now()}\`;
+  writeSessionId(sid, directory);
+  await runMemo(['bootstrap'], directory);
+  await runMemo(['prompt', 'session_start', '--session-id', sid], directory);
+  return sid;
+}
+
+async function recordTurn(directory) {
+  const sid = readSessionId(directory);
+  await runMemo(['prompt', 'record', '--session-id', sid, '--body', '[hook-automated turn]'], directory);
+}
+
+async function endSession(directory) {
+  const sid = readSessionId(directory);
+  await runMemo(['prompt', 'session_end', '--session-id', sid], directory);
+  try { fs.unlinkSync(sessionFile(directory)); } catch {}
+  await runMemo(['sync'], directory);
+}
+
+// OpenCode v2 entrypoint. setup() may return a cleanup function; hook
+// registrations are disposed before teardown work so no turn is recorded
+// after the session has ended.
+async function setup(ctx) {
+  const directory = (ctx && ctx.location && ctx.location.directory) || process.cwd();
+  await startSession(directory);
+  let disposed = false;
+  let registration = null;
+  try {
+    registration = await ctx.session.hook('prompt', async (event) => {
+      if (disposed) return event;
+      await recordTurn(directory);
+      return event;
+    });
+  } catch {}
+  return async () => {
+    disposed = true;
+    try {
+      if (registration && typeof registration.dispose === 'function') await registration.dispose();
+    } catch {}
+    await endSession(directory);
+  };
+}
+
+// OpenCode v1 entrypoint (object form, hosts >= 1.18.29 call server()).
+async function server(input) {
+  const directory = (input && input.directory) || process.cwd();
+  await startSession(directory);
+  return {
+    'chat.message': async () => {
+      await recordTurn(directory);
+    },
+    async dispose() {
+      await endSession(directory);
+    }
+  };
+}
+
+export default { id: 'spec-memo', setup, server };
 `;
 }
 

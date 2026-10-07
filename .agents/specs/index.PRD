@@ -144,6 +144,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] Harden tool inputs: UPSERT_FAILED raw TypeError on object-shaped frontmatter arrays + session_end without session_start (`spec: 0070-us-85.spec.md`)
 - [ ] autoMode should mean unattended: no yield at internal checkpoints (`spec: 0071-us-83.spec.md`)
 - [ ] [`native-core-acceleration`](0071-native-core-acceleration.spec.md): Native Core Engine Acceleration: Compiled Daemon, Relational Indexing, and Fast I/O
+- [ ] OpenCode v2: generated plugin fails to load — emit default { id, setup } instead of legacy { name, onInit, onPrompt, onExit } (`spec: 0072-us-91.spec.md`)
+
 
 
 
@@ -260,6 +262,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 71 | `us-83` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | autoMode should mean unattended: no yield at internal checkpoints |
 
 | 72 | [`native-core-acceleration`](0071-native-core-acceleration.spec.md) | `[ ]` pending | Phase 9: Native Acceleration | Compiled Daemon, Relational Indexing, Fast I/O, and Sub-25ms CLI |
+
+| 72 | `us-91` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | OpenCode v2: generated plugin fails to load — emit default { id, setup } instead of legacy { name, onInit, onPrompt, onExit } |
 
 ## 9. Inbox (unscheduled ideas)
 

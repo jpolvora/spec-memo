@@ -129,18 +129,27 @@ describe('hooks-install', () => {
     assert.match(hooksRow!.diff || '', /invocationNum/);
   });
 
-  it('opencode plugin includes init/prompt/exit handlers per AC7', () => {
+  it('opencode plugin exposes dual v1/v2 entrypoint (id + setup for v2, server for v1)', () => {
     const plugin = generateOpenCodePlugin('2.0.0');
-    assert.match(plugin, /onInit/);
-    assert.match(plugin, /onPrompt/);
-    assert.match(plugin, /onExit/);
+    assert.match(plugin, /id: 'spec-memo'/);
+    assert.match(plugin, /async function setup\(ctx\)/);
+    assert.match(plugin, /async function server\(input\)/);
+    assert.match(plugin, /export default \{ id: 'spec-memo', setup, server \};/);
+    assert.match(plugin, /ctx\.session\.hook\('prompt'/);
+    assert.match(plugin, /'chat\.message'/);
+    assert.match(plugin, /dispose/);
+    assert.match(plugin, /location\.directory/);
+    assert.doesNotMatch(plugin, /onInit/);
+    assert.doesNotMatch(plugin, /onPrompt/);
+    assert.doesNotMatch(plugin, /onExit/);
     assert.match(plugin, /bootstrap/);
     assert.match(plugin, /sync/);
+    assert.match(plugin, /generated-by: spec-memo@2\.0\.0/);
     assert.ok(plugin.includes(String(HOOK_TIMEOUT_MS)));
-    assert.match(generateOpenCodePlugin('2.0.0', 'memo', [], true), /shell: true/);
+    assert.match(generateOpenCodePlugin('2.0.0', 'memo', [], true), /MEMO_SHELL = true/);
     assert.match(
       generateOpenCodePlugin('2.0.0', process.execPath, ['dist/cli.js'], false),
-      /shell: false/
+      /MEMO_SHELL = false/
     );
   });
 
