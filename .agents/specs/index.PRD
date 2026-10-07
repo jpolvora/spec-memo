@@ -140,6 +140,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [x] us-36: `memo setup --host opencode` MCP config shape (`spec: 0045-us-36.spec.md`)
 - [x] Vault dedup merge, vault rename, and consumer .spec-memo.json local config (`spec: 0050-vault-dedup-merge-and-local-config.spec.md`)
 - [ ] [`native-core-acceleration`](0071-native-core-acceleration.spec.md): Native Core Engine Acceleration: Compiled Daemon, Relational Indexing, and Fast I/O
+- [ ] OpenCode v2: generated plugin fails to load — emit default { id, setup } instead of legacy { name, onInit, onPrompt, onExit } (`spec: 0072-us-91.spec.md`)
+
 
 
 
@@ -248,6 +250,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 67 | [`vault-dedup-merge-and-local-config`](0050-vault-dedup-merge-and-local-config.spec.md) | `[x] done` | Phase 8: Agent Continuity & Knowledge Lifecycle | Vault dedup merge, vault rename, consumer `.spec-memo.json` local config; v0.28.0; PR #52 |
 
 | 71 | [`native-core-acceleration`](0071-native-core-acceleration.spec.md) | `[ ]` pending | Phase 9: Native Acceleration | Compiled Daemon, Relational Indexing, Fast I/O, and Sub-25ms CLI |
+
+| 72 | `us-91` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | OpenCode v2: generated plugin fails to load — emit default { id, setup } instead of legacy { name, onInit, onPrompt, onExit } |
 
 ## 9. Inbox (unscheduled ideas)
 

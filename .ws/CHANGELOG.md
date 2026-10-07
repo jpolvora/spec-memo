@@ -1,3 +1,8 @@
+### [2026-10-07] Agent: opencode-go (glm-5.3-flash)
+- **Prompt**: Import issue #91 (ws-spec-from-provider) and implement it keeping both v1 and v2 OpenCode plugin compatibility
+- **Done**: Rewrote `generateOpenCodePlugin` to emit the documented dual-entrypoint default export `{ id: 'spec-memo', setup, server }` — v2 `setup(ctx)` resolves `ctx.location.directory`, starts bootstrap + session_start, registers `ctx.session.hook('prompt')` for per-turn recording, and returns a cleanup that disposes the registration before session_end + sync + unlink; v1 `server(input)` returns `chat.message` + `dispose` hooks; removed legacy `{ name, onInit, onPrompt, onExit }` shape; session id file now resolves against the project directory instead of process cwd; fail-open/timeout behavior preserved; `hooks-install.test.ts` asserts the dual shape and no legacy tokens; updated spec `0072-us-91` (17 EARS ACs, dual entrypoint confirmed y), registered `step-00-us-91.spec.md`, tracked index.PRD row 72, FEATURES.md OpenCode wording aligned
+- **Result**: `npm run build` PASS; `node --test dist/hooks-install.test.js` 28/28; `npm test` 913/914 (1 pre-existing baseline failure `install_skills copies ws-memo into a temp product root`, reproduces on clean checkout); artifact load verified live (ESM, no `@opencode/plugin` import, cleanup unlinks session file). Implementation on `develop` uncommitted - not yet shipped/PR'd
+
 ### [2026-09-25] Agent: Cursor Grok 4.7
 - **Prompt**: Fix vault-stability spec status according to current code
 - **Done**: Spec 0067 body and Next-specs row 65 now say shipped at v0.37.5, matching frontmatter, the 2026-09-24 Done log, and the implemented doctor/sync/telemetry/lifecycle code
