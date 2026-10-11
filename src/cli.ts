@@ -494,10 +494,13 @@ Configure spec-memo deployment mode (local, hybrid, remote) and agent host MCP w
 
 Options:
   --mode          Deployment mode: local (default), hybrid, or remote
-  --url           Remote daemon origin URL (required for hybrid and remote modes)
-  --host          Target agent host (cursor, vscode, opencode, antigravity, claude, generic)
+  --url           Remote daemon origin URL (required for hybrid and remote modes; DSH streamable-http URL when --host dsh --transport streamable-http)
+  --host          Target agent host (cursor, vscode, opencode, antigravity, claude, generic, dsh)
   --print-mcp     Print host MCP configuration snippet to stdout
   --write-mcp     Write/merge host MCP configuration to host config file
+  --profile       DSH profile name (required for --host dsh --write-mcp; 1-64 chars of [A-Za-z0-9_-])
+  --project-root  DSH project root for cwd binding (absolute directory; defaults to resolved project root)
+  --transport     DSH transport: stdio (default) or streamable-http
   --auth-token    Bearer authentication token override
   --vault-root    Persist default vault root in ~/.spec-memo/config.json (alternative to SPEC_MEMO_ROOT)
   --vaultRoot     Override vault root directory for this command only
@@ -2377,6 +2380,17 @@ async function runCliInner(
         (parsed.options['auth-token'] as string) ||
         (parsed.options.authToken as string) ||
         undefined;
+      const profile =
+        (parsed.options.profile as string) ||
+        undefined;
+      const projectRoot =
+        (parsed.options['project-root'] as string) ||
+        (parsed.options.projectRoot as string) ||
+        undefined;
+      const transport =
+        (parsed.options.transport as string) ||
+        undefined;
+      const cwdOpt = (parsed.options.cwd as string) || undefined;
 
       const result = runSetup({
         mode,
@@ -2387,43 +2401,101 @@ async function runCliInner(
         vaultRoot,
         defaultVaultRoot,
         authToken,
+        profile,
+        projectRoot,
+        transport,
+        cwd: cwdOpt,
         interactive: process.stdin.isTTY && process.stdout.isTTY
       });
 
+      const isDsh = typeof host === 'string' && host.toLowerCase() === 'dsh';
       if (parsed.isJson) {
-        printJson(result);
-      } else {
-        console.log(`spec-memo — Setup Complete\n`);
-        console.log(`  Mode:             ${result.mode}`);
-        if (result.remoteUrl) {
-          console.log(`  Remote URL:       ${result.remoteUrl}`);
+        if (isDsh && typeof result.hostSnippet === 'string') {
+          printJson({ ...result, hostSnippet: { format: 'yaml', patch: result.hostSnippet } });
+        } else {
+          printJson(result);
         }
-        console.log(`  Token Configured: ${result.tokenConfigured ? 'Yes' : 'No (set SPEC_MEMO_AUTH_TOKEN)'}`);
-        console.log(`  Vault Config:     ${result.configPath}`);
-        if (result.defaultVaultRoot) {
-          console.log(`  Default Vault:    ${result.defaultVaultRoot}`);
-          console.log(`  Bootstrap Config: ${result.bootstrapConfigPath}`);
+      } else {
+        if (isDsh && result.warnings && result.warnings.length > 0) {
+          for (const w of result.warnings) {
+            console.error(`Warning: ${w}`);
+          }
+        }
+        if (isDsh && result.alreadyConfigured) {
+          console.log(`spec-memo — Already configured\n`);
+          if (result.hostConfigPath) {
+            console.log(`  Patch file:       ${result.hostConfigPath}`);
+          }
+          console.log(`  Status:           already configured`);
+        } else {
+          console.log(`spec-memo — Setup Complete\n`);
+          console.log(`  Mode:             ${result.mode}`);
+          if (result.remoteUrl) {
+            console.log(`  Remote URL:       ${result.remoteUrl}`);
+          }
+          console.log(`  Token Configured: ${result.tokenConfigured ? 'Yes' : 'No (set SPEC_MEMO_AUTH_TOKEN)'}`);
+          console.log(`  Vault Config:     ${result.configPath}`);
+          if (result.defaultVaultRoot) {
+            console.log(`  Default Vault:    ${result.defaultVaultRoot}`);
+            console.log(`  Bootstrap Config: ${result.bootstrapConfigPath}`);
+          }
+          if (isDsh && result.profile) {
+            console.log(`  DSH Profile:      ${result.profile}`);
+          }
+          if (isDsh && (result.patchPath || result.hostConfigPath)) {
+            console.log(`  Patch file:       ${result.patchPath ?? result.hostConfigPath}`);
+          }
         }
         if (result.hostSnippet) {
-          console.log(`\nHost MCP Configuration (${parsed.options.host}):`);
-          if (result.writtenMcp && result.hostConfigPath) {
-            console.log(`  Written to:       ${result.hostConfigPath}`);
+          if (isDsh) {
+            if (!(result.alreadyConfigured) || !result.hostConfigPath) {
+              if (result.writtenMcp && result.hostConfigPath) {
+                console.log(`\nHost MCP Configuration (${parsed.options.host}):`);
+                console.log(`  Written to:       ${result.hostConfigPath}`);
+              } else if (typeof result.hostSnippet === 'string') {
+                console.log(result.hostSnippet.trimEnd());
+              } else {
+                console.log(JSON.stringify(result.hostSnippet, null, 2));
+              }
+            } else if (typeof result.hostSnippet === 'string' && !result.writtenMcp) {
+              // alreadyConfigured no-op: snippet already on disk; do not reprint by default
+            }
           } else {
-            console.log(JSON.stringify(result.hostSnippet, null, 2));
+            console.log(`\nHost MCP Configuration (${parsed.options.host}):`);
+            if (result.writtenMcp && result.hostConfigPath) {
+              console.log(`  Written to:       ${result.hostConfigPath}`);
+            } else {
+              console.log(JSON.stringify(result.hostSnippet, null, 2));
+            }
           }
         }
       }
       return 0;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      const code = (err as Error & { code?: string }).code;
       const partial = (err as Error & { partialResult?: import('./types.js').SetupResult }).partialResult;
+      const isDsh = typeof (parsed.options.host as string) === 'string' && String(parsed.options.host).toLowerCase() === 'dsh';
       if (parsed.isJson) {
-        printJson({ isError: true, error: msg, code: 'SETUP_ERROR', ...(partial ? { data: partial } : {}) });
+        printJson({ isError: true, error: msg, code: code ?? 'SETUP_ERROR', ...(partial ? { data: partial } : {}) });
       } else {
-        console.error(`Setup failed: ${msg}`);
+        if (code) {
+          console.error(`Setup failed: [${code}] ${msg}`);
+        } else {
+          console.error(`Setup failed: ${msg}`);
+        }
+        if (partial?.warnings && (partial.warnings as string[]).length > 0) {
+          for (const w of partial.warnings as string[]) {
+            console.error(`Warning: ${w}`);
+          }
+        }
         if (partial?.hostSnippet) {
           console.log(`\nHost MCP Configuration (${parsed.options.host}):`);
-          console.log(JSON.stringify(partial.hostSnippet, null, 2));
+          if (typeof partial.hostSnippet === 'string' && isDsh) {
+            console.log((partial.hostSnippet as string).trimEnd());
+          } else {
+            console.log(JSON.stringify(partial.hostSnippet, null, 2));
+          }
         }
       }
       return 1;

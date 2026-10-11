@@ -221,7 +221,9 @@ export interface ProjectMetadata {
 
 export type DeploymentMode = 'local' | 'hybrid' | 'remote';
 
-export type HostName = 'cursor' | 'vscode' | 'opencode' | 'antigravity' | 'claude' | 'generic';
+export type HostName = 'cursor' | 'vscode' | 'opencode' | 'antigravity' | 'claude' | 'generic' | 'dsh';
+
+export type DshTransport = 'stdio' | 'streamable-http';
 
 export type ClientType = 'proxy' | 'direct-remote' | 'web' | 'cli' | 'unknown';
 
@@ -996,6 +998,27 @@ export interface SetupOptions {
   interactive?: boolean;
   urlPrompt?: () => string;
   authToken?: string;
+  /** DSH host: target profile name (explicit, required for --write-mcp). */
+  profile?: string;
+  /** DSH host: explicit project root for cwd binding (same as --project-root). */
+  projectRoot?: string;
+  /** DSH host: transport selection (same as --transport). */
+  transport?: DshTransport | string;
+  /** DSH host: test hook overriding $DSH_HOME (never the real ~/.dsh in tests). */
+  dshHome?: string;
+  /** DSH host: working directory hint for project-identity resolution. */
+  cwd?: string;
+  /** DSH host: MCP server name override (default spec-memo). */
+  serverName?: string;
+  /**
+   * DSH host: test hook injecting spawnSync for verification.
+   * Defaults to node:child_process spawnSync with an arg array.
+   */
+  dshSpawnSync?: (
+    cmd: string,
+    args: string[],
+    opts: { encoding: string; timeout: number }
+  ) => { status: number | null; stdout: unknown; stderr: unknown; error?: { code?: string; message?: string } };
 }
 
 export interface SetupResult {
@@ -1008,6 +1031,14 @@ export interface SetupResult {
   hostSnippet?: Record<string, unknown> | string;
   hostConfigPath?: string;
   writtenMcp?: boolean;
+  /** DSH host: target profile name. */
+  profile?: string;
+  /** DSH host: resolved patch file path. */
+  patchPath?: string;
+  /** DSH host: true when a second identical write changed zero bytes. */
+  alreadyConfigured?: boolean;
+  /** DSH host: non-fatal warnings (http default URL, fallback cwd). */
+  warnings?: string[];
   message?: string;
 }
 
