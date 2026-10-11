@@ -64,6 +64,24 @@ function stubEnoent() {
   });
 }
 
+/** Windows shell path: the `dsh.cmd` shim is absent, so cmd.exe reports this. */
+function stubWindowsNotRecognized() {
+  return (_cmd: string, _args: string[], _opts: { encoding: string; timeout: number }): SpawnResult => ({
+    status: 1,
+    stdout: '',
+    stderr: "'dsh' is not recognized as an internal or external command,\r\noperable program or batch file."
+  });
+}
+
+/** The DSH desktop app owns this profile and refuses CLI introspection. */
+function stubManagedProfile() {
+  return (_cmd: string, _args: string[], _opts: { encoding: string; timeout: number }): SpawnResult => ({
+    status: 1,
+    stdout: '',
+    stderr: 'error: profile "desktop" is managed exclusively by the Electron application'
+  });
+}
+
 async function captureCli(fn: () => Promise<number>): Promise<{ exit: number; stdout: string; stderr: string }> {
   const origLog = console.log;
   const origErr = console.error;
@@ -696,5 +714,63 @@ test('DSH host wiring us-94 (12 ACs)', async (t) => {
     );
     assert.strictEqual(cap.exit, 1);
     assert.ok(cap.stderr.includes('DSH_TRANSPORT_INVALID'));
+  });
+
+  // --- v0.38.1 fixes found while installing the DSH host for real ---
+
+  await t.test('D3 fix: stdio entry carries an explicit env layer with unquoted !!js tokens', () => {
+    const yaml = generateHostMcpSnippet('dsh', 'memo', ['serve'], {
+      projectRoot: makeDir('d3-proj')
+    }) as string;
+    assert.ok(yaml.includes('env:'), 'stdio entry must include an env layer');
+    assert.ok(
+      yaml.includes('SPEC_MEMO_AUTH_TOKEN: !!js process.env.SPEC_MEMO_AUTH_TOKEN'),
+      'auth token must be re-injected via !!js (DSH scrubs credential-shaped env for children)'
+    );
+    assert.ok(
+      yaml.includes('SPEC_MEMO_SSE_TOKEN: !!js process.env.SPEC_MEMO_SSE_TOKEN'),
+      'sse token must be re-injected via !!js'
+    );
+    assert.ok(!yaml.includes("'!!js"), '!!js expressions must never be quoted');
+    const http = generateHostMcpSnippet('dsh', 'memo', ['serve'], {
+      transport: 'streamable-http',
+      url: 'http://127.0.0.1:3123/sse'
+    }) as string;
+    assert.ok(http.includes('headers:'), 'http entry keeps the header layer');
+    assert.ok(/Authorization: !!js process\.env\.SPEC_MEMO_AUTH_TOKEN/.test(http));
+    assert.ok(!http.includes('env:'), 'http entry must not add the stdio env layer');
+  });
+
+  await t.test('D1 fix: Windows "not recognized" shim failure maps to DSH_CLI_NOT_FOUND', () => {
+    assert.throws(
+      () => verifyDshPatch('web', '/tmp/x.yml', 'mcp-spec-memo', stubWindowsNotRecognized()),
+      (err: unknown) => (err as { code?: string }).code === 'DSH_CLI_NOT_FOUND'
+    );
+  });
+
+  await t.test('D2 fix: Electron-managed profile skips verification with a warning instead of failing', () => {
+    const outcome = verifyDshPatch('desktop', '/tmp/fake.yml', 'mcp-spec-memo', stubManagedProfile());
+    assert.strictEqual(outcome.verified, false, 'must not claim verification');
+    assert.strictEqual(outcome.skipped, true, 'must be reported as skipped');
+    assert.ok(outcome.warning?.includes('desktop'), 'warning must name the profile');
+    assert.ok(outcome.warning?.includes('/tmp/fake.yml'), 'warning must name the written patch path');
+
+    const vault = makeVault('d2-vault');
+    const dshHome = makeDir('d2-dsh');
+    const res = runSetup({
+      vaultRoot: vault,
+      host: 'dsh',
+      profile: 'desktop',
+      projectRoot: makeDir('d2-proj'),
+      dshHome,
+      writeMcp: true,
+      dshSpawnSync: stubManagedProfile()
+    });
+    assert.strictEqual(res.writtenMcp, true, 'write must be reported as successful');
+    assert.ok(
+      (res.warnings ?? []).some((w) => w.includes('managed by the DSH desktop app')),
+      'skip reason must surface as a warning'
+    );
+    assert.ok(fs.existsSync(res.patchPath as string), 'patch file must exist on disk');
   });
 });

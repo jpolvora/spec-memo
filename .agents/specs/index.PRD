@@ -367,6 +367,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-29 | us-86 | Indexer deletes FTS by filepath + reconciles record_links on id change; doctor consistent without rebuild | v0.37.7; npm test 919 pass |
 | 2026-09-29 | us-85 | Upsert array frontmatter hardening + idempotent session_end + single-active sessionId inference | v0.37.8; npm test 926 pass |
 | 2026-10-11 | us-94 | `memo setup --host dsh` YAML insert patch mounting bundled `@deepseek-ai/dsh-mcp-client` (cwd binding, streamable-http `!!js` auth, dump-config verify, idempotent merge, named error codes) | v0.38.0; npm test 952 pass |
+| 2026-10-11 | us-94 | DSH install-time fixes: shell-spawned Windows shims, Electron-managed profile verification skip with warning, stdio `env` token layer (fixes hybrid 401) | v0.38.1; npm test 955 pass |
 
 ## Archive
 

@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.38.0**.
+**Local working memory for coding agents outside the product repository.** Version **0.38.1**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -229,7 +229,7 @@ memo setup --host dsh --project-root /absolute/path/to/project --print-mcp
 memo setup --host dsh --profile <name> --project-root /absolute/path/to/project --write-mcp
 ```
 
-Stdio entry (`cwd` binds the spawned server to the resolved project root):
+Stdio entry (`cwd` binds the spawned server to the resolved project root). The `env` layer is required: DSH scrubs credential-shaped names (`/KEY|PASSWORD|SECRET|TOKEN/i`) from every child environment before the explicit layer merges, so without it a hybrid `memo serve` would lose its bearer token and degrade remote sync to HTTP 401. `!!js` is resolved by the DSH loader at load time:
 
 ```yaml
 - insert:
@@ -240,6 +240,9 @@ Stdio entry (`cwd` binds the spawned server to the resolved project root):
         transport: stdio
         command: memo
         args: ['serve']
+        env:
+          SPEC_MEMO_AUTH_TOKEN: !!js process.env.SPEC_MEMO_AUTH_TOKEN
+          SPEC_MEMO_SSE_TOKEN: !!js process.env.SPEC_MEMO_SSE_TOKEN
         cwd: /absolute/path/to/the/project
 ```
 
@@ -257,7 +260,7 @@ HTTP entry (`--transport streamable-http`; the token is never written to disk �
           Authorization: !!js process.env.SPEC_MEMO_AUTH_TOKEN
 ```
 
-Writes are idempotent (a second identical `--write-mcp` reports `already configured`) and verified with `dsh --profile <p> --patch <file> --dump-config`. On Windows the plain `command: memo` relies on `cross-spawn` shim resolution for `memo.cmd`; hosts that spawn without it need an absolute path fallback.
+Writes are idempotent (a second identical `--write-mcp` reports `already configured`) and verified with `dsh --profile <p> --patch <file> --dump-config`. Verification skips with a warning — instead of failing — for Electron-managed profiles (for example the DSH desktop app's own profile), which the CLI refuses to introspect; reload the app to compose the patch. On Windows the `dsh.cmd` / `memo.cmd` shims are spawned through the shell, and the plain `command: memo` relies on the MCP SDK's `cross-spawn` shim resolution; hosts that spawn without it need an absolute path fallback.
 
 ### Agent skill (`ws-memo`)
 

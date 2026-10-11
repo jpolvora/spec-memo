@@ -105,7 +105,26 @@ export interface DshPatchConfigStdio {
   transport: 'stdio';
   command: string;
   args: string[];
+  /**
+   * Explicit env layer. DSH scrubs credential-shaped names
+   * (/KEY|PASSWORD|SECRET|TOKEN/i) from every child environment before the
+   * explicit layer merges, so a hybrid `memo serve` child would otherwise lose
+   * its bearer token and degrade remote sync to HTTP 401. `!!js` expressions
+   * are resolved by the DSH loader at load time, in the harness process.
+   */
+  env: Record<string, string>;
   cwd: string;
+}
+
+/**
+ * Env entries every generated DSH stdio entry carries so the spawned
+ * `memo serve` keeps its bearer token despite the harness credential scrub.
+ */
+export function dshStdioEnv(): Record<string, string> {
+  return {
+    [DSH_AUTH_ENV_VAR]: `!!js process.env.${DSH_AUTH_ENV_VAR}`,
+    SPEC_MEMO_SSE_TOKEN: '!!js process.env.SPEC_MEMO_SSE_TOKEN'
+  };
 }
 
 export interface DshPatchConfigHttp {
@@ -233,7 +252,7 @@ export function generateDshPatchObject(params: {
         {
           id,
           name: DSH_MCP_CLIENT_NAME,
-          config: { serverName, transport: 'stdio', command, args, cwd }
+          config: { serverName, transport: 'stdio', command, args, env: dshStdioEnv(), cwd }
         }
       ]
     }
@@ -255,6 +274,13 @@ export function serializeDshPatch(patch: DshPatch): string {
         lines.push(`        command: ${yamlScalar(stdio.command)}`);
         const argList = stdio.args.map((a) => yamlQuoted(a)).join(', ');
         lines.push(`        args: [${argList}]`);
+        if (stdio.env && Object.keys(stdio.env).length > 0) {
+          lines.push('        env:');
+          for (const [key, value] of Object.entries(stdio.env)) {
+            // Values are DSH `!!js` expressions: never quote them.
+            lines.push(`          ${key}: ${value}`);
+          }
+        }
         lines.push(`        cwd: ${yamlScalar(stdio.cwd)}`);
       } else {
         const http = item.config;
@@ -655,12 +681,29 @@ export type DshSpawnSyncFn = (
   opts: { encoding: string; timeout: number }
 ) => { status: number | null; stdout: unknown; stderr: unknown; error?: { code?: string; message?: string } };
 
+export interface DshVerifyOutcome {
+  verified: boolean;
+  skipped?: boolean;
+  warning?: string;
+}
+
+/** Quote one argument for a Windows `cmd.exe` command line. */
+function quoteWindowsShellArg(value: string): string {
+  if (value.length > 0 && !/[\s"^&|<>()%!]/.test(value)) {
+    return value;
+  }
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+const DSH_MANAGED_PROFILE_RE = /managed exclusively by the Electron application/i;
+const DSH_CMD_NOT_RECOGNIZED_RE = /is not recognized as an internal or external command/i;
+
 export function verifyDshPatch(
   profile: string,
   patchPath: string,
   serverId: string,
   spawnFn?: DshSpawnSyncFn
-): void {
+): DshVerifyOutcome {
   if (!profile || profile.trim().length === 0) {
     throw dshError('DSH profile is required. Pass --profile <name>.', 'DSH_PROFILE_REQUIRED');
   }
@@ -668,7 +711,17 @@ export function verifyDshPatch(
   const run: DshSpawnSyncFn =
     spawnFn ??
     ((cmd: string, args: string[], opts: { encoding: string; timeout: number }) => {
-      const res = spawnSync(cmd, args, { encoding: opts.encoding as BufferEncoding, timeout: opts.timeout });
+      // On Windows `dsh` on PATH is a `dsh.cmd` shim, which CreateProcess cannot
+      // execute directly: a shell-less spawn fails ENOENT even though the CLI is
+      // installed. Run the shim through the shell there so verification works.
+      const res =
+        process.platform === 'win32'
+          ? spawnSync([cmd, ...args].map(quoteWindowsShellArg).join(' '), {
+              encoding: opts.encoding as BufferEncoding,
+              timeout: opts.timeout,
+              shell: true
+            })
+          : spawnSync(cmd, args, { encoding: opts.encoding as BufferEncoding, timeout: opts.timeout });
       const err = res.error as { code?: string; message?: string } | undefined;
       return {
         status: res.status,
@@ -693,7 +746,11 @@ export function verifyDshPatch(
       'DSH_VERIFY_FAILED'
     );
   }
-  if (result.error && result.error.code === 'ENOENT') {
+  const stdout = typeof result.stdout === 'string' ? result.stdout : String(result.stdout ?? '');
+  const stderr = typeof result.stderr === 'string' ? result.stderr : String(result.stderr ?? '');
+  // A missing CLI surfaces as ENOENT (POSIX) or as cmd.exe's "not recognized"
+  // message (Windows, where the runner above goes through the shell).
+  if ((result.error && result.error.code === 'ENOENT') || DSH_CMD_NOT_RECOGNIZED_RE.test(stderr)) {
     throw dshError('DSH CLI not found. Install DeepSeek Harness 0.2 or later.', 'DSH_CLI_NOT_FOUND');
   }
   if (result.error) {
@@ -702,8 +759,18 @@ export function verifyDshPatch(
       'DSH_VERIFY_FAILED'
     );
   }
-  const stdout = typeof result.stdout === 'string' ? result.stdout : String(result.stdout ?? '');
-  const stderr = typeof result.stderr === 'string' ? result.stderr : String(result.stderr ?? '');
+  // Electron-managed profiles refuse CLI introspection, but their
+  // cordis.patch.yml is still the app's own user layer. Report success with an
+  // explicit warning instead of a false verification failure.
+  if (DSH_MANAGED_PROFILE_RE.test(stderr) || DSH_MANAGED_PROFILE_RE.test(stdout)) {
+    return {
+      verified: false,
+      skipped: true,
+      warning:
+        `profile '${profile.trim()}' is managed by the DSH desktop app, so CLI verification ` +
+        `(dsh --dump-config) is unavailable; the patch was written to ${patchPath} — reload the DSH app to compose it.`
+    };
+  }
   const notFoundRe = new RegExp(`entry\\s+"${escapeRegExp(serverId)}"\\s+not found`);
   if (notFoundRe.test(stderr)) {
     throw dshError(
@@ -720,6 +787,7 @@ export function verifyDshPatch(
   if (result.status !== 0) {
     throw dshError(`DSH verification failed with exit code ${String(result.status)}.`, 'DSH_VERIFY_FAILED');
   }
+  return { verified: true };
 }
 
 /**
@@ -945,7 +1013,13 @@ export function runSetup(options: SetupOptions = {}): SetupResult {
           hostConfigPath = merge.configPath;
           dshPatchPath = merge.configPath;
           try {
-            verifyDshPatch(profile, merge.configPath, serverId, options.dshSpawnSync);
+            const verifyOutcome = verifyDshPatch(profile, merge.configPath, serverId, options.dshSpawnSync);
+            if (verifyOutcome.warning) {
+              // Verification was not possible (e.g. Electron-managed profile);
+              // surface it as a warning rather than a false failure.
+              warnings.push(verifyOutcome.warning);
+              dshWarnings = warnings;
+            }
           } catch (err: unknown) {
             const verifyErr = err as Error & { code?: string; partialResult?: SetupResult };
             if (!verifyErr.partialResult) {
