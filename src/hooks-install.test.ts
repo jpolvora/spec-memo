@@ -146,6 +146,7 @@ describe('hooks-install', () => {
     assert.match(plugin, /sync/);
     assert.match(plugin, /generated-by: spec-memo@2\.0\.0/);
     assert.ok(plugin.includes(String(HOOK_TIMEOUT_MS)));
+    assert.match(plugin, /windowsHide: true/);
     assert.match(generateOpenCodePlugin('2.0.0', 'memo', [], true), /MEMO_SHELL = true/);
     assert.match(
       generateOpenCodePlugin('2.0.0', process.execPath, ['dist/cli.js'], false),
