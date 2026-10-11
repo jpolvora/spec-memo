@@ -632,27 +632,10 @@ export function writeDshPatchConfig(
   if (coreBlock.trim() === newBlock.trim()) {
     return { configPath: patchPath, written: false, alreadyConfigured: true };
   }
-  const before = lines.slice(0, span.startLine).join('\n');
-  const afterLines = lines.slice(span.coreEndLine);
-  const after = afterLines.join('\n');
-  let next: string;
-  if (before.length === 0) {
-    next = newBlock.trim() + '\n' + after.replace(/^\n/, '');
-    if (!next.endsWith('\n')) {
-      next += '\n';
-    }
-    if (after.startsWith('\n') && !next.includes('\n\n')) {
-      next = newBlock.trim() + '\n' + after;
-    }
-  } else {
-    const beforeWithNl = before.endsWith('\n') ? before : before + '\n';
-    next = beforeWithNl + newBlock.trim() + '\n' + after.replace(/^\n/, (m) => m);
-    if (after.length > 0 && !after.startsWith('\n') && !after.startsWith('\r')) {
-      next = beforeWithNl + newBlock.trim() + '\n' + after;
-    }
-  }
-  // Preserve exact separator semantics: core replacement keeps trailing blank lines from `after`.
-  // Reconstruct via offsets to guarantee unrelated bytes are untouched except the span.
+  // Replace exactly the entry span by byte offset so every unrelated byte
+  // (including separators and trailing blank lines) is preserved verbatim.
+  // Offsets are exact for both LF and CRLF inputs: split('\n') keeps '\r'
+  // inside each line, and each line contributes length + 1 bytes.
   const lineOffsets: number[] = [0];
   let acc = 0;
   for (const line of lines) {
@@ -661,8 +644,7 @@ export function writeDshPatchConfig(
   }
   const startOffset = lineOffsets[span.startLine] ?? 0;
   const coreEndOffset = lineOffsets[span.coreEndLine] ?? existing.length;
-  const rebuilt = existing.slice(0, startOffset) + newBlock.trim() + '\n' + existing.slice(coreEndOffset).replace(/^\n?/, (m) => m);
-  void next;
+  const rebuilt = existing.slice(0, startOffset) + newBlock.trim() + '\n' + existing.slice(coreEndOffset);
   fs.writeFileSync(patchPath, rebuilt, 'utf8');
   return { configPath: patchPath, written: true };
 }
