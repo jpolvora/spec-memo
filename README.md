@@ -1,6 +1,6 @@
 # spec-memo
 
-**Local working memory for coding agents outside the product repository.** Version **0.37.9**.
+**Local working memory for coding agents outside the product repository.** Version **0.38.0**.
 
 [Documentation Website](https://jpolvora.github.io/spec-memo/) · [Living Feature Wiki](https://jpolvora.github.io/spec-memo/wiki/) · [Architecture & Specs](.agents/specs/index.PRD) · [Changelog](PLAN.md)
 
@@ -125,16 +125,28 @@ memo setup --mode remote --url http://daemon.internal:3000
 
 All agent hosts (Cursor, VS Code, OpenCode, Antigravity, Claude Desktop) use the same **uniform stdio MCP wiring** (`memo serve`). Mode switching is controlled entirely via `~/.spec-memo/config.json`.
 
+| Host | Snippet shape | Config path |
+|---|---|---|
+| cursor | JSON `mcpServers` | `~/.cursor/mcp.json` |
+| vscode | JSON `servers` | `~/.vscode/mcp.json` |
+| opencode | JSON `mcp` (`type: local`) | `~/.config/opencode/config.json` |
+| antigravity | JSON `mcpServers` | `~/.gemini/antigravity/mcp_config.json` |
+| claude | JSON `mcpServers` | OS-specific `claude_desktop_config.json` |
+| generic | JSON `mcpServers` | `~/.mcp/mcp_config.json` |
+| dsh | YAML `insert` patch (`@deepseek-ai/dsh-mcp-client`) | `$DSH_HOME/profiles/<profile>/cordis.patch.yml` (default `~/.dsh`) |
+
 ```bash
 # Print MCP configuration snippet for your editor
 memo setup --host cursor --print-mcp
 memo setup --host vscode --print-mcp
 memo setup --host opencode --print-mcp
 memo setup --host claude --print-mcp
+memo setup --host dsh --print-mcp --project-root /absolute/path/to/project
 
 # Automatically write/merge MCP configuration directly to your editor's config file
 memo setup --host cursor --write-mcp
 memo setup --host vscode --write-mcp
+memo setup --host dsh --profile <name> --project-root /absolute/path/to/project --write-mcp
 ```
 
 #### Manual Host Configuration Snippets
@@ -205,6 +217,47 @@ Add to `~/.config/opencode/config.json` (`type` is `local`, `command` is an arra
   }
 }
 ```
+
+#### DeepSeek Harness (DSH 0.2+)
+No package install is required: `@deepseek-ai/dsh-mcp-client` ships inside DSH 0.2 or later. DSH composes its plugin tree from YAML loader patch entries, so `memo setup --host dsh` emits a one-entry `insert` patch (not a JSON `mcpServers` block). Merge target is `$DSH_HOME/profiles/<profile>/cordis.patch.yml` (default `~/.dsh`); `cordis.yml` and `package.json` are never modified.
+
+```bash
+# Print the YAML patch (paste into cordis.patch.yml)
+memo setup --host dsh --project-root /absolute/path/to/project --print-mcp
+
+# Merge into a DSH profile and verify via dump-config
+memo setup --host dsh --profile <name> --project-root /absolute/path/to/project --write-mcp
+```
+
+Stdio entry (`cwd` binds the spawned server to the resolved project root):
+
+```yaml
+- insert:
+    - id: mcp-spec-memo
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: spec-memo
+        transport: stdio
+        command: memo
+        args: ['serve']
+        cwd: /absolute/path/to/the/project
+```
+
+HTTP entry (`--transport streamable-http`; the token is never written to disk — DSH resolves the `!!js` expression at load time):
+
+```yaml
+- insert:
+    - id: mcp-spec-memo
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: spec-memo
+        transport: streamable-http
+        url: http://127.0.0.1:3123/sse
+        headers:
+          Authorization: !!js process.env.SPEC_MEMO_AUTH_TOKEN
+```
+
+Writes are idempotent (a second identical `--write-mcp` reports `already configured`) and verified with `dsh --profile <p> --patch <file> --dump-config`. On Windows the plain `command: memo` relies on `cross-spawn` shim resolution for `memo.cmd`; hosts that spawn without it need an absolute path fallback.
 
 ### Agent skill (`ws-memo`)
 

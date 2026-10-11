@@ -455,7 +455,7 @@ async function runMemo(args, directory) {
       const child = spawn(
         MEMO_EXECUTABLE,
         [...MEMO_ARGS, ...args],
-        { stdio: 'ignore', shell: MEMO_SHELL, cwd: directory || process.cwd() }
+        { stdio: 'ignore', shell: MEMO_SHELL, windowsHide: true, cwd: directory || process.cwd() }
       );
       const timer = setTimeout(() => {
         try { child.kill('SIGTERM'); } catch {}

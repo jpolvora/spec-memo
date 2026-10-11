@@ -52,7 +52,7 @@ flowchart TD
 
 #### [NEW] [src/setup.ts](../src/setup.ts)
 - Implement `normalizeRemoteUrl(rawUrl: string): string` (strips `/sse`, `/message`, trailing slashes; validates `http://` or `https://`).
-- Implement `generateHostMcpSnippet(host: HostName, command?: string)` for `cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`.
+- Implement `generateHostMcpSnippet(host: HostName, command?: string)` for `cursor`, `vscode`, `opencode`, `antigravity`, `claude`, `generic`, `dsh` (DSH emits a YAML `insert` patch mounting `@deepseek-ai/dsh-mcp-client`, bundled in DSH 0.2+, merged into `$DSH_HOME/profiles/<profile>/cordis.patch.yml`).
 - Implement `runSetup(options: SetupOptions)`:
   - Merges into `~/.spec-memo/config.json` preserving `ttl`, `vaultGit`, `embeddings`, `bootstrap`.
   - Rejects missing URL or missing env token (`SPEC_MEMO_AUTH_TOKEN` / `SPEC_MEMO_SSE_TOKEN`) in non-interactive hybrid/remote mode.

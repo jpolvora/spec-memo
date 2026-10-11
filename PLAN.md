@@ -268,4 +268,5 @@ When a Phase slice lands, append a row and tick the matching boxes in `PRODUCT.P
 | 2026-09-29 | us-87-probe-noise | Bounded unauthorized WARN logging (first + rollup / client / 60s), status companion `GET /health`, product `failureRate` excludes expected `HTTP_401`; v0.37.6; npm test 913 pass |
 | 2026-09-29 | us-86-fts-id-rename | `indexRecord` deletes FTS by filepath + reconciles `record_links` on frontmatter id change; doctor consistent without rebuild; regression test; v0.37.7; npm test 919 pass |
 | 2026-09-29 | us-85-tool-input-harden | Upsert rejects object-shaped `pathPatterns`/`tags`/`linkedPaths` with structured frontmatter error (no TypeError); `session_end` soft-skips missing sessions and infers single active `sessionId`; v0.37.8; npm test 926 pass |
+| 2026-10-11 | us-94-dsh-host | `memo setup --host dsh` YAML insert patch mounting bundled `@deepseek-ai/dsh-mcp-client` (cwd project binding, streamable-http `!!js` auth, dump-config verify gate, idempotent byte-preserving merge, named error codes); README host matrix + DSH section; v0.38.0; npm test 952 pass |
 

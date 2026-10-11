@@ -189,6 +189,14 @@ test('Deployment Modes & Portable MCP Wiring (Phase 1, 2, 3)', async (t) => {
       assert.strictEqual(typeof other[key]['spec-memo'].command, 'string');
       assert.deepStrictEqual(other[key]['spec-memo'].args, ['serve']);
     }
+    // us-94: dsh emits a YAML insert patch (not mcpServers JSON); plugin ships in DSH >= 0.2.
+    assert.ok((SUPPORTED_HOSTS as string[]).includes('dsh'), 'SUPPORTED_HOSTS must include dsh');
+    const dshSnippet = generateHostMcpSnippet('dsh', 'memo', ['serve'], { projectRoot: tempDir }) as string;
+    assert.strictEqual(typeof dshSnippet, 'string');
+    assert.ok(dshSnippet.includes('- insert:'), 'dsh snippet must contain insert wrapper');
+    assert.ok(dshSnippet.includes('@deepseek-ai/dsh-mcp-client'), 'dsh snippet must mount the bundled client');
+    assert.ok(dshSnippet.includes('mcp-spec-memo'), 'dsh snippet must target mcp-spec-memo');
+    assert.ok(!dshSnippet.includes('mcpServers'), 'dsh must not emit mcpServers JSON');
     // Stdio host configs must never auto-start the :3124 status monitor: every
     // editor window spawns its own `memo serve`, so a fixed status port collides.
     for (const host of SUPPORTED_HOSTS) {

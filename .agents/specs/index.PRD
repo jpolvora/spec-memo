@@ -145,6 +145,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 - [ ] autoMode should mean unattended: no yield at internal checkpoints (`spec: 0071-us-83.spec.md`)
 - [ ] [`native-core-acceleration`](0071-native-core-acceleration.spec.md): Native Core Engine Acceleration: Compiled Daemon, Relational Indexing, and Fast I/O
 - [ ] OpenCode v2: generated plugin fails to load — emit default { id, setup } instead of legacy { name, onInit, onPrompt, onExit } (`spec: 0072-us-91.spec.md`)
+- [x] memo setup: add --host dsh (DeepSeek Harness 0.2) MCP wiring (`spec: 0073-us-94.spec.md`)
+
 
 
 
@@ -265,6 +267,8 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 
 | 72 | `us-91` | `[ ]` todo | Phase 8: Agent Continuity & Knowledge Lifecycle | OpenCode v2: generated plugin fails to load — emit default { id, setup } instead of legacy { name, onInit, onPrompt, onExit } |
 
+| 73 | `us-94` | `[x]` done | Phase 8: Agent Continuity & Knowledge Lifecycle | memo setup: add --host dsh MCP wiring (YAML insert patch, cwd binding, streamable-http, verify, idempotent); v0.38.0 |
+
 ## 9. Inbox (unscheduled ideas)
 
 - Mobile companion web dashboard.
@@ -362,6 +366,7 @@ Evidence from the workflow-skills tree (2026-08-22): 48 specs, 57 plan directori
 | 2026-09-29 | us-87 | Bounded unauthorized WARN logging, status companion `GET /health`, product failureRate excludes expected HTTP_401 | v0.37.6; npm test 913 pass |
 | 2026-09-29 | us-86 | Indexer deletes FTS by filepath + reconciles record_links on id change; doctor consistent without rebuild | v0.37.7; npm test 919 pass |
 | 2026-09-29 | us-85 | Upsert array frontmatter hardening + idempotent session_end + single-active sessionId inference | v0.37.8; npm test 926 pass |
+| 2026-10-11 | us-94 | `memo setup --host dsh` YAML insert patch mounting bundled `@deepseek-ai/dsh-mcp-client` (cwd binding, streamable-http `!!js` auth, dump-config verify, idempotent merge, named error codes) | v0.38.0; npm test 952 pass |
 
 ## Archive
 
