@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "skills": {
+    "sdw-batch": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-batch/SKILL.md",
+      "computedHash": "3f698c10537967cf44b178c85b78be744f3b4d5391ebe77980e0f9ae9dcd5e89"
+    },
+    "sdw-changelog": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-changelog/SKILL.md",
+      "computedHash": "eae5db986fd39531182c62a373f6985ee805e42ad67a36e4569c73f5a992bbb4"
+    },
+    "sdw-code-review": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-code-review/SKILL.md",
+      "computedHash": "5bcfc07072a96c899b9ab887e26ec2a009632fee388c7b9b64d801cd3e241191"
+    },
+    "sdw-config": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-config/SKILL.md",
+      "computedHash": "af8958394679c45cb9d524e3cb66e58ef5a88195d11c7580fa046ff3dff0dd38"
+    },
+    "sdw-doctor": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-doctor/SKILL.md",
+      "computedHash": "16649e93cba2bdc74b4fa048518e24999b9ec9f261ca5a84da38cd1feeb9ee2b"
+    },
+    "sdw-fixer": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-fixer/SKILL.md",
+      "computedHash": "f785004f0739a97ffca73b83c52728947b45e2627afe254a7ee3d378bb930142"
+    },
+    "sdw-memory": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-memory/SKILL.md",
+      "computedHash": "6447354ec8783e8ec0e415ccd2bab5a7dec509e499d17faf45fc8c45c1275959"
+    },
+    "sdw-retro": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-retro/SKILL.md",
+      "computedHash": "06075606acdd445631c6d01af092dea12888e1af7f8c9bb45e8baf55d0013995"
+    },
+    "sdw-router": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-router/SKILL.md",
+      "computedHash": "b9a5d66fa671f4259f71f5853e052d9dbea865c14aafba097f54dbdea389e64f"
+    },
+    "sdw-rules": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-rules/SKILL.md",
+      "computedHash": "e1a74fb1cb84144e312945ba37cd4ee328f71facd18528595c576c1aa0575a91"
+    },
+    "sdw-run": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-run/SKILL.md",
+      "computedHash": "6a07ca90945063e19988503d0b71cbb8aae8c32d8bc7298cc0dd9170275c7fee"
+    },
+    "sdw-security-checks": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-security-checks/SKILL.md",
+      "computedHash": "565c48a30e50623cd63708d7996b736c3bfb54c2a554e59ea9818d94d71fc942"
+    },
+    "sdw-ship-pr": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-ship-pr/SKILL.md",
+      "computedHash": "0f4d9ca7db8447d1f7a4549168d54772b5b3de42abd078be9a8055e05ecdd04d"
+    },
+    "sdw-spec": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": "skills/sdw-spec/SKILL.md",
+      "computedHash": "88577e4f33c331785f04dbbe2c7fe8bc882c976efeca19b215df6a3bfa2445cd"
+    },
+    "ws-memo": {
+      "source": "jpolvora/spec-driven-workflow",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/ws-memo/SKILL.md",
+      "computedHash": "f422baa354f3cef8ff94dc2f326a75269738f9434d412188ec0bd1b2e357e7bf"
+    }
+  }
+}

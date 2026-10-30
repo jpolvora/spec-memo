@@ -2,7 +2,7 @@
 
 **Audience: agents.** Humans: [`README.md`](README.md).
 
-This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, task tracking, and **ship via `ws-ship-pr`** (version bump required before every PR).
+This document is the operating contract for coding agents working in and with **spec-memo**. It defines session startup, testing, tool usage, health diagnostics (`doctor`), HTTP/SSE serve + status monitor checks, autoboot service guidance, git boundaries, task tracking, and **ship via `sdw-ship-pr`** (version bump required before every PR).
 
 **Humans / operators** (install, autoboot systemd/Task Scheduler, favorite status URL): [`README.md`](README.md).
 
@@ -15,57 +15,49 @@ This document is the operating contract for coding agents working in and with **
 1. Explicit user instructions (current turn)
 2. This root `AGENTS.md` / [`GEMINI.md`](GEMINI.md) operating contract
 3. Design & architecture constraints ([`PRODUCT.PRD`](PRODUCT.PRD), [`FEATURES.md`](FEATURES.md), [`PLAN.md`](PLAN.md), [`.agents/specs/index.PRD`](.agents/specs/index.PRD), [`.agents/specs/*.spec.md`](.agents/specs/))
-4. Autoload (Always-applied) skills ([`.ws/autoload.md`](.ws/autoload.md))
+4. Autoload (Always-applied) skills (§ Autoload below)
 
 ---
 
 ## Autoload (Always-applied skills)
 
-Load **every** skill listed in [`.ws/autoload.md`](.ws/autoload.md) § Always-applied skills on every prompt. Membership SoT is that file (hybrid installs may resolve the same id under `{globalSkillsRoot}` when missing locally). `ws-karpathy-guidelines` stays shared-hub mandatory, not this table.
+Load exactly these **two** skills on every prompt, every session — they are the only Always-applied members:
 
 | Skill | Path | Trigger | Role |
 |---|---|---|---|
-| `ws-senior-developer` | `{skillsRoot}/ws-senior-developer/SKILL.md` | Every prompt | Delivery gate, Code review proof |
-| `ws-self-learning` | `{skillsRoot}/ws-self-learning/SKILL.md` | Every mutating task | MEMORY consult + trap write (including after `ws-goal-fix-pr` / `ws-fix-pr`) |
-| `ws-changelog` | `{skillsRoot}/ws-changelog/SKILL.md` | Every task completion | Append-only history |
-| `ws-fable-method` | `{skillsRoot}/ws-fable-method/SKILL.md` | Every prompt | Investigate/act/verify when non-trivial; defer when orch owns the session |
-| `ws-tdah` | `{skillsRoot}/ws-tdah/SKILL.md` | Every prompt | Action-first shape + judgment |
-| `ws-megabrain` | `{skillsRoot}/ws-megabrain/SKILL.md` | Every prompt | Vibe-coding implementer (no spec); defer when orch owns the session |
-| `ws-memo` | `{skillsRoot}/ws-memo/SKILL.md` | Session start / working memory | Vault runtime (11 MCP tools + CLI) with MCP I/O guard (untrusted-data fences + SHA-256 checksums; `IO_GUARD` refuse) |
-| `ws-session-tracking` | `{skillsRoot}/ws-session-tracking/SKILL.md` | Every session | Prompt turns, task boundaries, deliverables |
-| `ws-spec-memo` | `{skillsRoot}/ws-spec-memo/SKILL.md` | Config preflight | Wire `config.json` memory backends and hybrid fallback |
+| `sdw-router` | `{skillsRoot}/sdw-router/SKILL.md` | Every prompt | Dispatch intent across SDW skills; pass unrecognized work through untouched |
+| `sdw-rules` | `{skillsRoot}/sdw-rules/SKILL.md` | Every prompt | Non-negotiable rules: plan before unsolicited change, explicit authorization, YAGNI, surgical scope, empirical verification |
 
-`ws-task-lifecycle` is **not** Always-applied here. Load `ws-task-lifecycle` only for prompt-driven product work that is not Spec-to-PR (see autoload router).
+Every other SDW skill is progressive disclosure: it loads on demand through `sdw-router`, never at session start. Hybrid installs resolve the same ids under `{globalSkillsRoot}` when they are absent locally.
 
 ---
 
-## Specs Progressive Disclosure & Router
+## SDW Router & Progressive Disclosure
 
-When the user mentions specs / plans / Spec-to-PR / `index.PRD` without naming a skill, load **only** the matching skill (full table: [`autoload.md`](.ws/autoload.md) § Specs skill router):
+`sdw-router` is the entry point for workflow intents. When the user mentions specs, plans, implementation, review, or shipping without naming a skill, route the intent and load **only** the matching skill (matrix: `{skillsRoot}/sdw-router/SKILL.md` § Routing Matrix):
 
 | When the task means… | Load | Does not do |
 |---|---|---|
-| Unified spec front door | `ws-spec-manager` | Delegates; does not implement product code |
-| Draft a new local spec | `ws-spec-write` | Does not create `{plansDir}`; does not run orch |
-| Validate / reshape `*.spec.md` format & ACs | `ws-spec-format` | Does not invent product requirements |
-| Register spec of record & workflow copy | `ws-spec-provider-local` | Not for free-text draft |
-| Init / sync / promote / track `index.PRD` | `ws-spec-index` | Does not rewrite AC bodies for code drift |
-| Spec-of-record path / chronological prefix | `ws-spec-organizer` | Does not reformulate requirements |
-| Spec text drifted from implemented code | `ws-spec-update` | Does not update `index.PRD` checkboxes |
-| Prompt-driven product work (not Spec-to-PR) | `ws-task-lifecycle` | Does not mkdir `{plansDir}` or run orch |
-| Vibe-coding / what-next without a spec | `ws-megabrain` | Does not replace spec-to-pr |
-| Deliver feature Spec→PR (standard FSM) | `ws-spec-to-pr` | Not for batch; not for format-only edits |
-| Deliver feature Spec→PR (fast lite) | `ws-spec-to-pr-lite` | Not for complex multi-phase work |
-| Sequential multi-spec delivery | `ws-spec-multi` | Master orch only; does not edit product code |
-| Bulk-import GH issues / ADO US → specs | `ws-spec-from-provider` | Not single-id fetch; not orch delivery |
-| Ship / PR (`ws-ship-pr`, including “ship next version”) | § Ship via `ws-ship-pr` below + load `ws-ship-pr` | Not a feature-slice orch; does not invent scope; **always bump version before create-pr** |
+| Configuration, `.sdw/config.json`, workspace layout | `sdw-config` | Does not implement product code |
+| Author, grill, validate, index, sync, or archive specs | `sdw-spec` | Does not implement specifications |
+| Deliver one spec end to end (blueprint → DAG tasks → score → review → PR) | `sdw-run` | One spec per run; does not queue specs |
+| Queue several specs sequentially | `sdw-batch` | Delegates each item to `sdw-run`; never refines |
+| Deep working-tree code review and executable fix plan | `sdw-code-review` | Does not remediate; findings go to `sdw-fixer` |
+| Surgical remediation of review or verification findings | `sdw-fixer` | Never self-approves; reviewer and fixer stay separate |
+| Pre-commit secrets / credentials / PII gate | `sdw-security-checks` | Scans and blocks; does not fix |
+| Ship / PR, including “ship next version” | `sdw-ship-pr` | Does not invent scope; **always bump version before create-pr** |
+| Traps / gaps / patterns / errors knowledge | `sdw-memory` | Single memory path; no direct vault or `traps.md` edits |
+| Completed-task history | `sdw-changelog` | Append-only; never rewrites history |
+| Installation and workspace health | `sdw-doctor` | Read-only audit |
+| Retrospective over a completed run | `sdw-retro` | Reports friction and candidates; changes nothing |
 
-### Vault / spec-memo runtime
+### spec-memo runtime (product)
 
-[`ws-memo`](.agents/skills/ws-memo/SKILL.md), [`ws-session-tracking`](.agents/skills/ws-session-tracking/SKILL.md), and [`ws-spec-memo`](.agents/skills/ws-spec-memo/SKILL.md) are **Always-applied** with **separated roles**:
-- **`ws-memo` (Knowledge Continuity):** Vault operations (bootstrap, search, upsert, doctor, canvas, SSE status, check_version, install_skills). Injects anti-regression traps, architectural decisions, and active specs.
-- **`ws-session-tracking` (Execution Continuity):** Session lifecycle boundaries (`session_start`, `session_end`), prompt turn ingestion, deliverable correlation (PRs, commits), and cross-agent handoff batons via MCP `prompt`.
-- **`ws-spec-memo` (Consumer setup):** `specMemo.*` / harness flags, import MEMORY, write-block hook, disable. Do not write `specMemo.*` from `ws-memo`.
+The memory backend is the spec-memo vault; `sdw-memory` is the only skill that reads or writes it.
+
+- **Knowledge continuity (`sdw-memory`):** queries and records traps/gaps/patterns/errors; the default backend is the vault through the `memo` CLI / MCP (fallback `.sdw/memory/traps.md`). It injects anti-regression traps, architectural decisions, and active specs before planning.
+- **Run and session continuity:** MCP/CLI `prompt` (`session_start` / `session_end`) records prompt turns, deliverables (PRs, commits), and handoff batons; `sdw-run` persists run state in `.sdw/state/{runId}.state.json`; `sdw-retro` reports friction after a completed run.
+- **Configuration:** `sdw-config` owns `.sdw/config.json` (`specsDir`, `memory.backends`, SCM, verification gates). Do not write `specMemo.*` or harness flags through `sdw-memory`.
 
 ---
 
@@ -172,7 +164,7 @@ Human-facing ops (autoboot systemd / Windows Task Scheduler, remote MCP URL): [`
 
 ## 🖥️ Agent workflows: run · serve · diagnose · status · autoboot
 
-Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI (`memo` or `node dist/cli.js`). Full map: [`ws-memo`](.agents/skills/ws-memo/SKILL.md).
+Prefer MCP tools when the host exposes `spec-memo` / `user-spec-memo`. Else CLI (`memo` or `node dist/cli.js`). Full map: `sdw-memory` (vault knowledge) and `sdw-router` (intent dispatch).
 
 ### Run (session & vault ops)
 
@@ -314,7 +306,7 @@ When the user asks to install a boot service for the SSE daemon:
 ### 8. `promote`
 - **Purpose**: Copy a record into the product repository as documentation (default-deny without destination).
 - **Parameters**: `id` (string, optional when `format=skill`), `destination` (required string), `format` (optional `raw` \| `adr` \| `madr` \| `skill`), `limit` (number), `force` (boolean).
-- **CLI Example**: `memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md`
+- **CLI Example**: `memo promote --format skill --to .agents/skills/<skill-name>/SKILL.md`
 
 ### 9. `check_version`
 - **Purpose**: Compare the running spec-memo package version to the latest npm release (soft-fail offline).
@@ -378,7 +370,7 @@ CLI-only (not an MCP tool). Lists active traps by `occurrences`.
 memo rank --json
 memo rank --layer web --limit 10
 memo rank --backfill
-memo promote --format skill --to .agents/skills/ws-recurrence/SKILL.md
+memo promote --format skill --to .agents/skills/<skill-name>/SKILL.md
 ```
 
 ---
@@ -398,45 +390,17 @@ This product's thesis is that **product git is not a memory store. Dogfood it.**
 
 ---
 
-## 📋 Task Execution & Spec-to-PR Workflow
+## 🚀 Ship via `sdw-ship-pr`
 
-Always work in strict synchronization with [`.agents/specs/index.PRD`](.agents/specs/index.PRD) and project tracking documents:
-
-### Phase 1: Intake & Alignment (Pre-execution)
-1. Locate the feature slice in `.agents/specs/index.PRD` and `PLAN.md`.
-2. Review acceptance criteria in `.agents/specs/<slug>.spec.md`.
-3. Mark task as `[~] in progress` in `.agents/specs/index.PRD`.
-
-### Phase 2: Surgical Implementation & Verification
-1. Apply minimal, surgical diffs following Karpathy guidelines.
-2. Run `npm test` and verify that all 196 tests pass with zero regressions.
-
-### Phase 3: Post-Execution Tracking Updates (Canonical Order)
-Once tests pass, update tracking documents in this exact order:
-1. **[`FEATURES.md`](FEATURES.md)**: Mark matching capabilities as `[x]`.
-2. **[`PLAN.md`](PLAN.md)**: Append to `## Done log` with Date, Slice Slug, and Proof Result.
-3. **[`PRODUCT.PRD`](PRODUCT.PRD)**: Append to `## 11. Done log`.
-4. **[`.agents/specs/index.PRD`](.agents/specs/index.PRD)**:
-   - Mark spec in `## 8. Next specs` as `[x] done`.
-   - Append to `## 10. Done log`.
-   - Mark slice spec status as complete.
-5. **Changelog & Learning**:
-   - Log task completion via `ws-changelog`.
-   - Record newly discovered traps via `ws-self-learning` (`memo upsert --kind trap ...`).
-
----
-
-## 🚀 Ship via `ws-ship-pr`
-
-**Every** `/ws-ship-pr` invocation (including “ship next version”, “bump + ship”, or any standalone ship) must complete this checklist **in order before create-pr**. Do not skip steps or merge early.
+**Every** `/sdw-ship-pr` invocation (including “ship next version”, “bump + ship”, or any standalone ship) must complete this checklist **in order before create-pr**. Do not skip steps or merge early.
 
 | Step | Do | Done when |
 |---|---|---|
 | 1. Verify | Run tests and verifications (`npm test`; add `npm run build` / targeted suites if the slice touched them). Fix failures before any version bump. | Full suite green |
 | 2. Bump | **Required before PR.** Bump the product version in `package.json` (semver patch/minor/major per shipped scope). Keep lockfile / embedded version strings consistent if the repo mirrors them. | `package.json` `version` matches the release intent |
 | 3. README | Update [`README.md`](README.md) with the latest features just implemented (version badge/line, Command & Tool Reference, operator-facing deltas). Align with [`FEATURES.md`](FEATURES.md) — do not claim unfinished work. | README reflects this version’s shipped surface |
-| 4. Commit + push | Commit ship-scope changes (version, README, tracking docs, code). Push `shipHead` (`config.project.workingBranch`, default `develop`). Product specs of record may need `SKIP_MEMO_HOOK=1` in this repo. | Branch pushed; no uncommitted ship-scope files |
-| 5. `ws-ship-pr` | Load and run [`ws-ship-pr`](https://github.com/jpolvora/workflow-skills/tree/develop/.agents/skills/ws-ship-pr): prepare board → create PR to `config.project.baseBranch`. Steps 1–4 must already be ✅ — **never create a PR without a version bump on the branch.** | PR URL captured |
-| 6. `ws-goal-fix-pr` | After PR exists, run [`ws-goal-fix-pr`](https://github.com/jpolvora/workflow-skills/tree/develop/.agents/skills/ws-goal-fix-pr): wait for CI / agentic review, converge threads, merge only when checks green and `activeThreads == 0` (unless user said `no-merge`). | PR merged or explicitly left open per user |
+| 4. Commit + push | Commit ship-scope changes (version, README, tracking docs, code). Push the working branch (`develop`). Product specs of record may need `SKIP_MEMO_HOOK=1` in this repo. | Branch pushed; no uncommitted ship-scope files |
+| 5. `sdw-ship-pr` | Load and run `sdw-ship-pr`: prepare board → create PR to the base branch (`master`). Steps 1–4 must already be ✅ — **never create a PR without a version bump on the branch.** | PR URL captured |
+| 6. Review convergence | After the PR exists, run `sdw-ship-pr --poll-pr` (add `--merge` when the user allows merging): wait for CI and agentic review, route findings to `sdw-fixer`, resolve threads only after pushing an explanatory fix comment, and merge only when checks are green and `activeThreads == 0` (unless the user said `no-merge`). | PR merged or explicitly left open per user |
 
-**Rules:** announce each checklist row as you complete it; never bump version on a red test run; never create a PR without completing steps 1–4 (version bump is mandatory for every ship); never push secrets; never delete `shipHead` after merge.
+**Rules:** announce each checklist row as you complete it; never bump version on a red test run; never create a PR without completing steps 1–4 (version bump is mandatory for every ship); never push secrets; never delete the working branch after merge.

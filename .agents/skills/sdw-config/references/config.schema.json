@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://spec-driven-workflow.org/schemas/config.schema.json",
+  "title": "SDW Configuration Schema",
+  "description": "Configuration schema for Spec-Driven Workflow (.sdw/config.json).",
+  "type": "object",
+  "required": ["specsDir"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Relative path or URL to the JSON schema definition file."
+    },
+    "specsDir": {
+      "type": "string",
+      "description": "Path to the directory containing feature specifications. Supports tokens {projectRoot} and {skillsRoot}.",
+      "default": "{projectRoot}/.sdw/specs"
+    },
+    "scoreMin": {
+      "type": "integer",
+      "description": "Minimum conformance score (0-10) required before creating delivery commits.",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 8
+    },
+    "scmCodeReviewEnabled": {
+      "type": "boolean",
+      "description": "Enable remote pull request review polling loop and automated review comment resolution.",
+      "default": false
+    },
+    "pushDelivery": {
+      "type": "boolean",
+      "description": "Automatically push the delivery commit and branch to remote origin upon workflow completion.",
+      "default": false
+    },
+    "stateDir": {
+      "type": "string",
+      "description": "Path to the directory storing run session state files. Supports tokens {projectRoot} and {skillsRoot}.",
+      "default": "{projectRoot}/.sdw/state"
+    },
+    "skillsRoot": {
+      "type": "string",
+      "description": "Path to the active skills directory. Supports tokens {projectRoot} and {skillsRoot}."
+    },
+    "autoResolveGaps": {
+      "type": "boolean",
+      "description": "Automatically apply recommended defaults for unhandled grilling gaps when running non-interactively.",
+      "default": true
+    },
+    "securityChecksEnabled": {
+      "type": "boolean",
+      "description": "Enable pre-commit secrets and credentials leak scanning.",
+      "default": false
+    },
+    "useWorktrees": {
+      "type": "boolean",
+      "description": "Enable per-task isolated git worktrees for dispatched subagents under .sdw/worktrees/{runId}/.",
+      "default": false
+    },
+    "useFeatureBranches": {
+      "type": "boolean",
+      "description": "Automatically create and activate an isolated feature branch derived from specification slug.",
+      "default": false
+    },
+    "scmProvider": {
+      "type": "string",
+      "enum": ["none", "ado", "github"],
+      "default": "none",
+      "description": "Configured SCM provider for issues, work items, and pull requests. Allowed: none, ado, github."
+    },
+    "implementation": {
+      "type": "object",
+      "description": "Configuration for task implementation execution in Step 4.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["handoff", "command"],
+          "default": "handoff",
+          "description": "Implementation execution mode: handoff (interactive agent/human) or command (automated process execution)."
+        },
+        "command": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Command to execute when implementation.mode is command. Supports {promptFile}, {taskId}, {cwd}, {slug}, {evidenceFile}."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "default": 1800000,
+          "description": "Execution timeout in milliseconds for command mode."
+        },
+        "envAllowlist": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "LANG", "LC_ALL"],
+          "description": "List of allowed environment variable names passed to implementation command."
+        }
+      },
+      "additionalProperties": false
+    },
+    "verification": {
+      "type": "object",
+      "description": "Configuration for build and test gates in Step 4.",
+      "properties": {
+        "buildCommand": {
+          "type": ["string", "null"],
+          "default": "npm run build",
+          "description": "Command executed for build verification gate when requiredBuild is true."
+        },
+        "testCommand": {
+          "type": ["string", "null"],
+          "default": "npm test",
+          "description": "Command executed for test verification gate when runAllTests is true."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "default": 600000,
+          "description": "Execution timeout in milliseconds for build and test verification commands."
+        }
+      },
+      "additionalProperties": false
+    },
+    "requiredBuild": {
+      "type": "boolean",
+      "description": "Enforce successful build verification before creating delivery commit or PR.",
+      "default": false
+    },
+    "runAllTests": {
+      "type": "boolean",
+      "description": "Enforce passing all test suites before creating delivery commit or PR.",
+      "default": false
+    },
+    "prePrCommand": {
+      "type": "string",
+      "description": "Optional project-specific shell command to execute before PR preparation (e.g. version bump, lint).",
+      "default": ""
+    },
+    "prePrInstructions": {
+      "type": "string",
+      "description": "Optional project-specific instructions or checklist for agents to verify prior to PR submission.",
+      "default": ""
+    },
+    "reviewFixCommand": {
+      "type": "string",
+      "description": "Optional command that applies review-thread fixes. When unset, sdw-ship-pr never resolves active threads automatically.",
+      "default": ""
+    },
+    "maxPreemptions": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum concurrent-push adaptation budget for post-PR review convergence before draining rounds.",
+      "default": 3
+    }
+  },
+  "additionalProperties": true
+}

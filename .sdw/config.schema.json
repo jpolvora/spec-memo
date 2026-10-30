@@ -1,0 +1,355 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://spec-driven-workflow.org/schemas/config.schema.json",
+  "title": "SDW Configuration Schema",
+  "description": "Configuration schema for Spec-Driven Workflow (.sdw/config.json).",
+  "type": "object",
+  "required": [
+    "specsDir"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Relative path or URL to the JSON schema definition file."
+    },
+    "specsDir": {
+      "type": "string",
+      "description": "Path to the directory containing feature specifications. Supports tokens {projectRoot} and {skillsRoot}.",
+      "default": "{projectRoot}/.sdw/specs"
+    },
+    "automation": {
+      "type": "object",
+      "description": "Opt-in autonomous delivery. When both flags are true, Step 8 ships, converges, and merges in the same invocation; any failing gate still blocks delivery.",
+      "properties": {
+        "autoShip": {
+          "type": "boolean",
+          "description": "Allow Step 8 to push and poll the pull request without an operator round trip.",
+          "default": false
+        },
+        "autoMerge": {
+          "type": "boolean",
+          "description": "Allow Step 8 to merge the pull request once every gate and review thread is clear.",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "scoreMin": {
+      "type": "integer",
+      "description": "Minimum conformance score (0-10) required before creating delivery commits.",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 8
+    },
+    "scoring": {
+      "type": "object",
+      "description": "Configuration for Step 5 LLM-judge conformance scoring (Spec 027).",
+      "properties": {
+        "judgeCommand": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional command that judges conformance and writes the verdict JSON. Supports {promptFile}, {verdictFile}, {diffFile}, {criteriaFile}, {slug}, {targetRoot}. When null, the current agent model instance judges and submits the verdict via 'score submit'."
+        },
+        "judgeModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Judge model identifier passed to the judge command or the host agent."
+        },
+        "judgeProvider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Judge provider identifier passed to the judge command or the host agent."
+        },
+        "judgeEffort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Judge reasoning-effort hint passed to the judge command or the host agent."
+        },
+        "judgeApiEndpoint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Judge API endpoint passed to the judge command or the host agent."
+        },
+        "judgeCriticity": {
+          "type": "string",
+          "enum": [
+            "permissive",
+            "strict",
+            "perfectionist"
+          ],
+          "default": "strict",
+          "description": "Judge strictness: permissive credits partial attempts, strict requires the demanded behaviour, perfectionist requires complete implementation with verification."
+        }
+      },
+      "additionalProperties": false
+    },
+    "scmCodeReviewEnabled": {
+      "type": "boolean",
+      "description": "Enable remote pull request review polling loop and automated review comment resolution.",
+      "default": false
+    },
+    "pushDelivery": {
+      "type": "boolean",
+      "description": "Automatically push the delivery commit and branch to remote origin upon workflow completion.",
+      "default": false
+    },
+    "changelogEnabled": {
+      "type": "boolean",
+      "description": "Enable appending delivery records to the project changelog. When false, sdw-changelog exits 0 with 'skipped: disabled' and writes nothing.",
+      "default": true
+    },
+    "changelogFile": {
+      "type": "string",
+      "description": "Path to the project changelog. Supports the {projectRoot} token; the resolved path must stay inside the project root.",
+      "default": "{projectRoot}/CHANGELOG.md"
+    },
+    "stateDir": {
+      "type": "string",
+      "description": "Path to the directory storing run session state files. Supports tokens {projectRoot} and {skillsRoot}.",
+      "default": "{projectRoot}/.sdw/state"
+    },
+    "sandboxDir": {
+      "type": "string",
+      "description": "Path to the directory that holds sandbox clones created by sdw-run --sandbox. Defaults to {projectRoot}/.sdw/sandbox; any other value must resolve outside the project root. Supports tokens {projectRoot}, {skillsRoot}, and {temp}.",
+      "default": "{projectRoot}/.sdw/sandbox"
+    },
+    "skillsRoot": {
+      "type": "string",
+      "description": "Path to the active skills directory. Supports tokens {projectRoot} and {skillsRoot}."
+    },
+    "autoResolveGaps": {
+      "type": "boolean",
+      "description": "Automatically apply recommended defaults for unhandled grilling gaps when running non-interactively.",
+      "default": true
+    },
+    "securityChecksEnabled": {
+      "type": "boolean",
+      "description": "Enable pre-commit secrets and credentials leak scanning.",
+      "default": false
+    },
+    "useWorktrees": {
+      "type": "boolean",
+      "description": "Enable per-task isolated git worktrees under .sdw/worktrees/{runId}/ for implementation.mode: command.",
+      "default": false
+    },
+    "useFeatureBranches": {
+      "type": "boolean",
+      "description": "Automatically create and activate an isolated feature branch derived from specification slug.",
+      "default": false
+    },
+    "branching": {
+      "type": "object",
+      "description": "Branch lane model (spec 00040): the work lane is where feature branches start and where the repository returns after delivery; the integration lane is where the pull request merges. `strategy` selects a preset and every explicit key overrides that preset.",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "trunk",
+            "github",
+            "develop",
+            "gitflow",
+            "gitlab"
+          ],
+          "default": "trunk",
+          "description": "Preset: trunk (feature branches start from the checked-out branch), github (work lane mirrors the integration lane), develop (feature branches start from develop; pull requests target the auto-detected integration branch), gitflow (feature branches start from develop and pull requests merge into develop), gitlab (work lane mirrors the integration lane; promotions between environment lanes stay manual)."
+        },
+        "featurePrefix": {
+          "type": "string",
+          "default": "feature/",
+          "description": "Prefix for the feature branch name: {branching.featurePrefix}{specSlug}."
+        },
+        "workBranch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Branch where feature branches start and where the repository returns after delivery. null uses the checked-out branch; the github and gitlab presets mirror integrationBranch."
+        },
+        "integrationBranch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Branch that receives the pull request merge. null means auto: the repository default branch resolved from origin/HEAD."
+        },
+        "updateWorkBranch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Fetch origin and fast-forward the work branch before creating the feature branch."
+        },
+        "syncWorkBranchAfterMerge": {
+          "type": "boolean",
+          "default": false,
+          "description": "After the pull request merges, fast-forward the work branch to the integration branch."
+        },
+        "pushSyncedWorkBranch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Push the synchronized work branch to origin after the post-merge fast-forward."
+        }
+      },
+      "additionalProperties": false
+    },
+    "scmProvider": {
+      "type": "string",
+      "enum": [
+        "none",
+        "ado",
+        "github"
+      ],
+      "default": "none",
+      "description": "Configured SCM provider for issues, work items, and pull requests. Allowed: none, ado, github."
+    },
+    "implementation": {
+      "type": "object",
+      "description": "Configuration for task implementation execution in Step 4.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "subagent",
+            "command"
+          ],
+          "default": "subagent",
+          "description": "Implementation execution mode: subagent (sequential host-dispatched workers, one task at a time) or command (automated subprocess per task)."
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Command to execute when implementation.mode is command."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "default": 1800000,
+          "description": "Execution timeout in milliseconds for command mode."
+        },
+        "envAllowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "PATH",
+            "HOME",
+            "USERPROFILE",
+            "TEMP",
+            "TMP",
+            "LANG",
+            "LC_ALL"
+          ],
+          "description": "List of allowed environment variable names."
+        }
+      },
+      "additionalProperties": false
+    },
+    "verification": {
+      "type": "object",
+      "description": "Configuration for build and test gates in Step 4.",
+      "properties": {
+        "buildCommand": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "npm run build",
+          "description": "Command executed for build verification gate."
+        },
+        "testCommand": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "npm test",
+          "description": "Command executed for test verification gate."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "default": 600000,
+          "description": "Execution timeout in milliseconds."
+        }
+      },
+      "additionalProperties": false
+    },
+    "requiredBuild": {
+      "type": "boolean",
+      "description": "Enforce successful build verification before creating delivery commit or PR.",
+      "default": false
+    },
+    "runAllTests": {
+      "type": "boolean",
+      "description": "Enforce passing all test suites before creating delivery commit or PR.",
+      "default": false
+    },
+    "prePrCommand": {
+      "type": "string",
+      "description": "Optional project-specific shell command to execute before PR preparation (e.g. version bump, lint).",
+      "default": ""
+    },
+    "prePrInstructions": {
+      "type": "string",
+      "description": "Optional project-specific instructions or checklist for agents to verify prior to PR submission.",
+      "default": ""
+    },
+    "reviewFixCommand": {
+      "type": "string",
+      "description": "Optional command that applies review-thread fixes. When unset, sdw-ship-pr never resolves active threads automatically.",
+      "default": ""
+    },
+    "maxPreemptions": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum concurrent-push adaptation budget for post-PR review convergence before draining rounds.",
+      "default": 3
+    },
+    "memory": {
+      "type": "object",
+      "description": "Product memory backend selection for sdw-memory (central knowledge wrapper). The ws-memo vault is the default integration; local traps file and memory files are fallbacks.",
+      "properties": {
+        "backends": {
+          "type": "object",
+          "description": "Enable or disable each memory store backend. Missing keys default to enabled.",
+          "properties": {
+            "wsMemo": {
+              "type": "boolean",
+              "description": "Use the ws-memo vault (memo CLI) as the default knowledge store.",
+              "default": true
+            },
+            "traps": {
+              "type": "boolean",
+              "description": "Use the local .sdw/memory/traps.md table backend.",
+              "default": true
+            },
+            "files": {
+              "type": "boolean",
+              "description": "Search local MEMORY.md and memory/*.md files (read-only).",
+              "default": true
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

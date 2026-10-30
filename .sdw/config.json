@@ -1,0 +1,60 @@
+{
+  "$schema": "./config.schema.json",
+  "specsDir": "{projectRoot}/.sdw/specs",
+  "scoreMin": 8,
+  "scoring": {
+    "judgeCommand": null,
+    "judgeModel": null,
+    "judgeProvider": null,
+    "judgeEffort": null,
+    "judgeApiEndpoint": null,
+    "judgeCriticity": "strict"
+  },
+  "scmCodeReviewEnabled": false,
+  "pushDelivery": false,
+  "automation": {
+    "autoShip": false,
+    "autoMerge": false
+  },
+  "changelogEnabled": true,
+  "changelogFile": "{projectRoot}/CHANGELOG.md",
+  "stateDir": "{projectRoot}/.sdw/state",
+  "sandboxDir": "{projectRoot}/.sdw/sandbox",
+  "autoResolveGaps": true,
+  "securityChecksEnabled": false,
+  "useWorktrees": false,
+  "useFeatureBranches": false,
+  "scmProvider": "none",
+  "implementation": {
+    "mode": "subagent",
+    "command": null,
+    "timeoutMs": 1800000,
+    "envAllowlist": [
+      "PATH",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "LANG",
+      "LC_ALL"
+    ]
+  },
+  "verification": {
+    "buildCommand": null,
+    "testCommand": null,
+    "timeoutMs": 600000
+  },
+  "requiredBuild": false,
+  "runAllTests": false,
+  "prePrCommand": "",
+  "prePrInstructions": "",
+  "reviewFixCommand": "",
+  "maxPreemptions": 3,
+  "memory": {
+    "backends": {
+      "wsMemo": true,
+      "traps": true,
+      "files": true
+    }
+  }
+}
