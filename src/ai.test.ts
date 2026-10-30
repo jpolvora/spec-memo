@@ -807,7 +807,7 @@ describe('Vault AI assistance (spec 0056)', () => {
     const leaky = new FakeVaultAiAgent();
     leaky.refineResult = {
       ok: true,
-      searchTerms: ['ghp_abcdefghijklmnopqrstuvwxyz1234567890ABCD'],
+      searchTerms: ['ghp_abcdefghijklmnopqrstuvwxyz1234567890ABCD'], // pragma: allowlist secret
       summary: 'leaked sk_test_abcdefghijklmnopqrstuvwxyz1234 key'
     };
     await upsertRecord({
