@@ -34,10 +34,15 @@ function readInteger(value, fallback, field, min) {
   return value;
 }
 
+function splitCommand(value) {
+  const parts = String(value).trim().match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+  return parts.map((part) => part.replace(/^(["'])(.*)\1$/, '$2')).filter(Boolean);
+}
+
 function readCommand(value) {
   if (value === undefined) return [...DEFAULT_CONFIG.memoCommand];
   if (typeof value === 'string') {
-    const parts = value.trim().split(/\s+/).filter(Boolean);
+    const parts = splitCommand(value);
     if (parts.length === 0) {
       throw new TypeError('specmemo-bridge config: memoCommand must not be empty');
     }

@@ -36,19 +36,20 @@ function joinFor(platform, base, ...parts) {
   return result;
 }
 
-function defaultFileExists(candidate) {
+function defaultFileExists(candidate, { executable = true } = {}) {
   try {
     accessSync(candidate, constants.F_OK);
-    if (process.platform !== 'win32') accessSync(candidate, constants.X_OK);
+    if (executable && process.platform !== 'win32') accessSync(candidate, constants.X_OK);
+    else accessSync(candidate, constants.R_OK);
     return true;
   } catch {
     return false;
   }
 }
 
-function exists(candidate, fileExists) {
+function exists(candidate, fileExists, options) {
   try {
-    return Boolean(fileExists(candidate));
+    return Boolean(fileExists(candidate, options));
   } catch {
     return false;
   }
@@ -123,7 +124,7 @@ export function discoverMemoCommand({
 
   if (typeof productRoot === 'string' && productRoot.trim().length > 0) {
     const cliPath = joinFor(platform, productRoot, 'dist', 'cli.js');
-    if (exists(cliPath, fileExists)) {
+    if (exists(cliPath, fileExists, { executable: false })) {
       return { argv: [String(nodeCommand), cliPath], source: 'product-cli' };
     }
   }

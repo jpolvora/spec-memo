@@ -48,13 +48,24 @@ function stringOrNull(value) {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function sanitizeSessionId(rawId) {
+  const cleaned = String(rawId)
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 64);
+  return cleaned || null;
+}
+
 function identityOf(session) {
   const header = session?.header ?? {};
   const rawId = stringOrNull(header.id) ?? stringOrNull(session?.id);
+  const safeId = rawId ? sanitizeSessionId(rawId) : null;
   const cwd = stringOrNull(header.cwd) ?? stringOrNull(session?.cwd);
   return {
-    key: rawId ?? '<unknown>',
-    sessionId: rawId ? `${SESSION_PREFIX}${rawId}` : null,
+    key: safeId ?? '<unknown>',
+    sessionId: safeId ? `${SESSION_PREFIX}${safeId}` : null,
     cwd
   };
 }
@@ -355,6 +366,10 @@ export function apply(ctx, rawConfig = {}) {
     const toolName = extractToolName(event);
     if (!toolName) return undefined;
     const { key, sessionId, cwd } = identityOf(session);
+    if (!sessionId) {
+      diagnose(ctx, 'tool/result without a session id; skipping tool audit');
+      return undefined;
+    }
     return runner.enqueue(
       key,
       safeTask(() =>

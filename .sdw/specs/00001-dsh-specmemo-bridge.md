@@ -56,11 +56,11 @@ Event mapping:
 
 | DSH signal | Plugin action | Semantics |
 |---|---|---|
-| `session/created` | `memo bootstrap --cwd <cwd>`, then `memo prompt session_start --session-id dsh:<id>` | Once per live session |
-| `user/message` (session event) | `memo prompt record --session-id dsh:<id> --body <text>` | Each accepted user message |
+| `session/created` | `memo bootstrap --cwd <cwd>`, then `memo prompt session_start --session-id dsh-<id>` | Once per live session |
+| `user/message` (session event) | `memo prompt record --session-id dsh-<id> --body <text>` | Each accepted user message |
 | `tool/result` (session event) | `memo append --event <tool-name> ...` | Only when `events.toolAudit` is true |
 | `session/flush` | Debounced `memo sync` | Trailing edge after `debounceMs` |
-| `session/disposed` | `memo prompt session_end --session-id dsh:<id>`, then `memo sync` | Once per session |
+| `session/disposed` | `memo prompt session_end --session-id dsh-<id>`, then `memo sync` | Once per session |
 
 Configuration (Schemastery, persisted in the plugin row config):
 
@@ -82,8 +82,8 @@ Configuration (Schemastery, persisted in the plugin row config):
 }
 ```
 
-- Session identity: memory records use `dsh:<dshSessionId>` as `--session-id`; `--cwd` comes from `session.header.cwd` so memo resolves the project identity from the git remote.
-- Executable discovery order: `memoCommand` config, `SPEC_MEMO_MEMO` env, `memo` on `PATH`, then `node <vaultRoot>/dist/cli.js` when `vaultRoot` is configured. Windows `.cmd` shims are handled by the subprocess layer.
+- Session identity: memory records use `dsh-<dshSessionId>` as `--session-id`, sanitized to `[A-Za-z0-9_-]` and capped at 64 characters; `--cwd` comes from `session.header.cwd` so memo resolves the project identity from the git remote.
+- Executable discovery order: `memoCommand` config, `SPEC_MEMO_MEMO` env, `memo` on `PATH`, then `node <productRoot>/dist/cli.js` when `productRoot` is configured. `vaultRoot` is the `SPEC_MEMO_ROOT` data directory and is never probed for code. Windows `.cmd` shims are handled by the subprocess layer.
 - Injection: `static inject = ['subprocess', 'sessions']`; optional services are read through `ctx.get(name)`.
 - Concurrency: one FIFO queue per DSH session; overflow drops the oldest entry and increments `queue_overflow`.
 - Retries: none in v1; `session_start`, `session_end`, and `prompt record` are safe to re-run because memo soft-skips duplicate session transitions.
@@ -107,7 +107,7 @@ Configuration (Schemastery, persisted in the plugin row config):
 | Assumption | Chosen default | Rationale | Confirmed |
 |---|---|---|---|
 | Transport | `memo` CLI through `ctx.subprocess` | Works in every deployment mode without MCP client wiring | No |
-| Session identity | `dsh:<sessionId>` prefix | Avoids collisions with other hosts writing to the same vault | No |
+| Session identity | `dsh-<sessionId>` prefix, sanitized | Avoids collisions and keeps record slugs filesystem-safe on Windows | No |
 | Default enablement | Enabled once the plugin row is installed | Installing the plugin is the opt-in signal | No |
 | Tool auditing | Disabled by default | Tool results are noisy; users opt in per profile | No |
 | Bootstrap usage | Read-only in v1 | Keeps the first release one-way and deterministic | No |
@@ -134,7 +134,7 @@ Configuration (Schemastery, persisted in the plugin row config):
 - Per-session counters: `bootstrap`, `session_start`, `prompt_record`, `tool_audit`, `sync`, `session_end`, `failures`, `timeouts`, `queue_overflow`.
 - Structured lines prefixed `[specmemo-bridge]` with command name, session id, duration, and exit code.
 - Status tool payload: `{ enabled, queueDepth, counters, lastError, lastInvocationAt }`.
-- Vault-side evidence: `memo prompt list --session-id dsh:<id>` lists the ingested turns after a DSH session.
+- Vault-side evidence: `memo prompt list --session-id dsh-<id>` lists the ingested turns after a DSH session.
 
 ### Negative & Failing Test Scenarios
 

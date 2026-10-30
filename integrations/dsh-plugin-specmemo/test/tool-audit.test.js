@@ -72,3 +72,13 @@ test('AC15: tool results without a name are ignored', async () => {
 
   assert.equal(fake.invocations.length, 0);
 });
+
+test('AC15: tool results without a session id are skipped with a diagnostic', async () => {
+  const fake = createFakeContext();
+  apply(fake.ctx, memoConfig({ events: { toolAudit: true } }));
+
+  await fake.emit('session/event', { header: {} }, toolResult('read_file'));
+
+  assert.equal(fake.invocations.length, 0, 'no orphan append may be spawned');
+  assert.ok(fake.warnings.some((line) => /tool\/result without a session id/.test(line)));
+});

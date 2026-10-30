@@ -49,3 +49,19 @@ test('AC2: session ids are filesystem-safe on Windows', async () => {
     assert.doesNotMatch(id, /[<>:"/\\|?*]/, `reserved Windows filename character in ${id}`);
   }
 });
+
+test('AC2: hostile session ids are sanitized before they reach the vault', async () => {
+  const fake = createFakeContext();
+  apply(fake.ctx, memoConfig());
+  await fake.emit('session/created', sessionFor('../../evil id\n', 'C:\\repo'));
+
+  const sessionIds = fake.invocations
+    .flatMap((request) => request.argv)
+    .filter((arg) => typeof arg === 'string' && arg.startsWith('dsh-'));
+  assert.ok(sessionIds.length > 0);
+  for (const id of sessionIds) {
+    assert.match(id, /^dsh-[A-Za-z0-9_-]+$/);
+    assert.equal(id.includes('..'), false);
+    assert.equal(id.includes('/'), false);
+  }
+});

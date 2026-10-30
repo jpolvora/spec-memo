@@ -31,6 +31,9 @@ test('config accepts a string command and partial event overrides', () => {
   assert.deepEqual(config.memoCommand, ['node', './dist/cli.js']);
   assert.equal(config.events.toolAudit, true);
   assert.equal(config.events.bootstrap, true);
+
+  const quoted = normalizeConfig({ memoCommand: '"C:\\Program Files\\memo\\memo.exe"' });
+  assert.deepEqual(quoted.memoCommand, ['C:\\Program Files\\memo\\memo.exe']);
 });
 
 test('invalid config is rejected', () => {

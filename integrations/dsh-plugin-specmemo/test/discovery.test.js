@@ -72,6 +72,24 @@ test('AC11: vaultRoot alone does not provide the node fallback', () => {
   assert.equal(result, null, 'the vault data root is not a product checkout');
 });
 
+test('AC11: the node fallback probes readability, not execute permission', () => {
+  const probes = [];
+  const result = discoverMemoCommand({
+    env: { PATH: '/usr/bin' },
+    productRoot: '/vault',
+    platform: 'linux',
+    nodeCommand: '/usr/bin/node',
+    fileExists: (candidate, options) => {
+      probes.push([candidate, options]);
+      return candidate === '/vault/dist/cli.js';
+    }
+  });
+
+  assert.deepEqual(result, { argv: ['/usr/bin/node', '/vault/dist/cli.js'], source: 'product-cli' });
+  const probe = probes.find(([candidate]) => candidate === '/vault/dist/cli.js');
+  assert.deepEqual(probe[1], { executable: false });
+});
+
 test('AC11: discovery returns null when nothing resolves', () => {
   assert.equal(
     discoverMemoCommand({ env: {}, productRoot: null, platform: 'linux', fileExists: () => false }),
