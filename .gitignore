@@ -36,3 +36,8 @@ credentials.json
 # ws-wiki runtime checkpoints (never commit)
 .agents/specs/wiki/*.state.json
 
+# SDW local runtime (config.json, schema, spec index stay tracked)
+.sdw/state/
+.sdw/sandbox/
+.sdw/worktrees/
+

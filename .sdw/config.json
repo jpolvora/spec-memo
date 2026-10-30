@@ -10,21 +10,31 @@
     "judgeApiEndpoint": null,
     "judgeCriticity": "strict"
   },
-  "scmCodeReviewEnabled": false,
-  "pushDelivery": false,
+  "scmCodeReviewEnabled": true,
+  "pushDelivery": true,
   "automation": {
-    "autoShip": false,
-    "autoMerge": false
+    "autoShip": true,
+    "autoMerge": true
   },
   "changelogEnabled": true,
   "changelogFile": "{projectRoot}/CHANGELOG.md",
   "stateDir": "{projectRoot}/.sdw/state",
   "sandboxDir": "{projectRoot}/.sdw/sandbox",
+  "skillsRoot": "{projectRoot}/.agents/skills",
   "autoResolveGaps": true,
-  "securityChecksEnabled": false,
+  "securityChecksEnabled": true,
   "useWorktrees": false,
-  "useFeatureBranches": false,
-  "scmProvider": "none",
+  "useFeatureBranches": true,
+  "branching": {
+    "strategy": "gitflow",
+    "featurePrefix": "feature/",
+    "workBranch": "develop",
+    "integrationBranch": "develop",
+    "updateWorkBranch": true,
+    "syncWorkBranchAfterMerge": true,
+    "pushSyncedWorkBranch": false
+  },
+  "scmProvider": "github",
   "implementation": {
     "mode": "subagent",
     "command": null,
@@ -40,12 +50,12 @@
     ]
   },
   "verification": {
-    "buildCommand": null,
-    "testCommand": null,
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
     "timeoutMs": 600000
   },
-  "requiredBuild": false,
-  "runAllTests": false,
+  "requiredBuild": true,
+  "runAllTests": true,
   "prePrCommand": "",
   "prePrInstructions": "",
   "reviewFixCommand": "",
