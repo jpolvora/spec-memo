@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { apply } from '../lib/index.js';
-import { createFakeContext, sessionFor } from './helpers/fake-ctx.js';
+import { createFakeContext, memoConfig, sessionFor, TEST_MEMO_COMMAND } from './helpers/fake-ctx.js';
 
 test('AC2: session/created bootstraps the session cwd before session_start', async () => {
   const fake = createFakeContext();
-  apply(fake.ctx, {});
+  apply(fake.ctx, memoConfig());
 
   assert.equal(fake.listenerCount('session/created'), 1);
   await fake.emit('session/created', sessionFor('s1', 'C:\\repo'));
@@ -13,8 +13,8 @@ test('AC2: session/created bootstraps the session cwd before session_start', asy
   assert.deepEqual(
     fake.invocations.map((request) => request.argv),
     [
-      ['memo', 'bootstrap', '--cwd', 'C:\\repo', '--session-id', 'dsh:s1'],
-      ['memo', 'prompt', 'session_start', '--session-id', 'dsh:s1', '--cwd', 'C:\\repo']
+      [...TEST_MEMO_COMMAND, 'bootstrap', '--cwd', 'C:\\repo', '--session-id', 'dsh:s1'],
+      [...TEST_MEMO_COMMAND, 'prompt', 'session_start', '--session-id', 'dsh:s1', '--cwd', 'C:\\repo']
     ]
   );
   assert.equal(fake.invocations[0].cwd, 'C:\\repo');
@@ -24,7 +24,7 @@ test('AC2: session/created bootstraps the session cwd before session_start', asy
 
 test('AC2: duplicate session/created runs bootstrap once per live session', async () => {
   const fake = createFakeContext();
-  apply(fake.ctx, {});
+  apply(fake.ctx, memoConfig());
   const session = sessionFor('s1', 'C:\\repo');
 
   await fake.emit('session/created', session);

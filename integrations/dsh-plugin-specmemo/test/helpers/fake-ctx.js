@@ -1,9 +1,18 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 
 /**
- * Minimal fake Cordis context: records spawn requests, captures listeners, and
- * exposes the registered status tool.
+ * Resolvable stand-in for the `memo` executable. Tests never execute it; it
+ * only has to satisfy executable discovery (AC11), so an absolute path that
+ * exists on every machine keeps the suite independent of PATH.
  */
+export const TEST_MEMO_COMMAND = Object.freeze([process.execPath]);
+
+/** Plugin config with an explicit, always-resolvable `memoCommand`. */
+export function memoConfig(extra = {}) {
+  return { memoCommand: [...TEST_MEMO_COMMAND], ...extra };
+}
+
+/** Minimal Cordis-style fake: records spawns, listeners, tools, and warnings. */
 export function createFakeContext({ spawn, tools = true } = {}) {
   const listeners = new Map();
   const invocations = [];
@@ -22,7 +31,11 @@ export function createFakeContext({ spawn, tools = true } = {}) {
     ? {
         register(tool) {
           registeredTools.push(tool);
-          return tool;
+          const off = () => {
+            const index = registeredTools.indexOf(tool);
+            if (index >= 0) registeredTools.splice(index, 1);
+          };
+          return off;
         }
       }
     : undefined;
@@ -44,6 +57,11 @@ export function createFakeContext({ spawn, tools = true } = {}) {
       const handlers = listeners.get(event) ?? [];
       handlers.push(handler);
       listeners.set(event, handlers);
+      return () => {
+        const current = listeners.get(event) ?? [];
+        const index = current.indexOf(handler);
+        if (index >= 0) current.splice(index, 1);
+      };
     }
   };
 
@@ -85,6 +103,10 @@ export function userMessage(text) {
   return { type: 'user/message', data: { text } };
 }
 
+export function toolResult(name, extra = {}) {
+  return { type: 'tool/result', data: { name, ...extra } };
+}
+
 export function stalledSpawn({ onSpawn, onTerminate } = {}) {
   return (request) => {
     onSpawn?.(request);
@@ -104,4 +126,24 @@ export function stalledSpawn({ onSpawn, onTerminate } = {}) {
 
 export function exitSpawn(exitCode) {
   return () => ({ done: Promise.resolve({ exitCode, signal: null }), terminate() {} });
+}
+
+/**
+ * Run `work` with no `memo` on PATH and no `SPEC_MEMO_MEMO`, so executable
+ * discovery has nothing to resolve (AC11). The environment is restored even
+ * when `work` throws.
+ */
+export async function withoutMemoExecutable(work) {
+  const previousPath = process.env.PATH;
+  const previousMemo = process.env.SPEC_MEMO_MEMO;
+  process.env.PATH = '';
+  delete process.env.SPEC_MEMO_MEMO;
+  try {
+    return await work();
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    if (previousMemo === undefined) delete process.env.SPEC_MEMO_MEMO;
+    else process.env.SPEC_MEMO_MEMO = previousMemo;
+  }
 }

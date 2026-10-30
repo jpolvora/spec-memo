@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DEFAULT_CONFIG, normalizeConfig } from '../lib/config.js';
 import { apply } from '../lib/index.js';
-import { createFakeContext, sessionFor } from './helpers/fake-ctx.js';
+import { createFakeContext, memoConfig, sessionFor } from './helpers/fake-ctx.js';
 
 test('config defaults resolve to the documented values', () => {
   const config = normalizeConfig({});
@@ -58,7 +58,7 @@ test('apply is a no-op when the bridge is disabled', () => {
 
 test('apply tolerates a missing tools service', async () => {
   const fake = createFakeContext({ tools: false });
-  assert.doesNotThrow(() => apply(fake.ctx, {}));
+  assert.doesNotThrow(() => apply(fake.ctx, memoConfig()));
   await fake.emit('session/created', sessionFor('s10'));
   assert.equal(fake.invocations.length, 2);
 });

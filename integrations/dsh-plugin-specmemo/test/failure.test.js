@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { apply } from '../lib/index.js';
-import { createFakeContext, exitSpawn, sessionFor, userMessage } from './helpers/fake-ctx.js';
+import { createFakeContext, exitSpawn, memoConfig, sessionFor, userMessage } from './helpers/fake-ctx.js';
 
 test('AC8: a non-zero exit is counted and diagnosed without failing the turn', async () => {
   const fake = createFakeContext({ spawn: exitSpawn(2) });
-  apply(fake.ctx, {});
+  apply(fake.ctx, memoConfig());
 
   await assert.doesNotReject(() =>
     fake.emit('session/event', sessionFor('s8'), userMessage('token-shaped secret prompt text'))
@@ -23,7 +23,7 @@ test('AC8: a non-zero exit is counted and diagnosed without failing the turn', a
 
 test('AC8: diagnostics never contain the prompt body', async () => {
   const fake = createFakeContext({ spawn: exitSpawn(1) });
-  apply(fake.ctx, {});
+  apply(fake.ctx, memoConfig());
   await fake.emit('session/event', sessionFor('s8'), userMessage('super-secret-prompt-body'));
 
   const diagnostics = fake.warnings.join('\n');
@@ -40,7 +40,7 @@ test('AC8: spawn errors are swallowed and the next invocation still runs', async
       return { done: Promise.resolve({ exitCode: 0, signal: null }), terminate() {} };
     }
   });
-  apply(fake.ctx, {});
+  apply(fake.ctx, memoConfig());
 
   const session = sessionFor('s9');
   await assert.doesNotReject(() => fake.emit('session/event', session, userMessage('first')));

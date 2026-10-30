@@ -211,15 +211,17 @@ export function createSessionQueue({ limit = 64, onOverflow } = {}) {
   };
 }
 
-export function createMemoRunner({ spawn, config, onOverflow } = {}) {
+export function createMemoRunner({ spawn, config, memoCommand, onOverflow } = {}) {
   const queue = createSessionQueue({ limit: config?.queueLimit ?? 64, onOverflow });
+  const command =
+    Array.isArray(memoCommand) && memoCommand.length > 0 ? memoCommand : config.memoCommand;
   return {
     enqueue: (sessionKey, task) => queue.enqueue(sessionKey, task),
     queueDepth: () => queue.depth(),
     run: ({ args = [], cwd } = {}) =>
       runMemoCommand({
         spawn,
-        argv: buildMemoArgv(config.memoCommand, args),
+        argv: buildMemoArgv(command, args),
         cwd: typeof cwd === 'string' && cwd.length > 0 ? cwd : undefined,
         env: buildMemoEnv(config),
         timeoutMs: config.timeoutMs

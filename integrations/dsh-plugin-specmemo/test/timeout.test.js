@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { apply } from '../lib/index.js';
-import { createFakeContext, sessionFor, stalledSpawn, userMessage } from './helpers/fake-ctx.js';
+import { createFakeContext, memoConfig, sessionFor, stalledSpawn, userMessage } from './helpers/fake-ctx.js';
 
 test('AC6: every memo invocation is bounded by the configured timeout', async () => {
   const fake = createFakeContext({ spawn: stalledSpawn() });
-  apply(fake.ctx, { timeoutMs: 30 });
+  apply(fake.ctx, memoConfig({ timeoutMs: 30 }));
 
   const startedAt = Date.now();
   await fake.emit('session/event', sessionFor('s5'), userMessage('stall please'));
@@ -30,7 +30,7 @@ test('AC7: a timed out memo invocation terminates the child process', async () =
       onTerminate: () => terminations.push(Date.now())
     })
   });
-  apply(fake.ctx, { timeoutMs: 25 });
+  apply(fake.ctx, memoConfig({ timeoutMs: 25 }));
 
   await fake.emit('session/event', sessionFor('s6'), userMessage('stall please'));
 
@@ -40,7 +40,7 @@ test('AC7: a timed out memo invocation terminates the child process', async () =
 
 test('AC6: a spawn that never settles is still bounded', async () => {
   const fake = createFakeContext({ spawn: () => new Promise(() => {}) });
-  apply(fake.ctx, { timeoutMs: 25 });
+  apply(fake.ctx, memoConfig({ timeoutMs: 25 }));
 
   const startedAt = Date.now();
   await fake.emit('session/event', sessionFor('s11'), userMessage('stall please'));
@@ -62,7 +62,7 @@ test('AC6/AC7: the queue keeps running after a timed out invocation', async () =
       return { done: Promise.resolve({ exitCode: 0, signal: null }), terminate() {} };
     }
   });
-  apply(fake.ctx, { timeoutMs: 25 });
+  apply(fake.ctx, memoConfig({ timeoutMs: 25 }));
 
   await fake.emit('session/created', sessionFor('s7'));
 
