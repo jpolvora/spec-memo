@@ -8,6 +8,7 @@ export const inject = ['subprocess', 'sessions'];
 
 const LOG_PREFIX = '[specmemo-bridge]';
 const SESSION_PREFIX = 'dsh-';
+const TRACK_LIMIT = 1024;
 const STATUS_TOOL = 'specmemo_bridge_status';
 const TOOL_NAME_MAX_LENGTH = 64;
 const SESSION_ID_MAX_LENGTH = 128;
@@ -56,6 +57,14 @@ function sanitizeSessionId(rawId) {
     .replace(/^-|-$/g, '')
     .slice(0, 64);
   return cleaned || null;
+}
+
+function trackKey(set, key) {
+  set.add(key);
+  if (set.size > TRACK_LIMIT) {
+    const oldest = set.values().next().value;
+    set.delete(oldest);
+  }
 }
 
 function identityOf(session) {
@@ -317,7 +326,7 @@ export function apply(ctx, rawConfig = {}) {
         return undefined;
       }
       if (state.started.has(key)) return undefined;
-      state.started.add(key);
+      trackKey(state.started, key);
       state.ended.delete(key);
       const [bootstrap, begin] = buildSessionStartCommands(sessionId, cwd);
       return runner.enqueue(
@@ -438,12 +447,16 @@ export function apply(ctx, rawConfig = {}) {
         return undefined;
       }
       if (state.ended.has(key)) return undefined;
-      state.ended.add(key);
+      trackKey(state.ended, key);
       return runner.enqueue(
         key,
         safeTask(async () => {
           await invoke('session_end', sessionId, cwd, ['prompt', 'session_end', '--session-id', sessionId]);
           await invoke('sync', sessionId, cwd, ['sync']);
+          // Bounded bookkeeping: once the terminal handshake settles, the key
+          // leaves both sets so a long-lived daemon does not grow per session.
+          state.ended.delete(key);
+          state.started.delete(key);
         })
       );
     } catch (error) {
