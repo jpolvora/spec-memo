@@ -362,12 +362,12 @@ describe('Operational Telemetry & Structured Rolling Usage Logging', () => {
       success: true,
       vaultRoot: tempVault,
       metadata: {
-        token: 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890',
-        bearer: 'Bearer secret-jwt-token-with-many-characters-12345',
+        token: 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890', // pragma: allowlist secret
+        bearer: 'Bearer secret-jwt-token-with-many-characters-12345', // pragma: allowlist secret
         safeKey: 'valid_data',
         vaultRoot: tempVault,
         nested: {
-          pathWithSecret: 'key is ghp_9876543210ZYXWVUTSRQPONMLKJIHGFEDCBA',
+          pathWithSecret: 'key is ghp_9876543210ZYXWVUTSRQPONMLKJIHGFEDCBA', // pragma: allowlist secret
           hostPath: 'C:\\Users\\john\\secret\\file.txt'
         }
       }
