@@ -15,7 +15,7 @@ test('AC8: a non-zero exit is counted and diagnosed without failing the turn', a
   assert.equal(status.counters.prompt_record, 1);
   assert.equal(status.counters.failures, 1);
   assert.equal(status.lastError.command, 'prompt_record');
-  assert.equal(status.lastError.sessionId, 'dsh:s8');
+  assert.equal(status.lastError.sessionId, 'dsh-s8');
   assert.match(status.lastError.message, /failed/);
   assert.ok(fake.warnings.length >= 1);
   assert.match(fake.warnings[0], /^\[specmemo-bridge\]/);

@@ -36,11 +36,11 @@ function readInteger(value, fallback, field, min) {
 function readCommand(value) {
   if (value === undefined) return [...DEFAULT_CONFIG.memoCommand];
   if (typeof value === 'string') {
-    const command = value.trim();
-    if (!command) {
+    const parts = value.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) {
       throw new TypeError('specmemo-bridge config: memoCommand must not be empty');
     }
-    return [command];
+    return parts;
   }
   if (Array.isArray(value)) {
     if (value.length === 0) {

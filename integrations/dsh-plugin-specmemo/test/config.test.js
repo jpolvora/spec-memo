@@ -27,7 +27,7 @@ test('config defaults resolve to the documented values', () => {
 
 test('config accepts a string command and partial event overrides', () => {
   const config = normalizeConfig({ memoCommand: 'node ./dist/cli.js', events: { toolAudit: true } });
-  assert.deepEqual(config.memoCommand, ['node ./dist/cli.js']);
+  assert.deepEqual(config.memoCommand, ['node', './dist/cli.js']);
   assert.equal(config.events.toolAudit, true);
   assert.equal(config.events.bootstrap, true);
 });

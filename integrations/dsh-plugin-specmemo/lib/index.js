@@ -7,7 +7,7 @@ export const name = 'specmemo-bridge';
 export const inject = ['subprocess', 'sessions'];
 
 const LOG_PREFIX = '[specmemo-bridge]';
-const SESSION_PREFIX = 'dsh:';
+const SESSION_PREFIX = 'dsh-';
 const STATUS_TOOL = 'specmemo_bridge_status';
 const TOOL_NAME_MAX_LENGTH = 64;
 const SESSION_ID_MAX_LENGTH = 128;
@@ -236,7 +236,7 @@ export function apply(ctx, rawConfig = {}) {
       enabled: config.enabled,
       queueDepth: runner.queueDepth(),
       counters: { ...counters },
-      lastError: state.lastError,
+      lastError: state.lastError ? { ...state.lastError } : null,
       lastInvocationAt: state.lastInvocationAt
     };
   }

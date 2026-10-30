@@ -16,7 +16,7 @@ test('AC3: user/message records the prompt body for the session', async () => {
 
   assert.deepEqual(
     fake.invocations.map((request) => request.argv),
-    [[...TEST_MEMO_COMMAND, 'prompt', 'record', '--session-id', 'dsh:s2', '--body', 'please remember this']]
+    [[...TEST_MEMO_COMMAND, 'prompt', 'record', '--session-id', 'dsh-s2', '--body', 'please remember this']]
   );
   assert.equal(fake.invocations[0].cwd, 'C:\\repo');
 });
@@ -38,7 +38,7 @@ test('AC3: message content parts are flattened into the body', async () => {
   );
   assert.deepEqual(
     fake.invocations.map((request) => request.argv),
-    [[...TEST_MEMO_COMMAND, 'prompt', 'record', '--session-id', 'dsh:s2', '--body', 'hello world']]
+    [[...TEST_MEMO_COMMAND, 'prompt', 'record', '--session-id', 'dsh-s2', '--body', 'hello world']]
   );
 });
 
@@ -48,6 +48,6 @@ test('AC3: prompt bodies are truncated to maxBodyBytes', async () => {
   await fake.emit('session/event', sessionFor('s2'), userMessage('0123456789'));
   assert.deepEqual(
     fake.invocations.map((request) => request.argv),
-    [[...TEST_MEMO_COMMAND, 'prompt', 'record', '--session-id', 'dsh:s2', '--body', '01234']]
+    [[...TEST_MEMO_COMMAND, 'prompt', 'record', '--session-id', 'dsh-s2', '--body', '01234']]
   );
 });

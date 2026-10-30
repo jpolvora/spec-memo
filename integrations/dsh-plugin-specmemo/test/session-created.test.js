@@ -13,8 +13,8 @@ test('AC2: session/created bootstraps the session cwd before session_start', asy
   assert.deepEqual(
     fake.invocations.map((request) => request.argv),
     [
-      [...TEST_MEMO_COMMAND, 'bootstrap', '--cwd', 'C:\\repo', '--session-id', 'dsh:s1'],
-      [...TEST_MEMO_COMMAND, 'prompt', 'session_start', '--session-id', 'dsh:s1', '--cwd', 'C:\\repo']
+      [...TEST_MEMO_COMMAND, 'bootstrap', '--cwd', 'C:\\repo', '--session-id', 'dsh-s1'],
+      [...TEST_MEMO_COMMAND, 'prompt', 'session_start', '--session-id', 'dsh-s1', '--cwd', 'C:\\repo']
     ]
   );
   assert.equal(fake.invocations[0].cwd, 'C:\\repo');
@@ -22,8 +22,7 @@ test('AC2: session/created bootstraps the session cwd before session_start', asy
   assert.equal(typeof fake.invocations[0].signal?.aborted, 'boolean');
 });
 
-test('AC2: duplicate session/created runs bootstrap once per live session', async () => {
-  const fake = createFakeContext();
+test('AC2: duplicate session/created runs bootstrap once per live session', async () => {  const fake = createFakeContext();
   apply(fake.ctx, memoConfig());
   const session = sessionFor('s1', 'C:\\repo');
 
@@ -35,4 +34,18 @@ test('AC2: duplicate session/created runs bootstrap once per live session', asyn
     fake.invocations.map((request) => request.argv[1] ?? request.argv[0]),
     ['bootstrap', 'prompt']
   );
+});
+
+test('AC2: session ids are filesystem-safe on Windows', async () => {
+  const fake = createFakeContext();
+  apply(fake.ctx, memoConfig());
+  await fake.emit('session/created', sessionFor('s1', 'C:\\repo'));
+
+  const sessionIds = fake.invocations
+    .flatMap((request) => request.argv)
+    .filter((arg) => typeof arg === 'string' && arg.startsWith('dsh-'));
+  assert.ok(sessionIds.length > 0, 'the prefixed session id must reach the memo argv');
+  for (const id of sessionIds) {
+    assert.doesNotMatch(id, /[<>:"/\\|?*]/, `reserved Windows filename character in ${id}`);
+  }
 });

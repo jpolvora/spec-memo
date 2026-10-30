@@ -51,10 +51,10 @@ test('AC9: two rapid user messages run strictly one after another', async () => 
   assert.equal(state.maxActive, 1, 'memo invocations must never overlap within a session');
   assert.equal(state.active, 0);
   assert.deepEqual(state.order, [
-    'bootstrap --cwd C:\\repo --session-id dsh:s1',
-    'prompt session_start --session-id dsh:s1 --cwd C:\\repo',
-    'prompt record --session-id dsh:s1 --body first message',
-    'prompt record --session-id dsh:s1 --body second message'
+    'bootstrap --cwd C:\\repo --session-id dsh-s1',
+    'prompt session_start --session-id dsh-s1 --cwd C:\\repo',
+    'prompt record --session-id dsh-s1 --body first message',
+    'prompt record --session-id dsh-s1 --body second message'
   ]);
 
   const status = await fake.status();
@@ -84,11 +84,11 @@ test('AC9: created, message, tool, flush, and disposed run in session-event orde
 
   assert.equal(state.maxActive, 1, 'memo invocations must never overlap within a session');
   assert.deepEqual(state.order, [
-    'bootstrap --cwd C:\\repo --session-id dsh:s2',
-    'prompt session_start --session-id dsh:s2 --cwd C:\\repo',
-    'prompt record --session-id dsh:s2 --body audit this',
+    'bootstrap --cwd C:\\repo --session-id dsh-s2',
+    'prompt session_start --session-id dsh-s2 --cwd C:\\repo',
+    'prompt record --session-id dsh-s2 --body audit this',
     'append --event tool:read_file',
-    'prompt session_end --session-id dsh:s2',
+    'prompt session_end --session-id dsh-s2',
     'sync'
   ]);
   const status = await fake.status();

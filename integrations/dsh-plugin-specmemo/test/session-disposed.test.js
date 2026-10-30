@@ -12,7 +12,7 @@ test('AC4: session/disposed ends the session then syncs', async () => {
   assert.deepEqual(
     fake.invocations.map((request) => request.argv),
     [
-      [...TEST_MEMO_COMMAND, 'prompt', 'session_end', '--session-id', 'dsh:s3'],
+      [...TEST_MEMO_COMMAND, 'prompt', 'session_end', '--session-id', 'dsh-s3'],
       [...TEST_MEMO_COMMAND, 'sync']
     ]
   );

@@ -4,6 +4,7 @@ import test from 'node:test';
 import { apply } from '../lib/index.js';
 import {
   createFakeContext,
+  exitSpawn,
   memoConfig,
   sessionFor,
   stalledSpawn,
@@ -41,17 +42,20 @@ test('AC12: specmemo_bridge_status exposes the documented read-only payload', as
 });
 
 test('AC12: the status payload is a copy and cannot mutate bridge state', async () => {
-  const fake = createFakeContext();
+  const fake = createFakeContext({ spawn: exitSpawn(1) });
   apply(fake.ctx, memoConfig());
   await fake.emit('session/created', sessionFor('s2'));
 
   const first = await fake.status();
+  assert.ok(first.lastError, 'a failing memo invocation records lastError');
   first.counters.bootstrap = 99;
   first.enabled = false;
+  first.lastError.message = 'tampered';
 
   const second = await fake.status();
   assert.equal(second.counters.bootstrap, 1, 'the status tool is read-only');
   assert.equal(second.enabled, true);
+  assert.notEqual(second.lastError.message, 'tampered', 'lastError is returned as a copy');
 });
 
 test('AC12: queueDepth reports a running invocation and returns to zero', async () => {
