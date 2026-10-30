@@ -12,4 +12,4 @@ Central repository index tracking specification lifecycle states, metadata, and 
 
 | Prefix | Slug | Title | Status | Source | Spec Date | Validation | Archival Date |
 |---|---|---|---|---|---|---|---|
-| 00001 | 00001-dsh-specmemo-bridge | DSH spec-memo memory bridge plugin | pending | local | 2026-10-30 | PASS | - |
+| 00001 | 00001-dsh-specmemo-bridge | DSH spec-memo memory bridge plugin | completed | local | 2026-10-30 | PASS | - |

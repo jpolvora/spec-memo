@@ -3,10 +3,9 @@ id: null
 slug: 00001-dsh-specmemo-bridge
 title: "DSH spec-memo memory bridge plugin"
 source: local
-status: draft
+status: implemented
 specDate: 2026-10-30
 ---
-
 # Specification — DSH spec-memo memory bridge plugin
 
 ## Description
