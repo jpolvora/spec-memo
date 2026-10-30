@@ -186,7 +186,7 @@ export function apply(ctx, rawConfig = {}) {
   try {
     memo = discoverMemoCommand({
       configuredCommand: isExplicitMemoCommand(rawConfig) ? config.memoCommand : null,
-      vaultRoot: config.vaultRoot
+      productRoot: config.productRoot
     });
   } catch (error) {
     diagnose(ctx, `memo executable discovery failed: ${describeError(error)}`);
@@ -195,7 +195,7 @@ export function apply(ctx, rawConfig = {}) {
   if (!memo) {
     diagnose(
       ctx,
-      'memo executable not found (checked memoCommand, SPEC_MEMO_MEMO, PATH, and vaultRoot dist/cli.js); bridge disabled'
+      'memo executable not found (checked memoCommand, SPEC_MEMO_MEMO, PATH, and productRoot dist/cli.js); bridge disabled'
     );
     return undefined;
   }

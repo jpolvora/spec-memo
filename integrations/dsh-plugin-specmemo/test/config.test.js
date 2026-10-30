@@ -10,6 +10,7 @@ test('config defaults resolve to the documented values', () => {
     enabled: true,
     memoCommand: ['memo'],
     vaultRoot: null,
+    productRoot: null,
     timeoutMs: 2000,
     debounceMs: 1500,
     queueLimit: 64,

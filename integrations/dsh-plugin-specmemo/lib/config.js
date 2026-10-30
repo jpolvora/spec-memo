@@ -10,6 +10,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   memoCommand: Object.freeze(['memo']),
   vaultRoot: null,
+  productRoot: null,
   timeoutMs: 2000,
   debounceMs: 1500,
   queueLimit: 64,
@@ -56,10 +57,10 @@ function readCommand(value) {
   throw new TypeError('specmemo-bridge config: memoCommand must be a string or an array of strings');
 }
 
-function readVaultRoot(value) {
+function readPathOrNull(value, field) {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new TypeError('specmemo-bridge config: vaultRoot must be a non-empty string or null');
+    throw new TypeError(`specmemo-bridge config: ${field} must be a non-empty string or null`);
   }
   return value;
 }
@@ -88,7 +89,8 @@ export function normalizeConfig(rawConfig = {}) {
   return {
     enabled: readBoolean(rawConfig.enabled, DEFAULT_CONFIG.enabled, 'enabled'),
     memoCommand: readCommand(rawConfig.memoCommand),
-    vaultRoot: readVaultRoot(rawConfig.vaultRoot),
+    vaultRoot: readPathOrNull(rawConfig.vaultRoot, 'vaultRoot'),
+    productRoot: readPathOrNull(rawConfig.productRoot, 'productRoot'),
     timeoutMs: readInteger(rawConfig.timeoutMs, DEFAULT_CONFIG.timeoutMs, 'timeoutMs', 1),
     debounceMs: readInteger(rawConfig.debounceMs, DEFAULT_CONFIG.debounceMs, 'debounceMs', 0),
     queueLimit: readInteger(rawConfig.queueLimit, DEFAULT_CONFIG.queueLimit, 'queueLimit', 1),

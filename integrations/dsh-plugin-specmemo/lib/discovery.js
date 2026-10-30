@@ -5,7 +5,7 @@
  *   1. `memoCommand` from the plugin row config (only when set explicitly)
  *   2. `SPEC_MEMO_MEMO` from the environment
  *   3. `memo` found on `PATH`
- *   4. `node <vaultRoot>/dist/cli.js` when `vaultRoot` is configured
+ *   4. `node <productRoot>/dist/cli.js` when `productRoot` is configured
  *
  * Nothing here throws: an unreadable PATH entry or filesystem probe simply
  * fails that candidate. When no candidate resolves the caller disables the
@@ -95,7 +95,7 @@ function resolveCommand(command, options) {
 export function discoverMemoCommand({
   configuredCommand = null,
   env = process.env,
-  vaultRoot = null,
+  productRoot = null,
   platform = process.platform,
   fileExists = defaultFileExists,
   nodeCommand = process.execPath
@@ -121,10 +121,10 @@ export function discoverMemoCommand({
     return { argv: ['memo'], source: 'path' };
   }
 
-  if (typeof vaultRoot === 'string' && vaultRoot.trim().length > 0) {
-    const cliPath = joinFor(platform, vaultRoot, 'dist', 'cli.js');
+  if (typeof productRoot === 'string' && productRoot.trim().length > 0) {
+    const cliPath = joinFor(platform, productRoot, 'dist', 'cli.js');
     if (exists(cliPath, fileExists)) {
-      return { argv: [String(nodeCommand), cliPath], source: 'vault-cli' };
+      return { argv: [String(nodeCommand), cliPath], source: 'product-cli' };
     }
   }
 

@@ -10,12 +10,12 @@ import {
   withoutMemoExecutable
 } from './helpers/fake-ctx.js';
 
-test('AC11: an explicitly configured command wins over env, PATH, and vaultRoot', () => {
+test('AC11: an explicitly configured command wins over env, PATH, and productRoot', () => {
   const checked = [];
   const result = discoverMemoCommand({
     configuredCommand: ['custom-memo'],
     env: { PATH: '/usr/bin', SPEC_MEMO_MEMO: '/opt/memo/bin/memo' },
-    vaultRoot: '/vault',
+    productRoot: '/vault',
     platform: 'linux',
     fileExists: (candidate) => {
       checked.push(candidate);
@@ -48,7 +48,19 @@ test('AC11: memo on PATH is used when no config or env command resolves', () => 
   assert.deepEqual(result, { argv: ['memo'], source: 'path' });
 });
 
-test('AC11: node <vaultRoot>/dist/cli.js is the last discovery candidate', () => {
+test('AC11: node <productRoot>/dist/cli.js is the last discovery candidate', () => {
+  const result = discoverMemoCommand({
+    env: { PATH: '/usr/bin' },
+    productRoot: '/vault',
+    platform: 'linux',
+    nodeCommand: '/usr/bin/node',
+    fileExists: (candidate) => candidate === '/vault/dist/cli.js'
+  });
+
+  assert.deepEqual(result, { argv: ['/usr/bin/node', '/vault/dist/cli.js'], source: 'product-cli' });
+});
+
+test('AC11: vaultRoot alone does not provide the node fallback', () => {
   const result = discoverMemoCommand({
     env: { PATH: '/usr/bin' },
     vaultRoot: '/vault',
@@ -57,12 +69,12 @@ test('AC11: node <vaultRoot>/dist/cli.js is the last discovery candidate', () =>
     fileExists: (candidate) => candidate === '/vault/dist/cli.js'
   });
 
-  assert.deepEqual(result, { argv: ['/usr/bin/node', '/vault/dist/cli.js'], source: 'vault-cli' });
+  assert.equal(result, null, 'the vault data root is not a product checkout');
 });
 
 test('AC11: discovery returns null when nothing resolves', () => {
   assert.equal(
-    discoverMemoCommand({ env: {}, vaultRoot: null, platform: 'linux', fileExists: () => false }),
+    discoverMemoCommand({ env: {}, productRoot: null, platform: 'linux', fileExists: () => false }),
     null
   );
 });
